@@ -1,0 +1,73 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "search": "Search",
+    "filter": "Filter",
+    "export": "Export",
+    "loading": "Loading...",
+    "noData": "No data found",
+    "confirm": "Confirm",
+    "close": "Close"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "customers": "Customers",
+    "quotes": "Quotes",
+    "invoices": "Invoices",
+    "deals": "Deals",
+    "products": "Products",
+    "tasks": "Tasks",
+    "tickets": "Support",
+    "shipments": "Shipments",
+    "finance": "Finance",
+    "reports": "Reports",
+    "activity": "Activity",
+    "companies": "Companies",
+    "users": "Users",
+    "settings": "Settings",
+    "logout": "Logout"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "totalSales": "Total Sales",
+    "totalQuotes": "Total Quotes",
+    "successRate": "Success Rate",
+    "activeCompanies": "Active Companies",
+    "recentActivity": "Recent Activity",
+    "totalInvoices": "Total Invoices"
+  },
+  "activity": {
+    "create": "created",
+    "update": "updated",
+    "delete": "deleted",
+    "quote": "Quote",
+    "invoice": "Invoice",
+    "deal": "Deal",
+    "customer": "Customer",
+    "product": "Product"
+  },
+  "status": {
+    "draft": "Draft",
+    "sent": "Sent",
+    "accepted": "Accepted",
+    "declined": "Declined",
+    "waiting": "Waiting",
+    "paid": "Paid",
+    "overdue": "Overdue",
+    "open": "Open",
+    "closed": "Closed",
+    "active": "Active",
+    "inactive": "Inactive"
+  }
+}
+
+
+
+
+
+
+

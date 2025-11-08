@@ -1,0 +1,205 @@
+'use client'
+
+import { useQuery } from '@tanstack/react-query'
+import { useParams, useRouter } from 'next/navigation'
+import { useLocale } from 'next-intl'
+import { ArrowLeft, Edit, MessageSquare, User, AlertCircle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
+import ActivityTimeline from '@/components/ui/ActivityTimeline'
+import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
+import Link from 'next/link'
+
+interface Ticket {
+  id: string
+  subject: string
+  description?: string
+  status: string
+  priority: string
+  tags?: string[]
+  customerId?: string
+  Customer?: {
+    id: string
+    name: string
+    email?: string
+  }
+  createdAt: string
+  updatedAt?: string
+  activities?: any[]
+}
+
+async function fetchTicket(id: string): Promise<Ticket> {
+  const res = await fetch(`/api/tickets/${id}`)
+  if (!res.ok) throw new Error('Failed to fetch ticket')
+  return res.json()
+}
+
+export default function TicketDetailPage() {
+  const params = useParams()
+  const router = useRouter()
+  const locale = useLocale()
+  const id = params.id as string
+
+  const { data: ticket, isLoading } = useQuery({
+    queryKey: ['ticket', id],
+    queryFn: () => fetchTicket(id),
+  })
+
+  if (isLoading) {
+    return <SkeletonDetail />
+  }
+
+  if (!ticket) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-gray-600">Destek talebi bulunamadı</p>
+        <Button
+          variant="outline"
+          className="mt-4"
+          onClick={() => router.push(`/${locale}/tickets`)}
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Geri Dön
+        </Button>
+      </div>
+    )
+  }
+
+  const statusColors: Record<string, string> = {
+    OPEN: 'bg-blue-100 text-blue-800',
+    IN_PROGRESS: 'bg-yellow-100 text-yellow-800',
+    CLOSED: 'bg-green-100 text-green-800',
+    CANCELLED: 'bg-red-100 text-red-800',
+  }
+
+  const statusLabels: Record<string, string> = {
+    OPEN: 'Açık',
+    IN_PROGRESS: 'Devam Ediyor',
+    CLOSED: 'Kapatıldı',
+    CANCELLED: 'İptal Edildi',
+  }
+
+  const priorityColors: Record<string, string> = {
+    LOW: 'bg-gray-100 text-gray-800',
+    MEDIUM: 'bg-yellow-100 text-yellow-800',
+    HIGH: 'bg-red-100 text-red-800',
+  }
+
+  const priorityLabels: Record<string, string> = {
+    LOW: 'Düşük',
+    MEDIUM: 'Orta',
+    HIGH: 'Yüksek',
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => router.push(`/${locale}/tickets`)}
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+              <MessageSquare className="h-8 w-8" />
+              {ticket.subject}
+            </h1>
+            <p className="mt-1 text-gray-600">Destek Talebi Detayları</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Ticket Info */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Talep Bilgileri</h2>
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-gray-600">Durum</p>
+              <Badge className={`mt-1 ${statusColors[ticket.status] || 'bg-gray-100 text-gray-800'}`}>
+                {statusLabels[ticket.status] || ticket.status}
+              </Badge>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Öncelik</p>
+              <Badge className={`mt-1 ${priorityColors[ticket.priority] || 'bg-gray-100 text-gray-800'}`}>
+                {priorityLabels[ticket.priority] || ticket.priority}
+              </Badge>
+            </div>
+            {ticket.Customer && (
+              <div>
+                <p className="text-sm text-gray-600">Müşteri</p>
+                <Link href={`/${locale}/customers/${ticket.Customer.id}`}>
+                  <div className="flex items-center gap-2 mt-1 p-2 border rounded hover:bg-gray-50 cursor-pointer">
+                    <User className="h-4 w-4 text-gray-400" />
+                    <div>
+                      <p className="font-medium">{ticket.Customer.name}</p>
+                      {ticket.Customer.email && (
+                        <p className="text-sm text-gray-600">{ticket.Customer.email}</p>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              </div>
+            )}
+            {ticket.description && (
+              <div className="pt-4 border-t">
+                <p className="text-sm text-gray-600 mb-2">Açıklama</p>
+                <p className="text-sm text-gray-700 whitespace-pre-wrap">{ticket.description}</p>
+              </div>
+            )}
+            {ticket.tags && ticket.tags.length > 0 && (
+              <div className="pt-4 border-t">
+                <p className="text-sm text-gray-600 mb-2">Etiketler</p>
+                <div className="flex flex-wrap gap-2">
+                  {ticket.tags.map((tag: string, index: number) => (
+                    <Badge key={index} variant="outline">{tag}</Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Bilgiler</h2>
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-gray-600">Talep ID</p>
+              <p className="font-mono text-sm mt-1">{ticket.id}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600">Oluşturulma Tarihi</p>
+              <p className="font-medium mt-1">
+                {new Date(ticket.createdAt).toLocaleDateString('tr-TR')}
+              </p>
+            </div>
+            {ticket.updatedAt && (
+              <div>
+                <p className="text-sm text-gray-600">Son Güncelleme</p>
+                <p className="font-medium mt-1">
+                  {new Date(ticket.updatedAt).toLocaleDateString('tr-TR')}
+                </p>
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      {/* Activity Timeline */}
+      {ticket.activities && ticket.activities.length > 0 && (
+        <ActivityTimeline activities={ticket.activities} />
+      )}
+    </div>
+  )
+}
+
+
+
+
+

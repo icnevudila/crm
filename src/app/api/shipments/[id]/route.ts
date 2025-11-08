@@ -1,0 +1,499 @@
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/authOptions'
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    // Session kontrolü - hata yakalama ile
+    let session
+    try {
+      session = await getServerSession(authOptions)
+    } catch (sessionError: any) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Shipments [id] GET API session error:', sessionError)
+      }
+      return NextResponse.json(
+        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { status: 500 }
+      )
+    }
+
+    if (!session?.user?.companyId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { id } = await params
+    const supabase = getSupabaseWithServiceRole()
+
+    // Debug: ID ve companyId kontrolü
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Shipment detail API - Request:', {
+        id,
+        companyId: session.user.companyId,
+        isSuperAdmin: session.user.role === 'SUPER_ADMIN',
+      })
+    }
+
+    // Shipment'ı çek (Invoice'ı ayrı query ile çekeceğiz - ilişki hatası nedeniyle)
+    // ÖNEMLİ: SuperAdmin için companyId kontrolü yapma
+    let shipmentQuery = supabase
+      .from('Shipment')
+      .select('*')
+      .eq('id', id)
+    
+    // SuperAdmin değilse companyId kontrolü yap
+    if (session.user.role !== 'SUPER_ADMIN') {
+      shipmentQuery = shipmentQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { data: shipmentData, error } = await shipmentQuery.maybeSingle()
+
+    if (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Shipment detail API - Error:', error)
+      }
+      return NextResponse.json({ error: error.message || 'Sevkiyat bulunamadı' }, { status: 500 })
+    }
+
+    if (!shipmentData) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Shipment detail API - Not found:', {
+          id,
+          companyId: session.user.companyId,
+          isSuperAdmin: session.user.role === 'SUPER_ADMIN',
+        })
+      }
+      return NextResponse.json({ error: 'Sevkiyat bulunamadı' }, { status: 404 })
+    }
+
+    // Debug: invoiceId kontrolü
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Shipment invoiceId:', (shipmentData as any).invoiceId)
+    }
+
+    // Invoice'ı ayrı query ile çek (ilişki hatası nedeniyle)
+    let invoiceData = null
+    if ((shipmentData as any).invoiceId) {
+      try {
+        const { data: invoice, error: invoiceError } = await supabase
+          .from('Invoice')
+          .select(`
+            id,
+            title,
+            invoiceNumber,
+            status,
+            total,
+            taxRate,
+            discount,
+            createdAt,
+            updatedAt,
+            Customer (
+              id,
+              name,
+              email
+            )
+          `)
+          .eq('id', (shipmentData as any).invoiceId)
+          .eq('companyId', session.user.companyId)
+          .maybeSingle()
+        
+        if (invoiceError) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Invoice query error:', invoiceError, 'invoiceId:', (shipmentData as any).invoiceId)
+          }
+        } else if (invoice) {
+          invoiceData = invoice // Invoice bulundu, önce atayalım
+          // Quote ve Deal bilgilerini ayrı çek (eğer varsa)
+          if ((invoice as any).quoteId) {
+            try {
+              const { data: quote } = await supabase
+                .from('Quote')
+                .select(`
+                  id,
+                  Deal (
+                    id,
+                    Customer (
+                      id,
+                      name,
+                      email
+                    )
+                  )
+                `)
+                .eq('id', (invoice as any).quoteId)
+                .eq('companyId', session.user.companyId)
+                .maybeSingle()
+              
+              if (quote) {
+                invoiceData = {
+                  ...invoice,
+                  Quote: quote,
+                }
+              } else {
+                invoiceData = invoice
+              }
+            } catch (quoteErr) {
+              invoiceData = invoice
+            }
+          } else {
+            invoiceData = invoice
+          }
+        }
+      } catch (invoiceErr) {
+        // Invoice çekilemedi, devam et
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Invoice fetch error:', invoiceErr, 'invoiceId:', (shipmentData as any).invoiceId)
+        }
+      }
+    }
+
+    // InvoiceItem'ları çek (sevkiyat içeriği için)
+    let invoiceItems = null
+    if ((shipmentData as any).invoiceId) {
+      try {
+        const { data: items } = await supabase
+          .from('InvoiceItem')
+          .select(
+            `
+            *,
+            Product (
+              id,
+              name,
+              sku,
+              barcode,
+              stock,
+              unit
+            )
+          `
+          )
+          .eq('invoiceId', (shipmentData as any).invoiceId)
+          .eq('companyId', session.user.companyId)
+          .order('createdAt', { ascending: true })
+        
+        invoiceItems = items || []
+      } catch (err) {
+        // Hata olsa bile devam et
+        if (process.env.NODE_ENV === 'development') {
+          console.error('InvoiceItem fetch error:', err)
+        }
+      }
+    }
+
+    // StockMovement'ları çek (sevkiyat ile ilgili)
+    let stockMovements = null
+    try {
+      const { data: movements } = await supabase
+        .from('StockMovement')
+        .select(
+          `
+          *,
+          Product (
+            id,
+            name
+          ),
+          User (
+            id,
+            name,
+            email
+          )
+        `
+        )
+        .eq('relatedTo', 'Shipment')
+        .eq('relatedId', id)
+        .eq('companyId', session.user.companyId)
+        .order('createdAt', { ascending: false })
+        .limit(50)
+      
+      stockMovements = movements || []
+    } catch (err) {
+      // Hata olsa bile devam et
+    }
+
+    // ActivityLog'ları çek
+    const { data: activities } = await supabase
+      .from('ActivityLog')
+      .select(
+        `
+        *,
+        User (
+          name,
+          email
+        )
+      `
+      )
+      .eq('companyId', session.user.companyId)
+      .eq('entity', 'Shipment')
+      .eq('meta->>id', id)
+      .order('createdAt', { ascending: false })
+      .limit(20)
+
+    return NextResponse.json({
+      ...(shipmentData as any),
+      Invoice: invoiceData,
+      activities: activities || [],
+      invoiceItems: invoiceItems || [],
+      stockMovements: stockMovements || [],
+    })
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Failed to fetch shipment' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    // Session kontrolü - hata yakalama ile
+    let session
+    try {
+      session = await getServerSession(authOptions)
+    } catch (sessionError: any) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Shipments [id] PUT API session error:', sessionError)
+      }
+      return NextResponse.json(
+        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { status: 500 }
+      )
+    }
+
+    if (!session?.user?.companyId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { id } = await params
+    const body = await request.json()
+    const supabase = getSupabaseWithServiceRole()
+
+    // ÖNEMLİ: Onaylı sevkiyatlar güncellenemez (status değişikliği hariç - status endpoint'i kullanılmalı)
+    // Mevcut sevkiyat durumunu kontrol et
+    const { data: currentShipment } = await supabase
+      .from('Shipment')
+      .select('status')
+      .eq('id', id)
+      .eq('companyId', session.user.companyId)
+      .maybeSingle()
+
+    if (currentShipment?.status?.toUpperCase() === 'APPROVED') {
+      // Onaylı sevkiyatlar için sadece status endpoint'i kullanılabilir (status değişikliği için)
+      // Diğer alanlar (tracking, invoiceId, vb.) güncellenemez
+      if (body.status && body.status.toUpperCase() !== 'APPROVED') {
+        // Status değişikliği yapılıyor - status endpoint'ini kullan
+        return NextResponse.json({ 
+          error: 'Onaylı sevkiyatlar için durum değişikliği /api/shipments/[id]/status endpoint\'i üzerinden yapılmalıdır' 
+        }, { status: 400 })
+      }
+      
+      // Onaylı sevkiyatlar için diğer alanlar güncellenemez
+      if (body.tracking !== undefined || body.invoiceId !== undefined || 
+          body.shippingCompany !== undefined || body.estimatedDelivery !== undefined || 
+          body.deliveryAddress !== undefined) {
+        return NextResponse.json({ 
+          error: 'Onaylı sevkiyatlar düzenlenemez!' 
+        }, { status: 400 })
+      }
+    }
+
+    // Shipment verilerini güncelle
+    const updateData: any = {
+      updatedAt: new Date().toISOString(),
+    }
+
+    // Temel alanlar
+    if (body.tracking !== undefined) updateData.tracking = body.tracking || null
+    if (body.status !== undefined) updateData.status = body.status
+    if (body.invoiceId !== undefined) updateData.invoiceId = body.invoiceId || null
+    
+    // Schema-extension alanları (varsa güncelle, yoksa Supabase hata vermez - kolon yoksa göz ardı eder)
+    if (body.shippingCompany !== undefined) updateData.shippingCompany = body.shippingCompany || null
+    if (body.estimatedDelivery !== undefined) updateData.estimatedDelivery = body.estimatedDelivery || null
+    if (body.deliveryAddress !== undefined) updateData.deliveryAddress = body.deliveryAddress || null
+
+    const { data: updateResult, error } = await supabase
+      .from('Shipment')
+      // @ts-expect-error - Supabase database type tanımları eksik
+      .update(updateData)
+      .eq('id', id)
+      .eq('companyId', session.user.companyId)
+      .select()
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    // Array ise ilk elemanı al, değilse direkt kullan
+    const data = Array.isArray(updateResult) && updateResult.length > 0 ? updateResult[0] : updateResult
+
+    if (!data) {
+      return NextResponse.json({ error: 'Shipment not found or update failed' }, { status: 404 })
+    }
+
+    // Shipment DELIVERED olduğunda ActivityLog kaydı (hata olsa bile devam et)
+    try {
+      if (body.status === 'DELIVERED' && data) {
+        // @ts-expect-error - Supabase database type tanımları eksik
+        await supabase.from('ActivityLog').insert([
+          {
+            entity: 'Shipment',
+            action: 'UPDATE',
+            description: `Kargo teslim edildi: ${(data as any)?.tracking || 'Takipsiz'}`,
+            meta: { entity: 'Shipment', action: 'delivered', id },
+            userId: session.user.id,
+            companyId: session.user.companyId,
+          },
+        ])
+      }
+
+      // ActivityLog kaydı
+      // @ts-expect-error - Supabase database type tanımları eksik
+      await supabase.from('ActivityLog').insert([
+        {
+          entity: 'Shipment',
+          action: 'UPDATE',
+          description: `Sevkiyat güncellendi: ${body.tracking || (data as any)?.tracking || 'Takipsiz'}`,
+          meta: { entity: 'Shipment', action: 'update', id },
+          userId: session.user.id,
+          companyId: session.user.companyId,
+        },
+      ])
+    } catch (activityError) {
+      // ActivityLog hatası ana işlemi engellemez
+      if (process.env.NODE_ENV === 'development') {
+        console.error('ActivityLog error:', activityError)
+      }
+    }
+
+    return NextResponse.json(data)
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Failed to update shipment' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    // Session kontrolü - hata yakalama ile
+    let session
+    try {
+      session = await getServerSession(authOptions)
+    } catch (sessionError: any) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Shipments [id] DELETE API session error:', sessionError)
+      }
+      return NextResponse.json(
+        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { status: 500 }
+      )
+    }
+
+    if (!session?.user?.companyId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { id } = await params
+    const supabase = getSupabaseWithServiceRole()
+
+    // Debug: ID ve companyId kontrolü
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Shipment DELETE API - Request:', {
+        id,
+        companyId: session.user.companyId,
+        isSuperAdmin: session.user.role === 'SUPER_ADMIN',
+      })
+    }
+
+    // ÖNEMLİ: Onaylı sevkiyatlar silinemez
+    // SuperAdmin kontrolü ekle
+    let shipmentQuery = supabase
+      .from('Shipment')
+      .select('status, tracking')
+      .eq('id', id)
+    
+    // SuperAdmin değilse companyId kontrolü yap
+    if (session.user.role !== 'SUPER_ADMIN') {
+      shipmentQuery = shipmentQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { data: currentShipment, error: fetchError } = await shipmentQuery.maybeSingle()
+
+    if (fetchError) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Shipment DELETE API - Fetch Error:', fetchError)
+      }
+      return NextResponse.json({ error: 'Sevkiyat bulunamadı' }, { status: 404 })
+    }
+
+    if (!currentShipment) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Shipment DELETE API - Not found:', {
+          id,
+          companyId: session.user.companyId,
+          isSuperAdmin: session.user.role === 'SUPER_ADMIN',
+        })
+      }
+      return NextResponse.json({ error: 'Sevkiyat bulunamadı' }, { status: 404 })
+    }
+
+    // Onaylı sevkiyatlar silinemez
+    if (currentShipment.status?.toUpperCase() === 'APPROVED') {
+      return NextResponse.json({ error: 'Onaylı sevkiyatlar silinemez!' }, { status: 400 })
+    }
+
+    // Silme işlemi - SuperAdmin kontrolü ekle
+    let deleteQuery = supabase
+      .from('Shipment')
+      .delete()
+      .eq('id', id)
+    
+    // SuperAdmin değilse companyId kontrolü yap
+    if (session.user.role !== 'SUPER_ADMIN') {
+      deleteQuery = deleteQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { error } = await deleteQuery
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+      if (currentShipment) {
+        try {
+          // @ts-expect-error - Supabase database type tanımları eksik
+          await supabase.from('ActivityLog').insert([
+          {
+            entity: 'Shipment',
+            action: 'DELETE',
+            description: `Sevkiyat silindi: ${(currentShipment as any)?.tracking || 'Takipsiz'}`,
+            meta: { entity: 'Shipment', action: 'delete', id },
+            userId: session.user.id,
+            companyId: session.user.companyId,
+          },
+        ])
+      } catch (activityError) {
+        // ActivityLog hatası ana işlemi engellemez
+        if (process.env.NODE_ENV === 'development') {
+          console.error('ActivityLog error:', activityError)
+        }
+      }
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    return NextResponse.json(
+      { error: 'Failed to delete shipment' },
+      { status: 500 }
+    )
+  }
+}

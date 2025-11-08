@@ -1,0 +1,331 @@
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/authOptions'
+import { getRecords, createRecord } from '@/lib/crud'
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { hasPermission } from '@/lib/permissions'
+
+// Cache'i kapat - POST işleminden sonra fresh data gelsin
+export const dynamic = 'force-dynamic'
+
+export async function GET(request: Request) {
+  try {
+    // Session kontrolü - hata yakalama ile
+    let session
+    try {
+      session = await getServerSession(authOptions)
+    } catch (sessionError: any) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Session error:', sessionError)
+      }
+      return NextResponse.json(
+        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { status: 500 }
+      )
+    }
+
+    if (!session?.user?.companyId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Permission check - canRead kontrolü
+    const canRead = await hasPermission('customer', 'read', session.user.id)
+    if (!canRead) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Müşterileri görüntüleme yetkiniz yok' },
+        { status: 403 }
+      )
+    }
+
+    const { searchParams } = new URL(request.url)
+    const search = searchParams.get('search') || ''
+    const status = searchParams.get('status') || ''
+    const sector = searchParams.get('sector') || ''
+    const customerCompanyId = searchParams.get('customerCompanyId') || '' // Müşteri firması filtresi
+    const page = parseInt(searchParams.get('page') || '1', 10)
+    const pageSize = parseInt(searchParams.get('pageSize') || '20', 10)
+
+    // SuperAdmin tüm şirketlerin verilerini görebilir
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    const companyId = session.user.companyId
+    const supabase = getSupabaseWithServiceRole()
+
+    // Toplam kayıt sayısını al (pagination için)
+    let countQuery = supabase
+      .from('Customer')
+      .select('*', { count: 'exact', head: true })
+    
+    if (!isSuperAdmin) {
+      countQuery = countQuery.eq('companyId', companyId)
+    }
+
+    // Filtreleri uygula (count için)
+    if (search) {
+      countQuery = countQuery.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`)
+    }
+    if (status) {
+      countQuery = countQuery.eq('status', status)
+    }
+    if (sector) {
+      countQuery = countQuery.eq('sector', sector)
+    }
+    if (customerCompanyId) {
+      countQuery = countQuery.eq('customerCompanyId', customerCompanyId)
+    }
+
+    const { count } = await countQuery
+
+    // Veri sorgusu (pagination ile) - Müşteri firması bilgisini de çek
+    // ÖNEMLİ: Filtreleri ÖNCE uygula, sonra order ve range uygula
+    let dataQuery = supabase
+      .from('Customer')
+      .select(`
+        id, 
+        name, 
+        email, 
+        phone, 
+        city,
+        status, 
+        sector, 
+        createdAt,
+        customerCompanyId,
+        CustomerCompany (
+          id,
+          name,
+          sector,
+          city
+        )
+      `) // Müşteri firması bilgisini de çek
+    
+    // ÖNCE companyId filtresi (SuperAdmin değilse)
+    if (!isSuperAdmin) {
+      dataQuery = dataQuery.eq('companyId', companyId)
+    }
+
+    // SONRA diğer filtreleri uygula
+    if (search) {
+      dataQuery = dataQuery.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`)
+    }
+    if (status) {
+      dataQuery = dataQuery.eq('status', status)
+    }
+    if (sector) {
+      dataQuery = dataQuery.eq('sector', sector)
+    }
+    if (customerCompanyId) {
+      dataQuery = dataQuery.eq('customerCompanyId', customerCompanyId)
+    }
+
+    // EN SON order ve range uygula (filtrelerden sonra)
+    dataQuery = dataQuery
+      .order('createdAt', { ascending: false })
+      .range((page - 1) * pageSize, page * pageSize - 1)
+
+    const { data, error } = await dataQuery
+
+    if (error) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Customers GET API query error:', {
+          message: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+        })
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    const totalPages = Math.ceil((count || 0) / pageSize)
+
+    // Debug log - development'ta
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Customers GET API:', {
+        companyId,
+        isSuperAdmin,
+        page,
+        pageSize,
+        totalItems: count || 0,
+        returnedItems: data?.length || 0,
+        filters: { search, status, sector, customerCompanyId },
+        firstCustomer: data?.[0] ? { id: data[0].id, name: data[0].name, createdAt: data[0].createdAt } : null,
+        lastCustomer: data?.[data.length - 1] ? { id: data[data.length - 1].id, name: data[data.length - 1].name, createdAt: data[data.length - 1].createdAt } : null,
+      })
+    }
+
+    // Cache'i kapat - POST işleminden sonra fresh data gelsin
+    return NextResponse.json(
+      {
+        data: data || [],
+        pagination: {
+          page,
+          pageSize,
+          totalItems: count || 0,
+          totalPages,
+        },
+      },
+      {
+        headers: {
+          'Cache-Control': 'no-store, must-revalidate',
+        },
+      }
+    )
+  } catch (error: any) {
+    // Production'da console.error kaldırıldı - sadece error response döndür
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Customers API error:', error)
+    }
+    return NextResponse.json(
+      { 
+        error: error?.message || 'Failed to fetch customers',
+        ...(process.env.NODE_ENV === 'development' && { stack: error?.stack }),
+      },
+      { status: 500 }
+    )
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    // Session kontrolü - hata yakalama ile
+    let session
+    try {
+      session = await getServerSession(authOptions)
+    } catch (sessionError: any) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Session error:', sessionError)
+      }
+      return NextResponse.json(
+        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { status: 500 }
+      )
+    }
+
+    if (!session?.user?.companyId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Permission check - canCreate kontrolü
+    const canCreate = await hasPermission('customer', 'create', session.user.id)
+    if (!canCreate) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Müşteri oluşturma yetkiniz yok' },
+        { status: 403 }
+      )
+    }
+
+    // Body parse - hata yakalama ile
+    let body
+    try {
+      body = await request.json()
+    } catch (jsonError: any) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Customers POST API JSON parse error:', jsonError)
+      }
+      return NextResponse.json(
+        { error: 'Invalid JSON body', message: jsonError?.message || 'Failed to parse request body' },
+        { status: 400 }
+      )
+    }
+
+    // Zorunlu alanları kontrol et
+    if (!body.name || body.name.trim() === '') {
+      return NextResponse.json(
+        { error: 'Müşteri adı gereklidir' },
+        { status: 400 }
+      )
+    }
+
+    // Customer verilerini oluştur - SADECE schema.sql'de olan kolonları gönder
+    // schema.sql: name, email, phone, city, status, companyId
+    // schema-extension.sql: address, sector, website, taxNumber, fax, notes (migration çalıştırılmamış olabilir - GÖNDERME!)
+    // migration 004: customerCompanyId (müşteri hangi firmada çalışıyor)
+    const customerData: any = {
+      name: body.name.trim(),
+      status: body.status || 'ACTIVE',
+      companyId: session.user.companyId,
+    }
+
+    // Sadece schema.sql'de olan alanlar
+    if (body.email !== undefined && body.email !== null && body.email !== '') {
+      customerData.email = body.email
+    }
+    if (body.phone !== undefined && body.phone !== null && body.phone !== '') {
+      customerData.phone = body.phone
+    }
+    if (body.city !== undefined && body.city !== null && body.city !== '') {
+      customerData.city = body.city
+    }
+    // customerCompanyId - müşteri hangi firmada çalışıyor (migration 004'te eklendi)
+    if (body.customerCompanyId !== undefined && body.customerCompanyId !== null && body.customerCompanyId !== '') {
+      customerData.customerCompanyId = body.customerCompanyId
+    }
+    // NOT: address, sector, website, taxNumber, fax, notes schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
+
+    const created = await createRecord(
+      'Customer',
+      customerData,
+      `Yeni müşteri eklendi: ${body.name}`
+    )
+
+    // Oluşturulan kaydı tam bilgileriyle çek (CustomerCompany ilişkisi dahil)
+    const supabase = getSupabaseWithServiceRole()
+    const { data: fullData, error: fetchError } = await supabase
+      .from('Customer')
+      .select(`
+        id, 
+        name, 
+        email, 
+        phone, 
+        city,
+        status, 
+        sector, 
+        createdAt,
+        customerCompanyId,
+        CustomerCompany (
+          id,
+          name,
+          sector,
+          city
+        )
+      `)
+      .eq('id', (created as any)?.id)
+      .single()
+
+    // Eğer tam veri çekilemediyse, oluşturulan kaydı döndür
+    const responseData = fullData || created
+
+    // Debug log - development'ta
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Customers POST API - Created:', {
+        id: (responseData as any)?.id,
+        name: (responseData as any)?.name,
+        companyId: (responseData as any)?.companyId,
+        customerCompanyId: (responseData as any)?.customerCompanyId,
+        customerData,
+        fullData: !!fullData,
+        fetchError: fetchError?.message,
+      })
+    }
+
+    // Cache'i kapat - POST işleminden sonra fresh data gelsin
+    return NextResponse.json(responseData, {
+      status: 201,
+      headers: {
+        'Cache-Control': 'no-store, must-revalidate',
+      },
+    })
+  } catch (error: any) {
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Customers POST API error:', error)
+    }
+    return NextResponse.json(
+      { error: error?.message || 'Failed to create customer' },
+      { status: 500 }
+    )
+  }
+}
+
+
+
+
+

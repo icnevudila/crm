@@ -1,0 +1,302 @@
+'use client'
+
+import { useState, useEffect, useCallback } from 'react'
+import { useLocale } from 'next-intl'
+import { Plus, Edit, Trash2, Eye } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import TicketForm from './TicketForm'
+import SkeletonList from '@/components/skeletons/SkeletonList'
+import Link from 'next/link'
+import { useData } from '@/hooks/useData'
+import { mutate } from 'swr'
+
+interface Ticket {
+  id: string
+  subject: string
+  status: string
+  priority: string
+  customerId?: string
+  createdAt: string
+}
+
+const statusColors: Record<string, string> = {
+  OPEN: 'bg-blue-100 text-blue-800',
+  IN_PROGRESS: 'bg-yellow-100 text-yellow-800',
+  CLOSED: 'bg-green-100 text-green-800',
+}
+
+const statusLabels: Record<string, string> = {
+  OPEN: 'Açık',
+  IN_PROGRESS: 'Devam Ediyor',
+  CLOSED: 'Kapalı',
+}
+
+const priorityColors: Record<string, string> = {
+  LOW: 'bg-gray-100 text-gray-800',
+  MEDIUM: 'bg-blue-100 text-blue-800',
+  HIGH: 'bg-red-100 text-red-800',
+}
+
+const priorityLabels: Record<string, string> = {
+  LOW: 'Düşük',
+  MEDIUM: 'Orta',
+  HIGH: 'Yüksek',
+}
+
+export default function TicketList() {
+  const locale = useLocale()
+  const [status, setStatus] = useState('')
+  const [priority, setPriority] = useState('')
+  const [formOpen, setFormOpen] = useState(false)
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
+
+  // SWR ile veri çekme (repo kurallarına uygun)
+  const params = new URLSearchParams()
+  if (status) params.append('status', status)
+  if (priority) params.append('priority', priority)
+  
+  const apiUrl = `/api/tickets?${params.toString()}`
+  const { data: tickets = [], isLoading, error, mutate: mutateTickets } = useData<Ticket[]>(apiUrl, {
+    dedupingInterval: 5000, // 5 saniye cache (daha kısa - güncellemeler daha hızlı)
+    revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
+  })
+
+  const handleDelete = useCallback(async (id: string, subject: string) => {
+    if (!confirm(`${subject} destek talebini silmek istediğinize emin misiniz?`)) {
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/tickets/${id}`, {
+        method: 'DELETE',
+      })
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to delete ticket')
+      }
+      
+      // Optimistic update - silinen kaydı listeden kaldır
+      const updatedTickets = tickets.filter((t) => t.id !== id)
+      
+      // Cache'i güncelle - yeni listeyi hemen göster
+      await mutateTickets(updatedTickets, { revalidate: false })
+      
+      // Tüm diğer ticket URL'lerini de güncelle
+      await Promise.all([
+        mutate('/api/tickets', updatedTickets, { revalidate: false }),
+        mutate('/api/tickets?', updatedTickets, { revalidate: false }),
+        mutate(apiUrl, updatedTickets, { revalidate: false }),
+      ])
+    } catch (error: any) {
+      // Production'da console.error kaldırıldı
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Delete error:', error)
+      }
+      alert(error?.message || 'Silme işlemi başarısız oldu')
+    }
+  }, [tickets, mutateTickets, apiUrl])
+
+  const handleAdd = useCallback(() => {
+    setSelectedTicket(null)
+    setFormOpen(true)
+  }, [])
+
+  const handleEdit = useCallback((ticket: Ticket) => {
+    setSelectedTicket(ticket)
+    setFormOpen(true)
+  }, [])
+
+  const handleFormClose = () => {
+    setFormOpen(false)
+    setSelectedTicket(null)
+    // Form kapanırken cache'i güncelleme yapılmaz - onSuccess callback'te zaten yapılıyor
+  }
+
+  if (isLoading) {
+    return <SkeletonList />
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Destek Talepleri</h1>
+          <p className="mt-2 text-gray-600">Toplam {tickets.length} talep</p>
+        </div>
+        <Button
+          onClick={handleAdd}
+          className="bg-gradient-primary text-white"
+        >
+          <Plus className="mr-2 h-4 w-4" />
+          Yeni Talep
+        </Button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-4">
+        <Select value={status || 'all'} onValueChange={(v) => setStatus(v === 'all' ? '' : v)}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Durum" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tümü</SelectItem>
+            <SelectItem value="OPEN">Açık</SelectItem>
+            <SelectItem value="IN_PROGRESS">Devam Ediyor</SelectItem>
+            <SelectItem value="CLOSED">Kapalı</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={priority || 'all'} onValueChange={(v) => setPriority(v === 'all' ? '' : v)}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Öncelik" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tümü</SelectItem>
+            <SelectItem value="LOW">Düşük</SelectItem>
+            <SelectItem value="MEDIUM">Orta</SelectItem>
+            <SelectItem value="HIGH">Yüksek</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Table */}
+      <div className="bg-white rounded-lg shadow-card overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Konu</TableHead>
+              <TableHead>Durum</TableHead>
+              <TableHead>Öncelik</TableHead>
+              <TableHead>Müşteri</TableHead>
+              <TableHead>Tarih</TableHead>
+              <TableHead className="text-right">İşlemler</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {tickets.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                  Destek talebi bulunamadı
+                </TableCell>
+              </TableRow>
+            ) : (
+              tickets.map((ticket) => (
+                <TableRow key={ticket.id}>
+                  <TableCell className="font-medium">{ticket.subject}</TableCell>
+                  <TableCell>
+                    <Badge className={statusColors[ticket.status] || 'bg-gray-100'}>
+                      {statusLabels[ticket.status] || ticket.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={priorityColors[ticket.priority] || 'bg-gray-100'}>
+                      {priorityLabels[ticket.priority] || ticket.priority}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {ticket.customerId ? (
+                      <Link 
+                        href={`/${locale}/customers/${ticket.customerId}`}
+                        className="text-primary-600 hover:underline"
+                        prefetch={true}
+                      >
+                        Müşteri #{ticket.customerId.substring(0, 8)}
+                      </Link>
+                    ) : (
+                      '-'
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    {new Date(ticket.createdAt).toLocaleDateString('tr-TR')}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Link href={`/${locale}/tickets/${ticket.id}`} prefetch={true}>
+                        <Button variant="ghost" size="icon" aria-label={`${ticket.subject} destek talebini görüntüle`}>
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(ticket)}
+                        aria-label={`${ticket.subject} destek talebini düzenle`}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(ticket.id, ticket.subject)}
+                        className="text-red-600 hover:text-red-700"
+                        aria-label={`${ticket.subject} destek talebini sil`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Form Modal */}
+      <TicketForm
+        ticket={selectedTicket || undefined}
+        open={formOpen}
+        onClose={handleFormClose}
+        onSuccess={async (savedTicket: Ticket) => {
+          // Optimistic update - yeni/ güncellenmiş kaydı hemen cache'e ekle ve UI'da göster
+          // Böylece form kapanmadan önce destek talebi listede görünür
+          
+          let updatedTickets: Ticket[]
+          
+          if (selectedTicket) {
+            // UPDATE: Mevcut kaydı güncelle
+            updatedTickets = tickets.map((t) =>
+              t.id === savedTicket.id ? savedTicket : t
+            )
+          } else {
+            // CREATE: Yeni kaydı listenin başına ekle
+            updatedTickets = [savedTicket, ...tickets]
+          }
+          
+          // Cache'i güncelle - optimistic update'i hemen uygula ve koru
+          // revalidate: false = background refetch yapmaz, optimistic update korunur
+          await mutateTickets(updatedTickets, { revalidate: false })
+          
+          // Tüm diğer ticket URL'lerini de güncelle (optimistic update)
+          await Promise.all([
+            mutate('/api/tickets', updatedTickets, { revalidate: false }),
+            mutate('/api/tickets?', updatedTickets, { revalidate: false }),
+            mutate(apiUrl, updatedTickets, { revalidate: false }),
+          ])
+        }}
+      />
+    </div>
+  )
+}
+
+
+
+
+
