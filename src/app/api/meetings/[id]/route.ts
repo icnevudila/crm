@@ -1,0 +1,351 @@
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/authOptions'
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
+
+// Dynamic route - PUT/DELETE sonrası fresh data için cache'i kapat
+export const dynamic = 'force-dynamic'
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    // Session kontrolü
+    let session
+    try {
+      session = await getServerSession(authOptions)
+    } catch (sessionError: any) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Meetings [id] GET API session error:', sessionError)
+      }
+      return NextResponse.json(
+        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { status: 500 }
+      )
+    }
+
+    if (!session?.user?.companyId) {
+      return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 })
+    }
+
+    const { id } = await params
+    const supabase = getSupabaseWithServiceRole()
+
+    // SuperAdmin tüm şirketlerin verilerini görebilir
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    const companyId = session.user.companyId
+
+    // Meeting'i ilişkili verilerle çek
+    let query = supabase
+      .from('Meeting')
+      .select(
+        `
+        *,
+        Customer:Customer(id, name, email, phone),
+        Deal:Deal(id, title, stage, value),
+        CreatedBy:User!Meeting_createdBy_fkey(id, name, email)
+      `
+      )
+      .eq('id', id)
+
+    // SuperAdmin değilse companyId filtresi ekle
+    if (!isSuperAdmin) {
+      query = query.eq('companyId', companyId)
+    }
+
+    const { data, error } = await query.single()
+
+    if (error || !data) {
+      if (error?.code === 'PGRST116' || error?.message?.includes('No rows')) {
+        return NextResponse.json({ error: 'Görüşme bulunamadı' }, { status: 404 })
+      }
+      return NextResponse.json({ error: error?.message || 'Görüşme bulunamadı' }, { status: 404 })
+    }
+
+    // Gider bilgilerini Finance tablosundan çek (relatedTo='Meeting')
+    const { data: expenses } = await supabase
+      .from('Finance')
+      .select('*')
+      .eq('relatedTo', 'Meeting')
+      .eq('relatedId', id)
+      .eq('type', 'EXPENSE')
+      .order('createdAt', { ascending: false })
+
+    // ActivityLog'ları çek
+    let activityQuery = supabase
+      .from('ActivityLog')
+      .select(
+        `
+        *,
+        User (
+          name,
+          email
+        )
+      `
+      )
+      .eq('entity', 'Meeting')
+      .eq('meta->>meetingId', id)
+
+    if (!isSuperAdmin) {
+      activityQuery = activityQuery.eq('companyId', companyId)
+    }
+
+    const { data: activities } = await activityQuery
+      .order('createdAt', { ascending: false })
+      .limit(20)
+
+    return NextResponse.json({
+      ...(data as any),
+      expenses: expenses || [],
+      activities: activities || [],
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      },
+    })
+  } catch (error: any) {
+    console.error('Meetings [id] GET API exception:', error)
+    return NextResponse.json(
+      { error: 'Görüşme yüklenemedi', message: error?.message || 'Unknown error' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function PUT(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    // Session kontrolü
+    let session
+    try {
+      session = await getServerSession(authOptions)
+    } catch (sessionError: any) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Meetings [id] PUT API session error:', sessionError)
+      }
+      return NextResponse.json(
+        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { status: 500 }
+      )
+    }
+
+    if (!session?.user?.companyId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { id } = await params
+
+    // Body parse
+    let body
+    try {
+      body = await request.json()
+    } catch (jsonError: any) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Meetings [id] PUT API JSON parse error:', jsonError)
+      }
+      return NextResponse.json(
+        { error: 'Invalid JSON body', message: jsonError?.message || 'Failed to parse request body' },
+        { status: 400 }
+      )
+    }
+
+    // Zorunlu alanları kontrol et
+    if (!body.title || body.title.trim() === '') {
+      return NextResponse.json(
+        { error: 'Görüşme başlığı gereklidir' },
+        { status: 400 }
+      )
+    }
+
+    if (!body.meetingDate) {
+      return NextResponse.json(
+        { error: 'Görüşme tarihi gereklidir' },
+        { status: 400 }
+      )
+    }
+
+    const supabase = getSupabaseWithServiceRole()
+
+    // SuperAdmin kontrolü
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    const companyId = session.user.companyId
+
+    // Meeting'in var olup olmadığını ve yetki kontrolü yap
+    let checkQuery = supabase
+      .from('Meeting')
+      .select('id, companyId')
+      .eq('id', id)
+
+    if (!isSuperAdmin) {
+      checkQuery = checkQuery.eq('companyId', companyId)
+    }
+
+    const { data: existingMeeting } = await checkQuery.single()
+
+    if (!existingMeeting) {
+      return NextResponse.json({ error: 'Görüşme bulunamadı' }, { status: 404 })
+    }
+
+    // Meeting verilerini güncelle
+    const updateData: any = {
+      title: body.title.trim(),
+      description: body.description || null,
+      meetingDate: body.meetingDate,
+      meetingDuration: body.meetingDuration || 60,
+      location: body.location || null,
+      status: body.status || 'SCHEDULED',
+      customerId: body.customerId || null,
+      dealId: body.dealId || null,
+      updatedAt: new Date().toISOString(),
+    }
+
+    const { data: meeting, error } = await supabase
+      .from('Meeting')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Meetings [id] PUT API error:', error)
+      return NextResponse.json(
+        { error: error.message || 'Failed to update meeting' },
+        { status: 500 }
+      )
+    }
+
+    // ActivityLog kaydı
+    try {
+      await supabase.from('ActivityLog').insert([
+        {
+          entity: 'Meeting',
+          action: 'UPDATE',
+          description: `Görüşme güncellendi: ${body.title}`,
+          meta: { 
+            entity: 'Meeting', 
+            action: 'update', 
+            meetingId: id,
+            companyId: session.user.companyId,
+            createdBy: session.user.id,
+            ...body 
+          },
+          userId: session.user.id,
+          companyId: session.user.companyId,
+        },
+      ])
+    } catch (activityError) {
+      console.error('ActivityLog error:', activityError)
+    }
+
+    return NextResponse.json(meeting)
+  } catch (error: any) {
+    console.error('Meetings [id] PUT API exception:', error)
+    return NextResponse.json(
+      { error: 'Failed to update meeting', message: error?.message || 'Unknown error' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    // Session kontrolü
+    let session
+    try {
+      session = await getServerSession(authOptions)
+    } catch (sessionError: any) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Meetings [id] DELETE API session error:', sessionError)
+      }
+      return NextResponse.json(
+        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { status: 500 }
+      )
+    }
+
+    if (!session?.user?.companyId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const { id } = await params
+    const supabase = getSupabaseWithServiceRole()
+
+    // SuperAdmin kontrolü
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    const companyId = session.user.companyId
+
+    // Meeting'in var olup olmadığını ve yetki kontrolü yap
+    let checkQuery = supabase
+      .from('Meeting')
+      .select('id, title, companyId')
+      .eq('id', id)
+
+    if (!isSuperAdmin) {
+      checkQuery = checkQuery.eq('companyId', companyId)
+    }
+
+    const { data: meeting } = await checkQuery.single()
+
+    if (!meeting) {
+      return NextResponse.json({ error: 'Görüşme bulunamadı' }, { status: 404 })
+    }
+
+    // Önce giderleri sil (Finance tablosundan)
+    await supabase
+      .from('Finance')
+      .delete()
+      .eq('relatedTo', 'Meeting')
+      .eq('relatedId', id)
+
+    // Meeting'i sil
+    const { error } = await supabase
+      .from('Meeting')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      console.error('Meetings [id] DELETE API error:', error)
+      return NextResponse.json(
+        { error: error.message || 'Failed to delete meeting' },
+        { status: 500 }
+      )
+    }
+
+    // ActivityLog kaydı
+    try {
+      await supabase.from('ActivityLog').insert([
+        {
+          entity: 'Meeting',
+          action: 'DELETE',
+          description: `Görüşme silindi: ${(meeting as any)?.title || 'Unknown'}`,
+          meta: { 
+            entity: 'Meeting', 
+            action: 'delete', 
+            meetingId: id,
+            companyId: session.user.companyId,
+            createdBy: session.user.id,
+          },
+          userId: session.user.id,
+          companyId: session.user.companyId,
+        },
+      ])
+    } catch (activityError) {
+      console.error('ActivityLog error:', activityError)
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    console.error('Meetings [id] DELETE API exception:', error)
+    return NextResponse.json(
+      { error: 'Failed to delete meeting', message: error?.message || 'Unknown error' },
+      { status: 500 }
+    )
+  }
+}
+

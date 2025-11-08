@@ -29,6 +29,7 @@ import {
   Info,
   FileText as FileTextIcon,
   Shield as ShieldIcon,
+  Calendar,
 } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 
@@ -37,6 +38,7 @@ const menuItems = [
   { href: '/companies', label: 'Firmalar', icon: Building2 },
   { href: '/vendors', label: 'Tedarikçiler', icon: Store },
   { href: '/customers', label: 'Müşteriler', icon: Users },
+  { href: '/meetings', label: 'Görüşmeler', icon: Calendar },
   { href: '/deals', label: 'Fırsatlar', icon: Briefcase },
   { href: '/quotes', label: 'Teklifler', icon: FileText },
   { href: '/invoices', label: 'Faturalar', icon: Receipt },

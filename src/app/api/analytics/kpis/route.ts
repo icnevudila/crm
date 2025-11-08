@@ -307,6 +307,8 @@ export async function GET() {
         totalDeals: totalDeals || 0,
         avgDealValue,
         pendingInvoices: pendingInvoicesTotal,
+        pendingShipments: pendingShipmentsCount,
+        pendingPurchaseShipments: pendingPurchaseShipmentsCount,
         // Aylık KPI'lar (son 3 ay)
         monthlyKPIs: monthlyData,
       },

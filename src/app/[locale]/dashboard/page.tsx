@@ -279,6 +279,7 @@ export default function DashboardPage() {
   const locale = useLocale()
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
+  
 
   // Dashboard KPI'larını çek (TanStack Query ile)
   // Cache stratejisi: 5 dakika stale time (yeni deal eklendiğinde güncellensin)
@@ -372,6 +373,54 @@ export default function DashboardPage() {
     refetchOnMount: false, // ULTRA AGRESİF: Mount'ta refetch yok (cache'den göster)
     retry: 1, // ULTRA AGRESİF: Sadece 1 kez tekrar dene (hızlı hata)
     retryDelay: 500, // 500ms bekle (daha hızlı)
+  })
+
+  // ENTERPRISE: Teklif analizi - gerçekleşen/bekleyen, başarı oranı, red nedeni
+  async function fetchQuoteAnalysis() {
+    try {
+      const res = await fetch('/api/analytics/quote-analysis', {
+        cache: 'force-cache',
+        credentials: 'include',
+        next: { revalidate: 60 }, // 60 saniye cache
+      })
+      if (!res.ok) {
+        return {
+          total: 0,
+          accepted: 0,
+          pending: 0,
+          rejected: 0,
+          successRate: 0,
+          rejectionReasons: [],
+          acceptedTotal: 0,
+          pendingTotal: 0,
+          rejectedTotal: 0,
+        }
+      }
+      return res.json()
+    } catch (error) {
+      return {
+        total: 0,
+        accepted: 0,
+        pending: 0,
+        rejected: 0,
+        successRate: 0,
+        rejectionReasons: [],
+        acceptedTotal: 0,
+        pendingTotal: 0,
+        rejectedTotal: 0,
+      }
+    }
+  }
+
+  const { data: quoteAnalysisData } = useQuery({
+    queryKey: ['quote-analysis'],
+    queryFn: fetchQuoteAnalysis,
+    staleTime: 60 * 1000, // 60 saniye stale time
+    gcTime: 120 * 1000, // 2 dakika garbage collection time
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
+    retry: 1,
+    retryDelay: 500,
   })
 
   // Realtime güncellemeler - sadece initial data ile başla

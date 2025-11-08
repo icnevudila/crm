@@ -3,13 +3,15 @@
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { ArrowLeft, Edit, Users, Building2, Mail, Phone, Globe, FileText, DollarSign, Briefcase } from 'lucide-react'
+import { ArrowLeft, Edit, Users, Building2, Mail, Phone, Globe, FileText, DollarSign, Briefcase, Calendar, Plus, Receipt } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
+import { motion } from 'framer-motion'
+import Image from 'next/image'
 
 interface Company {
   id: string
@@ -24,6 +26,7 @@ interface Company {
   taxOffice?: string
   description?: string
   status: string
+  logoUrl?: string
   createdAt: string
   updatedAt?: string
   User?: Array<{
@@ -103,6 +106,25 @@ export default function CompanyDetailPage() {
     )
   }
 
+  // ENTERPRISE: Durum renkleri
+  const statusColors: Record<string, string> = {
+    'POTANSİYEL': 'bg-amber-100 text-amber-800 border-amber-300',
+    'MÜŞTERİ': 'bg-green-100 text-green-800 border-green-300',
+    'ALTBAYİ': 'bg-blue-100 text-blue-800 border-blue-300',
+    'PASİF': 'bg-red-100 text-red-800 border-red-300',
+    'ACTIVE': 'bg-green-100 text-green-800 border-green-300',
+    'INACTIVE': 'bg-red-100 text-red-800 border-red-300',
+  }
+
+  const statusLabels: Record<string, string> = {
+    'POTANSİYEL': 'Potansiyel',
+    'MÜŞTERİ': 'Müşteri',
+    'ALTBAYİ': 'Alt Bayi',
+    'PASİF': 'Pasif',
+    'ACTIVE': 'Aktif',
+    'INACTIVE': 'Pasif',
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -122,6 +144,101 @@ export default function CompanyDetailPage() {
         </div>
       </div>
 
+      {/* ENTERPRISE: Sabit Üst Kart (Summary) - Logo, Şehir, Durum, Vergi No */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+      >
+        <Card className="p-6 bg-gradient-to-br from-gray-50 to-gray-100 border-2 border-gray-200">
+          <div className="flex items-start justify-between">
+            <div className="flex items-start gap-6">
+              {/* Logo */}
+              <div className="w-24 h-24 rounded-lg bg-white border-2 border-gray-300 flex items-center justify-center overflow-hidden">
+                {company.logoUrl ? (
+                  <Image
+                    src={company.logoUrl}
+                    alt={company.name}
+                    width={96}
+                    height={96}
+                    className="object-cover"
+                  />
+                ) : (
+                  <Building2 className="h-12 w-12 text-gray-400" />
+                )}
+              </div>
+
+              {/* Firma Bilgileri */}
+              <div className="space-y-3">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">{company.name}</h2>
+                  {company.sector && (
+                    <p className="text-sm text-gray-600 mt-1">{company.sector}</p>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-4">
+                  {/* Şehir */}
+                  {company.city && (
+                    <div className="flex items-center gap-2">
+                      <Globe className="h-4 w-4 text-gray-500" />
+                      <span className="text-sm font-medium text-gray-700">{company.city}</span>
+                    </div>
+                  )}
+
+                  {/* Durum */}
+                  <Badge className={statusColors[company.status] || 'bg-gray-100 text-gray-800'}>
+                    {statusLabels[company.status] || company.status}
+                  </Badge>
+
+                  {/* Vergi No */}
+                  {company.taxNumber && (
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-gray-500" />
+                      <span className="text-sm font-medium text-gray-700">
+                        Vergi No: {company.taxNumber}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Vergi Dairesi */}
+                  {company.taxOffice && (
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-gray-500" />
+                      <span className="text-sm font-medium text-gray-700">
+                        {company.taxOffice}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* ENTERPRISE: Hızlı Eylemler (Sağ Taraf) */}
+            <div className="flex flex-col gap-2">
+              <Link href={`/${locale}/meetings/new?companyId=${company.id}`}>
+                <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white">
+                  <Calendar className="mr-2 h-4 w-4" />
+                  Görüşme Ekle
+                </Button>
+              </Link>
+              <Link href={`/${locale}/quotes/new?companyId=${company.id}`}>
+                <Button variant="outline" className="w-full border-indigo-300 text-indigo-700 hover:bg-indigo-50">
+                  <FileText className="mr-2 h-4 w-4" />
+                  Teklif Oluştur
+                </Button>
+              </Link>
+              <Link href={`/${locale}/finance/new?companyId=${company.id}`}>
+                <Button variant="outline" className="w-full border-amber-300 text-amber-700 hover:bg-amber-50">
+                  <Receipt className="mr-2 h-4 w-4" />
+                  Gider Gir
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </Card>
+      </motion.div>
+
       {/* Company Info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card className="p-6">
@@ -132,14 +249,8 @@ export default function CompanyDetailPage() {
           <div className="space-y-4">
             <div>
               <p className="text-sm text-gray-600">Durum</p>
-              <Badge
-                className={
-                  company.status === 'ACTIVE'
-                    ? 'bg-green-100 text-green-800 mt-1'
-                    : 'bg-red-100 text-red-800 mt-1'
-                }
-              >
-                {company.status === 'ACTIVE' ? 'Aktif' : 'Pasif'}
+              <Badge className={`${statusColors[company.status] || 'bg-gray-100 text-gray-800'} mt-1`}>
+                {statusLabels[company.status] || company.status}
               </Badge>
             </div>
             {company.sector && (

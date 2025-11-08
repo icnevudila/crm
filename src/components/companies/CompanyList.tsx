@@ -57,23 +57,8 @@ export default function CompanyList() {
   const [formOpen, setFormOpen] = useState(false)
   const [selectedCompany, setSelectedCompany] = useState<Company | null>(null)
 
-  // SUPER_ADMIN bu sayfayı kullanmaz (kendi sayfası var)
-  // Sadece ADMIN ve normal kullanıcılar müşteri firmalarını görebilir
+  // ENTERPRISE: SuperAdmin de bu sayfayı kullanabilir - tüm firmaları görebilir
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
-
-  // SUPER_ADMIN ise bu sayfayı gösterme
-  if (isSuperAdmin) {
-    return (
-      <div className="space-y-6">
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <p className="text-sm text-yellow-800">
-            Bu sayfa sadece ADMIN ve normal kullanıcılar için müşteri firmaları yönetim sayfasıdır.
-            SuperAdmin için ayrı bir sayfa mevcuttur.
-          </p>
-        </div>
-      </div>
-    )
-  }
 
   // Debounced search - performans için (kullanıcı yazmayı bitirdikten 300ms sonra arama)
   const [debouncedSearch, setDebouncedSearch] = useState(search)
@@ -87,12 +72,15 @@ export default function CompanyList() {
   }, [search])
 
   // SWR ile veri çekme (repo kurallarına uygun) - debounced search kullanıyoruz
-  // Müşteri firmaları için yeni endpoint kullan
+  // ENTERPRISE: SuperAdmin için tüm firmalar, normal kullanıcı için müşteri firmaları
   const params = new URLSearchParams()
   if (debouncedSearch) params.append('search', debouncedSearch)
   if (status) params.append('status', status)
   
-  const apiUrl = `/api/customer-companies?${params.toString()}`
+  // SuperAdmin için tüm firmalar endpoint'i, normal kullanıcı için müşteri firmaları
+  const apiUrl = isSuperAdmin 
+    ? `/api/companies?${params.toString()}`
+    : `/api/customer-companies?${params.toString()}`
   const { data: companies = [], isLoading, error, mutate: mutateCompanies } = useData<Company[]>(apiUrl, {
     dedupingInterval: 0, // Cache YOK - her seferinde fresh data (POST sonrası veri gelsin)
     revalidateOnFocus: true, // Focus'ta yeniden fetch yap (sayfa yenilendiğinde veri gelsin)
@@ -117,7 +105,12 @@ export default function CompanyList() {
     }
 
       try {
-      const res = await fetch(`/api/customer-companies/${id}`, {
+      // ENTERPRISE: SuperAdmin için /api/companies, normal kullanıcı için /api/customer-companies
+      const deleteUrl = isSuperAdmin 
+        ? `/api/companies/${id}`
+        : `/api/customer-companies/${id}`
+      
+      const res = await fetch(deleteUrl, {
         method: 'DELETE',
         credentials: 'include', // Session cookie'lerini gönder
       })
@@ -134,12 +127,15 @@ export default function CompanyList() {
       // revalidate: true = background refetch yapar, veritabanından güncel veri gelir
       await mutateCompanies(updatedCompanies, { revalidate: true })
       
-      // Tüm diğer customer-companies URL'lerini de güncelle (revalidate ile)
-      await Promise.all([
-        mutate('/api/customer-companies', updatedCompanies, { revalidate: true }),
-        mutate('/api/customer-companies?', updatedCompanies, { revalidate: true }),
-        mutate(apiUrl, updatedCompanies, { revalidate: true }),
-      ])
+      // ENTERPRISE: SuperAdmin için /api/companies, normal kullanıcı için /api/customer-companies
+      const cacheKeys = isSuperAdmin
+        ? ['/api/companies', '/api/companies?', apiUrl]
+        : ['/api/customer-companies', '/api/customer-companies?', apiUrl]
+      
+      // Tüm ilgili URL'leri güncelle (revalidate ile)
+      await Promise.all(
+        cacheKeys.map(key => mutate(key, updatedCompanies, { revalidate: true }))
+      )
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
@@ -147,7 +143,7 @@ export default function CompanyList() {
       }
       alert(error?.message || 'Silme işlemi başarısız oldu')
     }
-  }, [companies, mutateCompanies, apiUrl])
+  }, [companies, mutateCompanies, apiUrl, isSuperAdmin])
 
   const handleAdd = useCallback(() => {
     setSelectedCompany(null)
@@ -193,19 +189,35 @@ export default function CompanyList() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Müşteri Firmaları</h1>
+          <h1 className="text-3xl font-bold text-gray-900">
+            {isSuperAdmin ? 'Firmalar' : 'Müşteri Firmaları'}
+          </h1>
           <p className="mt-2 text-gray-600">
-            Toplam {companies.length} müşteri firması
+            {isSuperAdmin 
+              ? `Toplam ${companies.length} firma`
+              : `Toplam ${companies.length} müşteri firması`
+            }
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            onClick={handleAdd}
-            className="bg-gradient-primary text-white"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Müşteri Firması Ekle
-          </Button>
+          {isSuperAdmin && (
+            <Button
+              onClick={handleAdd}
+              className="bg-gradient-primary text-white"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Firma Ekle
+            </Button>
+          )}
+          {!isSuperAdmin && (
+            <Button
+              onClick={handleAdd}
+              className="bg-gradient-primary text-white"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Müşteri Firması Ekle
+            </Button>
+          )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline">
@@ -372,25 +384,26 @@ export default function CompanyList() {
             // revalidate: true = background refetch yapar, veritabanından güncel veri gelir
             await mutateCompanies(updatedCompanies, { revalidate: true })
             
-            // Tüm customer-companies URL'lerini invalidate et ve refetch yap
-            // Pattern match ile tüm URL'leri bul ve invalidate et
-            const allCustomerCompanyKeys = [
-              '/api/customer-companies',
-              '/api/customer-companies?',
-              apiUrl,
-            ]
+            // ENTERPRISE: SuperAdmin için /api/companies, normal kullanıcı için /api/customer-companies
+            const cacheKeys = isSuperAdmin
+              ? ['/api/companies', '/api/companies?', apiUrl]
+              : ['/api/customer-companies', '/api/customer-companies?', apiUrl]
             
             // Her URL'i invalidate et ve refetch yap
             await Promise.all(
-              allCustomerCompanyKeys.map((key) =>
+              cacheKeys.map((key) =>
                 mutate(key, undefined, { revalidate: true })
               )
             )
             
-            // Ayrıca global mutate ile tüm customer-companies URL'lerini invalidate et
+            // Ayrıca global mutate ile tüm ilgili URL'leri invalidate et
             // SWR'nin key matcher'ını kullan
+            const keyMatcher = isSuperAdmin
+              ? (key: string) => typeof key === 'string' && key.includes('/api/companies')
+              : (key: string) => typeof key === 'string' && key.includes('/api/customer-companies')
+            
             await mutate(
-              (key: string) => typeof key === 'string' && key.includes('/api/customer-companies'),
+              keyMatcher,
               undefined,
               { revalidate: true }
             )

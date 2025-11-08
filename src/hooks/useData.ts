@@ -25,7 +25,7 @@ export function useData<T = any>(
 ) {
   const {
     revalidateOnFocus = false, // Focus'ta revalidate YOK - instant navigation için
-    dedupingInterval = 600000, // 10 DAKİKA - ULTRA AGRESİF CACHE (instant navigation - <300ms hedef)
+    dedupingInterval = 60000, // ENTERPRISE: 60 SANİYE - Login sonrası veriler cache'lenip 60 saniye içinde yenilensin
     errorRetryInterval = 1000, // Exponential backoff: 1s (çok hızlı retry)
     suspense = false, // Suspense boundaries manuel olarak ekleniyor
     refreshInterval,

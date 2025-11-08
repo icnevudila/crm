@@ -30,13 +30,19 @@ export const getSupabase = () => {
           eventsPerSecond: 10, // Rate limiting
         },
       },
-      // OPTİMİZE: Query timeout'u artır (ilk yüklemede daha fazla zaman ver)
+      // ENTERPRISE: Query timeout ve connection pool optimizasyonu
       fetch: (url, options = {}) => {
         return fetch(url, {
           ...options,
-          // Timeout: 10 saniye (ilk yüklemede daha fazla zaman ver, sonra optimize edilecek)
-          signal: AbortSignal.timeout(10000),
+          // Timeout: 15 saniye (enterprise seviye için artırıldı)
+          signal: AbortSignal.timeout(15000),
+          // Connection pooling için keep-alive
+          keepalive: true,
         })
+      },
+      // Connection pool ayarları
+      db: {
+        schema: 'public',
       },
     })
   }
@@ -92,13 +98,19 @@ export function getSupabaseWithServiceRole() {
             eventsPerSecond: 10, // Rate limiting
           },
         },
-        // OPTİMİZE: Query timeout'u artır (ilk yüklemede daha fazla zaman ver)
+        // ENTERPRISE: Query timeout ve connection pool optimizasyonu
         fetch: (url, options = {}) => {
           return fetch(url, {
             ...options,
-            // Timeout: 10 saniye (ilk yüklemede daha fazla zaman ver, sonra optimize edilecek)
-            signal: AbortSignal.timeout(10000),
+            // Timeout: 15 saniye (enterprise seviye için artırıldı)
+            signal: AbortSignal.timeout(15000),
+            // Connection pooling için keep-alive
+            keepalive: true,
           })
+        },
+        // Connection pool ayarları
+        db: {
+          schema: 'public',
         },
       })
       return serviceRoleClient

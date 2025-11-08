@@ -180,6 +180,18 @@ export default function QuotePDF({ quote }: QuotePDFProps) {
               {new Date(quote.createdAt).toLocaleDateString('tr-TR')}
             </Text>
           </View>
+          {/* ENTERPRISE: Otomatik son geçerlilik tarihi (bugün + 15 gün) */}
+          <View style={styles.row}>
+            <Text style={styles.label}>Son Geçerlilik Tarihi:</Text>
+            <Text style={styles.value}>
+              {(() => {
+                const today = new Date()
+                const validUntil = new Date(today)
+                validUntil.setDate(today.getDate() + 15) // Bugün + 15 gün
+                return validUntil.toLocaleDateString('tr-TR')
+              })()}
+            </Text>
+          </View>
           <View style={styles.row}>
             <Text style={styles.label}>Durum:</Text>
             <Text style={styles.value}>
@@ -281,6 +293,15 @@ export default function QuotePDF({ quote }: QuotePDFProps) {
           <Text>
             Bu teklif {new Date(quote.createdAt).toLocaleDateString('tr-TR')} tarihinde
             hazırlanmıştır.
+          </Text>
+          <Text style={{ marginTop: 5, fontWeight: 'bold' }}>
+            Son geçerlilik tarihi:{' '}
+            {(() => {
+              const today = new Date()
+              const validUntil = new Date(today)
+              validUntil.setDate(today.getDate() + 15) // Bugün + 15 gün
+              return validUntil.toLocaleDateString('tr-TR')
+            })()}
           </Text>
         </View>
       </Page>

@@ -12,9 +12,9 @@ const bcryptCompare = async (password: string, hash: string): Promise<boolean> =
   }
 }
 
-// Session cache - ULTRA AGRESİF performans için
+// Session cache - ENTERPRISE: Login sonrası 60 saniye revalidation
 const sessionCache = new Map<string, { session: any; expires: number }>()
-const SESSION_CACHE_TTL = 30 * 60 * 1000 // 30 DAKİKA cache (instant navigation için)
+const SESSION_CACHE_TTL = 60 * 1000 // 60 SANİYE cache (login sonrası veriler cache'lenip 60 saniye içinde yenilensin)
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -185,6 +185,8 @@ export const authOptions: NextAuthOptions = {
   session: {
     strategy: 'jwt',
     maxAge: 30 * 24 * 60 * 60, // 30 gün
+    // ENTERPRISE: Session timeout hatalarını önlemek için updateAge artırıldı
+    updateAge: 24 * 60 * 60, // 24 saat (session her 24 saatte bir güncellenir)
   },
   secret: process.env.NEXTAUTH_SECRET,
   // Debug mode - development'ta daha fazla log

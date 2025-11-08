@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useSession } from 'next-auth/react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -90,7 +91,11 @@ export default function CompanyForm({
 }: CompanyFormProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const { data: session } = useSession()
   const [loading, setLoading] = useState(false)
+  
+  // ENTERPRISE: SuperAdmin için /api/companies, normal kullanıcı için /api/customer-companies
+  const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
 
   const {
     register,
@@ -120,9 +125,11 @@ export default function CompanyForm({
 
   const mutation = useMutation({
     mutationFn: async (data: CompanyFormData) => {
+      // ENTERPRISE: SuperAdmin için /api/companies, normal kullanıcı için /api/customer-companies
+      const baseUrl = isSuperAdmin ? '/api/companies' : '/api/customer-companies'
       const url = company
-        ? `/api/customer-companies/${company.id}`
-        : '/api/customer-companies'
+        ? `${baseUrl}/${company.id}`
+        : baseUrl
       const method = company ? 'PUT' : 'POST'
 
       try {

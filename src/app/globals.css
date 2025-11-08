@@ -3,16 +3,18 @@
 @tailwind utilities;
 
 :root {
-  /* Premium Tema CSS Variables */
-  --primary: #6366f1;
+  /* ENTERPRISE: Premium Tema CSS Variables - gri ton zemin + accent (indigo/amber) */
+  --primary: #6366f1; /* Indigo */
   --primary-dark: #4f46e5;
-  --secondary: #8b5cf6;
-  --secondary-dark: #7c3aed;
-  --accent: #ec4899;
-  --accent-dark: #db2777;
+  --secondary: #f59e0b; /* Amber (mor/yeşil tonları kaldırıldı) */
+  --secondary-dark: #d97706;
+  --accent: #f59e0b; /* Amber accent */
+  --accent-dark: #d97706;
 
-  /* Background */
-  --surface: #f8fafc;
+  /* ENTERPRISE: UI renk teması - gri ton zemin + accent (indigo/amber) */
+  --surface: #f5f5f5; /* Gri ton zemin */
+  --surface-light: #fafafa;
+  --surface-dark: #e5e5e5;
 
   /* Text */
   --text-primary: #0f172a;
