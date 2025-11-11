@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Dynamic route - build-time'da çalışmasın
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -28,10 +27,11 @@ export async function GET(
       )
     }
 
+    const supabase = getSupabaseWithServiceRole()
     const { data, error } = await supabase
       .from('Competitor')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', (await params).id)
       .eq('companyId', session.user.companyId)
       .single()
 
@@ -52,7 +52,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -71,11 +71,13 @@ export async function PUT(
     }
 
     const body = await request.json()
+    const { id } = await params
 
+    const supabase = getSupabaseWithServiceRole()
     const { data, error } = await supabase
       .from('Competitor')
       .update(body)
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('companyId', session.user.companyId)
       .select()
       .single()
@@ -85,7 +87,7 @@ export async function PUT(
     await supabase.from('ActivityLog').insert({
       action: 'UPDATE',
       entityType: 'Competitor',
-      entityId: params.id,
+      entityId: id,
       userId: session.user.id,
       companyId: session.user.companyId,
       description: `Updated competitor: ${data.name}`,
@@ -103,7 +105,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -121,10 +123,12 @@ export async function DELETE(
       )
     }
 
+    const { id } = await params
+    const supabase = getSupabaseWithServiceRole()
     const { error } = await supabase
       .from('Competitor')
       .delete()
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('companyId', session.user.companyId)
 
     if (error) throw error
@@ -132,7 +136,7 @@ export async function DELETE(
     await supabase.from('ActivityLog').insert({
       action: 'DELETE',
       entityType: 'Competitor',
-      entityId: params.id,
+      entityId: id,
       userId: session.user.id,
       companyId: session.user.companyId,
       description: `Deleted competitor`,

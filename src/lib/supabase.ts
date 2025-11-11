@@ -6,25 +6,27 @@ let serviceRoleClient: ReturnType<typeof createClient> | null = null
 
 export const getSupabase = () => {
   if (!client) {
+    // ✅ BUILD-TIME DETECTION: Next.js build sırasında Supabase client oluşturma
+    // Next.js build sırasında bu fonksiyon çağrılırsa, placeholder döndür
+    const isBuildTime = 
+      process.env.NEXT_PHASE === 'phase-production-build' ||
+      process.env.NEXT_PHASE === 'phase-export' ||
+      process.env.NEXT_PHASE === 'phase-development' ||
+      (typeof window === 'undefined' && process.env.NODE_ENV === 'production' && !process.env.VERCEL_ENV) ||
+      process.env.__NEXT_PRIVATE_PREBUNDLED_REACT
+
+    if (isBuildTime) {
+      // Build-time'da placeholder döndür - hiçbir gerçek bağlantı yapma
+      return createClient('https://placeholder.supabase.co', 'placeholder-key', {
+        auth: { persistSession: false },
+      })
+    }
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-    // Build-time'da environment variables yoksa, runtime'da tekrar deneyecek
+    // Runtime'da environment variables zorunlu
     if (!supabaseUrl || !supabaseAnonKey) {
-      // Build-time'da (Next.js build sırasında) hata verme
-      // Runtime'da environment variables yüklenecek
-      const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build' || 
-                         process.env.NEXT_PHASE === 'phase-export' ||
-                         !process.env.VERCEL // Vercel'de değilse build-time olabilir
-      
-      if (isBuildTime) {
-        // Build-time'da placeholder döndür (runtime'da düzgün yüklenecek)
-        // Singleton pattern'i bypass et - her seferinde yeni placeholder döndür
-        return createClient('https://placeholder.supabase.co', 'placeholder-key', {
-          auth: { persistSession: false },
-        })
-      }
-      // Runtime'da environment variables zorunlu
       throw new Error('Missing Supabase environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set')
     }
 
@@ -87,20 +89,26 @@ export const createClientSupabase = () => {
  */
 export function getSupabaseWithServiceRole() {
   if (!serviceRoleClient) {
+    // ✅ BUILD-TIME DETECTION: Next.js build sırasında Supabase client oluşturma
+    const isBuildTime = 
+      process.env.NEXT_PHASE === 'phase-production-build' ||
+      process.env.NEXT_PHASE === 'phase-export' ||
+      process.env.NEXT_PHASE === 'phase-development' ||
+      (typeof window === 'undefined' && process.env.NODE_ENV === 'production' && !process.env.VERCEL_ENV) ||
+      process.env.__NEXT_PRIVATE_PREBUNDLED_REACT
+
+    if (isBuildTime) {
+      // Build-time'da placeholder döndür - hiçbir gerçek bağlantı yapma
+      return createClient('https://placeholder.supabase.co', 'placeholder-key', {
+        auth: { persistSession: false },
+      })
+    }
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    // Build-time'da environment variables yoksa placeholder döndür
+    // Runtime'da environment variables zorunlu
     if (!supabaseUrl) {
-      const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build' || 
-                         process.env.NEXT_PHASE === 'phase-export' ||
-                         !process.env.VERCEL
-      
-      if (isBuildTime) {
-        return createClient('https://placeholder.supabase.co', 'placeholder-key', {
-          auth: { persistSession: false },
-        })
-      }
       throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL')
     }
 

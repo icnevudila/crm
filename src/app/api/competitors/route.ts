@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Dynamic route - build-time'da çalışmasın
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,6 +24,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    const supabase = getSupabaseWithServiceRole()
     const { data, error } = await supabase
       .from('Competitor')
       .select('*')
@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const supabase = getSupabaseWithServiceRole()
     const { data, error } = await supabase
       .from('Competitor')
       .insert({

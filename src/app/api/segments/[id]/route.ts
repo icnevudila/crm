@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
-import { createClient } from '@supabase/supabase-js'
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+// Dynamic route - build-time'da çalışmasın
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -28,10 +27,12 @@ export async function GET(
       )
     }
 
+    const { id } = await params
+    const supabase = getSupabaseWithServiceRole()
     const { data, error } = await supabase
       .from('CustomerSegment')
       .select('*, members:SegmentMember(count)')
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('companyId', session.user.companyId)
       .single()
 
@@ -52,7 +53,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -70,11 +71,14 @@ export async function PUT(
       )
     }
 
+    const { id } = await params
+    const supabase = getSupabaseWithServiceRole()
+    
     // Mevcut segment'i çek (ActivityLog için)
     const { data: existingSegment } = await supabase
       .from('CustomerSegment')
       .select('name')
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('companyId', session.user.companyId)
       .single()
 
@@ -83,7 +87,7 @@ export async function PUT(
     const { data, error } = await supabase
       .from('CustomerSegment')
       .update(body)
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('companyId', session.user.companyId)
       .select()
       .single()
@@ -95,11 +99,11 @@ export async function PUT(
       await supabase.from('ActivityLog').insert({
         action: 'UPDATE',
         entityType: 'CustomerSegment',
-        entityId: params.id,
+        entityId: id,
         userId: session.user.id,
         companyId: session.user.companyId,
-        description: `Segment güncellendi: ${body.name || existingSegment?.name || params.id}`,
-        meta: { segmentId: params.id },
+        description: `Segment güncellendi: ${body.name || existingSegment?.name || id}`,
+        meta: { segmentId: id },
       })
     } catch (logError) {
       // ActivityLog hatası ana işlemi etkilemez
@@ -117,7 +121,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -135,18 +139,21 @@ export async function DELETE(
       )
     }
 
+    const { id } = await params
+    const supabase = getSupabaseWithServiceRole()
+    
     // Mevcut segment'i çek (ActivityLog için)
     const { data: existingSegment } = await supabase
       .from('CustomerSegment')
       .select('name')
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('companyId', session.user.companyId)
       .single()
 
     const { error } = await supabase
       .from('CustomerSegment')
       .delete()
-      .eq('id', params.id)
+      .eq('id', id)
       .eq('companyId', session.user.companyId)
 
     if (error) throw error
@@ -156,11 +163,11 @@ export async function DELETE(
       await supabase.from('ActivityLog').insert({
         action: 'DELETE',
         entityType: 'CustomerSegment',
-        entityId: params.id,
+        entityId: id,
         userId: session.user.id,
         companyId: session.user.companyId,
-        description: `Segment silindi: ${existingSegment?.name || params.id}`,
-        meta: { segmentId: params.id },
+        description: `Segment silindi: ${existingSegment?.name || id}`,
+        meta: { segmentId: id },
       })
     } catch (logError) {
       // ActivityLog hatası ana işlemi etkilemez
