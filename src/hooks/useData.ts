@@ -25,7 +25,7 @@ export function useData<T = any>(
 ) {
   const {
     revalidateOnFocus = false, // Focus'ta revalidate YOK - instant navigation için
-    dedupingInterval = 60000, // ENTERPRISE: 60 SANİYE - Login sonrası veriler cache'lenip 60 saniye içinde yenilensin
+    dedupingInterval = 5000, // AGRESİF: 5 SANİYE - Daha sık fresh data (optimistic update'ler zaten var)
     errorRetryInterval = 1000, // Exponential backoff: 1s (çok hızlı retry)
     suspense = false, // Suspense boundaries manuel olarak ekleniyor
     refreshInterval,
@@ -50,7 +50,6 @@ export function useData<T = any>(
         setTimeout(() => revalidate({ retryCount }), delay)
       },
       // Background revalidation
-      revalidateOnReconnect: true,
       // Keep previous data on error
       keepPreviousData: true,
     }

@@ -24,9 +24,9 @@ export async function GET(request: Request) {
       .limit(limit)
 
     if (read === 'true') {
-      query = query.eq('read', true)
+      query = query.eq('isRead', true)
     } else if (read === 'false') {
-      query = query.eq('read', false)
+      query = query.eq('isRead', false)
     }
 
     const { data, error } = await query
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
     // Supabase database type tanımları eksik, Notification tablosu için type tanımı yok
     const { data, error } = await (supabase
       .from('Notification') as any)
-      .update({ read })
+      .update({ isRead: read })
       .in('id', notificationIds)
       .eq('userId', session.user.id)
       .select()

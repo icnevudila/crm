@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -9,6 +9,8 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { toast } from '@/lib/toast'
+import { getStageMessage } from '@/lib/stageTranslations'
 import {
   Dialog,
   DialogContent,
@@ -25,15 +27,28 @@ import {
 } from '@/components/ui/select'
 
 const quoteSchema = z.object({
-  title: z.string().min(1, 'Başlık gereklidir'),
+  title: z.string().min(1, 'Başlık gereklidir').max(200, 'Başlık en fazla 200 karakter olabilir'),
   status: z.enum(['DRAFT', 'SENT', 'ACCEPTED', 'DECLINED', 'WAITING']).default('DRAFT'),
-  total: z.number().min(0.01, 'Alt Toplam 0\'dan büyük olmalı'),
+  total: z.number().min(0.01, 'Alt Toplam 0\'dan büyük olmalı').max(999999999, 'Tutar çok büyük'),
   dealId: z.string().min(1, 'Fırsat seçimi zorunludur'),
   vendorId: z.string().optional(),
-  description: z.string().optional(),
+  description: z.string().max(2000, 'Açıklama en fazla 2000 karakter olabilir').optional(),
   validUntil: z.string().min(1, 'Geçerlilik tarihi zorunludur'),
-  discount: z.number().min(0).max(100).optional(),
-  taxRate: z.number().min(0).max(100).optional(),
+  discount: z.number().min(0, 'İndirim oranı 0-100 arası olmalı').max(100, 'İndirim oranı 0-100 arası olmalı').optional(),
+  taxRate: z.number().min(0, 'KDV oranı 0-100 arası olmalı').max(100, 'KDV oranı 0-100 arası olmalı').optional(),
+  customerCompanyId: z.string().optional(), // Firma bazlı ilişki
+}).refine((data) => {
+  // validUntil geçmiş tarih olamaz
+  if (data.validUntil) {
+    const validUntil = new Date(data.validUntil)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return validUntil >= today
+  }
+  return true
+}, {
+  message: 'Geçerlilik tarihi geçmiş bir tarih olamaz',
+  path: ['validUntil'],
 })
 
 type QuoteFormData = z.infer<typeof quoteSchema>
@@ -43,6 +58,8 @@ interface QuoteFormProps {
   open: boolean
   onClose: () => void
   onSuccess?: (savedQuote: any) => void // Cache güncelleme için callback
+  dealId?: string // Prop olarak dealId geçilebilir (modal içinde kullanım için)
+  customerId?: string // Prop olarak customerId geçilebilir (modal içinde kullanım için)
 }
 
 async function fetchDeals() {
@@ -59,9 +76,16 @@ async function fetchVendors() {
   return Array.isArray(data) ? data : (data.data || data.vendors || [])
 }
 
-export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteFormProps) {
+export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dealIdProp, customerId: customerIdProp }: QuoteFormProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const searchParams = useSearchParams()
+  const customerCompanyId = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
+  const dealIdFromUrl = searchParams.get('dealId') || undefined // URL'den dealId al
+  
+  // Prop öncelikli - prop varsa prop'u kullan, yoksa URL'den al
+  const dealId = dealIdProp || dealIdFromUrl
+  const customerId = customerIdProp
   const [loading, setLoading] = useState(false)
 
   const { data: dealsData } = useQuery({
@@ -103,15 +127,38 @@ export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteForm
   })
 
   const status = watch('status')
-  const dealId = watch('dealId')
+  const selectedDealId = watch('dealId') // Form'dan seçilen deal ID'si
   const total = watch('total')
   const discount = watch('discount') || 0
   const taxRate = watch('taxRate') || 18
+  
+  // Durum bazlı koruma kontrolü - form alanlarını devre dışı bırakmak için
+  const isProtected = quote && quote.status === 'ACCEPTED'
+
+  // Deal bilgilerini çek (dealId varsa)
+  const { data: dealData } = useQuery({
+    queryKey: ['deal', dealId],
+    queryFn: async () => {
+      if (!dealId) return null
+      const res = await fetch(`/api/deals/${dealId}`)
+      if (!res.ok) return null
+      return res.json()
+    },
+    enabled: !!dealId && open && !quote, // Sadece yeni kayıt modunda ve dealId varsa
+  })
 
   // Quote prop değiştiğinde veya modal açıldığında form'u güncelle
   useEffect(() => {
     if (open) {
       if (quote) {
+        // ÖNEMLİ: Quote ACCEPTED olduğunda düzenlenemez
+        if (quote.status === 'ACCEPTED') {
+          const message = getStageMessage(quote.status, 'quote', 'immutable')
+          toast.warning(message.title, message.description)
+          onClose() // Modal'ı kapat
+          return
+        }
+
         // Düzenleme modu - quote bilgilerini yükle
         // Tarih formatını düzelt
         let formattedValidUntil = ''
@@ -133,13 +180,30 @@ export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteForm
           discount: quote.discount || 0,
           taxRate: quote.taxRate || 18,
         })
+      } else if (dealId && dealData) {
+        // Yeni kayıt modu - dealId varsa ve deal bilgileri yüklendiyse forma yansıt
+        const deal = dealData
+        const validUntilDate = new Date()
+        validUntilDate.setDate(validUntilDate.getDate() + 30) // 30 gün sonra
+        
+        reset({
+          title: deal.title ? `Teklif - ${deal.title}` : '',
+          status: 'DRAFT',
+          total: typeof deal.value === 'string' ? parseFloat(deal.value) || 0 : (deal.value || 0),
+          dealId: dealId,
+          vendorId: '',
+          description: deal.description || '',
+          validUntil: validUntilDate.toISOString().split('T')[0],
+          discount: 0,
+          taxRate: 18,
+        })
       } else {
         // Yeni kayıt modu - form'u temizle
         reset({
           title: '',
           status: 'DRAFT',
           total: 0,
-          dealId: '',
+          dealId: dealId || '', // Prop veya URL'den gelen dealId'yi kullan
           vendorId: '',
           description: '',
           validUntil: '',
@@ -148,7 +212,7 @@ export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteForm
         })
       }
     }
-  }, [quote, open, reset])
+  }, [quote, open, reset, dealId, dealData])
 
   // Toplam hesaplama (indirim ve KDV ile)
   const subtotal = total || 0
@@ -162,10 +226,17 @@ export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteForm
       const url = quote ? `/api/quotes/${quote.id}` : '/api/quotes'
       const method = quote ? 'PUT' : 'POST'
 
+      // Payload oluştur - customerCompanyId kolonu Quote tablosunda yok, göndermiyoruz
+      const payload = {
+        ...data,
+        total: finalTotal,
+        // NOT: customerCompanyId kolonu Quote tablosunda yok - GÖNDERME!
+      }
+
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...data, total: finalTotal }),
+        body: JSON.stringify(payload),
       })
 
       if (!res.ok) {
@@ -219,7 +290,10 @@ export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteForm
       await mutation.mutateAsync(cleanData)
     } catch (error: any) {
       console.error('Quote save error:', error)
-      alert(error.message || 'Kaydetme işlemi başarısız oldu')
+      toast.error(
+        'Teklif kaydedilemedi',
+        error.message || 'Teklif kaydetme işlemi sırasında bir hata oluştu. Lütfen tüm alanları kontrol edip tekrar deneyin.'
+      )
     } finally {
       setLoading(false)
     }
@@ -242,6 +316,24 @@ export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteForm
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {/* ÖNEMLİ: Durum bazlı koruma bilgilendirmeleri */}
+          {quote && quote.status === 'ACCEPTED' && (
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-4">
+              <p className="text-sm text-blue-800 font-semibold">
+                🔒 Bu teklif kabul edildi ve fatura oluşturuldu. Teklif bilgileri değiştirilemez veya silinemez.
+              </p>
+            </div>
+          )}
+          
+          {/* Durum bazlı form devre dışı bırakma */}
+          {isProtected && (
+            <div className="bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
+              <p className="text-xs text-gray-600">
+                ⚠️ Bu teklif korumalı durumda olduğu için form alanları düzenlenemez.
+              </p>
+            </div>
+          )}
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Title */}
             <div className="space-y-2 md:col-span-2">
@@ -251,7 +343,7 @@ export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteForm
               <Input
                 {...register('title')}
                 placeholder="Teklif başlığı"
-                disabled={loading}
+                disabled={loading || isProtected}
                 className={errors.title ? 'border-red-500' : ''}
               />
               {errors.title && (
@@ -265,9 +357,9 @@ export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteForm
                 Fırsat <span className="text-red-600">*</span>
               </label>
               <Select
-                value={dealId || ''}
+                value={selectedDealId || ''}
                 onValueChange={(value) => setValue('dealId', value)}
-                disabled={loading}
+                disabled={loading || isProtected}
               >
                 <SelectTrigger className={errors.dealId ? 'border-red-500' : ''}>
                   <SelectValue placeholder="Fırsat seçin (Zorunlu)" />
@@ -292,9 +384,9 @@ export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteForm
             <div className="space-y-2">
               <label className="text-sm font-medium">Tedarikçi</label>
               <Select
-                value={watch('vendorId') || undefined}
+                value={watch('vendorId') || 'none'}
                 onValueChange={(value) => setValue('vendorId', value === 'none' ? undefined : value)}
-                disabled={loading}
+                disabled={loading || isProtected}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Tedarikçi seçin (Opsiyonel)" />
@@ -324,7 +416,7 @@ export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteForm
                 onValueChange={(value) =>
                   setValue('status', value as QuoteFormData['status'])
                 }
-                disabled={loading}
+                disabled={loading || isProtected}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -346,7 +438,7 @@ export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteForm
                 {...register('description')}
                 placeholder="Teklif açıklaması ve detaylar"
                 rows={3}
-                disabled={loading}
+                disabled={loading || isProtected}
               />
             </div>
 
@@ -358,7 +450,7 @@ export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteForm
               <Input
                 type="date"
                 {...register('validUntil')}
-                disabled={loading}
+                disabled={loading || isProtected}
                 className={errors.validUntil ? 'border-red-500' : ''}
                 min={new Date().toISOString().split('T')[0]}
               />
@@ -381,7 +473,7 @@ export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteForm
                 min="0.01"
                 {...register('total', { valueAsNumber: true })}
                 placeholder="0.00"
-                disabled={loading}
+                disabled={loading || isProtected}
                 className={errors.total ? 'border-red-500' : ''}
               />
               {errors.total && (
@@ -402,7 +494,7 @@ export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteForm
                 max="100"
                 {...register('discount', { valueAsNumber: true })}
                 placeholder="0"
-                disabled={loading}
+                disabled={loading || isProtected}
               />
               {discount > 0 && (
                 <p className="text-xs text-gray-500">
@@ -421,7 +513,7 @@ export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteForm
                 max="100"
                 {...register('taxRate', { valueAsNumber: true })}
                 placeholder="18"
-                disabled={loading}
+                disabled={loading || isProtected}
               />
             </div>
 
@@ -454,16 +546,16 @@ export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteForm
               type="button"
               variant="outline"
               onClick={onClose}
-              disabled={loading}
+              disabled={loading || isProtected}
             >
               İptal
             </Button>
             <Button
               type="submit"
               className="bg-gradient-primary text-white"
-              disabled={loading}
+              disabled={loading || isProtected}
             >
-              {loading ? 'Kaydediliyor...' : quote ? 'Güncelle' : 'Kaydet'}
+              {loading ? 'Kaydediliyor...' : quote ? (isProtected ? 'Değiştirilemez' : 'Güncelle') : 'Kaydet'}
             </Button>
           </div>
         </form>
@@ -471,8 +563,3 @@ export default function QuoteForm({ quote, open, onClose, onSuccess }: QuoteForm
     </Dialog>
   )
 }
-
-
-
-
-

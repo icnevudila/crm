@@ -20,10 +20,10 @@ export async function GET(request: Request) {
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
 
     // 1. Önce SALES tipindeki ve aktif durumdaki faturaları çek
-    // İptal edilmiş (CANCELLED) faturalar hariç
+    // İptal edilmiş (CANCELLED) faturalar hariç - DÜZELTME: totalAmount kullan (050 migration ile total → totalAmount)
     let invoiceQuery = supabase
       .from('Invoice')
-      .select('id, title, invoiceNumber, status, total, createdAt, invoiceType')
+      .select('id, title, invoiceNumber, status, totalAmount, createdAt, invoiceType')
       .eq('invoiceType', 'SALES') // Sadece satış faturaları
       .neq('status', 'CANCELLED') // İptal edilmiş faturalar hariç
       .order('createdAt', { ascending: false })

@@ -1,118 +1,147 @@
-/**
- * Bildirim Servisleri
- * Kullanıcılara bildirim gönderme ve yönetme
- */
-
-import { getSupabaseWithServiceRole } from './supabase'
-
-export interface NotificationData {
-  userId: string
-  companyId: string
-  title: string
-  message: string
-  type?: 'info' | 'success' | 'warning' | 'error' | 'task_assigned' | 'deal_assigned' | 'quote_assigned'
-  entityType?: string
-  entityId?: string
-}
+import { createClientSupabase } from './supabase'
+import { createNotification } from './notification-helper'
 
 /**
- * Kullanıcıya bildirim gönder
+ * Bildirimi okundu olarak işaretle
  */
-export async function sendNotification(data: NotificationData) {
+export async function markNotificationRead(notificationId: string): Promise<void> {
   try {
-    const supabase = getSupabaseWithServiceRole()
-    
-    // Supabase database type tanımları eksik, Notification tablosu için type tanımı yok
-    const { data: notification, error } = await (supabase
-      .from('Notification') as any)
-      .insert([
-        {
-          userId: data.userId,
-          companyId: data.companyId,
-          title: data.title,
-          message: data.message,
-          type: data.type || 'info',
-          entityType: data.entityType,
-          entityId: data.entityId,
-          read: false,
-        },
-      ])
-      .select()
-      .single()
+    const supabase = createClientSupabase()
+    const { error } = await supabase
+      .from('Notification')
+      .update({ isRead: true })
+      .eq('id', notificationId)
 
     if (error) {
-      console.error('Notification creation error:', error)
-      return null
+      console.error('Error marking notification as read:', error)
+      throw error
     }
-
-    return notification
   } catch (error) {
-    console.error('sendNotification error:', error)
-    return null
+    console.error('Error in markNotificationRead:', error)
+    throw error
   }
 }
 
 /**
- * İşlem atandığında bildirim gönder
+ * Kullanıcının tüm bildirimlerini okundu olarak işaretle
  */
-export async function notifyTaskAssignment(
-  assignedUserId: string,
-  companyId: string,
-  taskId: string,
-  taskTitle: string,
-  assignedByName: string
-) {
-  return await sendNotification({
-    userId: assignedUserId,
-    companyId,
-    title: 'Yeni Görev Atandı',
-    message: `${assignedByName} size "${taskTitle}" görevini atadı.`,
-    type: 'task_assigned',
-    entityType: 'Task',
-    entityId: taskId,
-  })
+export async function markAllNotificationsRead(userId: string): Promise<void> {
+  try {
+    const supabase = createClientSupabase()
+    const { error } = await supabase
+      .from('Notification')
+      .update({ isRead: true })
+      .eq('userId', userId)
+      .eq('isRead', false)
+
+    if (error) {
+      console.error('Error marking all notifications as read:', error)
+      throw error
+    }
+  } catch (error) {
+    console.error('Error in markAllNotificationsRead:', error)
+    throw error
+  }
 }
 
 /**
- * Deal atandığında bildirim gönder
+ * Kullanıcının okunmamış bildirim sayısını getir
  */
-export async function notifyDealAssignment(
-  assignedUserId: string,
-  companyId: string,
-  dealId: string,
-  dealTitle: string,
-  assignedByName: string
-) {
-  return await sendNotification({
-    userId: assignedUserId,
-    companyId,
-    title: 'Yeni Fırsat Atandı',
-    message: `${assignedByName} size "${dealTitle}" fırsatını atadı.`,
-    type: 'deal_assigned',
-    entityType: 'Deal',
-    entityId: dealId,
-  })
+export async function getUnreadNotificationCount(userId: string): Promise<number> {
+  try {
+    const supabase = createClientSupabase()
+    const { count, error } = await supabase
+      .from('Notification')
+      .select('*', { count: 'exact', head: true })
+      .eq('userId', userId)
+      .eq('isRead', false)
+
+    if (error) {
+      console.error('Error getting unread notification count:', error)
+      return 0
+    }
+
+    return count || 0
+  } catch (error) {
+    console.error('Error in getUnreadNotificationCount:', error)
+    return 0
+  }
 }
 
 /**
- * Quote atandığında bildirim gönder
+ * Kullanıcının bildirimlerini getir
  */
-export async function notifyQuoteAssignment(
-  assignedUserId: string,
-  companyId: string,
-  quoteId: string,
-  quoteTitle: string,
-  assignedByName: string
-) {
-  return await sendNotification({
-    userId: assignedUserId,
-    companyId,
-    title: 'Yeni Teklif Atandı',
-    message: `${assignedByName} size "${quoteTitle}" teklifini atadı.`,
-    type: 'quote_assigned',
-    entityType: 'Quote',
-    entityId: quoteId,
-  })
+export async function fetchUserNotifications(userId: string, limit: number = 20): Promise<any[]> {
+  try {
+    const supabase = createClientSupabase()
+    const { data, error } = await supabase
+      .from('Notification')
+      .select('*')
+      .eq('userId', userId)
+      .order('createdAt', { ascending: false })
+      .limit(limit)
+
+    if (error) {
+      console.error('Error fetching user notifications:', error)
+      return []
+    }
+
+    return data || []
+  } catch (error) {
+    console.error('Error in fetchUserNotifications:', error)
+    return []
+  }
 }
+
+/**
+ * Görev atama bildirimi oluştur
+ */
+export async function notifyTaskAssignment({
+  userId,
+  companyId,
+  taskId,
+  taskTitle,
+}: {
+  userId: string
+  companyId: string
+  taskId: string
+  taskTitle: string
+}): Promise<void> {
+  try {
+    await createNotification({
+      userId,
+      companyId,
+      title: 'Yeni Görev Atandı',
+      message: `"${taskTitle}" görevi size atandı.`,
+      type: 'info',
+      relatedTo: 'Task',
+      relatedId: taskId,
+      link: `/tr/tasks/${taskId}`,
+      priority: 'normal',
+    })
+  } catch (error) {
+    console.error('Error in notifyTaskAssignment:', error)
+    // Bildirim oluşturma hatası ana işlemi engellemez
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 

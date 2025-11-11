@@ -30,7 +30,7 @@ export default function FileUpload({
 
     // Dosya boyutu kontrolü
     if (file.size > maxSize * 1024 * 1024) {
-      alert(`Dosya boyutu ${maxSize}MB'dan büyük olamaz`)
+      toast.warning(`Dosya boyutu ${maxSize}MB'dan büyük olamaz`)
       return
     }
 
@@ -59,7 +59,7 @@ export default function FileUpload({
       }
     } catch (error: any) {
       console.error('Upload error:', error)
-      alert(error?.message || 'Dosya yüklenemedi')
+      toast.error('Dosya yüklenemedi', error?.message)
     } finally {
       setUploading(false)
       if (fileInputRef.current) {
@@ -78,7 +78,7 @@ export default function FileUpload({
       setUploadedFiles((prev) => prev.filter((f) => f.path !== filePath))
     } catch (error: any) {
       console.error('Delete error:', error)
-      alert('Dosya silinemedi')
+      toast.warning('Dosya silinemedi')
     }
   }
 

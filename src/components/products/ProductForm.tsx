@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { toast } from '@/lib/toast'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -25,24 +26,33 @@ import {
 } from '@/components/ui/select'
 
 const productSchema = z.object({
-  name: z.string().min(1, 'Ürün adı gereklidir'),
-  price: z.number().min(0, 'Fiyat 0\'dan büyük olmalı'),
-  stock: z.number().min(0, 'Stok 0\'dan küçük olamaz').optional(),
+  name: z.string().min(1, 'Ürün adı gereklidir').max(200, 'Ürün adı en fazla 200 karakter olabilir'),
+  price: z.number().min(0, 'Fiyat 0\'dan büyük olmalı').max(999999999, 'Fiyat çok büyük'),
+  stock: z.number().min(0, 'Stok 0\'dan küçük olamaz').max(999999999, 'Stok çok büyük').optional(),
   vendorId: z.string().optional(),
-  description: z.string().optional(),
+  description: z.string().max(2000, 'Açıklama en fazla 2000 karakter olabilir').optional(),
   imageUrl: z.union([
     z.string().url('Geçerli bir URL girin'),
     z.literal(''),
   ]).optional(),
-  category: z.string().optional(),
-  sku: z.string().optional(),
-  barcode: z.string().optional(),
+  category: z.string().max(100, 'Kategori en fazla 100 karakter olabilir').optional(),
+  sku: z.string().max(100, 'SKU en fazla 100 karakter olabilir').optional(),
+  barcode: z.string().max(100, 'Barkod en fazla 100 karakter olabilir').optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'DISCONTINUED']).optional(),
-  minStock: z.number().min(0).optional(),
-  maxStock: z.number().min(0).optional(),
-  unit: z.string().optional(),
-  weight: z.number().min(0).optional(),
-  dimensions: z.string().optional(),
+  minStock: z.number().min(0, 'Min stok 0\'dan küçük olamaz').max(999999999, 'Min stok çok büyük').optional(),
+  maxStock: z.number().min(0, 'Max stok 0\'dan küçük olamaz').max(999999999, 'Max stok çok büyük').optional(),
+  unit: z.string().max(20, 'Birim en fazla 20 karakter olabilir').optional(),
+  weight: z.number().min(0, 'Ağırlık 0\'dan küçük olamaz').max(999999, 'Ağırlık çok büyük').optional(),
+  dimensions: z.string().max(100, 'Boyutlar en fazla 100 karakter olabilir').optional(),
+}).refine((data) => {
+  // minStock < maxStock kontrolü
+  if (data.minStock !== undefined && data.maxStock !== undefined && data.minStock > data.maxStock) {
+    return false
+  }
+  return true
+}, {
+  message: 'Min stok, max stoktan büyük olamaz',
+  path: ['minStock'],
 })
 
 type ProductFormData = z.infer<typeof productSchema>
@@ -200,7 +210,7 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
       await mutation.mutateAsync(data)
     } catch (error: any) {
       console.error('Error:', error)
-      alert(error?.message || 'Kaydetme işlemi başarısız oldu')
+      toast.error('Kaydedilemedi', error?.message)
     } finally {
       setLoading(false)
     }
@@ -292,7 +302,7 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
                 />
               </div>
               <p className="text-xs text-gray-500">
-                Mevcut kategorilerden seçin veya yeni kategori yazıp Enter'a basın
+                Mevcut kategorilerden seçin veya yeni kategori yazıp Enter&apos;a basın
               </p>
             </div>
 

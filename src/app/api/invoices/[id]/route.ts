@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { 
+  isValidInvoiceTransition, 
+  isInvoiceImmutable, 
+  canDeleteInvoice,
+  getTransitionErrorMessage
+} from '@/lib/stageValidation'
 import { formatCurrency } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
@@ -27,6 +33,16 @@ export async function GET(
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Permission check - canRead kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canRead = await hasPermission('invoice', 'read', session.user.id)
+    if (!canRead) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Fatura görüntüleme yetkiniz yok' },
+        { status: 403 }
+      )
     }
 
     const { id } = await params
@@ -304,7 +320,7 @@ export async function GET(
     }
 
     // ActivityLog'ları çek
-    const { data: activities } = await supabase
+    let activityQuery = supabase
       .from('ActivityLog')
       .select(
         `
@@ -315,11 +331,17 @@ export async function GET(
         )
       `
       )
-      .eq('companyId', session.user.companyId)
       .eq('entity', 'Invoice')
       .eq('meta->>id', id)
       .order('createdAt', { ascending: false })
       .limit(20)
+    
+    // SuperAdmin değilse MUTLAKA companyId filtresi uygula
+    if (!isSuperAdmin) {
+      activityQuery = activityQuery.eq('companyId', companyId)
+    }
+    
+    const { data: activities } = await activityQuery
 
     return NextResponse.json({
       ...(data as any),
@@ -356,19 +378,225 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Permission check - canUpdate kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canUpdate = await hasPermission('invoice', 'update', session.user.id)
+    if (!canUpdate) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Fatura güncelleme yetkiniz yok' },
+        { status: 403 }
+      )
+    }
+
     const { id } = await params
     const body = await request.json()
     const supabase = getSupabaseWithServiceRole()
 
+    // Quote'tan oluşturulan faturalar ve kesinleşmiş faturalar korumalı - hiçbir şekilde değiştirilemez
+    const { data: currentInvoice } = await supabase
+      .from('Invoice')
+      .select('quoteId, status, title')
+      .eq('id', id)
+      .eq('companyId', session.user.companyId)
+      .maybeSingle()
+
+    if (currentInvoice && currentInvoice.quoteId) {
+      return NextResponse.json(
+        { 
+          error: 'Tekliften oluşturulan faturalar değiştirilemez',
+          message: 'Bu fatura tekliften otomatik olarak oluşturuldu. Fatura bilgilerini değiştirmek için önce teklifi reddetmeniz gerekir.',
+          reason: 'QUOTE_INVOICE_CANNOT_BE_UPDATED',
+          relatedQuote: {
+            id: currentInvoice.quoteId,
+            link: `/quotes/${currentInvoice.quoteId}`
+          }
+        },
+        { status: 403 }
+      )
+    }
+
+    // ÖNEMLİ: Immutability kontrol (PAID, CANCELLED)
+    const currentStatus = currentInvoice?.status
+    if (currentStatus && isInvoiceImmutable(currentStatus)) {
+      // İlgili Finance kaydını kontrol et (PAID ise)
+      let relatedFinance = null
+      if (currentStatus === 'PAID') {
+        const { data } = await supabase
+          .from('Finance')
+          .select('id, amount, type')
+          .eq('relatedTo', `Invoice: ${id}`)
+          .eq('companyId', session.user.companyId)
+          .maybeSingle()
+        relatedFinance = data
+      }
+
+      return NextResponse.json(
+        { 
+          error: 'Bu fatura artık değiştirilemez',
+          message: `${currentStatus} durumundaki faturalar değiştirilemez (immutable). ${
+            currentStatus === 'PAID' ? 'Finance kaydı oluşturulmuştur.' : 'İptal edilmiştir.'
+          }`,
+          reason: 'IMMUTABLE_INVOICE',
+          status: currentStatus,
+          relatedFinance
+        },
+        { status: 403 }
+      )
+    }
+
+    // ÖNEMLİ: Status transition validation
+    if (body.status !== undefined && body.status !== currentStatus) {
+      const validation = isValidInvoiceTransition(currentStatus, body.status)
+      
+      if (!validation.valid) {
+        return NextResponse.json(
+          { 
+            error: 'Geçersiz status geçişi',
+            message: validation.error || getTransitionErrorMessage('invoice', currentStatus, body.status),
+            reason: 'INVALID_STATUS_TRANSITION',
+            currentStatus,
+            attemptedStatus: body.status,
+            allowedTransitions: validation.allowed || []
+          },
+          { status: 400 }
+        )
+      }
+    }
+
+    // SHIPPED/RECEIVED kontrolü - özel kural (stok işlemi var)
+    if (currentInvoice && (currentInvoice.status === 'SHIPPED' || currentInvoice.status === 'RECEIVED')) {
+      return NextResponse.json(
+        { 
+          error: currentInvoice.status === 'SHIPPED' 
+            ? 'Sevkiyatı yapılmış faturalar değiştirilemez' 
+            : 'Mal kabul edilmiş faturalar değiştirilemez',
+          message: currentInvoice.status === 'SHIPPED'
+            ? 'Bu fatura için sevkiyat yapıldı ve stoktan düşüldü.'
+            : 'Bu fatura için mal kabul edildi ve stoğa girişi yapıldı.',
+          reason: currentInvoice.status === 'SHIPPED' 
+            ? 'SHIPPED_INVOICE_CANNOT_BE_UPDATED'
+            : 'RECEIVED_INVOICE_CANNOT_BE_UPDATED'
+        },
+        { status: 403 }
+      )
+    }
+
+    // PAID kontrolü artık immutability'de var ama eski kod uyumluluğu için bırakıyoruz
+    if (currentInvoice?.status === 'PAID') {
+      // İlgili Finance kaydını kontrol et (kullanıcıya bilgi vermek için)
+      const { data: relatedFinance } = await supabase
+        .from('Finance')
+        .select('id, amount, type')
+        .eq('relatedTo', `Invoice: ${id}`)
+        .eq('companyId', session.user.companyId)
+        .maybeSingle()
+
+      return NextResponse.json(
+        { 
+          error: 'Ödenmiş faturalar değiştirilemez',
+          message: 'Bu fatura ödendi ve finans kaydı oluşturuldu. Fatura bilgilerini değiştirmek için önce ilgili finans kaydını silmeniz gerekir.',
+          reason: 'PAID_INVOICE_CANNOT_BE_UPDATED',
+          relatedFinance: relatedFinance ? {
+            id: relatedFinance.id,
+            amount: relatedFinance.amount,
+            type: relatedFinance.type
+          } : null
+        },
+        { status: 403 }
+      )
+    }
+
+    // Status değiştirme yetkisi kontrolü
+    if (body.status !== undefined) {
+      const { checkUserPermission } = await import('@/lib/permissions')
+      const permissions = await checkUserPermission('invoices')
+      
+      if (!permissions.canUpdate) {
+        return NextResponse.json(
+          { error: 'Status değiştirme yetkiniz yok' },
+          { status: 403 }
+        )
+      }
+    }
+
+    // ÖNEMLİ: Invoice OVERDUE durumuna geçtiğinde bildirim gönder (dueDate kontrolü)
+    // Database trigger ile de yapılabilir ama burada da kontrol ediyoruz
+    if (body.dueDate !== undefined || body.status !== undefined) {
+      const invoiceDueDate = body.dueDate ? new Date(body.dueDate) : (currentInvoice as any)?.dueDate ? new Date((currentInvoice as any).dueDate) : null
+      const invoiceStatus = body.status !== undefined ? body.status : currentInvoice?.status
+      
+      if (invoiceDueDate && invoiceStatus && invoiceStatus !== 'PAID' && invoiceStatus !== 'CANCELLED') {
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const dueDate = new Date(invoiceDueDate)
+        dueDate.setHours(0, 0, 0, 0)
+        
+        // Vade geçmişse OVERDUE durumuna geç ve bildirim gönder
+        if (dueDate < today && invoiceStatus !== 'OVERDUE') {
+          // Status'u OVERDUE yap (eğer değiştirilmemişse)
+          if (body.status === undefined) {
+            body.status = 'OVERDUE'
+          }
+          
+          // Bildirim gönder (database trigger da gönderecek ama burada da gönderiyoruz)
+          try {
+            const { createNotificationForRole } = await import('@/lib/notification-helper')
+            await createNotificationForRole({
+              companyId: session.user.companyId,
+              role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+              title: 'Fatura Vadesi Geçti',
+              message: `${(currentInvoice as any)?.invoiceNumber || currentInvoice?.title || 'Fatura'} faturasının vadesi geçti. Ödeme yapılması gerekiyor.`,
+              type: 'error',
+              priority: 'high',
+              relatedTo: 'Invoice',
+              relatedId: id,
+            })
+          } catch (notificationError) {
+            // Bildirim hatası ana işlemi engellemez
+          }
+        }
+        // Vade yaklaşıyorsa bildirim gönder (3 gün öncesi uyarı, 1 gün öncesi kritik)
+        else if (dueDate > today && dueDate <= new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000)) {
+          const daysUntilDue = Math.ceil((dueDate.getTime() - today.getTime()) / (24 * 60 * 60 * 1000))
+          
+          try {
+            const { createNotificationForRole } = await import('@/lib/notification-helper')
+            await createNotificationForRole({
+              companyId: session.user.companyId,
+              role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+              title: daysUntilDue <= 1 ? 'Fatura Vadesi Yaklaşıyor (Kritik)' : 'Fatura Vadesi Yaklaşıyor',
+              message: `${(currentInvoice as any)?.invoiceNumber || currentInvoice?.title || 'Fatura'} faturasının vadesi ${daysUntilDue} gün sonra. ${daysUntilDue <= 1 ? 'Acil ödeme yapılması gerekiyor.' : 'Ödeme yapılması gerekiyor.'}`,
+              type: 'warning',
+              priority: daysUntilDue <= 1 ? 'critical' : 'high',
+              relatedTo: 'Invoice',
+              relatedId: id,
+            })
+          } catch (notificationError) {
+            // Bildirim hatası ana işlemi engellemez
+          }
+        }
+      }
+    }
+
+    // ACCEPTED olan faturalar iptal edilemez
+    if (body.status === 'CANCELLED') {
+      if (currentInvoice && currentInvoice.status === 'ACCEPTED') {
+        return NextResponse.json(
+          { error: 'Kabul edilmiş faturalar iptal edilemez' },
+          { status: 400 }
+        )
+      }
+    }
+
     // Invoice verilerini güncelle - SADECE schema.sql'de olan kolonları gönder
-    // schema.sql: title, status, total, quoteId, companyId, updatedAt
+    // schema.sql: title, status, totalAmount, quoteId, companyId, updatedAt (050 migration ile total → totalAmount)
     // schema-extension.sql: invoiceNumber, dueDate, paymentDate, taxRate (migration çalıştırılmamış olabilir - GÖNDERME!)
     // schema-vendor.sql: vendorId (migration çalıştırılmamış olabilir - GÖNDERME!)
     // migration 007: invoiceType (migration çalıştırılmamış olabilir - GÖNDERME!)
     const updateData: any = {
       title: body.title,
       status: body.status,
-      total: body.total,
+      totalAmount: body.totalAmount !== undefined ? parseFloat(body.totalAmount) : (body.total !== undefined ? parseFloat(body.total) : undefined),
       updatedAt: new Date().toISOString(),
     }
 
@@ -414,34 +642,95 @@ export async function PUT(
     }
 
     // Invoice PAID olduğunda otomatik Finance kaydı oluştur
-    if (body.status === 'PAID' && data) {
-      const { data: finance } = await supabase
+    // ÖNEMLİ: Status değişikliği yapıldığında (DRAFT → PAID) veya zaten PAID ise kontrol et
+    if ((body.status === 'PAID' || data?.status === 'PAID') && data) {
+      // Önce bu invoice için Finance kaydı var mı kontrol et (duplicate önleme)
+      const { data: existingFinance } = await supabase
         .from('Finance')
-        // @ts-expect-error - Supabase database type tanımları eksik
-        .insert([
-          {
-            type: 'INCOME',
-            amount: data.total,
-            relatedTo: `Invoice: ${data.id}`,
-            companyId: session.user.companyId,
-          },
-        ])
-        .select()
-        .single()
+        .select('id')
+        .eq('relatedTo', `Invoice: ${data.id}`)
+        .eq('companyId', session.user.companyId)
+        .maybeSingle()
 
-      if (finance) {
-        // ActivityLog kaydı
-        // @ts-ignore - Supabase database type tanımları eksik, insert metodu dinamik tip bekliyor
-        await supabase.from('ActivityLog').insert([
-          {
-            entity: 'Finance',
-            action: 'CREATE',
-            description: `Fatura ödendi, finans kaydı oluşturuldu: ${formatCurrency(data.total)}`,
-            meta: { entity: 'Finance', action: 'create', id: (finance as any).id, fromInvoice: data.id },
-            userId: session.user.id,
-            companyId: session.user.companyId,
-          },
-        ])
+      // Eğer Finance kaydı yoksa oluştur
+      if (!existingFinance) {
+        const { data: finance } = await supabase
+          .from('Finance')
+          // @ts-expect-error - Supabase database type tanımları eksik
+          .insert([
+            {
+              type: 'INCOME',
+              amount: data.totalAmount || 0,
+              relatedTo: `Invoice: ${data.id}`,
+              companyId: session.user.companyId,
+              category: 'INVOICE_INCOME', // Kategori ekle
+            },
+          ])
+          .select()
+          .single()
+
+        if (finance) {
+          // ActivityLog kaydı
+          // @ts-ignore - Supabase database type tanımları eksik, insert metodu dinamik tip bekliyor
+          await supabase.from('ActivityLog').insert([
+            {
+              entity: 'Finance',
+              action: 'CREATE',
+              description: `Fatura ödendi, finans kaydı oluşturuldu`,
+              meta: { entity: 'Finance', action: 'create', id: (finance as any).id, fromInvoice: data.id },
+              userId: session.user.id,
+              companyId: session.user.companyId,
+            },
+          ])
+
+          // Bildirim: Fatura ödendi (sadece yeni kayıt oluşturulduğunda)
+          if (body.status === 'PAID') {
+            const { createNotificationForRole } = await import('@/lib/notification-helper')
+            await createNotificationForRole({
+              companyId: session.user.companyId,
+              role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+              title: 'Fatura Ödendi',
+              message: `Fatura ödendi ve finans kaydı oluşturuldu. Detayları görmek ister misiniz?`,
+              type: 'success',
+              relatedTo: 'Invoice',
+              relatedId: data.id,
+            })
+
+            // ✅ Email otomasyonu: Invoice PAID → Müşteriye email gönder
+            try {
+              const { getAndRenderEmailTemplate, getTemplateVariables } = await import('@/lib/template-renderer')
+              const { sendEmail } = await import('@/lib/email-service')
+              
+              // Template değişkenlerini hazırla
+              const variables = await getTemplateVariables('Invoice', data, session.user.companyId)
+              
+              // Email template'ini çek ve render et
+              const emailTemplate = await getAndRenderEmailTemplate('INVOICE', session.user.companyId, variables)
+              
+              if (emailTemplate && variables.customerEmail) {
+                // Email gönder
+                const emailResult = await sendEmail({
+                  to: variables.customerEmail as string,
+                  subject: emailTemplate.subject || 'Faturanız Ödendi',
+                  html: emailTemplate.body,
+                })
+                
+                if (emailResult.success) {
+                  if (process.env.NODE_ENV === 'development') {
+                    console.log('✅ Invoice PAID email sent to:', variables.customerEmail)
+                  }
+                } else {
+                  console.error('Invoice PAID email send error:', emailResult.error)
+                }
+              }
+            } catch (emailError) {
+              // Email hatası ana işlemi engellemez
+              if (process.env.NODE_ENV === 'development') {
+                console.error('Invoice PAID email automation error:', emailError)
+              }
+            }
+          }
+        }
       }
     }
 
@@ -451,7 +740,7 @@ export async function PUT(
       {
         entity: 'Invoice',
         action: 'UPDATE',
-        description: `Fatura güncellendi: ${body.title || data.title}`,
+        description: `Fatura bilgileri güncellendi: ${body.title || data.title}`,
         meta: { entity: 'Invoice', action: 'update', id },
         userId: session.user.id,
         companyId: session.user.companyId,
@@ -502,10 +791,10 @@ export async function DELETE(
       })
     }
 
-    // Önce invoice'u kontrol et - ActivityLog için title lazım (optional - hata olsa bile silme işlemi yapılır)
+    // Önce invoice'u kontrol et - ActivityLog için title lazım ve koruma kontrolü için
     const { data: invoice } = await supabase
       .from('Invoice')
-      .select('title')
+      .select('title, status, quoteId')
       .eq('id', id)
       .eq('companyId', session.user.companyId)
       .maybeSingle() // .single() yerine .maybeSingle() kullan - hata vermez, sadece null döner
@@ -515,7 +804,78 @@ export async function DELETE(
       console.log('Invoice fetch result:', {
         invoiceFound: !!invoice,
         invoiceTitle: invoice?.title,
+        invoiceStatus: invoice?.status,
+        hasQuoteId: !!invoice?.quoteId,
       })
+    }
+
+    // ÖNEMLİ: Delete validation - Status kontrolü
+    const deleteCheck = canDeleteInvoice(invoice?.status)
+    if (!deleteCheck.canDelete) {
+      // İlgili Finance kaydını kontrol et (kullanıcıya bilgi vermek için)
+      const { data: relatedFinance } = await supabase
+        .from('Finance')
+        .select('id, amount, type')
+        .eq('relatedTo', `Invoice: ${id}`)
+        .eq('companyId', session.user.companyId)
+        .maybeSingle()
+
+      return NextResponse.json(
+        { 
+          error: 'Bu fatura silinemez',
+          message: deleteCheck.error,
+          reason: 'CANNOT_DELETE_INVOICE',
+          status: invoice?.status,
+          relatedFinance: relatedFinance ? {
+            id: relatedFinance.id,
+            amount: relatedFinance.amount,
+            type: relatedFinance.type
+          } : null
+        },
+        { status: 403 }
+      )
+    }
+
+    // ÖNEMLİ: Invoice SHIPPED olduğunda silinemez (Stok düşüldüğü için)
+    if (invoice?.status === 'SHIPPED') {
+      return NextResponse.json(
+        { 
+          error: 'Sevkiyatı yapılmış faturalar silinemez',
+          message: 'Bu fatura için sevkiyat yapıldı ve stoktan düşüldü. Faturayı silmek için önce sevkiyatı iptal etmeniz ve stok işlemini geri almanız gerekir.',
+          reason: 'SHIPPED_INVOICE_CANNOT_BE_DELETED',
+          action: 'Sevkiyatı iptal edip stok işlemini geri alın'
+        },
+        { status: 403 }
+      )
+    }
+
+    // ÖNEMLİ: Invoice RECEIVED olduğunda silinemez (Stok artırıldığı için)
+    if (invoice?.status === 'RECEIVED') {
+      return NextResponse.json(
+        { 
+          error: 'Mal kabul edilmiş faturalar silinemez',
+          message: 'Bu fatura için mal kabul edildi ve stoğa girişi yapıldı. Faturayı silmek için önce mal kabul işlemini iptal etmeniz ve stok işlemini geri almanız gerekir.',
+          reason: 'RECEIVED_INVOICE_CANNOT_BE_DELETED',
+          action: 'Mal kabul işlemini iptal edip stok işlemini geri alın'
+        },
+        { status: 403 }
+      )
+    }
+
+    // ÖNEMLİ: Invoice quoteId varsa silinemez (Tekliften oluşturulduğu için)
+    if (invoice?.quoteId) {
+      return NextResponse.json(
+        { 
+          error: 'Tekliften oluşturulan faturalar silinemez',
+          message: 'Bu fatura tekliften otomatik olarak oluşturuldu. Faturayı silmek için önce teklifi reddetmeniz gerekir.',
+          reason: 'QUOTE_INVOICE_CANNOT_BE_DELETED',
+          relatedQuote: {
+            id: invoice.quoteId,
+            link: `/quotes/${invoice.quoteId}`
+          }
+        },
+        { status: 403 }
+      )
     }
 
     // Silme işlemini yap - data kontrolü ile

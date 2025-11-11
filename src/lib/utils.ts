@@ -6,25 +6,25 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 /**
- * Format currency - ENTERPRISE: EURO varsayılan, dinamik sembol
+ * Format currency - TRY (TL) varsayılan, dinamik sembol
  */
-export function formatCurrency(amount: number, currency: string = 'EUR') {
+export function formatCurrency(amount: number, currency: string = 'TRY') {
   if (typeof amount !== 'number' || isNaN(amount)) {
-    return '€0,00'
+    return '₺0,00'
   }
 
   // Currency sembolü
   const currencySymbols: Record<string, string> = {
-    EUR: '€',
     TRY: '₺',
+    EUR: '€',
     USD: '$',
     GBP: '£',
   }
 
   const symbol = currencySymbols[currency] || currency
 
-  // Locale ayarı (EUR için en-US, TRY için tr-TR)
-  const locale = currency === 'TRY' ? 'tr-TR' : currency === 'EUR' ? 'en-US' : 'en-US'
+  // Locale ayarı (TRY için tr-TR, diğerleri için en-US)
+  const locale = currency === 'TRY' ? 'tr-TR' : 'en-US'
 
   return new Intl.NumberFormat(locale, {
     style: 'currency',
@@ -35,12 +35,12 @@ export function formatCurrency(amount: number, currency: string = 'EUR') {
 }
 
 /**
- * Get currency symbol - ENTERPRISE: Dinamik sembol döndürür
+ * Get currency symbol - TRY (TL) varsayılan, dinamik sembol döndürür
  */
-export function getCurrencySymbol(currency: string = 'EUR'): string {
+export function getCurrencySymbol(currency: string = 'TRY'): string {
   const currencySymbols: Record<string, string> = {
-    EUR: '€',
     TRY: '₺',
+    EUR: '€',
     USD: '$',
     GBP: '£',
   }

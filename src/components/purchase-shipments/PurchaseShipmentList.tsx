@@ -215,10 +215,16 @@ export default function PurchaseShipmentList() {
         ])
       }, 500) // 500ms sonra revalidate (optimistic update görünür, sonra fresh data çekilir)
 
-      alert(result.message || `Mal kabul #${id.substring(0, 8)} onaylandı. Stok girişleri yapıldı.`)
+      toast.success(
+        'Mal kabul tamamlandı!',
+        result.message || `Mal kabul #${id.substring(0, 8)} başarıyla onaylandı. Ürünler stoğa eklendi ve faturaya "Mal Kabul Edildi" bildirimi gönderildi.`
+      )
     } catch (error: any) {
       console.error('Approve error:', error)
-      alert(error?.message || 'Onaylama başarısız oldu')
+      toast.error(
+        'Mal kabul onaylanamadı',
+        error?.message || 'Mal kabul işlemi sırasında bir hata oluştu. Lütfen tekrar deneyin.'
+      )
     } finally {
       setApprovingId(null)
     }
@@ -228,13 +234,16 @@ export default function PurchaseShipmentList() {
   const handleViewDetail = useCallback(async (purchaseShipment: PurchaseShipment) => {
     try {
       const res = await fetch(`/api/purchase-shipments/${purchaseShipment.id}`)
-      if (!res.ok) throw new Error('Mal kabul detayları yüklenemedi')
+      if (!res.ok) throw new Error('Bilgiler yüklenemedi')
       const detail = await res.json()
       setDetailPurchaseShipment(detail)
       setDetailModalOpen(true)
     } catch (error: any) {
       console.error('Detail fetch error:', error)
-      alert(error?.message || 'Mal kabul detayları yüklenemedi')
+      toast.error(
+        'Mal kabul bilgileri yüklenemedi',
+        error?.message || 'Mal kabul detayları getirilirken bir hata oluştu. Lütfen sayfayı yenileyin.'
+      )
     }
   }, [])
 
@@ -262,7 +271,10 @@ export default function PurchaseShipmentList() {
       ])
     } catch (error: any) {
       console.error('Delete error:', error)
-      alert(error?.message || 'Silme işlemi başarısız oldu')
+      toast.error(
+        'Mal kabul kaydı silinemedi',
+        error?.message || 'Mal kabul kaydı silinirken bir hata oluştu. Lütfen tekrar deneyin.'
+      )
     }
   }, [purchaseShipments, mutatePurchaseShipments, apiUrl])
 
@@ -439,7 +451,7 @@ export default function PurchaseShipmentList() {
                               <p><strong>Fatura No:</strong> {purchaseShipment.Invoice.invoiceNumber || purchaseShipment.invoiceId.substring(0, 8)}</p>
                               <p><strong>Başlık:</strong> {purchaseShipment.Invoice.title || '-'}</p>
                               <p><strong>Tedarikçi:</strong> {getVendorName(purchaseShipment)}</p>
-                              <p><strong>Toplam:</strong> {formatCurrency(purchaseShipment.Invoice.total || 0)}</p>
+                              <p><strong>Toplam:</strong> {formatCurrency(purchaseShipment.Invoice.totalAmount || 0)}</p>
                               <p><strong>Tarih:</strong> {new Date(purchaseShipment.Invoice.createdAt).toLocaleDateString('tr-TR')}</p>
                             </div>
                           </TooltipContent>
@@ -482,7 +494,7 @@ export default function PurchaseShipmentList() {
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" size="icon">
-                            <MoreVertical className="h-4 w-4" />
+                            <MoreVertical className="h-4 w-4 text-gray-600" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -566,7 +578,7 @@ export default function PurchaseShipmentList() {
                     href={`/${locale}/invoices/${detailPurchaseShipment.Invoice.id}`}
                     className="text-indigo-600 hover:underline"
                   >
-                    {detailPurchaseShipment.Invoice.title} - {formatCurrency(detailPurchaseShipment.Invoice.total || 0)}
+                    {detailPurchaseShipment.Invoice.title} - {formatCurrency(detailPurchaseShipment.Invoice.totalAmount || 0)}
                   </Link>
                 </Card>
               )}

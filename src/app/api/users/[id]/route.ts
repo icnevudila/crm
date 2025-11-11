@@ -28,24 +28,33 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // SuperAdmin tüm şirketlerin verilerini görebilir
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    const companyId = session.user.companyId
+
     const { id } = await params
     
     const supabase = getSupabaseWithServiceRole()
 
     // User'ı çek
-    const { data: user, error } = await supabase
+    let userQuery = supabase
       .from('User')
       .select('*')
       .eq('id', id)
-      .eq('companyId', session.user.companyId)
-      .single()
+    
+    // SuperAdmin değilse companyId filtresi ekle
+    if (!isSuperAdmin) {
+      userQuery = userQuery.eq('companyId', companyId)
+    }
+    
+    const { data: user, error } = await userQuery.single()
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     // ActivityLog'ları çek
-    const { data: activities } = await supabase
+    let activityQuery = supabase
       .from('ActivityLog')
       .select(
         `
@@ -56,9 +65,15 @@ export async function GET(
         )
       `
       )
-      .eq('companyId', session.user.companyId)
       .eq('entity', 'User')
       .eq('meta->>id', id)
+    
+    // SuperAdmin değilse MUTLAKA companyId filtresi uygula
+    if (!isSuperAdmin) {
+      activityQuery = activityQuery.eq('companyId', companyId)
+    }
+    
+    const { data: activities } = await activityQuery
       .order('createdAt', { ascending: false })
       .limit(20)
 
@@ -169,7 +184,7 @@ export async function PUT(
     await logAction({
       entity: 'User',
       action: 'UPDATE',
-      description: `Kullanıcı güncellendi: ${updateData.name || id}`,
+      description: `Kullanıcı bilgileri güncellendi: ${updateData.name || ''}`,
       meta: { entity: 'User', action: 'update', id },
       userId: session.user.id,
       companyId: session.user.companyId,

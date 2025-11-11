@@ -111,7 +111,26 @@ export async function checkUserPermission(
     }
   }
 
-  // RolePermission'dan kontrol et
+  // 3. Önce UserPermission kontrol et (kullanıcı özel yetkileri - en yüksek öncelik)
+  const { data: userPermission } = await supabase
+    .from('UserPermission')
+    .select('"canCreate", "canRead", "canUpdate", "canDelete"')
+    .eq('userId', targetUserId)
+    .eq('companyId', companyId)
+    .eq('module', module)
+    .single()
+
+  if (userPermission) {
+    // UserPermission varsa, bu yetkileri kullan (en yüksek öncelik)
+    return {
+      canRead: userPermission.canRead || false,
+      canCreate: userPermission.canCreate || false,
+      canUpdate: userPermission.canUpdate || false,
+      canDelete: userPermission.canDelete || false,
+    }
+  }
+
+  // 4. UserPermission yoksa, RolePermission'dan kontrol et
   if (userData.roleId) {
     const { data: rolePermission } = await supabase
       .from('RolePermission')

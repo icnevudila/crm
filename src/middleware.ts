@@ -48,7 +48,9 @@ export async function middleware(request: NextRequest) {
   }
 
   // Locale'li path'ler için auth kontrolü - timeout ile
-  if (pathname.startsWith('/tr/') || pathname.startsWith('/en/')) {
+  // Login sayfası için auth kontrolünü bypass et
+  if ((pathname.startsWith('/tr/') || pathname.startsWith('/en/')) && 
+      !pathname.startsWith('/tr/login') && !pathname.startsWith('/en/login')) {
     try {
       // Timeout ile token kontrolü - çok yavaş olursa atla
       // İlk yükleme hızı için timeout'u 2 saniyeye düşür
@@ -64,7 +66,7 @@ export async function middleware(request: NextRequest) {
 
       // Token yoksa login'e yönlendir
       if (!token) {
-        const loginUrl = new URL('/login', request.url)
+        const loginUrl = new URL('/tr/login', request.url)
         return NextResponse.redirect(loginUrl)
       }
     } catch (error) {

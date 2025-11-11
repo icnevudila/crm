@@ -27,63 +27,107 @@ import { useLocale } from 'next-intl'
 import dynamic from 'next/dynamic'
 import SkeletonList from '@/components/skeletons/SkeletonList'
 
-// Lazy load rapor componentleri
-const SalesReports = dynamic(() => import('@/components/reports/SalesReports'), {
-  ssr: false,
-  loading: () => <SkeletonList />,
-})
+// Lazy load rapor componentleri - güvenli import ile
+const SalesReports = dynamic(
+  () => import('@/components/reports/SalesReports').then((mod) => mod.default || mod),
+  { 
+    ssr: false,
+    loading: () => <SkeletonList />,
+  }
+)
 
-const CustomerReports = dynamic(() => import('@/components/reports/CustomerReports'), {
-  ssr: false,
-  loading: () => <SkeletonList />,
-})
+const CustomerReports = dynamic(
+  () => import('@/components/reports/CustomerReports').then((mod) => mod.default || mod),
+  { 
+    ssr: false,
+    loading: () => <SkeletonList />,
+  }
+)
 
-const DealReports = dynamic(() => import('@/components/reports/DealReports'), {
-  ssr: false,
-  loading: () => <SkeletonList />,
-})
+const DealReports = dynamic(
+  () => import('@/components/reports/DealReports').then((mod) => mod.default || mod),
+  { 
+    ssr: false,
+    loading: () => <SkeletonList />,
+  }
+)
 
-const QuoteReports = dynamic(() => import('@/components/reports/QuoteReports'), {
-  ssr: false,
-  loading: () => <SkeletonList />,
-})
+const QuoteReports = dynamic(
+  () => import('@/components/reports/QuoteReports').then((mod) => mod.default || mod),
+  { 
+    ssr: false,
+    loading: () => <SkeletonList />,
+  }
+)
 
-const InvoiceReports = dynamic(() => import('@/components/reports/InvoiceReports'), {
-  ssr: false,
-  loading: () => <SkeletonList />,
-})
+const InvoiceReports = dynamic(
+  () => import('@/components/reports/InvoiceReports').then((mod) => mod.default || mod),
+  { 
+    ssr: false,
+    loading: () => <SkeletonList />,
+  }
+)
 
-const ProductReports = dynamic(() => import('@/components/reports/ProductReports'), {
-  ssr: false,
-  loading: () => <SkeletonList />,
-})
+const ProductReports = dynamic(
+  () => import('@/components/reports/ProductReports').then((mod) => mod.default || mod),
+  { 
+    ssr: false,
+    loading: () => <SkeletonList />,
+  }
+)
 
-const FinancialReports = dynamic(() => import('@/components/reports/FinancialReports'), {
-  ssr: false,
-  loading: () => <SkeletonList />,
-})
+const FinancialReports = dynamic(
+  () => import('@/components/reports/FinancialReports').then((mod) => mod.default || mod),
+  { 
+    ssr: false,
+    loading: () => <SkeletonList />,
+  }
+)
 
-const PerformanceReports = dynamic(() => import('@/components/reports/PerformanceReports'), {
-  ssr: false,
-  loading: () => <SkeletonList />,
-})
+const PerformanceReports = dynamic(
+  () => import('@/components/reports/PerformanceReports').then((mod) => mod.default || mod),
+  { 
+    ssr: false,
+    loading: () => <SkeletonList />,
+  }
+)
 
-const TimeBasedReports = dynamic(() => import('@/components/reports/TimeBasedReports'), {
-  ssr: false,
-  loading: () => <SkeletonList />,
-})
+const TimeBasedReports = dynamic(
+  () => import('@/components/reports/TimeBasedReports').then((mod) => mod.default || mod),
+  { 
+    ssr: false,
+    loading: () => <SkeletonList />,
+  }
+)
 
-const SectorReports = dynamic(() => import('@/components/reports/SectorReports'), {
-  ssr: false,
-  loading: () => <SkeletonList />,
-})
+const SectorReports = dynamic(
+  () => import('@/components/reports/SectorReports').then((mod) => mod.default || mod),
+  { 
+    ssr: false,
+    loading: () => <SkeletonList />,
+  }
+)
 
 interface ReportCategory {
   id: string
   name: string
-  icon: any
-  description: string
+  iconId?: string
+  description?: string
   count: number
+}
+
+// Icon mapping
+const iconMap: Record<string, any> = {
+  sales: TrendingUp,
+  customers: Users,
+  deals: Briefcase,
+  quotes: FileText,
+  invoices: Receipt,
+  products: Package,
+  financial: DollarSign,
+  performance: Target,
+  time: Calendar,
+  sector: Building2,
 }
 
 async function fetchReportCategories() {
@@ -134,19 +178,22 @@ export default function ReportsPage() {
         <SkeletonList />
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-          {categories?.map((category: ReportCategory) => (
-            <Card key={category.id} className="p-4 hover:shadow-md transition-shadow cursor-pointer">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-primary-50">
-                  <category.icon className="h-5 w-5 text-primary-600" />
+          {categories?.map((category: ReportCategory) => {
+            const IconComponent = category.iconId ? iconMap[category.iconId] : Activity
+            return (
+              <Card key={category.id} className="p-4 hover:shadow-md transition-shadow cursor-pointer">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-primary-50">
+                    {IconComponent && <IconComponent className="h-5 w-5 text-primary-600" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">{category.name}</p>
+                    <p className="text-xs text-gray-500">{category.count} rapor</p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{category.name}</p>
-                  <p className="text-xs text-gray-500">{category.count} rapor</p>
-                </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            )
+          })}
         </div>
       )}
 
@@ -163,6 +210,14 @@ export default function ReportsPage() {
 
           {reportTabs.map((tab) => {
             const TabComponent = tab.component
+            // Component'in yüklenip yüklenmediğini kontrol et
+            if (!TabComponent) {
+              return (
+                <TabsContent key={tab.id} value={tab.id} className="mt-0">
+                  <div className="p-4 text-red-600">Rapor bileşeni yüklenemedi</div>
+                </TabsContent>
+              )
+            }
             return (
               <TabsContent key={tab.id} value={tab.id} className="mt-0">
                 <TabComponent />

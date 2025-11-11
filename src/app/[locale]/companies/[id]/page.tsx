@@ -1,17 +1,21 @@
 'use client'
 
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { ArrowLeft, Edit, Users, Building2, Mail, Phone, Globe, FileText, DollarSign, Briefcase, Calendar, Plus, Receipt } from 'lucide-react'
+import { ArrowLeft, Edit, Users, Building2, Mail, Phone, Globe, FileText, DollarSign, Briefcase, Calendar, Plus, Receipt, X, Truck } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import { motion } from 'framer-motion'
 import Image from 'next/image'
+import CompanyForm from '@/components/companies/CompanyForm'
+import { useData } from '@/hooks/useData'
 
 interface Company {
   id: string
@@ -20,6 +24,8 @@ interface Company {
   city?: string
   address?: string
   phone?: string
+  countryCode?: string
+  contactPerson?: string
   email?: string
   website?: string
   taxNumber?: string
@@ -27,6 +33,7 @@ interface Company {
   description?: string
   status: string
   logoUrl?: string
+  lastMeetingDate?: string
   createdAt: string
   updatedAt?: string
   User?: Array<{
@@ -66,11 +73,32 @@ interface Company {
     total: number
     createdAt: string
   }>
+  Shipment?: Array<{
+    id: string
+    tracking?: string
+    status: string
+    createdAt: string
+  }>
+  Finance?: Array<{
+    id: string
+    type: string
+    amount: number
+    description?: string
+    createdAt: string
+  }>
+  Meeting?: Array<{
+    id: string
+    title: string
+    meetingDate: string
+    status: string
+    createdAt: string
+  }>
   activities?: any[]
 }
 
 async function fetchCompany(id: string): Promise<Company> {
-  const res = await fetch(`/api/companies/${id}`)
+  // KURUM İÇİ FİRMA YÖNETİMİ: CustomerCompany endpoint'ini kullan
+  const res = await fetch(`/api/customer-companies/${id}`)
   if (!res.ok) throw new Error('Failed to fetch company')
   return res.json()
 }
@@ -80,6 +108,7 @@ export default function CompanyDetailPage() {
   const router = useRouter()
   const locale = useLocale()
   const id = params.id as string
+  const [isEditMode, setIsEditMode] = useState(false)
 
   const { data: company, isLoading } = useQuery({
     queryKey: ['company', id],
@@ -106,8 +135,12 @@ export default function CompanyDetailPage() {
     )
   }
 
-  // ENTERPRISE: Durum renkleri
+  // ENTERPRISE: Durum renkleri (POT, MUS, ALT, PAS)
   const statusColors: Record<string, string> = {
+    'POT': 'bg-amber-100 text-amber-800 border-amber-300',
+    'MUS': 'bg-green-100 text-green-800 border-green-300',
+    'ALT': 'bg-blue-100 text-blue-800 border-blue-300',
+    'PAS': 'bg-red-100 text-red-800 border-red-300',
     'POTANSİYEL': 'bg-amber-100 text-amber-800 border-amber-300',
     'MÜŞTERİ': 'bg-green-100 text-green-800 border-green-300',
     'ALTBAYİ': 'bg-blue-100 text-blue-800 border-blue-300',
@@ -117,6 +150,10 @@ export default function CompanyDetailPage() {
   }
 
   const statusLabels: Record<string, string> = {
+    'POT': 'Potansiyel',
+    'MUS': 'Müşteri',
+    'ALT': 'Alt Bayi',
+    'PAS': 'Pasif',
     'POTANSİYEL': 'Potansiyel',
     'MÜŞTERİ': 'Müşteri',
     'ALTBAYİ': 'Alt Bayi',
@@ -142,7 +179,30 @@ export default function CompanyDetailPage() {
             <p className="mt-1 text-gray-600">Firma Detayları</p>
           </div>
         </div>
+        {!isEditMode && (
+          <Button
+            variant="outline"
+            onClick={() => setIsEditMode(true)}
+          >
+            <Edit className="mr-2 h-4 w-4" />
+            Düzenle
+          </Button>
+        )}
       </div>
+
+      {/* Company Form (Edit Mode) */}
+      {isEditMode && (
+        <CompanyForm
+          company={company}
+          open={isEditMode}
+          onClose={() => setIsEditMode(false)}
+          onSuccess={async () => {
+            setIsEditMode(false)
+            // Cache'i invalidate et - yeni veriyi çek
+            window.location.reload()
+          }}
+        />
+      )}
 
       {/* ENTERPRISE: Sabit Üst Kart (Summary) - Logo, Şehir, Durum, Vergi No */}
       <motion.div
@@ -216,19 +276,19 @@ export default function CompanyDetailPage() {
 
             {/* ENTERPRISE: Hızlı Eylemler (Sağ Taraf) */}
             <div className="flex flex-col gap-2">
-              <Link href={`/${locale}/meetings/new?companyId=${company.id}`}>
+              <Link href={`/${locale}/meetings/new?customerCompanyId=${company.id}`}>
                 <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white">
                   <Calendar className="mr-2 h-4 w-4" />
                   Görüşme Ekle
                 </Button>
               </Link>
-              <Link href={`/${locale}/quotes/new?companyId=${company.id}`}>
+              <Link href={`/${locale}/quotes/new?customerCompanyId=${company.id}`}>
                 <Button variant="outline" className="w-full border-indigo-300 text-indigo-700 hover:bg-indigo-50">
                   <FileText className="mr-2 h-4 w-4" />
                   Teklif Oluştur
                 </Button>
               </Link>
-              <Link href={`/${locale}/finance/new?companyId=${company.id}`}>
+              <Link href={`/${locale}/finance/new?customerCompanyId=${company.id}`}>
                 <Button variant="outline" className="w-full border-amber-300 text-amber-700 hover:bg-amber-50">
                   <Receipt className="mr-2 h-4 w-4" />
                   Gider Gir
@@ -239,78 +299,99 @@ export default function CompanyDetailPage() {
         </Card>
       </motion.div>
 
-      {/* Company Info */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-            <Building2 className="h-5 w-5" />
-            Firma Bilgileri
-          </h2>
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm text-gray-600">Durum</p>
-              <Badge className={`${statusColors[company.status] || 'bg-gray-100 text-gray-800'} mt-1`}>
-                {statusLabels[company.status] || company.status}
-              </Badge>
+      {/* Company Info (Readonly Mode) */}
+      {!isEditMode && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+              <Building2 className="h-5 w-5" />
+              Firma Bilgileri
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-600">Durum</p>
+                <Badge className={`${statusColors[company.status] || 'bg-gray-100 text-gray-800'} mt-1`}>
+                  {statusLabels[company.status] || company.status}
+                </Badge>
+              </div>
+              {company.contactPerson && (
+                <div>
+                  <p className="text-sm text-gray-600">Kontak Kişi</p>
+                  <p className="font-medium mt-1">{company.contactPerson}</p>
+                </div>
+              )}
+              {company.sector && (
+                <div>
+                  <p className="text-sm text-gray-600">Sektör</p>
+                  <p className="font-medium mt-1">{company.sector}</p>
+                </div>
+              )}
+              {company.city && (
+                <div>
+                  <p className="text-sm text-gray-600">Şehir</p>
+                  <p className="font-medium mt-1">{company.city}</p>
+                </div>
+              )}
+              {company.phone && (
+                <div className="flex items-center gap-2">
+                  <Phone className="h-4 w-4 text-gray-400" />
+                  <p className="font-medium">
+                    {company.countryCode && <span>{company.countryCode} </span>}
+                    {company.phone}
+                  </p>
+                </div>
+              )}
+              {company.lastMeetingDate && (
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-gray-400" />
+                  <div>
+                    <p className="text-sm text-gray-600">Son Görüşme</p>
+                    <p className="font-medium mt-1">
+                      {new Date(company.lastMeetingDate).toLocaleDateString('tr-TR')}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {company.email && (
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-gray-400" />
+                  <p className="font-medium">{company.email}</p>
+                </div>
+              )}
+              {company.website && (
+                <div className="flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-gray-400" />
+                  <a href={company.website} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline">
+                    {company.website}
+                  </a>
+                </div>
+              )}
+              {company.address && (
+                <div>
+                  <p className="text-sm text-gray-600">Adres</p>
+                  <p className="font-medium mt-1">{company.address}</p>
+                </div>
+              )}
+              {company.taxNumber && (
+                <div>
+                  <p className="text-sm text-gray-600">Vergi No</p>
+                  <p className="font-medium mt-1">{company.taxNumber}</p>
+                </div>
+              )}
+              {company.taxOffice && (
+                <div>
+                  <p className="text-sm text-gray-600">Vergi Dairesi</p>
+                  <p className="font-medium mt-1">{company.taxOffice}</p>
+                </div>
+              )}
+              {company.description && (
+                <div>
+                  <p className="text-sm text-gray-600">Açıklama</p>
+                  <p className="font-medium mt-1">{company.description}</p>
+                </div>
+              )}
             </div>
-            {company.sector && (
-              <div>
-                <p className="text-sm text-gray-600">Sektör</p>
-                <p className="font-medium mt-1">{company.sector}</p>
-              </div>
-            )}
-            {company.city && (
-              <div>
-                <p className="text-sm text-gray-600">Şehir</p>
-                <p className="font-medium mt-1">{company.city}</p>
-              </div>
-            )}
-            {company.phone && (
-              <div className="flex items-center gap-2">
-                <Phone className="h-4 w-4 text-gray-400" />
-                <p className="font-medium">{company.phone}</p>
-              </div>
-            )}
-            {company.email && (
-              <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-gray-400" />
-                <p className="font-medium">{company.email}</p>
-              </div>
-            )}
-            {company.website && (
-              <div className="flex items-center gap-2">
-                <Globe className="h-4 w-4 text-gray-400" />
-                <a href={company.website} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline">
-                  {company.website}
-                </a>
-              </div>
-            )}
-            {company.address && (
-              <div>
-                <p className="text-sm text-gray-600">Adres</p>
-                <p className="font-medium mt-1">{company.address}</p>
-              </div>
-            )}
-            {company.taxNumber && (
-              <div>
-                <p className="text-sm text-gray-600">Vergi No</p>
-                <p className="font-medium mt-1">{company.taxNumber}</p>
-              </div>
-            )}
-            {company.taxOffice && (
-              <div>
-                <p className="text-sm text-gray-600">Vergi Dairesi</p>
-                <p className="font-medium mt-1">{company.taxOffice}</p>
-              </div>
-            )}
-            {company.description && (
-              <div>
-                <p className="text-sm text-gray-600">Açıklama</p>
-                <p className="font-medium mt-1">{company.description}</p>
-              </div>
-            )}
-          </div>
-        </Card>
+          </Card>
 
         <Card className="p-6">
           <h2 className="text-xl font-semibold mb-4">Bilgiler</h2>
@@ -335,161 +416,268 @@ export default function CompanyDetailPage() {
             )}
           </div>
         </Card>
-      </div>
+        </div>
+      )}
 
-      {/* İlişkili Veriler */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Kullanıcılar */}
-        {company.User && company.User.length > 0 && (
-          <Card className="p-6">
-            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Kullanıcılar ({company.User.length})
-            </h2>
-            <div className="space-y-2">
-              {company.User.map((user) => (
-                <div key={user.id} className="flex items-center justify-between p-2 border rounded">
-                  <div>
-                    <p className="font-medium">{user.name}</p>
-                    <p className="text-sm text-gray-600">{user.email}</p>
-                  </div>
-                  <Badge>{user.role}</Badge>
+      {/* İlişkili Veriler - Sekmeler */}
+      <Card className="p-6">
+        <Tabs defaultValue="meetings" className="w-full">
+          <TabsList className="grid w-full grid-cols-6">
+            <TabsTrigger value="meetings" className="flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Görüşmeler ({company.Meeting?.length || 0})
+            </TabsTrigger>
+            <TabsTrigger value="deals" className="flex items-center gap-2">
+              <Briefcase className="h-4 w-4" />
+              Fırsatlar ({company.Deal?.length || 0})
+            </TabsTrigger>
+            <TabsTrigger value="quotes" className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Teklifler ({company.Quote?.length || 0})
+            </TabsTrigger>
+            <TabsTrigger value="invoices" className="flex items-center gap-2">
+              <DollarSign className="h-4 w-4" />
+              Faturalar ({company.Invoice?.length || 0})
+            </TabsTrigger>
+            <TabsTrigger value="shipments" className="flex items-center gap-2">
+              <Truck className="h-4 w-4" />
+              Sevkiyatlar ({company.Shipment?.length || 0})
+            </TabsTrigger>
+            <TabsTrigger value="finance" className="flex items-center gap-2">
+              <Receipt className="h-4 w-4" />
+              Giderler ({company.Finance?.length || 0})
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Görüşmeler Sekmesi */}
+          <TabsContent value="meetings" className="mt-6">
+            {company.Meeting && company.Meeting.length > 0 ? (
+              <div className="space-y-2">
+                {company.Meeting.map((meeting) => (
+                  <Link key={meeting.id} href={`/${locale}/meetings/${meeting.id}`}>
+                    <div className="flex items-center justify-between p-4 border rounded hover:bg-gray-50 cursor-pointer transition-colors">
+                      <div>
+                        <p className="font-medium">{meeting.title}</p>
+                        <p className="text-sm text-gray-600">
+                          {new Date(meeting.meetingDate).toLocaleDateString('tr-TR')}
+                        </p>
+                      </div>
+                      <Badge>{meeting.status}</Badge>
+                    </div>
+                  </Link>
+                ))}
+                <div className="mt-4">
+                  <Link href={`/${locale}/meetings?customerCompanyId=${company.id}`}>
+                    <Button variant="outline" className="w-full">
+                      Tüm Görüşmeleri Gör
+                    </Button>
+                  </Link>
                 </div>
-              ))}
-            </div>
-          </Card>
-        )}
-
-        {/* Müşteriler */}
-        {company.Customer && company.Customer.length > 0 && (
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Müşteriler ({company.Customer.length})
-              </h2>
-              {company.Customer.length > 5 && (
-                <Link href={`/${locale}/customers?companyId=${company.id}`}>
-                  <Button variant="outline" size="sm">
-                    Tümünü Gör
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Calendar className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p>Henüz görüşme kaydı yok</p>
+                <Link href={`/${locale}/meetings/new?customerCompanyId=${company.id}`}>
+                  <Button className="mt-4">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Görüşme Ekle
                   </Button>
                 </Link>
-              )}
-            </div>
-            <div className="space-y-2">
-              {company.Customer.slice(0, 5).map((customer) => (
-                <Link key={customer.id} href={`/${locale}/customers/${customer.id}`}>
-                  <div className="flex items-center justify-between p-2 border rounded hover:bg-gray-50 cursor-pointer">
-                    <div>
-                      <p className="font-medium">{customer.name}</p>
-                      {customer.email && <p className="text-sm text-gray-600">{customer.email}</p>}
-                    </div>
-                    <Badge className={customer.status === 'ACTIVE' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>
-                      {customer.status === 'ACTIVE' ? 'Aktif' : 'Pasif'}
-                    </Badge>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </Card>
-        )}
+              </div>
+            )}
+          </TabsContent>
 
-        {/* Fırsatlar */}
-        {company.Deal && company.Deal.length > 0 && (
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <Briefcase className="h-5 w-5" />
-                Fırsatlar ({company.Deal.length})
-              </h2>
-              {company.Deal.length > 5 && (
-                <Link href={`/${locale}/deals?companyId=${company.id}`}>
-                  <Button variant="outline" size="sm">
-                    Tümünü Gör
+          {/* Fırsatlar Sekmesi */}
+          <TabsContent value="deals" className="mt-6">
+            {company.Deal && company.Deal.length > 0 ? (
+              <div className="space-y-2">
+                {company.Deal.map((deal) => (
+                  <Link key={deal.id} href={`/${locale}/deals/${deal.id}`}>
+                    <div className="flex items-center justify-between p-4 border rounded hover:bg-gray-50 cursor-pointer transition-colors">
+                      <div>
+                        <p className="font-medium">{deal.title}</p>
+                        <p className="text-sm text-gray-600">{deal.stage}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold">{new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(deal.value)}</p>
+                        <Badge className="mt-1">{deal.status}</Badge>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+                <div className="mt-4">
+                  <Link href={`/${locale}/deals?customerCompanyId=${company.id}`}>
+                    <Button variant="outline" className="w-full">
+                      Tüm Fırsatları Gör
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Briefcase className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p>Henüz fırsat kaydı yok</p>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Teklifler Sekmesi */}
+          <TabsContent value="quotes" className="mt-6">
+            {company.Quote && company.Quote.length > 0 ? (
+              <div className="space-y-2">
+                {company.Quote.map((quote) => (
+                  <Link key={quote.id} href={`/${locale}/quotes/${quote.id}`}>
+                    <div className="flex items-center justify-between p-4 border rounded hover:bg-gray-50 cursor-pointer transition-colors">
+                      <div>
+                        <p className="font-medium">{quote.title}</p>
+                        <p className="text-sm text-gray-600">{quote.status}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold">{new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(quote.total)}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(quote.createdAt).toLocaleDateString('tr-TR')}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+                <div className="mt-4">
+                  <Link href={`/${locale}/quotes?customerCompanyId=${company.id}`}>
+                    <Button variant="outline" className="w-full">
+                      Tüm Teklifleri Gör
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <FileText className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p>Henüz teklif kaydı yok</p>
+                <Link href={`/${locale}/quotes/new?customerCompanyId=${company.id}`}>
+                  <Button className="mt-4">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Teklif Oluştur
                   </Button>
                 </Link>
-              )}
-            </div>
-            <div className="space-y-2">
-              {company.Deal.slice(0, 5).map((deal) => (
-                <Link key={deal.id} href={`/${locale}/deals/${deal.id}`}>
-                  <div className="flex items-center justify-between p-2 border rounded hover:bg-gray-50 cursor-pointer">
-                    <div>
-                      <p className="font-medium">{deal.title}</p>
-                      <p className="text-sm text-gray-600">{deal.stage}</p>
-                    </div>
-                    <p className="font-semibold">{new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(deal.value)}</p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </Card>
-        )}
+              </div>
+            )}
+          </TabsContent>
 
-        {/* Teklifler */}
-        {company.Quote && company.Quote.length > 0 && (
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Teklifler ({company.Quote.length})
-              </h2>
-              {company.Quote.length > 5 && (
-                <Link href={`/${locale}/quotes?companyId=${company.id}`}>
-                  <Button variant="outline" size="sm">
-                    Tümünü Gör
+          {/* Faturalar Sekmesi */}
+          <TabsContent value="invoices" className="mt-6">
+            {company.Invoice && company.Invoice.length > 0 ? (
+              <div className="space-y-2">
+                {company.Invoice.map((invoice) => (
+                  <Link key={invoice.id} href={`/${locale}/invoices/${invoice.id}`}>
+                    <div className="flex items-center justify-between p-4 border rounded hover:bg-gray-50 cursor-pointer transition-colors">
+                      <div>
+                        <p className="font-medium">{invoice.title}</p>
+                        <p className="text-sm text-gray-600">{invoice.status}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold">{new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(invoice.total)}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(invoice.createdAt).toLocaleDateString('tr-TR')}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+                <div className="mt-4">
+                  <Link href={`/${locale}/invoices?customerCompanyId=${company.id}`}>
+                    <Button variant="outline" className="w-full">
+                      Tüm Faturaları Gör
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <DollarSign className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p>Henüz fatura kaydı yok</p>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Sevkiyatlar Sekmesi */}
+          <TabsContent value="shipments" className="mt-6">
+            {company.Shipment && company.Shipment.length > 0 ? (
+              <div className="space-y-2">
+                {company.Shipment.map((shipment) => (
+                  <Link key={shipment.id} href={`/${locale}/shipments/${shipment.id}`}>
+                    <div className="flex items-center justify-between p-4 border rounded hover:bg-gray-50 cursor-pointer transition-colors">
+                      <div>
+                        <p className="font-medium">
+                          {shipment.tracking || `Sevkiyat #${shipment.id.slice(0, 8)}`}
+                        </p>
+                        <p className="text-sm text-gray-600">{shipment.status}</p>
+                      </div>
+                      <Badge>{shipment.status}</Badge>
+                    </div>
+                  </Link>
+                ))}
+                <div className="mt-4">
+                  <Link href={`/${locale}/shipments?customerCompanyId=${company.id}`}>
+                    <Button variant="outline" className="w-full">
+                      Tüm Sevkiyatları Gör
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Truck className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p>Henüz sevkiyat kaydı yok</p>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Giderler Sekmesi */}
+          <TabsContent value="finance" className="mt-6">
+            {company.Finance && company.Finance.length > 0 ? (
+              <div className="space-y-2">
+                {company.Finance.map((finance) => (
+                  <Link key={finance.id} href={`/${locale}/finance/${finance.id}`}>
+                    <div className="flex items-center justify-between p-4 border rounded hover:bg-gray-50 cursor-pointer transition-colors">
+                      <div>
+                        <p className="font-medium">{finance.description || `${finance.type === 'EXPENSE' ? 'Gider' : 'Gelir'}`}</p>
+                        <p className="text-sm text-gray-600">{finance.type}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className={`font-semibold ${finance.type === 'EXPENSE' ? 'text-red-600' : 'text-green-600'}`}>
+                          {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(finance.amount)}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(finance.createdAt).toLocaleDateString('tr-TR')}
+                        </p>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+                <div className="mt-4">
+                  <Link href={`/${locale}/finance?customerCompanyId=${company.id}`}>
+                    <Button variant="outline" className="w-full">
+                      Tüm Giderleri Gör
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Receipt className="h-12 w-12 mx-auto mb-4 text-gray-400" />
+                <p>Henüz gider kaydı yok</p>
+                <Link href={`/${locale}/finance/new?customerCompanyId=${company.id}`}>
+                  <Button className="mt-4">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Gider Gir
                   </Button>
                 </Link>
-              )}
-            </div>
-            <div className="space-y-2">
-              {company.Quote.slice(0, 5).map((quote) => (
-                <Link key={quote.id} href={`/${locale}/quotes/${quote.id}`}>
-                  <div className="flex items-center justify-between p-2 border rounded hover:bg-gray-50 cursor-pointer">
-                    <div>
-                      <p className="font-medium">{quote.title}</p>
-                      <p className="text-sm text-gray-600">{quote.status}</p>
-                    </div>
-                    <p className="font-semibold">{new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(quote.total)}</p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </Card>
-        )}
-
-        {/* Faturalar */}
-        {company.Invoice && company.Invoice.length > 0 && (
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <DollarSign className="h-5 w-5" />
-                Faturalar ({company.Invoice.length})
-              </h2>
-              {company.Invoice.length > 5 && (
-                <Link href={`/${locale}/invoices?companyId=${company.id}`}>
-                  <Button variant="outline" size="sm">
-                    Tümünü Gör
-                  </Button>
-                </Link>
-              )}
-            </div>
-            <div className="space-y-2">
-              {company.Invoice.slice(0, 5).map((invoice) => (
-                <Link key={invoice.id} href={`/${locale}/invoices/${invoice.id}`}>
-                  <div className="flex items-center justify-between p-2 border rounded hover:bg-gray-50 cursor-pointer">
-                    <div>
-                      <p className="font-medium">{invoice.title}</p>
-                      <p className="text-sm text-gray-600">{invoice.status}</p>
-                    </div>
-                    <p className="font-semibold">{new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(invoice.total)}</p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </Card>
-        )}
-      </div>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </Card>
 
       {/* Activity Timeline */}
       {company.activities && company.activities.length > 0 && (

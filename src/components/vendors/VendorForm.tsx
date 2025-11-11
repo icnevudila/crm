@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { toast } from '@/lib/toast'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -154,7 +155,7 @@ export default function VendorForm({
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      alert(error?.message || 'Kaydetme işlemi başarısız oldu')
+      toast.error('Kaydedilemedi', error?.message)
     } finally {
       setLoading(false)
     }

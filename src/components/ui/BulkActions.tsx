@@ -33,7 +33,7 @@ export default function BulkActions({
       onClearSelection()
     } catch (error: any) {
       console.error('Bulk delete error:', error)
-      alert(error?.message || 'Toplu silme işlemi başarısız oldu')
+      toast.error('Toplu silme işlemi başarısız oldu', error?.message)
     } finally {
       setLoading(false)
     }
@@ -45,7 +45,7 @@ export default function BulkActions({
 
   return (
     <div className="flex items-center gap-3 p-3 bg-primary-50 border border-primary-200 rounded-lg">
-      <Badge variant="outline" className="bg-white">
+      <Badge variant="outline" className="bg-white text-gray-700 border-gray-300">
         {selectedIds.length} seçili
       </Badge>
       <div className="flex gap-2">

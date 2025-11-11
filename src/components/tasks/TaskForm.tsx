@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { toast } from '@/lib/toast'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -25,10 +26,10 @@ import {
 } from '@/components/ui/select'
 
 const taskSchema = z.object({
-  title: z.string().min(1, 'Başlık gereklidir'),
+  title: z.string().min(1, 'Başlık gereklidir').max(200, 'Başlık en fazla 200 karakter olabilir'),
   status: z.enum(['TODO', 'IN_PROGRESS', 'DONE', 'CANCELLED']).default('TODO'),
   assignedTo: z.string().optional(),
-  description: z.string().optional(),
+  description: z.string().max(2000, 'Açıklama en fazla 2000 karakter olabilir').optional(),
   dueDate: z.string().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
 })
@@ -152,7 +153,7 @@ export default function TaskForm({ task, open, onClose, onSuccess }: TaskFormPro
       await mutation.mutateAsync(data)
     } catch (error: any) {
       console.error('Error:', error)
-      alert(error?.message || 'Kaydetme işlemi başarısız oldu')
+      toast.error('Kaydedilemedi', error?.message)
     } finally {
       setLoading(false)
     }

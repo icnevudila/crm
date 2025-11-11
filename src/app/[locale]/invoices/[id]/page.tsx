@@ -4,15 +4,22 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { ArrowLeft, Edit, FileText, FileText as QuoteIcon, Truck, Trash2, Users, Plus, Package } from 'lucide-react'
+import { ArrowLeft, Edit, FileText, FileText as QuoteIcon, Truck, Trash2, Users, Plus, Package, AlertTriangle, Phone, Mail } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { formatCurrency } from '@/lib/utils'
+import { toast } from '@/lib/toast'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import dynamic from 'next/dynamic'
+import WorkflowStepper from '@/components/ui/WorkflowStepper'
+import { getInvoiceWorkflowSteps } from '@/lib/workflowSteps'
+import StatusInfoNote from '@/components/workflow/StatusInfoNote'
+import NextStepButtons from '@/components/workflow/NextStepButtons'
+import RelatedRecordsSuggestions from '@/components/workflow/RelatedRecordsSuggestions'
 import {
   Table,
   TableBody,
@@ -133,10 +140,13 @@ export default function InvoiceDetailPage() {
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setFormOpen(true)}>
-            <Edit className="mr-2 h-4 w-4" />
-            Düzenle
-          </Button>
+          {/* Quote'tan oluşturulan, SHIPPED ve RECEIVED durumundaki faturalar düzenlenemez ve silinemez */}
+          {!invoice.quoteId && invoice.status !== 'SHIPPED' && invoice.status !== 'RECEIVED' && (
+            <Button variant="outline" onClick={() => setFormOpen(true)}>
+              <Edit className="mr-2 h-4 w-4" />
+              Düzenle
+            </Button>
+          )}
           <Button
             className="bg-gradient-primary text-white"
             onClick={() => {
@@ -155,33 +165,59 @@ export default function InvoiceDetailPage() {
             <FileText className="mr-2 h-4 w-4" />
             XML Export (E-Fatura)
           </Button>
-          <Button
-            variant="outline"
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-            onClick={async () => {
-              if (!confirm(`${invoice.title} faturasını silmek istediğinize emin misiniz?`)) {
-                return
-              }
-              setDeleteLoading(true)
-              try {
-                const res = await fetch(`/api/invoices/${id}`, {
-                  method: 'DELETE',
-                })
-                if (!res.ok) throw new Error('Silme işlemi başarısız')
-                router.push(`/${locale}/invoices`)
-              } catch (error: any) {
-                alert(error?.message || 'Silme işlemi başarısız oldu')
-              } finally {
-                setDeleteLoading(false)
-              }
-            }}
-            disabled={deleteLoading}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Sil
-          </Button>
+          {/* Quote'tan oluşturulan, SHIPPED ve RECEIVED durumundaki faturalar silinemez */}
+          {!invoice.quoteId && invoice.status !== 'ACCEPTED' && invoice.status !== 'SHIPPED' && invoice.status !== 'RECEIVED' && (
+            <Button
+              variant="outline"
+              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              onClick={async () => {
+                if (!confirm(`${invoice.title} faturasını silmek istediğinize emin misiniz?`)) {
+                  return
+                }
+                setDeleteLoading(true)
+                try {
+                  const res = await fetch(`/api/invoices/${id}`, {
+                    method: 'DELETE',
+                  })
+                  if (!res.ok) throw new Error('Silme işlemi başarısız')
+                  router.push(`/${locale}/invoices`)
+                } catch (error: any) {
+                  alert(error?.message || 'Silme işlemi başarısız oldu')
+                } finally {
+                  setDeleteLoading(false)
+                }
+              }}
+              disabled={deleteLoading}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Sil
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Uyarı Mesajları */}
+      {invoice.status === 'SHIPPED' && (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+          <p className="text-sm text-green-800 font-semibold">
+            ✓ Sevkiyatı yapıldı, stoktan düşüldü, onaylandı. Bu fatura değiştirilemez.
+          </p>
+        </div>
+      )}
+      {invoice.status === 'RECEIVED' && (
+        <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
+          <p className="text-sm text-teal-800 font-semibold">
+            ✓ Mal kabul edildi, stoğa girişi yapıldı, onaylandı. Bu fatura değiştirilemez.
+          </p>
+        </div>
+      )}
+      {invoice.quoteId && (
+        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+          <p className="text-sm text-indigo-800 font-semibold">
+            ℹ️ Bu fatura tekliften oluşturuldu. Değiştirilemez.
+          </p>
+        </div>
+      )}
 
       {/* Info Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -237,6 +273,153 @@ export default function InvoiceDetailPage() {
           </p>
         </div>
       </div>
+
+      {/* OVERDUE Uyarısı ve Öneriler */}
+      {invoice.status === 'OVERDUE' && (
+        <Alert className="border-red-200 bg-red-50">
+          <AlertTriangle className="h-4 w-4 text-red-600" />
+          <AlertTitle className="text-red-900 font-semibold">
+            ⚠️ Bu Fatura Vadesi Geçti
+          </AlertTitle>
+          <AlertDescription className="text-red-800 mt-2">
+            <p className="mb-3">
+              Bu fatura vadesi geçti! Müşteri ile acilen iletişime geçip ödeme talep etmeniz gerekiyor.
+              {invoice.dueDate && (
+                <span className="block mt-1 text-sm">
+                  Vade Tarihi: <strong>{new Date(invoice.dueDate).toLocaleDateString('tr-TR')}</strong>
+                </span>
+              )}
+            </p>
+            <div className="flex gap-2 mt-4 flex-wrap">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const customer = invoice.Customer || invoice.Quote?.Deal?.Customer
+                  if (customer?.phone) {
+                    window.open(`tel:${customer.phone}`, '_blank')
+                  } else if (customer?.email) {
+                    window.open(`mailto:${customer.email}?subject=Ödeme Hatırlatması: ${invoice.title}`, '_blank')
+                  } else {
+                    alert('Müşteri iletişim bilgisi bulunamadı')
+                  }
+                }}
+                className="border-red-300 text-red-700 hover:bg-red-100"
+              >
+                <Phone className="h-4 w-4 mr-2" />
+                Müşteriyi Ara
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const customer = invoice.Customer || invoice.Quote?.Deal?.Customer
+                  if (customer?.email) {
+                    window.open(`mailto:${customer.email}?subject=Ödeme Hatırlatması: ${invoice.title}&body=Sayın ${customer.name},%0D%0A%0D%0A${invoice.title} faturası vadesi geçmiştir. Lütfen ödemeyi gerçekleştiriniz.`, '_blank')
+                  } else {
+                    alert('Müşteri e-posta adresi bulunamadı')
+                  }
+                }}
+                className="border-red-300 text-red-700 hover:bg-red-100"
+              >
+                <Mail className="h-4 w-4 mr-2" />
+                E-posta Gönder
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Workflow Stepper */}
+      <WorkflowStepper
+        steps={getInvoiceWorkflowSteps(invoice.status)}
+        currentStep={['DRAFT', 'SENT', 'PAID'].indexOf(invoice.status)}
+        title="Fatura İş Akışı"
+      />
+
+      {/* Status Info Note */}
+      <StatusInfoNote
+        entityType="invoice"
+        status={invoice.status}
+        relatedRecords={[
+          ...(invoice.quoteId ? [{
+            type: 'quote',
+            count: 1,
+            message: 'Bu fatura tekliften otomatik oluşturuldu'
+          }] : []),
+          ...(invoice.Customer ? [{
+            type: 'customer',
+            count: 1,
+            message: `Müşteri: ${invoice.Customer.name}`
+          }] : []),
+        ]}
+      />
+
+      {/* Next Step Buttons */}
+      <NextStepButtons
+        entityType="invoice"
+        currentStatus={invoice.status}
+        onAction={async (actionId) => {
+          // Status değiştirme işlemi
+          try {
+            const res = await fetch(`/api/invoices/${id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: actionId }),
+            })
+            if (!res.ok) {
+              const error = await res.json().catch(() => ({}))
+              toast.error(
+                'Durum değiştirilemedi',
+                error.message || 'Bir hata oluştu. Lütfen tekrar deneyin.'
+              )
+              return
+            }
+            toast.success('Durum değiştirildi')
+            refetch()
+          } catch (error: any) {
+            toast.error('Durum değiştirilemedi', error.message || 'Bir hata oluştu.')
+          }
+        }}
+        onCreateRelated={(type) => {
+          if (type === 'shipment') {
+            window.location.href = `/${locale}/shipments/new?invoiceId=${id}`
+          }
+        }}
+      />
+
+      {/* Related Records Suggestions */}
+      <RelatedRecordsSuggestions
+        entityType="invoice"
+        entityId={id}
+        relatedRecords={[
+          ...(invoice.Quote ? [{
+            id: invoice.Quote.id,
+            type: 'quote',
+            title: invoice.Quote.title,
+            link: `/${locale}/quotes/${invoice.Quote.id}`,
+          }] : []),
+          ...(invoice.Customer ? [{
+            id: invoice.Customer.id,
+            type: 'customer',
+            title: invoice.Customer.name,
+            link: `/${locale}/customers/${invoice.Customer.id}`,
+          }] : []),
+          ...(invoice.Shipment ? [{
+            id: invoice.Shipment.id,
+            type: 'shipment',
+            title: invoice.Shipment.tracking || 'Sevkiyat',
+            link: `/${locale}/shipments/${invoice.Shipment.id}`,
+          }] : []),
+        ]}
+        missingRecords={[
+          ...(invoice.status === 'SENT' && !invoice.Shipment ? [{
+            type: 'shipment',
+            label: 'Sevkiyat Oluştur',
+            icon: <Package className="h-4 w-4" />,
+            onCreate: () => window.location.href = `/${locale}/shipments/new?invoiceId=${id}`,
+            description: 'Fiziksel ürünler için sevkiyat oluşturun',
+          }] : []),
+        ]}
+      />
 
       {/* YENİ: İlgili Sevkiyat Bilgisi */}
       {invoice.shipmentId && invoice.Shipment && (
@@ -563,7 +746,7 @@ export default function InvoiceDetailPage() {
                   <p className="font-medium text-gray-900">
                     Sevkiyat #{shipment.tracking || shipment.id.substring(0, 8)}
                   </p>
-                  <Badge className="mt-1" variant="outline" className={
+                  <Badge variant="outline" className={`mt-1 ${
                     shipment.status === 'APPROVED' || shipment.status === 'DELIVERED'
                       ? 'bg-green-100 text-green-800 border-green-300'
                       : shipment.status === 'DRAFT'
@@ -575,7 +758,7 @@ export default function InvoiceDetailPage() {
                       : shipment.status === 'CANCELLED'
                       ? 'bg-red-100 text-red-800 border-red-300'
                       : 'bg-yellow-100 text-yellow-800 border-yellow-300'
-                  }>
+                  }`}>
                     {shipment.status === 'APPROVED' 
                       ? 'Onaylı'
                       : shipment.status === 'DELIVERED'

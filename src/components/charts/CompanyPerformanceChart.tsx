@@ -16,24 +16,24 @@ export default function CompanyPerformanceChart({ data }: CompanyPerformanceChar
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
           </svg>
         </div>
-        <p className="text-sm font-medium">Henüz kurum performans verisi yok</p>
-        <p className="text-xs text-gray-400 mt-1">Kurum aktiviteleri görüntülendiğinde burada görünecek</p>
+        <p className="text-sm font-medium">Henüz kullanıcı performans verisi yok</p>
+        <p className="text-xs text-gray-400 mt-1">Kullanıcı aktiviteleri görüntülendiğinde burada görünecek</p>
       </div>
     )
   }
 
   // Data formatını düzelt - BarChart için doğru formata çevir
-  // Kullanıcı isimlerini kısalt ve temizle (kurum isimleri olarak)
+  // Kullanıcı isimlerini kısalt ve temizle
   const chartData = data
     .map((item) => ({
-      company: (item.user || 'Kurum').substring(0, 15).trim(), // Kısa isim, max 15 karakter
+      company: (item.user || 'Kullanıcı').substring(0, 15).trim(), // Kısa isim, max 15 karakter
       sales: Math.max(0, item.sales || 0),
       quotes: Math.max(0, item.quotes || 0),
       deals: Math.max(0, item.deals || 0),
     }))
-    // Maksimum 8 kurum göster - performans için
+    // Maksimum 8 kullanıcı göster - performans için
     .filter((item, index) => index < 8)
-    // Kurum isimlerini benzersiz yap - aynı isim varsa numara ekle
+    // Kullanıcı isimlerini benzersiz yap - aynı isim varsa numara ekle
     .map((item, index, arr) => {
       const sameNameCount = arr.filter((i, idx) => idx < index && i.company === item.company).length
       return {
@@ -51,8 +51,8 @@ export default function CompanyPerformanceChart({ data }: CompanyPerformanceChar
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
           </svg>
         </div>
-        <p className="text-sm font-medium">Henüz kurum performans verisi yok</p>
-        <p className="text-xs text-gray-400 mt-1">Kurum aktiviteleri görüntülendiğinde burada görünecek</p>
+        <p className="text-sm font-medium">Henüz kullanıcı performans verisi yok</p>
+        <p className="text-xs text-gray-400 mt-1">Kullanıcı aktiviteleri görüntülendiğinde burada görünecek</p>
       </div>
     )
   }

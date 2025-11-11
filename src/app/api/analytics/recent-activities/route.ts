@@ -29,15 +29,23 @@ export async function GET() {
     // SuperAdmin tüm şirketlerin verilerini görebilir
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     const companyId = session.user.companyId
+    
+    // Güvenlik: companyId yoksa hata döndür
+    if (!companyId && !isSuperAdmin) {
+      return NextResponse.json({ error: 'Unauthorized - companyId required' }, { status: 401 })
+    }
+    
     const supabase = getSupabaseWithServiceRole()
 
     // Son 20 aktivite logunu çek - OPTİMİZE: JOIN kaldırıldı - çok yavaş
     let activitiesQuery = supabase
       .from('ActivityLog')
-      .select('id, entity, action, description, createdAt, userId')
+      .select('id, entity, action, description, createdAt, userId, companyId')
       .order('createdAt', { ascending: false })
       .limit(20) // Son 20 aktivite
     
+    // Normal kullanıcı: kendi companyId'sine göre filtrele
+    // SuperAdmin: tüm firmaları göster
     if (!isSuperAdmin) {
       activitiesQuery = activitiesQuery.eq('companyId', companyId)
     }

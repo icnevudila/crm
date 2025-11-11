@@ -1,13 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { toast } from '@/lib/toast'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
-import { X } from 'lucide-react'
+import { X, Upload, Image as ImageIcon } from 'lucide-react'
+import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -25,19 +27,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { CountryCodeSelector } from '@/components/ui/country-code-selector'
+import { useLocale } from 'next-intl'
 
 const companySchema = z.object({
   name: z.string().min(1, 'Firma adı gereklidir'),
+  contactPerson: z.string().min(1, 'Kontak kişi gereklidir'),
+  phone: z.string().min(1, 'Telefon gereklidir'),
+  countryCode: z.string().default('+90'),
+  taxOffice: z.string().min(1, 'Vergi dairesi gereklidir'),
+  taxNumber: z.string().min(1, 'Vergi numarası gereklidir'),
   sector: z.string().optional(),
   city: z.string().optional(),
+  // district kolonu veritabanında yok, bu yüzden kaldırıldı
   address: z.string().optional(),
-  phone: z.string().optional(),
   email: z.string().email('Geçerli bir email adresi giriniz').optional().or(z.literal('')),
   website: z.string().url('Geçerli bir website adresi giriniz').optional().or(z.literal('')),
-  taxNumber: z.string().optional(),
-  taxOffice: z.string().optional(),
   description: z.string().optional(),
-  status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
+  status: z.enum(['POT', 'MUS', 'ALT', 'PAS']).default('POT'),
+  logoUrl: z.string().url('Geçerli bir URL girin').optional().or(z.literal('')),
 })
 
 type CompanyFormData = z.infer<typeof companySchema>
@@ -83,6 +91,164 @@ const SECTORS = [
   'Diğer',
 ]
 
+// Türkiye şehirleri
+const CITIES = [
+  'Adana', 'Adıyaman', 'Afyonkarahisar', 'Ağrı', 'Amasya', 'Ankara', 'Antalya', 'Artvin',
+  'Aydın', 'Balıkesir', 'Bilecik', 'Bingöl', 'Bitlis', 'Bolu', 'Burdur', 'Bursa',
+  'Çanakkale', 'Çankırı', 'Çorum', 'Denizli', 'Diyarbakır', 'Edirne', 'Elazığ', 'Erzincan',
+  'Erzurum', 'Eskişehir', 'Gaziantep', 'Giresun', 'Gümüşhane', 'Hakkari', 'Hatay', 'Isparta',
+  'İçel (Mersin)', 'İstanbul', 'İzmir', 'Kars', 'Kastamonu', 'Kayseri', 'Kırklareli', 'Kırşehir',
+  'Kocaeli', 'Konya', 'Kütahya', 'Malatya', 'Manisa', 'Kahramanmaraş', 'Mardin', 'Muğla',
+  'Muş', 'Nevşehir', 'Niğde', 'Ordu', 'Rize', 'Sakarya', 'Samsun', 'Siirt',
+  'Sinop', 'Sivas', 'Tekirdağ', 'Tokat', 'Trabzon', 'Tunceli', 'Şanlıurfa', 'Uşak',
+  'Van', 'Yozgat', 'Zonguldak', 'Aksaray', 'Bayburt', 'Karaman', 'Kırıkkale', 'Batman',
+  'Şırnak', 'Bartın', 'Ardahan', 'Iğdır', 'Yalova', 'Karabük', 'Kilis', 'Osmaniye', 'Düzce'
+]
+
+// Şehirlere göre ilçeler (en popüler ilçeler)
+const DISTRICTS_BY_CITY: Record<string, string[]> = {
+  'İstanbul': [
+    'Adalar', 'Arnavutköy', 'Ataşehir', 'Avcılar', 'Bağcılar', 'Bahçelievler', 'Bakırköy',
+    'Başakşehir', 'Bayrampaşa', 'Beşiktaş', 'Beykoz', 'Beylikdüzü', 'Beyoğlu', 'Büyükçekmece',
+    'Çatalca', 'Çekmeköy', 'Esenler', 'Esenyurt', 'Eyüpsultan', 'Fatih', 'Gaziosmanpaşa',
+    'Güngören', 'Kadıköy', 'Kağıthane', 'Kartal', 'Küçükçekmece', 'Maltepe', 'Pendik',
+    'Sancaktepe', 'Sarıyer', 'Silivri', 'Sultanbeyli', 'Sultangazi', 'Şile', 'Şişli',
+    'Tuzla', 'Ümraniye', 'Üsküdar', 'Zeytinburnu'
+  ],
+  'Ankara': [
+    'Altındağ', 'Ayaş', 'Bala', 'Beypazarı', 'Çamlıdere', 'Çankaya', 'Çubuk', 'Elmadağ',
+    'Güdül', 'Haymana', 'Kalecik', 'Kızılcahamam', 'Nallıhan', 'Polatlı', 'Şereflikoçhisar',
+    'Yenimahalle', 'Akyurt', 'Etimesgut', 'Evren', 'Gölbaşı', 'Keçiören', 'Mamak', 'Sincan',
+    'Kazan', 'Pursaklar'
+  ],
+  'İzmir': [
+    'Aliağa', 'Bayındır', 'Bergama', 'Bornova', 'Çeşme', 'Dikili', 'Foça', 'Karaburun',
+    'Karşıyaka', 'Kemalpaşa', 'Kınık', 'Kiraz', 'Menemen', 'Ödemiş', 'Seferihisar', 'Selçuk',
+    'Tire', 'Torbalı', 'Urla', 'Beydağ', 'Buca', 'Konak', 'Menderes', 'Balçova', 'Çiğli',
+    'Gaziemir', 'Narlıdere', 'Güzelbahçe', 'Bayraklı', 'Karabağlar'
+  ],
+  'Bursa': [
+    'Büyükorhan', 'Gemlik', 'Gürsu', 'Harmancık', 'İnegöl', 'İznik', 'Karacabey', 'Keles',
+    'Kestel', 'Mudanya', 'Mustafakemalpaşa', 'Nilüfer', 'Orhaneli', 'Orhangazi', 'Osmangazi',
+    'Yenişehir', 'Yıldırım'
+  ],
+  'Antalya': [
+    'Akseki', 'Alanya', 'Elmalı', 'Finike', 'Gazipaşa', 'Gündoğmuş', 'Kaş', 'Kemer',
+    'Korkuteli', 'Kumluca', 'Manavgat', 'Serik', 'Demre', 'İbradı', 'Kale', 'Aksu',
+    'Döşemealtı', 'Kepez', 'Konyaaltı', 'Muratpaşa'
+  ],
+  'Adana': [
+    'Aladağ', 'Ceyhan', 'Feke', 'Karaisalı', 'Karataş', 'Kozan', 'Pozantı', 'Saimbeyli',
+    'Tufanbeyli', 'Yumurtalık', 'Yüreğir', 'Sarıçam', 'Çukurova', 'Seyhan', 'İmamoğlu'
+  ],
+  'Kocaeli': [
+    'Başiskele', 'Çayırova', 'Darıca', 'Derince', 'Dilovası', 'Gebze', 'Gölcük', 'İzmit',
+    'Kandıra', 'Karamürsel', 'Kartepe', 'Körfez'
+  ],
+  'Gaziantep': [
+    'Araban', 'İslahiye', 'Karkamış', 'Nizip', 'Nurdağı', 'Oğuzeli', 'Şahinbey', 'Şehitkamil',
+    'Yavuzeli', 'İslahiye', 'Kilis'
+  ],
+  'Konya': [
+    'Ahırlı', 'Akören', 'Akşehir', 'Altınekin', 'Beyşehir', 'Bozkır', 'Cihanbeyli', 'Çeltik',
+    'Çumra', 'Derbent', 'Derebucak', 'Doğanhisar', 'Emirgazi', 'Ereğli', 'Güneysinir', 'Hadim',
+    'Halkapınar', 'Hüyük', 'Ilgın', 'Kadınhanı', 'Karapınar', 'Karatay', 'Kulu', 'Meram',
+    'Sarayönü', 'Selçuklu', 'Seydişehir', 'Taşkent', 'Tuzlukçu', 'Yalıhüyük', 'Yunak'
+  ],
+  'Mersin': [
+    'Anamur', 'Aydıncık', 'Bozyazı', 'Çamlıyayla', 'Erdemli', 'Gülnar', 'Mut', 'Silifke',
+    'Tarsus', 'Akdeniz', 'Mezitli', 'Toroslar', 'Yenişehir'
+  ],
+  'Diyarbakır': [
+    'Bismil', 'Çermik', 'Çınar', 'Çüngüş', 'Dicle', 'Eğil', 'Ergani', 'Hani', 'Hazro',
+    'Kocaköy', 'Kulp', 'Lice', 'Silvan', 'Sur', 'Yenişehir', 'Bağlar', 'Kayapınar'
+  ],
+  'Hatay': [
+    'Altınözü', 'Antakya', 'Belen', 'Dörtyol', 'Erzin', 'Hassa', 'İskenderun', 'Kırıkhan',
+    'Kumlu', 'Reyhanlı', 'Samandağ', 'Yayladağı', 'Arsuz', 'Defne', 'Payas'
+  ],
+  'Manisa': [
+    'Ahmetli', 'Akhisar', 'Alaşehir', 'Demirci', 'Gölmarmara', 'Gördes', 'Kırkağaç', 'Köprübaşı',
+    'Kula', 'Salihli', 'Sarıgöl', 'Saruhanlı', 'Selendi', 'Soma', 'Şehzadeler', 'Turgutlu',
+    'Yunusemre', 'Akhisar', 'Soma'
+  ],
+  'Kayseri': [
+    'Akkışla', 'Bünyan', 'Develi', 'Felahiye', 'İncesu', 'Pınarbaşı', 'Sarıoğlan', 'Sarız',
+    'Tomarza', 'Yahyalı', 'Yeşilhisar', 'Melikgazi', 'Kocasinan', 'Talas', 'Hacılar', 'Özvatan'
+  ],
+  'Samsun': [
+    'Alaçam', 'Asarcık', 'Ayvacık', 'Bafra', 'Çarşamba', 'Havza', 'Kavak', 'Ladik', 'Ondokuzmayıs',
+    'Salıpazarı', 'Tekkeköy', 'Terme', 'Vezirköprü', 'Yakakent', 'Atakum', 'Canik', 'İlkadım'
+  ],
+  'Balıkesir': [
+    'Altıeylül', 'Ayvalık', 'Balya', 'Bandırma', 'Bigadiç', 'Burhaniye', 'Dursunbey', 'Edremit',
+    'Erdek', 'Gömeç', 'Gönen', 'Havran', 'İvrindi', 'Karesi', 'Kepsut', 'Manyas', 'Marmara',
+    'Savaştepe', 'Sındırgı', 'Susurluk'
+  ],
+  'Kahramanmaraş': [
+    'Afşin', 'Andırın', 'Çağlayancerit', 'Ekinözü', 'Elbistan', 'Göksun', 'Nurhak', 'Pazarcık',
+    'Türkoğlu', 'Onikişubat', 'Dulkadiroğlu'
+  ],
+  'Van': [
+    'Bahçesaray', 'Başkale', 'Çaldıran', 'Çatak', 'Edremit', 'Erciş', 'Gevaş', 'Gürpınar',
+    'Muradiye', 'Özalp', 'Saray', 'İpekyolu', 'Tuşba'
+  ],
+  'Aydın': [
+    'Bozdoğan', 'Buharkent', 'Çine', 'Didim', 'Efeler', 'Germencik', 'İncirliova', 'Karacasu',
+    'Karpuzlu', 'Koçarlı', 'Köşk', 'Kuşadası', 'Kuyucak', 'Nazilli', 'Söke', 'Sultanhisar', 'Yenipazar'
+  ],
+  'Tekirdağ': [
+    'Çerkezköy', 'Çorlu', 'Ergene', 'Hayrabolu', 'Kapaklı', 'Malkara', 'Marmaraereğlisi',
+    'Muratlı', 'Saray', 'Süleymanpaşa', 'Şarköy'
+  ],
+  'Trabzon': [
+    'Akçaabat', 'Araklı', 'Arsin', 'Beşikdüzü', 'Çarşıbaşı', 'Çaykara', 'Dernekpazarı',
+    'Düzköy', 'Hayrat', 'Köprübaşı', 'Maçka', 'Of', 'Şalpazarı', 'Sürmene', 'Tonya', 'Vakfıkebir',
+    'Yomra', 'Ortahisar'
+  ],
+  'Ordu': [
+    'Akkuş', 'Altınordu', 'Aybastı', 'Çamaş', 'Çatalpınar', 'Çaybaşı', 'Fatsa', 'Gölköy',
+    'Gülyalı', 'Gürgentepe', 'İkizce', 'Kabadüz', 'Kabataş', 'Korgan', 'Kumru', 'Mesudiye',
+    'Perşembe', 'Ulubey', 'Ünye'
+  ],
+  'Denizli': [
+    'Acıpayam', 'Babadağ', 'Baklan', 'Bekilli', 'Beyağaç', 'Bozkurt', 'Buldan', 'Çal',
+    'Çameli', 'Çardak', 'Çivril', 'Güney', 'Honaz', 'Kale', 'Merkezefendi', 'Pamukkale',
+    'Sarayköy', 'Serinhisar', 'Tavas'
+  ],
+  'Malatya': [
+    'Akçadağ', 'Arapgir', 'Arguvan', 'Battalgazi', 'Darende', 'Doğanşehir', 'Doğanyol',
+    'Hekimhan', 'Kale', 'Kuluncak', 'Pütürge', 'Yazıhan', 'Yeşilyurt'
+  ],
+  'Erzurum': [
+    'Aşkale', 'Aziziye', 'Çat', 'Hınıs', 'Horasan', 'İspir', 'Karaçoban', 'Karayazı',
+    'Köprüköy', 'Narman', 'Oltu', 'Olur', 'Palandöken', 'Pasinler', 'Pazaryolu', 'Şenkaya',
+    'Tekman', 'Tortum', 'Uzundere', 'Yakutiye'
+  ],
+  'Afyonkarahisar': [
+    'Başmakçı', 'Bayat', 'Bolvadin', 'Çay', 'Çobanlar', 'Dazkırı', 'Dinar', 'Emirdağ',
+    'Evciler', 'Hocalar', 'İhsaniye', 'İscehisar', 'Kızılören', 'Merkez', 'Sandıklı',
+    'Sinanpaşa', 'Sultandağı', 'Şuhut'
+  ],
+  'Aksaray': [
+    'Ağaçören', 'Eskil', 'Gülağaç', 'Güzelyurt', 'Merkez', 'Ortaköy', 'Sarıyahşi'
+  ],
+  'Amasya': [
+    'Göynücek', 'Gümüşhacıköy', 'Hamamözü', 'Merzifon', 'Suluova', 'Taşova'
+  ],
+  'Artvin': [
+    'Ardanuç', 'Arhavi', 'Borçka', 'Hopa', 'Murgul', 'Şavşat', 'Yusufeli', 'Merkez'
+  ]
+}
+
+// Durum etiketleri
+const statusLabels: Record<string, string> = {
+  POT: 'Potansiyel',
+  MUS: 'Müşteri',
+  ALT: 'Alt Bayi',
+  PAS: 'Pasif',
+}
+
 export default function CompanyForm({
   company,
   open,
@@ -90,12 +256,12 @@ export default function CompanyForm({
   onSuccess,
 }: CompanyFormProps) {
   const router = useRouter()
+  const locale = useLocale()
   const queryClient = useQueryClient()
   const { data: session } = useSession()
   const [loading, setLoading] = useState(false)
-  
-  // ENTERPRISE: SuperAdmin için /api/companies, normal kullanıcı için /api/customer-companies
-  const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+  const [countryCode, setCountryCode] = useState(company?.countryCode || '+90')
+  const [logoPreview, setLogoPreview] = useState(company?.logoUrl || '')
 
   const {
     register,
@@ -108,35 +274,96 @@ export default function CompanyForm({
     resolver: zodResolver(companySchema),
     defaultValues: company || {
       name: '',
+      contactPerson: '',
+      phone: '',
+      countryCode: '+90',
+      taxOffice: '',
+      taxNumber: '',
       sector: '',
       city: '',
+      // district kolonu veritabanında yok, bu yüzden kaldırıldı
       address: '',
-      phone: '',
       email: '',
       website: '',
-      taxNumber: '',
-      taxOffice: '',
       description: '',
-      status: 'ACTIVE',
+      status: 'POT',
+      logoUrl: '',
     },
   })
 
+  // Form'u company prop'u ile doldur (edit modu için)
+  // open değiştiğinde form'u güncelle - sadece modal açıldığında
+  useEffect(() => {
+    if (!open) return // Modal kapalıysa hiçbir şey yapma
+    
+    if (company) {
+      // Düzenleme modu - firma bilgilerini yükle
+      reset({
+        name: company.name || '',
+        contactPerson: company.contactPerson || '',
+        phone: company.phone || '',
+        countryCode: company.countryCode || '+90',
+        taxOffice: company.taxOffice || '',
+        taxNumber: company.taxNumber || '',
+        sector: company.sector || '',
+        city: company.city || '',
+        // district kolonu veritabanında yok, bu yüzden kaldırıldı
+        address: company.address || '',
+        email: company.email || '',
+        website: company.website || '',
+        description: company.description || '',
+        status: company.status || 'POT',
+        logoUrl: company.logoUrl || '',
+      })
+      setCountryCode(company.countryCode || '+90')
+      setLogoPreview(company.logoUrl || '')
+    } else {
+      // Yeni kayıt modu - form'u temizle
+      reset({
+        name: '',
+        contactPerson: '',
+        phone: '',
+        countryCode: '+90',
+        taxOffice: '',
+        taxNumber: '',
+        sector: '',
+        city: '',
+        // district kolonu veritabanında yok, bu yüzden kaldırıldı
+        address: '',
+        email: '',
+        website: '',
+        description: '',
+        status: 'POT',
+        logoUrl: '',
+      })
+      setCountryCode('+90')
+      setLogoPreview('')
+    }
+  }, [open, company, reset]) // open değiştiğinde tetikle
+
   const status = watch('status')
+  const city = watch('city')
 
   const mutation = useMutation({
     mutationFn: async (data: CompanyFormData) => {
-      // ENTERPRISE: SuperAdmin için /api/companies, normal kullanıcı için /api/customer-companies
-      const baseUrl = isSuperAdmin ? '/api/companies' : '/api/customer-companies'
+      // KURUM İÇİ FİRMA YÖNETİMİ: Tüm kullanıcılar CustomerCompany endpoint'ini kullanır
+      const baseUrl = '/api/customer-companies'
       const url = company
         ? `${baseUrl}/${company.id}`
         : baseUrl
       const method = company ? 'PUT' : 'POST'
 
       try {
+        // countryCode'u data'ya ekle
+        const submitData = {
+          ...data,
+          countryCode,
+        }
+
         const res = await fetch(url, {
           method,
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
+          body: JSON.stringify(submitData),
           credentials: 'include', // Session cookie'lerini gönder
         })
 
@@ -149,6 +376,12 @@ export default function CompanyForm({
             // JSON parse edilemezse status text kullan
             errorData = { error: res.statusText || 'Failed to save company' }
           }
+          
+          // Duplicate kontrolü hatası
+          if (errorData.error?.includes('vergi dairesi') || errorData.error?.includes('vergi numarası') || errorData.error?.includes('zaten kayıtlı')) {
+            throw new Error('Bu vergi dairesi ve vergi numarası kombinasyonu zaten kayıtlı. Lütfen farklı bir firma girin.')
+          }
+          
           throw new Error(errorData.error || errorData.message || 'Failed to save company')
         }
 
@@ -159,24 +392,78 @@ export default function CompanyForm({
         throw new Error(fetchError?.message || 'Network error: Failed to fetch')
       }
     },
-    onSuccess: (savedCompany) => {
+    onSuccess: async (savedCompany) => {
       // Debug: Development'ta log ekle
       if (process.env.NODE_ENV === 'development') {
         console.log('CompanyForm onSuccess:', savedCompany)
       }
       
-      // onSuccess callback'i çağır - optimistic update için
-      if (onSuccess) {
-        onSuccess(savedCompany)
+      // Kontak kişi otomatik müşteri olarak kaydedilsin
+      if (savedCompany?.contactPerson && savedCompany?.id) {
+        try {
+          const contactPersonData = {
+            name: savedCompany.contactPerson,
+            phone: savedCompany.phone || '',
+            email: savedCompany.email || '',
+            city: savedCompany.city || '',
+            customerCompanyId: savedCompany.id, // Hangi firmada çalışıyor
+            status: 'ACTIVE',
+          }
+
+          const customerRes = await fetch('/api/customers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(contactPersonData),
+            credentials: 'include',
+          })
+
+          if (customerRes.ok) {
+            const newCustomer = await customerRes.json()
+            // Kullanıcıya bilgi ver
+            toast.info(
+              'İlgili kişi otomatik oluşturuldu',
+              `${savedCompany.contactPerson} isimli yetkili kişi, bu firma için otomatik olarak müşteriler bölümüne eklendi.`
+            )
+            
+            // Debug: Development'ta log ekle
+            if (process.env.NODE_ENV === 'development') {
+              console.log('Auto-created customer:', newCustomer)
+            }
+          } else {
+            // Hata durumunda sessizce devam et (kritik değil)
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('Failed to auto-create customer:', await customerRes.json())
+            }
+          }
+        } catch (error) {
+          // Hata durumunda sessizce devam et (kritik değil)
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Error auto-creating customer:', error)
+          }
+        }
       }
+      
+      // onSuccess callback'i çağır - optimistic update için
+      // Önce callback'i çağır, sonra form'u kapat
+      if (onSuccess) {
+        await onSuccess(savedCompany)
+      }
+      
+      // Form'u temizle ve kapat
       reset()
       onClose()
+      
+      // Yeni firma kaydedildiğinde detay sayfasına yönlendirme YOK
+      // Kullanıcı listede görmek istiyor, detay sayfasına yönlendirme yapmıyoruz
     },
     onError: (error: any) => {
       console.error('CompanyForm mutation error:', error)
       // Daha detaylı hata mesajı göster
-      const errorMessage = error?.message || error?.error || 'Kaydetme işlemi başarısız oldu'
-      alert(errorMessage)
+      const errorMessage = error?.message || error?.error || 'Bilinmeyen bir hata oluştu'
+      toast.error(
+        'Firma kaydedilemedi',
+        errorMessage + ' Lütfen tüm alanları kontrol edip tekrar deneyin.'
+      )
     },
   })
 
@@ -189,21 +476,80 @@ export default function CompanyForm({
     }
   }
 
+  // Logo yükleme handler (gelecekte Supabase Storage'a yüklenecek)
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Geçici olarak base64 preview göster (gelecekte Supabase Storage'a yüklenecek)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        const base64String = reader.result as string
+        setLogoPreview(base64String)
+        setValue('logoUrl', base64String)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {company ? 'Firma Düzenle' : 'Yeni Firma'}
           </DialogTitle>
           <DialogDescription>
-            {company ? 'Firma bilgilerini güncelleyin' : 'Yeni firma ekleyin'}
+            {company ? 'Firma bilgilerini güncelleyin' : 'Yeni firma ekleyin. Zorunlu alanlar: Firma Adı, Kontak Kişi, Telefon, Vergi Dairesi, Vergi No'}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Name */}
+            {/* Logo Upload */}
+            <div className="space-y-2 md:col-span-2">
+              <label className="text-sm font-medium">Firma Logosu</label>
+              <div className="flex items-center gap-4">
+                {logoPreview && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="w-20 h-20 rounded-lg overflow-hidden border-2 border-gray-200"
+                  >
+                    <img
+                      src={logoPreview}
+                      alt="Logo preview"
+                      className="w-full h-full object-cover"
+                    />
+                  </motion.div>
+                )}
+                <div className="flex-1">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    disabled={loading}
+                    className="hidden"
+                    id="logo-upload"
+                  />
+                  <label htmlFor="logo-upload">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full cursor-pointer"
+                      disabled={loading}
+                      asChild
+                    >
+                      <span>
+                        <Upload className="mr-2 h-4 w-4" />
+                        Logo Yükle
+                      </span>
+                    </Button>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            {/* Name - ZORUNLU */}
             <div className="space-y-2 md:col-span-2">
               <label className="text-sm font-medium">Firma Adı *</label>
               <Input
@@ -214,6 +560,89 @@ export default function CompanyForm({
               {errors.name && (
                 <p className="text-sm text-red-600">{errors.name.message}</p>
               )}
+            </div>
+
+            {/* Contact Person - ZORUNLU */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Kontak Kişi *</label>
+              <Input
+                {...register('contactPerson')}
+                placeholder="Kontak kişi adı"
+                disabled={loading}
+              />
+              {errors.contactPerson && (
+                <p className="text-sm text-red-600">{errors.contactPerson.message}</p>
+              )}
+            </div>
+
+            {/* Phone - ZORUNLU (Ülke kodu ile) */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Telefon *</label>
+              <div className="flex gap-2">
+                <CountryCodeSelector
+                  value={countryCode}
+                  onValueChange={(value) => {
+                    setCountryCode(value)
+                    setValue('countryCode', value)
+                  }}
+                  disabled={loading}
+                />
+                <Input
+                  {...register('phone')}
+                  placeholder="555 123 45 67"
+                  disabled={loading}
+                  className="flex-1"
+                />
+              </div>
+              {errors.phone && (
+                <p className="text-sm text-red-600">{errors.phone.message}</p>
+              )}
+            </div>
+
+            {/* Tax Office - ZORUNLU */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Vergi Dairesi *</label>
+              <Input
+                {...register('taxOffice')}
+                placeholder="Kadıköy Vergi Dairesi"
+                disabled={loading}
+              />
+              {errors.taxOffice && (
+                <p className="text-sm text-red-600">{errors.taxOffice.message}</p>
+              )}
+            </div>
+
+            {/* Tax Number - ZORUNLU */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Vergi No *</label>
+              <Input
+                {...register('taxNumber')}
+                placeholder="1234567890"
+                disabled={loading}
+              />
+              {errors.taxNumber && (
+                <p className="text-sm text-red-600">{errors.taxNumber.message}</p>
+              )}
+            </div>
+
+            {/* Status */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Durum</label>
+              <Select
+                value={status}
+                onValueChange={(value) => setValue('status', value as 'POT' | 'MUS' | 'ALT' | 'PAS')}
+                disabled={loading}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="POT">Potansiyel</SelectItem>
+                  <SelectItem value="MUS">Müşteri</SelectItem>
+                  <SelectItem value="ALT">Alt Bayi</SelectItem>
+                  <SelectItem value="PAS">Pasif</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Sector */}
@@ -238,24 +667,28 @@ export default function CompanyForm({
               </Select>
             </div>
 
-            {/* City */}
+            {/* City - Dropdown */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Şehir</label>
-              <Input
-                {...register('city')}
-                placeholder="İstanbul"
+              <Select
+                value={city || 'none'}
+                onValueChange={(value) => {
+                  setValue('city', value === 'none' ? '' : value)
+                }}
                 disabled={loading}
-              />
-            </div>
-
-            {/* Phone */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Telefon</label>
-              <Input
-                {...register('phone')}
-                placeholder="0555 123 45 67"
-                disabled={loading}
-              />
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Şehir seçin" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Şehir Seçilmedi</SelectItem>
+                  {CITIES.map((cityName) => (
+                    <SelectItem key={cityName} value={cityName}>
+                      {cityName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* Email */}
@@ -285,26 +718,6 @@ export default function CompanyForm({
               )}
             </div>
 
-            {/* Tax Number */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Vergi No</label>
-              <Input
-                {...register('taxNumber')}
-                placeholder="1234567890"
-                disabled={loading}
-              />
-            </div>
-
-            {/* Tax Office */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Vergi Dairesi</label>
-              <Input
-                {...register('taxOffice')}
-                placeholder="Kadıköy Vergi Dairesi"
-                disabled={loading}
-              />
-            </div>
-
             {/* Address */}
             <div className="space-y-2 md:col-span-2">
               <label className="text-sm font-medium">Adres</label>
@@ -325,24 +738,6 @@ export default function CompanyForm({
                 disabled={loading}
                 rows={4}
               />
-            </div>
-
-            {/* Status */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Durum</label>
-              <Select
-                value={status}
-                onValueChange={(value) => setValue('status', value as 'ACTIVE' | 'INACTIVE')}
-                disabled={loading}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ACTIVE">Aktif</SelectItem>
-                  <SelectItem value="INACTIVE">Pasif</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
 
@@ -369,4 +764,3 @@ export default function CompanyForm({
     </Dialog>
   )
 }
-

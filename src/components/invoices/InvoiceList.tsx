@@ -2,12 +2,15 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocale } from 'next-intl'
+import { useSearchParams } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { Plus, Search, Edit, Trash2, Eye, FileText, LayoutGrid, Table as TableIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from '@/lib/toast'
 import {
   Table,
   TableBody,
@@ -33,6 +36,7 @@ import {
 import InvoiceForm from './InvoiceForm'
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import ModuleStats from '@/components/stats/ModuleStats'
+import { AutomationInfo } from '@/components/automation/AutomationInfo'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
 import dynamic from 'next/dynamic'
@@ -47,9 +51,20 @@ interface Invoice {
   id: string
   title: string
   status: string
-  total: number
+  totalAmount?: number
   quoteId?: string
+  companyId?: string
+  Company?: {
+    id: string
+    name: string
+  }
   createdAt: string
+}
+
+// Invoice değerini almak için helper fonksiyon - totalAmount kullan (050 migration ile total → totalAmount olarak değiştirildi)
+const getInvoiceValue = (invoice: Invoice): number => {
+  const value = invoice?.totalAmount
+  return typeof value === 'string' ? parseFloat(value) || 0 : (value || 0)
 }
 
 const statusColors: Record<string, string> = {
@@ -86,10 +101,27 @@ async function fetchKanbanInvoices(search: string, quoteId: string, invoiceType:
 
 export default function InvoiceList() {
   const locale = useLocale()
+  const searchParams = useSearchParams()
+  const { data: session } = useSession()
+  
+  // SuperAdmin kontrolü
+  const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+  
+  // URL parametrelerinden filtreleri oku
+  const statusFromUrl = searchParams.get('status') || ''
+  
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('kanban') // Kanban default
   const [invoiceType, setInvoiceType] = useState<'SALES' | 'PURCHASE' | 'ALL'>('ALL') // Tab seçimi
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('')
+  const [status, setStatus] = useState(statusFromUrl)
+  const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin için firma filtresi
+  
+  // URL'den gelen status parametresini state'e set et
+  useEffect(() => {
+    if (statusFromUrl && statusFromUrl !== status) {
+      setStatus(statusFromUrl)
+    }
+  }, [statusFromUrl])
   const [quoteId, setQuoteId] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
@@ -106,11 +138,22 @@ export default function InvoiceList() {
     return () => clearTimeout(timer)
   }, [search])
 
+  // SuperAdmin için firmaları çek
+  const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
+    isSuperAdmin ? '/api/superadmin/companies' : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
+  // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
+  const companies = (companiesData?.companies || []).filter((company, index, self) => 
+    index === self.findIndex((c) => c.id === company.id)
+  )
+  
   // SWR ile veri çekme (CustomerList pattern'i) - Table view için
   const params = new URLSearchParams()
   if (debouncedSearch) params.append('search', debouncedSearch)
   if (status) params.append('status', status) // Status boş string ise tüm status'ler
   if (invoiceType && invoiceType !== 'ALL') params.append('invoiceType', invoiceType) // invoiceType filtresi
+  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId) // SuperAdmin için firma filtresi
   
   const apiUrl = `/api/invoices?${params.toString()}`
   const { data: invoices = [], isLoading, mutate: mutateInvoices } = useData<Invoice[]>(
@@ -118,10 +161,7 @@ export default function InvoiceList() {
     {
       dedupingInterval: 0, // Cache'i kapat - her zaman fresh data
       revalidateOnFocus: true, // Focus'ta refetch yap
-      revalidateOnMount: true, // Mount'ta refetch yap
-      revalidateOnReconnect: true, // Reconnect'te refetch yap
       refreshInterval: 0, // Auto refresh YOK
-      keepPreviousData: false, // Önceki data'yı tutma
     }
   )
 
@@ -152,7 +192,7 @@ export default function InvoiceList() {
   const handleEdit = useCallback((invoice: Invoice) => {
     // ÖNEMLİ: SHIPPED (Sevkiyatı Yapıldı) durumundaki faturalar düzenlenemez
     if (invoice.status === 'SHIPPED') {
-      alert('Sevkiyatı yapılmış faturalar düzenlenemez. Sevkiyat onaylandıktan sonra fatura değiştirilemez.')
+      toast.warning('Bu fatura gönderildiği için düzenleyemezsiniz', 'Sevkiyat onaylandıktan sonra fatura değiştirilemez.')
       return
     }
     
@@ -191,7 +231,8 @@ export default function InvoiceList() {
             // Silinen invoice'u bu kolondan kaldır - totalValue'yu da güncelle
             const updatedInvoices = (col.invoices || []).filter((i: any) => i.id !== id)
             const updatedTotalValue = updatedInvoices.reduce((sum: number, i: any) => {
-              const invoiceValue = typeof i.total === 'string' ? parseFloat(i.total) || 0 : (i.total || 0)
+              const value = i?.totalAmount
+              const invoiceValue = typeof value === 'string' ? parseFloat(value) || 0 : (value || 0)
               return sum + invoiceValue
             }, 0)
             return {
@@ -222,6 +263,12 @@ export default function InvoiceList() {
         throw new Error(errorData.error || 'Failed to delete invoice')
       }
       
+      // Başarı bildirimi
+      toast.success(
+        'Fatura silindi!',
+        `${title} başarıyla silindi.`
+      )
+      
       // Başarılı silme sonrası - SADECE invalidate yap, refetch YAPMA (optimistic update zaten yapıldı)
       // ÖNEMLİ: Dashboard'daki tüm ilgili query'leri invalidate et (ana sayfada güncellensin)
       // Ama kanban-invoices'i invalidate ve refetch YAPMA - optimistic update'i koru
@@ -245,7 +292,7 @@ export default function InvoiceList() {
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      alert(error?.message || 'Silme işlemi başarısız oldu')
+      toast.error('Silinemedi', error?.message)
     } finally {
       setDeletingId(null)
     }
@@ -306,6 +353,34 @@ export default function InvoiceList() {
         }}
       />
 
+      {/* Otomasyon Bilgileri */}
+      <AutomationInfo
+        title="Faturalar Modülü Otomasyonları"
+        automations={[
+          {
+            action: 'Faturayı "Gönderildi" yaparsan',
+            result: 'Otomatik olarak "Sevkiyatlar" sayfasında yeni bir sevkiyat kaydı açılır',
+            details: [
+              'Sevkiyat durumu "Beklemede" olarak ayarlanır',
+              'Otomatik olarak müşteriye bildirim gönderilir (e-posta)',
+              '"Aktiviteler" sayfasında gönderim kaydı görünür',
+            ],
+          },
+          {
+            action: 'Faturayı "Ödendi" yaparsan',
+            result: 'Otomatik olarak "Finans" sayfasında yeni bir gelir kaydı açılır',
+            details: [
+              'Finans kaydı tutarı fatura tutarı ile aynı olur',
+              'Finans kaydı tarihi bugün olarak ayarlanır',
+              '"Ürünler" sayfasındaki ilgili ürünlerin stokları otomatik olarak düşer',
+              'Rezerve edilmiş stoklar otomatik olarak serbest bırakılır',
+              '"Aktiviteler" sayfasında ödeme kaydı görünür',
+              'Bildirim gönderilir (müşteriye ve ekibe)',
+            ],
+          },
+        ]}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -347,8 +422,8 @@ export default function InvoiceList() {
       </Tabs>
 
       {/* Filters */}
-      <div className="flex gap-4 items-center">
-        <div className="flex-1 relative">
+      <div className="flex gap-4 items-center flex-wrap">
+        <div className="flex-1 relative min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             type="search"
@@ -358,6 +433,21 @@ export default function InvoiceList() {
             className="pl-10"
           />
         </div>
+        {isSuperAdmin && (
+          <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Firma Seç" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tüm Firmalar</SelectItem>
+              {companies.map((company) => (
+                <SelectItem key={company.id} value={company.id}>
+                  {company.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         {/* Status filtresi - hem table hem kanban view'da göster */}
         <Select value={status || 'all'} onValueChange={(v) => setStatus(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-48">
@@ -428,7 +518,7 @@ export default function InvoiceList() {
               ])
             } catch (error: any) {
               console.error('Status update error:', error)
-              alert(error?.message || 'Fatura durumu güncellenirken bir hata oluştu')
+              toast.error('Fatura durumu güncellenirken hata oluştu', error?.message)
               throw error
             }
           }}
@@ -439,6 +529,7 @@ export default function InvoiceList() {
             <TableHeader>
               <TableRow>
                 <TableHead>Başlık</TableHead>
+                {isSuperAdmin && <TableHead>Firma</TableHead>}
                 <TableHead>Durum</TableHead>
                 <TableHead>Toplam</TableHead>
                 <TableHead>Teklif</TableHead>
@@ -449,21 +540,64 @@ export default function InvoiceList() {
             <TableBody>
               {invoices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={isSuperAdmin ? 7 : 6} className="text-center py-8 text-gray-500">
                     Fatura bulunamadı
                   </TableCell>
                 </TableRow>
               ) : (
-                invoices.map((invoice) => (
-                  <TableRow key={invoice.id}>
-                    <TableCell className="font-medium">{invoice.title}</TableCell>
-                    <TableCell>
-                      <Badge className={statusColors[invoice.status] || 'bg-gray-100'}>
-                        {statusLabels[invoice.status] || invoice.status}
-                      </Badge>
-                    </TableCell>
+                invoices.map((invoice) => {
+                  const isFromQuote = !!invoice.quoteId
+                  const isShipped = invoice.status === 'SHIPPED'
+                  const isReceived = invoice.status === 'RECEIVED'
+                  const isLocked = isFromQuote || isShipped || isReceived
+                  
+                  return (
+                    <TableRow 
+                      key={invoice.id}
+                      className={
+                        isLocked 
+                          ? isFromQuote 
+                            ? 'bg-indigo-50/50 hover:bg-indigo-50' 
+                            : isShipped
+                            ? 'bg-green-50/50 hover:bg-green-50'
+                            : 'bg-teal-50/50 hover:bg-teal-50'
+                          : ''
+                      }
+                    >
+                      <TableCell className="font-medium">
+                        {invoice.title}
+                        {isLocked && (
+                          <span className="ml-2 text-xs font-semibold">
+                            {isFromQuote 
+                              ? '(Tekliften)' 
+                              : isShipped
+                              ? '(Sevkiyat Yapıldı)'
+                              : '(Mal Kabul Edildi)'}
+                          </span>
+                        )}
+                      </TableCell>
+                      {isSuperAdmin && (
+                        <TableCell>
+                          <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                            {invoice.Company?.name || '-'}
+                          </Badge>
+                        </TableCell>
+                      )}
+                      <TableCell>
+                        <Badge className={
+                          isLocked 
+                            ? isFromQuote 
+                              ? 'bg-indigo-100 text-indigo-800 border-indigo-300' 
+                              : isShipped
+                              ? 'bg-green-100 text-green-800 border-green-300'
+                              : 'bg-teal-100 text-teal-800 border-teal-300'
+                            : (statusColors[invoice.status] || 'bg-gray-100')
+                        }>
+                          {statusLabels[invoice.status] || invoice.status}
+                        </Badge>
+                      </TableCell>
                     <TableCell className="font-semibold">
-                      {formatCurrency(invoice.total || 0)}
+                      {formatCurrency(getInvoiceValue(invoice))}
                     </TableCell>
                     <TableCell>
                       {invoice.quoteId ? (
@@ -485,33 +619,66 @@ export default function InvoiceList() {
                       <div className="flex justify-end gap-2">
                         <Link href={`/${locale}/invoices/${invoice.id}`} prefetch={true}>
                           <Button variant="ghost" size="icon" aria-label={`${invoice.title} faturasını görüntüle`}>
-                            <Eye className="h-4 w-4" />
+                            <Eye className="h-4 w-4 text-gray-600" />
                           </Button>
                         </Link>
-                        {/* SHIPPED durumundaki faturalar için düzenle butonu gösterilmez */}
-                        {invoice.status !== 'SHIPPED' && (
+                        {/* Quote'tan oluşturulan, PAID, SHIPPED ve RECEIVED durumundaki faturalar için düzenle butonu gösterilmez */}
+                        {!isFromQuote && !isShipped && !isReceived && invoice.status !== 'PAID' && (
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleEdit(invoice)}
+                            onClick={() => {
+                              if (invoice.status === 'PAID') {
+                                toast.warning('Bu fatura ödendiği için değiştirilemez', 'Bu fatura ödendi ve finans kaydı oluşturuldu.')
+                                return
+                              }
+                              handleEdit(invoice)
+                            }}
+                            disabled={invoice.status === 'PAID'}
                             aria-label={`${invoice.title} faturasını düzenle`}
+                            title={invoice.status === 'PAID' ? 'Bu fatura ödendiği için değiştirilemez' : 'Düzenle'}
                           >
-                            <Edit className="h-4 w-4" />
+                            <Edit className="h-4 w-4 text-gray-600" />
                           </Button>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(invoice.id, invoice.title)}
-                          className="text-red-600 hover:text-red-700"
-                          aria-label={`${invoice.title} faturasını sil`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {/* Quote'tan oluşturulan, PAID, SHIPPED ve RECEIVED durumundaki faturalar silinemez */}
+                        {!isFromQuote && !isShipped && !isReceived && invoice.status !== 'PAID' && invoice.status !== 'SHIPPED' && invoice.status !== 'RECEIVED' && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => {
+                              if (invoice.status === 'PAID') {
+                                toast.warning('Bu fatura ödendiği için silemezsiniz', 'Bu fatura ödendi ve finans kaydı oluşturuldu. Faturayı silmek için önce ilgili finans kaydını silmeniz gerekir.')
+                                return
+                              }
+                              if (invoice.status === 'SHIPPED') {
+                                toast.warning('Bu fatura gönderildiği için silemezsiniz', 'Bu fatura için sevkiyat yapıldı ve stoktan düşüldü. Faturayı silmek için önce sevkiyatı iptal etmeniz ve stok işlemini geri almanız gerekir.')
+                                return
+                              }
+                              if (invoice.status === 'RECEIVED') {
+                                toast.warning('Bu fatura teslim alındığı için silemezsiniz', 'Bu fatura için mal kabul edildi ve stoğa girişi yapıldı. Faturayı silmek için önce mal kabul işlemini iptal etmeniz ve stok işlemini geri almanız gerekir.')
+                                return
+                              }
+                              handleDelete(invoice.id, invoice.title)
+                            }}
+                            disabled={invoice.status === 'PAID' || invoice.status === 'SHIPPED' || invoice.status === 'RECEIVED'}
+                            className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                            aria-label={`${invoice.title} faturasını sil`}
+                            title={
+                              invoice.status === 'PAID' ? 'Bu fatura ödendiği için silemezsiniz' :
+                              invoice.status === 'SHIPPED' ? 'Bu fatura gönderildiği için silemezsiniz' :
+                              invoice.status === 'RECEIVED' ? 'Bu fatura teslim alındığı için silemezsiniz' :
+                              'Sil'
+                            }
+                          >
+                            <Trash2 className="h-4 w-4 text-red-600" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
+                  )
+                })
               )}
             </TableBody>
           </Table>
@@ -524,6 +691,14 @@ export default function InvoiceList() {
         open={formOpen}
         onClose={handleFormClose}
         onSuccess={async (savedInvoice: Invoice) => {
+          // Başarı bildirimi
+          toast.success(
+            selectedInvoice ? 'Fatura güncellendi!' : 'Fatura oluşturuldu!',
+            selectedInvoice 
+              ? `${savedInvoice.title || savedInvoice.invoiceNumber} başarıyla güncellendi.`
+              : `${savedInvoice.title || savedInvoice.invoiceNumber} başarıyla oluşturuldu.`
+          )
+          
           // Optimistic update - yeni/güncellenmiş kaydı hemen cache'e ekle
           // ÖNEMLİ: Hem table hem kanban view için optimistic update yap
           
@@ -568,8 +743,8 @@ export default function InvoiceList() {
                     i.id === savedInvoice.id ? savedInvoice : i
                   )
                   const updatedTotalValue = updatedInvoices.reduce((sum: number, i: any) => {
-                    const invoiceValue = typeof i.total === 'string' ? parseFloat(i.total) || 0 : (i.total || 0)
-                    return sum + invoiceValue
+                    const invoiceValue = i?.totalAmount || i?.total || i?.grandTotal || 0
+                    return sum + (typeof invoiceValue === 'string' ? parseFloat(invoiceValue) || 0 : invoiceValue)
                   }, 0)
                   return {
                     ...col,
@@ -580,8 +755,8 @@ export default function InvoiceList() {
                   // CREATE: Yeni kaydı bu kolona ekle - totalValue'yu da güncelle
                   const updatedInvoices = [savedInvoice, ...(col.invoices || [])]
                   const updatedTotalValue = updatedInvoices.reduce((sum: number, i: any) => {
-                    const invoiceValue = typeof i.total === 'string' ? parseFloat(i.total) || 0 : (i.total || 0)
-                    return sum + invoiceValue
+                    const invoiceValue = i?.totalAmount || i?.total || i?.grandTotal || 0
+                    return sum + (typeof invoiceValue === 'string' ? parseFloat(invoiceValue) || 0 : invoiceValue)
                   }, 0)
                   return {
                     ...col,

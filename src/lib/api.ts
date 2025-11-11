@@ -70,14 +70,49 @@ export async function fetchData<T = any>(
   url: string,
   options: FetchOptions = {}
 ): Promise<T> {
+  // CRITICAL: Her zaman log ekle - KPI sorununu debug etmek için
+  if (url.includes('/api/stats/customers')) {
+    console.log('fetchData - Calling /api/stats/customers:', {
+      url,
+      timestamp: new Date().toISOString(),
+    })
+  }
+
   try {
     const response = await fetchWithRetry(url, options)
-    return await response.json()
-  } catch (error: any) {
-    // Production'da console.error kaldırıldı - sadece error throw et
-    if (process.env.NODE_ENV === 'development') {
-      console.error('API Error:', url, error?.message || error)
+    
+    // CRITICAL: Her zaman log ekle - KPI sorununu debug etmek için
+    if (url.includes('/api/stats/customers')) {
+      console.log('fetchData - /api/stats/customers response:', {
+        url,
+        status: response.status,
+        ok: response.ok,
+        timestamp: new Date().toISOString(),
+      })
     }
+
+    const data = await response.json()
+
+    // CRITICAL: Her zaman log ekle - KPI sorununu debug etmek için
+    if (url.includes('/api/stats/customers')) {
+      console.log('fetchData - /api/stats/customers data:', {
+        url,
+        data,
+        timestamp: new Date().toISOString(),
+      })
+    }
+
+    return data
+  } catch (error: any) {
+    // CRITICAL: Her zaman log ekle - KPI sorununu debug etmek için
+    if (url.includes('/api/stats/customers')) {
+      console.error('fetchData - /api/stats/customers error:', {
+        url,
+        error: error?.message || error,
+        timestamp: new Date().toISOString(),
+      })
+    }
+
     // Hata mesajını daha kullanıcı dostu yap
     if (error?.message) {
       throw new Error(error.message)

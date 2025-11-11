@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { toast } from '@/lib/toast'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -25,12 +26,24 @@ import {
 } from '@/components/ui/select'
 
 const shipmentSchema = z.object({
-  tracking: z.string().optional(),
+  tracking: z.string().max(100, 'Takip numarası en fazla 100 karakter olabilir').optional(),
   status: z.enum(['DRAFT', 'PENDING', 'APPROVED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED']).default('PENDING'),
   invoiceId: z.string().optional(),
-  shippingCompany: z.string().optional(),
+  shippingCompany: z.string().max(200, 'Kargo firması en fazla 200 karakter olabilir').optional(),
   estimatedDelivery: z.string().optional(),
-  deliveryAddress: z.string().optional(),
+  deliveryAddress: z.string().max(500, 'Teslimat adresi en fazla 500 karakter olabilir').optional(),
+}).refine((data) => {
+  // estimatedDelivery geçmiş tarih olamaz
+  if (data.estimatedDelivery) {
+    const estimated = new Date(data.estimatedDelivery)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return estimated >= today
+  }
+  return true
+}, {
+  message: 'Tahmini teslimat tarihi geçmiş bir tarih olamaz',
+  path: ['estimatedDelivery'],
 })
 
 type ShipmentFormData = z.infer<typeof shipmentSchema>
@@ -55,6 +68,8 @@ async function fetchInvoices() {
 export default function ShipmentForm({ shipment, open, onClose, onSuccess }: ShipmentFormProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const searchParams = useSearchParams()
+  const invoiceIdFromUrl = searchParams.get('invoiceId') || undefined // URL'den invoiceId al
   const [loading, setLoading] = useState(false)
 
   const { data: invoicesData } = useQuery({
@@ -87,6 +102,9 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess }: Shi
 
   const status = watch('status')
   const invoiceId = watch('invoiceId')
+  
+  // Durum bazlı koruma kontrolü - form alanlarını devre dışı bırakmak için
+  const isProtected = shipment && shipment.status === 'DELIVERED'
 
   // Shipment prop değiştiğinde veya modal açıldığında form'u güncelle
   useEffect(() => {
@@ -158,7 +176,7 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess }: Shi
       await mutation.mutateAsync(data)
     } catch (error: any) {
       console.error('Error:', error)
-      alert(error?.message || 'Kaydetme işlemi başarısız oldu')
+      toast.error('Kaydedilemedi', error?.message)
     } finally {
       setLoading(false)
     }
@@ -177,19 +195,38 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess }: Shi
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {/* ÖNEMLİ: Durum bazlı koruma bilgilendirmeleri */}
+          {shipment && shipment.status === 'DELIVERED' && (
+            <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-4">
+              <p className="text-sm text-green-800 font-semibold">
+                🔒 Bu sevkiyat teslim edildi. Sevkiyat bilgileri değiştirilemez veya silinemez.
+              </p>
+            </div>
+          )}
+          
+          {/* Durum bazlı form devre dışı bırakma */}
+          {isProtected && (
+            <div className="bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
+              <p className="text-xs text-gray-600">
+                ⚠️ Bu sevkiyat korumalı durumda olduğu için form alanları düzenlenemez.
+              </p>
+            </div>
+          )}
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Invoice */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Fatura</label>
               <Select
-                value={invoiceId || ''}
-                onValueChange={(value) => setValue('invoiceId', value)}
-                disabled={loading}
+                value={invoiceId || 'none'}
+                onValueChange={(value) => setValue('invoiceId', value === 'none' ? '' : value)}
+                disabled={loading || isProtected}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Fatura seçin" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none">Fatura seçilmedi</SelectItem>
                   {invoices.map((invoice: any) => (
                     <SelectItem key={invoice.id} value={invoice.id}>
                       {invoice.title}
@@ -207,7 +244,7 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess }: Shi
                 onValueChange={(value) =>
                   setValue('status', value as ShipmentFormData['status'])
                 }
-                disabled={loading}
+                disabled={loading || isProtected}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -229,7 +266,7 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess }: Shi
               <Input
                 {...register('tracking')}
                 placeholder="TRK-123456789"
-                disabled={loading}
+                disabled={loading || isProtected}
               />
             </div>
 
@@ -239,7 +276,7 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess }: Shi
               <Input
                 {...register('shippingCompany')}
                 placeholder="Örn: Yurtiçi Kargo, Aras Kargo"
-                disabled={loading}
+                disabled={loading || isProtected}
               />
             </div>
 
@@ -249,7 +286,7 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess }: Shi
               <Input
                 type="date"
                 {...register('estimatedDelivery')}
-                disabled={loading}
+                disabled={loading || isProtected}
               />
             </div>
 
@@ -260,7 +297,7 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess }: Shi
                 {...register('deliveryAddress')}
                 placeholder="Tam teslimat adresi"
                 rows={3}
-                disabled={loading}
+                disabled={loading || isProtected}
               />
             </div>
           </div>
@@ -271,16 +308,16 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess }: Shi
               type="button"
               variant="outline"
               onClick={onClose}
-              disabled={loading}
+              disabled={loading || isProtected}
             >
               İptal
             </Button>
             <Button
               type="submit"
               className="bg-gradient-primary text-white"
-              disabled={loading}
+              disabled={loading || isProtected}
             >
-              {loading ? 'Kaydediliyor...' : shipment ? 'Güncelle' : 'Kaydet'}
+              {loading ? 'Kaydediliyor...' : shipment ? (isProtected ? 'Değiştirilemez' : 'Güncelle') : 'Kaydet'}
             </Button>
           </div>
         </form>

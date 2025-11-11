@@ -7,6 +7,13 @@ interface SalesTrendChartProps {
 }
 
 export default function SalesTrendChart({ data }: SalesTrendChartProps) {
+  // Debug: Gelen veriyi logla
+  if (process.env.NODE_ENV === 'development') {
+    console.log('SalesTrendChart - Received data:', data)
+    console.log('SalesTrendChart - Data length:', data?.length || 0)
+    console.log('SalesTrendChart - Data sample:', data?.slice(0, 3))
+  }
+
   // Eğer data yoksa veya boşsa placeholder göster
   if (!data || data.length === 0) {
     return (
@@ -27,6 +34,13 @@ export default function SalesTrendChart({ data }: SalesTrendChartProps) {
     month: item.month?.substring(0, 7) || item.month || 'N/A', // YYYY-MM formatı
     total_sales: Math.max(0, item.total_sales || 0),
   }))
+
+  // Debug: Formatlanmış veriyi logla
+  if (process.env.NODE_ENV === 'development') {
+    console.log('SalesTrendChart - Formatted data:', formattedData)
+    console.log('SalesTrendChart - Formatted data sample:', formattedData.slice(0, 3))
+    console.log('SalesTrendChart - Total sales sum:', formattedData.reduce((sum, item) => sum + item.total_sales, 0))
+  }
 
   // Maksimum değeri hesapla - Y ekseni için
   const maxValue = Math.max(...formattedData.map(item => item.total_sales), 1)

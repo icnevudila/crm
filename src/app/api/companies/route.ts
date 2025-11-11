@@ -3,8 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
-// Agresif cache - 1 saat cache (instant navigation - <300ms hedef)
-export const revalidate = 3600
+// Login sayfası için cache - 30 saniye (yeni firmalar için)
+export const revalidate = 30
 
 export async function GET(request: Request) {
   try {
@@ -148,12 +148,12 @@ export async function GET(request: Request) {
       })
     )
 
-    // ULTRA AGRESİF cache headers - 30 dakika cache (tek tıkla açılmalı)
+    // Login sayfası için cache - 30 saniye (yeni firmalar için)
     return NextResponse.json(companies, {
       headers: {
-        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200, max-age=1800',
-        'CDN-Cache-Control': 'public, s-maxage=3600',
-        'Vercel-CDN-Cache-Control': 'public, s-maxage=3600',
+        'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60, max-age=30',
+        'CDN-Cache-Control': 'public, s-maxage=30',
+        'Vercel-CDN-Cache-Control': 'public, s-maxage=30',
         'X-Total-Count': String(count || companies.length),
       },
     })
@@ -223,6 +223,9 @@ export async function POST(request: Request) {
           taxOffice: body.taxOffice || null,
           description: body.description || null,
           status: body.status || 'ACTIVE',
+          maxUsers: body.maxUsers || null, // Limitasyon alanları
+          maxModules: body.maxModules || null,
+          adminUserLimit: body.adminUserLimit || null,
         },
       ])
       .select()
@@ -234,6 +237,43 @@ export async function POST(request: Request) {
         { error: error.message || 'Failed to create company' },
         { status: 500 }
       )
+    }
+
+    // Eğer admin bilgileri verilmişse, admin kullanıcısı oluştur
+    if (body.adminEmail && body.adminName && body.adminPassword) {
+      const bcrypt = await import('bcryptjs')
+      const hashedPassword = await bcrypt.hash(body.adminPassword, 10)
+      
+      const { data: adminUser, error: adminError } = await (supabase
+        .from('User') as any)
+        .insert([
+          {
+            name: body.adminName,
+            email: body.adminEmail,
+            password: hashedPassword,
+            role: 'ADMIN',
+            companyId: company.id,
+          },
+        ])
+        .select()
+        .single()
+
+      if (adminError) {
+        console.error('Admin user creation error:', adminError)
+        // Admin oluşturma hatası kurum oluşturmayı engellemez, sadece log'lanır
+      } else {
+        // Admin oluşturuldu - ActivityLog
+        await (supabase.from('ActivityLog') as any).insert([
+          {
+            entity: 'User',
+            action: 'CREATE',
+            description: `Kurum admin'i oluşturuldu: ${body.adminName}`,
+            meta: { entity: 'User', action: 'create', id: adminUser.id, companyId: company.id },
+            userId: session.user.id,
+            companyId: company.id,
+          },
+        ])
+      }
     }
 
     // ActivityLog kaydı (SuperAdmin için)

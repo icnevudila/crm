@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -10,6 +10,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Plus, Trash2, Package } from 'lucide-react'
+import { toast } from '@/lib/toast'
+import { translateStage, getStageMessage } from '@/lib/stageTranslations'
 import {
   Dialog,
   DialogContent,
@@ -35,24 +37,25 @@ import {
 import { formatCurrency } from '@/lib/utils'
 
 const invoiceSchema = z.object({
-  title: z.string().min(1, 'Başlık gereklidir'),
+  title: z.string().min(1, 'Başlık gereklidir').max(200, 'Başlık en fazla 200 karakter olabilir'),
   status: z.enum(['DRAFT', 'SENT', 'SHIPPED', 'RECEIVED', 'PAID', 'OVERDUE', 'CANCELLED']).default('DRAFT'),
-  total: z.number().min(0, 'Toplam 0\'dan büyük olmalı'),
+  total: z.number().min(0, 'Toplam 0\'dan büyük olmalı').max(999999999, 'Toplam çok büyük'),
   invoiceType: z.enum(['SALES', 'PURCHASE', 'SERVICE_SALES', 'SERVICE_PURCHASE']).default('SALES'), // SALES (Satış), PURCHASE (Alış), SERVICE_SALES (Hizmet Satış), SERVICE_PURCHASE (Hizmet Alım)
-  serviceDescription: z.string().optional(), // Hizmet faturaları için hizmet açıklaması
+  serviceDescription: z.string().max(1000, 'Hizmet açıklaması en fazla 1000 karakter olabilir').optional(), // Hizmet faturaları için hizmet açıklaması
   customerId: z.string().optional(),
   quoteId: z.string().optional(),
   vendorId: z.string().optional(),
-  invoiceNumber: z.string().optional(),
+  customerCompanyId: z.string().optional(), // Firma bazlı ilişki
+  invoiceNumber: z.string().max(50, 'Fatura numarası en fazla 50 karakter olabilir').optional(),
   dueDate: z.string().optional(),
   paymentDate: z.string().optional(),
-  taxRate: z.number().min(0).max(100).optional(),
-  billingAddress: z.string().optional(),
-  billingCity: z.string().optional(),
-  billingTaxNumber: z.string().optional(),
+  taxRate: z.number().min(0, 'KDV oranı 0-100 arası olmalı').max(100, 'KDV oranı 0-100 arası olmalı').optional(),
+  billingAddress: z.string().max(500, 'Adres en fazla 500 karakter olabilir').optional(),
+  billingCity: z.string().max(100, 'Şehir en fazla 100 karakter olabilir').optional(),
+  billingTaxNumber: z.string().max(50, 'Vergi numarası en fazla 50 karakter olabilir').optional(),
   paymentMethod: z.enum(['CASH', 'BANK_TRANSFER', 'CHECK', 'CREDIT_CARD', 'OTHER']).optional(),
-  paymentNotes: z.string().optional(),
-  description: z.string().optional(),
+  paymentNotes: z.string().max(500, 'Ödeme notları en fazla 500 karakter olabilir').optional(),
+  description: z.string().max(2000, 'Açıklama en fazla 2000 karakter olabilir').optional(),
 }).refine((data) => {
   // SALES veya SERVICE_SALES faturası için müşteri zorunlu
   if ((data.invoiceType === 'SALES' || data.invoiceType === 'SERVICE_SALES') && !data.customerId) {
@@ -121,6 +124,8 @@ interface InvoiceItem {
 export default function InvoiceForm({ invoice, open, onClose, onSuccess }: InvoiceFormProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const searchParams = useSearchParams()
+  const customerCompanyId = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
   const [loading, setLoading] = useState(false)
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([])
   const [itemFormOpen, setItemFormOpen] = useState(false)
@@ -190,13 +195,51 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
   const customerId = watch('customerId')
   const taxRate = watch('taxRate') || 18
   const selectedCustomer = customers.find((c: any) => c.id === customerId)
+  
+  // Durum bazlı koruma kontrolü - form alanlarını devre dışı bırakmak için
+  const isProtected = invoice && (
+    invoice.status === 'PAID' || 
+    invoice.status === 'SHIPPED' || 
+    invoice.status === 'RECEIVED' || 
+    invoice.quoteId
+  )
 
   // Invoice prop değiştiğinde veya modal açıldığında form'u güncelle
   useEffect(() => {
     if (open) {
+      // ÖNEMLİ: PAID (Ödendi) durumundaki faturalar düzenlenemez
+      if (invoice && invoice.status === 'PAID') {
+        const message = getStageMessage(invoice.status, 'invoice', 'immutable')
+        toast.warning(message.title, message.description)
+        onClose() // Modal'ı kapat
+        return
+      }
+
       // ÖNEMLİ: SHIPPED (Sevkiyatı Yapıldı) durumundaki faturalar düzenlenemez
       if (invoice && invoice.status === 'SHIPPED') {
-        alert('Sevkiyatı yapılmış faturalar düzenlenemez. Sevkiyat onaylandıktan sonra fatura değiştirilemez.')
+        const statusName = translateStage(invoice.status, 'invoice')
+        toast.warning(
+          `${statusName} durumundaki faturalar düzenlenemez`,
+          'Bu fatura için sevkiyat yapıldı ve stoktan düşüldü. Fatura bilgilerini değiştirmek için önce sevkiyatı iptal etmeniz ve stok işlemini geri almanız gerekir.'
+        )
+        onClose() // Modal'ı kapat
+        return
+      }
+
+      // ÖNEMLİ: RECEIVED (Mal Kabul Edildi) durumundaki faturalar düzenlenemez
+      if (invoice && invoice.status === 'RECEIVED') {
+        const statusName = translateStage(invoice.status, 'invoice')
+        toast.warning(
+          `${statusName} durumundaki faturalar düzenlenemez`,
+          'Bu fatura için mal kabul edildi ve stoğa girişi yapıldı. Fatura bilgilerini değiştirmek için önce mal kabul işlemini iptal etmeniz ve stok işlemini geri almanız gerekir.'
+        )
+        onClose() // Modal'ı kapat
+        return
+      }
+
+      // ÖNEMLİ: Quote'tan oluşturulan faturalar düzenlenemez
+      if (invoice && invoice.quoteId) {
+        toast.warning('Tekliften oluşturulan faturalar değiştirilemez', 'Bu fatura tekliften otomatik olarak oluşturuldu. Fatura bilgilerini değiştirmek için önce teklifi reddetmeniz gerekir.')
         onClose() // Modal'ı kapat
         return
       }
@@ -340,6 +383,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
       // YENİ: Satış faturası (SALES) veya Alış faturası (PURCHASE) ise invoiceItems'ı body'ye ekle
       const requestBody = {
         ...data,
+        customerCompanyId: customerCompanyId || data.customerCompanyId || null, // URL'den veya form'dan customerCompanyId al
         ...((data.invoiceType === 'SALES' || data.invoiceType === 'PURCHASE') && invoiceItems.length > 0 && !invoice
           ? { invoiceItems: invoiceItems.map(item => ({
               productId: item.productId,
@@ -364,7 +408,10 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
       
       // YENİ: Sevkiyat oluşturuldu mesajını göster
       if (result.shipmentMessage) {
-        alert(result.shipmentMessage)
+        toast.info(
+          'Sevkiyat otomatik oluşturuldu',
+          result.shipmentMessage + ' Sevkiyat sayfasından durumunu takip edebilirsiniz.'
+        )
       }
       
       // Invoice oluşturulduktan sonra InvoiceItem'ları kaydet (eğer varsa ve yeni invoice ise)
@@ -396,7 +443,10 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
         } catch (itemError: any) {
           console.error('InvoiceItem save error:', itemError)
           // InvoiceItem kaydetme hatası ana işlemi engellemez, sadece uyarı ver
-          alert(`Fatura kaydedildi ancak bazı ürünler kaydedilemedi: ${itemError?.message || 'Bilinmeyen hata'}`)
+          toast.warning(
+            'Fatura kaydedildi ancak bazı ürünler eklenemedi',
+            itemError?.message || 'Ürün listesi kaydetme hatası. Faturayı düzenleyerek tekrar deneyin.'
+          )
         }
       }
       
@@ -434,19 +484,25 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
   const onSubmit = async (data: InvoiceFormData) => {
     // ÖNEMLİ: SHIPPED durumundaki faturalar düzenlenemez
     if (invoice && invoice.status === 'SHIPPED') {
-      alert('Sevkiyatı yapılmış faturalar düzenlenemez. Sevkiyat onaylandıktan sonra fatura değiştirilemez.')
+      toast.warning('Bu fatura gönderildiği için düzenleyemezsiniz', 'Sevkiyat onaylandıktan sonra fatura değiştirilemez.')
       return
     }
     
     // ÖNEMLİ: Alış faturası (PURCHASE) için malzeme kontrolü
     if (data.invoiceType === 'PURCHASE' && invoiceItems.length === 0 && !invoice) {
-      alert('Satın alma faturası için malzeme eklemelisiniz. Malzeme eklemeden alış faturası oluşturulamaz.')
+      toast.warning(
+        'Ürün eklemelisiniz',
+        'Alış faturası için en az bir ürün eklemelisiniz. "Ürün Ekle" butonunu kullanarak satın alınan ürünleri ekleyin.'
+      )
       return
     }
     
     // ÖNEMLİ: Satış faturası (SALES) için malzeme kontrolü
     if (data.invoiceType === 'SALES' && invoiceItems.length === 0 && !invoice) {
-      alert('Satış faturası için malzeme eklemelisiniz. Malzeme eklemeden satış faturası oluşturulamaz.')
+      toast.warning(
+        'Ürün eklemelisiniz',
+        'Satış faturası için en az bir ürün eklemelisiniz. "Ürün Ekle" butonunu kullanarak satılan ürünleri ekleyin.'
+      )
       return
     }
     
@@ -470,7 +526,10 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
       await mutation.mutateAsync(cleanData)
     } catch (error: any) {
       console.error('Invoice save error:', error)
-      alert(error.message || 'Kaydetme işlemi başarısız oldu')
+      toast.error(
+        'Fatura kaydedilemedi',
+        error.message || 'Fatura kaydetme işlemi sırasında bir hata oluştu. Lütfen tüm alanları kontrol edip tekrar deneyin.'
+      )
     } finally {
       setLoading(false)
     }
@@ -489,11 +548,41 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* ÖNEMLİ: SHIPPED durumundaki faturalar düzenlenemez */}
+          {/* ÖNEMLİ: Durum bazlı koruma bilgilendirmeleri */}
+          {invoice && invoice.status === 'PAID' && (
+            <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-4">
+              <p className="text-sm text-blue-800 font-semibold">
+                🔒 Bu fatura ödendi ve finans kaydı oluşturuldu. Fatura bilgileri değiştirilemez veya silinemez.
+              </p>
+            </div>
+          )}
           {invoice && invoice.status === 'SHIPPED' && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4 mb-4">
-              <p className="text-sm text-yellow-800">
-                ⚠️ Bu fatura sevkiyatı yapılmış durumda. Sevkiyat onaylandıktan sonra fatura değiştirilemez.
+            <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-4">
+              <p className="text-sm text-green-800 font-semibold">
+                🔒 Sevkiyatı yapıldı, stoktan düşüldü. Bu fatura değiştirilemez veya silinemez.
+              </p>
+            </div>
+          )}
+          {invoice && invoice.status === 'RECEIVED' && (
+            <div className="bg-teal-50 border border-teal-200 rounded-md p-4 mb-4">
+              <p className="text-sm text-teal-800 font-semibold">
+                🔒 Mal kabul edildi, stoğa girişi yapıldı. Bu fatura değiştirilemez veya silinemez.
+              </p>
+            </div>
+          )}
+          {invoice && invoice.quoteId && (
+            <div className="bg-indigo-50 border border-indigo-200 rounded-md p-4 mb-4">
+              <p className="text-sm text-indigo-800 font-semibold">
+                ℹ️ Bu fatura tekliften oluşturuldu. Değiştirilemez.
+              </p>
+            </div>
+          )}
+          
+          {/* Durum bazlı form devre dışı bırakma */}
+          {(invoice?.status === 'PAID' || invoice?.status === 'SHIPPED' || invoice?.status === 'RECEIVED' || invoice?.quoteId) && (
+            <div className="bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
+              <p className="text-xs text-gray-600">
+                ⚠️ Bu fatura korumalı durumda olduğu için form alanları düzenlenemez.
               </p>
             </div>
           )}
@@ -505,7 +594,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
               <Input
                 {...register('title')}
                 placeholder="Fatura başlığı"
-                disabled={loading || (invoice?.status === 'SHIPPED')}
+                disabled={loading || isProtected}
               />
               {errors.title && (
                 <p className="text-sm text-red-600">{errors.title.message}</p>
@@ -518,7 +607,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
               <Input
                 {...register('invoiceNumber')}
                 placeholder="FAT-2024-001"
-                disabled={loading}
+                disabled={loading || isProtected}
               />
             </div>
 
@@ -528,17 +617,23 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
               <Select
                 value={watch('invoiceType') || 'SALES'}
                 onValueChange={(value) => {
-                  setValue('invoiceType', value as 'SALES' | 'PURCHASE')
+                  setValue('invoiceType', value as 'SALES' | 'PURCHASE' | 'SERVICE_SALES' | 'SERVICE_PURCHASE')
                   // Tip değiştiğinde ilgili alanları temizle
-                  if (value === 'PURCHASE') {
+                  if (value === 'PURCHASE' || value === 'SERVICE_PURCHASE') {
                     // Alış faturası - müşteri seçimini kaldır, tedarikçi seçimi aktif
                     setValue('customerId', undefined)
+                    if (value === 'SERVICE_PURCHASE') {
+                      setInvoiceItems([]) // Hizmet faturalarında ürün listesi temizlenir
+                    }
                   } else {
                     // Satış faturası - tedarikçi seçimini kaldır, müşteri seçimi aktif
                     setValue('vendorId', undefined)
+                    if (value === 'SERVICE_SALES') {
+                      setInvoiceItems([]) // Hizmet faturalarında ürün listesi temizlenir
+                    }
                   }
                 }}
-                disabled={loading}
+                disabled={loading || isProtected}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Fatura tipi seçin" />
@@ -546,11 +641,17 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                 <SelectContent>
                   <SelectItem value="SALES">Satış Faturası (Stok Düşer)</SelectItem>
                   <SelectItem value="PURCHASE">Alış Faturası (Stok Artar)</SelectItem>
+                  <SelectItem value="SERVICE_SALES">Hizmet Satış Faturası</SelectItem>
+                  <SelectItem value="SERVICE_PURCHASE">Hizmet Alım Faturası</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-gray-500">
                 {watch('invoiceType') === 'PURCHASE' 
                   ? 'Tedarikçiden alış - stok artacak' 
+                  : watch('invoiceType') === 'SERVICE_SALES'
+                  ? 'Müşteriye hizmet satışı - ürün seçimi yok'
+                  : watch('invoiceType') === 'SERVICE_PURCHASE'
+                  ? 'Tedarikçiden hizmet alımı - ürün seçimi yok'
                   : 'Müşteriye satış - stok düşecek'}
               </p>
             </div>
@@ -568,7 +669,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                       handleCustomerChange(value)
                     }
                   }}
-                  disabled={loading}
+                  disabled={loading || isProtected}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Müşteri seçin" />
@@ -597,7 +698,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
               <Select
                 value={quoteId || 'none'}
                 onValueChange={(value) => setValue('quoteId', value === 'none' ? undefined : value)}
-                disabled={loading}
+                disabled={loading || isProtected}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Teklif seçin (Opsiyonel)" />
@@ -622,7 +723,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                 <Select
                   value={watch('vendorId') || 'none'}
                   onValueChange={(value) => setValue('vendorId', value === 'none' ? undefined : value)}
-                  disabled={loading}
+                  disabled={loading || isProtected}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Tedarikçi seçin" />
@@ -652,7 +753,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                   onChange: () => updateTotal() // KDV değişince toplamı güncelle
                 })}
                 placeholder="18"
-                disabled={loading}
+                disabled={loading || isProtected}
               />
             </div>
 
@@ -664,7 +765,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                 step="0.01"
                 {...register('total', { valueAsNumber: true })}
                 placeholder="0.00"
-                disabled={loading}
+                disabled={loading || isProtected}
                 readOnly // Otomatik hesaplanıyor
               />
               {errors.total && (
@@ -683,7 +784,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
               <Input
                 type="date"
                 {...register('dueDate')}
-                disabled={loading}
+                disabled={loading || isProtected}
               />
             </div>
 
@@ -694,7 +795,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                 <Input
                   type="date"
                   {...register('paymentDate')}
-                  disabled={loading}
+                  disabled={loading || isProtected}
                 />
               </div>
             )}
@@ -707,7 +808,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                 onValueChange={(value) =>
                   setValue('status', value as InvoiceFormData['status'])
                 }
-                disabled={loading}
+                disabled={loading || isProtected}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -731,7 +832,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                 {...register('billingAddress')}
                 placeholder="Fatura gönderim adresi"
                 rows={2}
-                disabled={loading}
+                disabled={loading || isProtected}
               />
             </div>
 
@@ -741,7 +842,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
               <Input
                 {...register('billingCity')}
                 placeholder="Şehir"
-                disabled={loading}
+                disabled={loading || isProtected}
               />
             </div>
 
@@ -751,7 +852,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
               <Input
                 {...register('billingTaxNumber')}
                 placeholder="Vergi numarası"
-                disabled={loading}
+                disabled={loading || isProtected}
               />
             </div>
 
@@ -762,7 +863,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                 <Select
                   value={watch('paymentMethod') || 'none'}
                   onValueChange={(value) => setValue('paymentMethod', value === 'none' ? undefined : value as any)}
-                  disabled={loading}
+                  disabled={loading || isProtected}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Ödeme yöntemi seçin" />
@@ -786,7 +887,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                 <Input
                   {...register('paymentNotes')}
                   placeholder="Ödeme notları"
-                  disabled={loading}
+                  disabled={loading || isProtected}
                 />
               </div>
             )}
@@ -798,7 +899,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                 {...register('description')}
                 placeholder="Fatura açıklaması ve notlar"
                 rows={3}
-                disabled={loading}
+                disabled={loading || isProtected}
               />
             </div>
           </div>
@@ -818,7 +919,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                   setEditingItemIndex(null)
                   setItemFormOpen(true)
                 }}
-                disabled={loading}
+                disabled={loading || isProtected}
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Ürün Ekle
@@ -836,7 +937,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                 <div className="flex-1">
                   <h4 className="text-sm font-semibold text-amber-800 mb-1">Malzeme Gerekli</h4>
                   <p className="text-sm text-amber-700">
-                    Satın alma faturası için malzeme eklemelisiniz. Malzeme eklemeden alış faturası oluşturulamaz ve mal kabul kaydı açılamaz.
+                    Lütfen satın alınan ürünleri ekleyin. Malzeme eklemeden alış faturası oluşturulamaz ve mal kabul kaydı açılamaz.
                   </p>
                 </div>
               </div>
@@ -872,7 +973,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                               variant="ghost"
                               size="icon"
                               onClick={() => handleEditItem(index)}
-                              disabled={loading}
+                              disabled={loading || isProtected}
                             >
                               <Package className="h-4 w-4" />
                             </Button>
@@ -881,7 +982,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                               variant="ghost"
                               size="icon"
                               onClick={() => handleRemoveItem(index)}
-                              disabled={loading}
+                              disabled={loading || isProtected}
                               className="text-red-600 hover:text-red-700"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -905,7 +1006,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                     setEditingItemIndex(null)
                     setItemFormOpen(true)
                   }}
-                  disabled={loading}
+                  disabled={loading || isProtected}
                   className="mt-4"
                 >
                   <Plus className="mr-2 h-4 w-4" />
@@ -928,9 +1029,9 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
             <Button
               type="submit"
               className="bg-gradient-primary text-white"
-              disabled={loading}
+              disabled={loading || isProtected}
             >
-              {loading ? 'Kaydediliyor...' : invoice ? 'Güncelle' : 'Kaydet'}
+              {loading ? 'Kaydediliyor...' : invoice ? (isProtected ? 'Değiştirilemez' : 'Güncelle') : 'Kaydet'}
             </Button>
           </div>
         </form>
@@ -991,7 +1092,10 @@ function InvoiceItemFormModal({ products, item, open, onClose, onSuccess }: Invo
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!productId || quantity <= 0 || unitPrice < 0) {
-      alert('Lütfen tüm alanları doldurun')
+      toast.warning(
+        'Ürün bilgilerini eksiksiz doldurun',
+        'Ürün seçmelisiniz, miktar 0\'dan büyük olmalı ve birim fiyat eksi olamaz.'
+      )
       return
     }
 
@@ -1083,8 +1187,3 @@ function InvoiceItemFormModal({ products, item, open, onClose, onSuccess }: Invo
     </Dialog>
   )
 }
-
-
-
-
-

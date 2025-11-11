@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 // Dynamic route - POST sonrası fresh data için cache'i kapat
@@ -8,22 +7,25 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
-    // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Quotes GET API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    // Session kontrolü - cache ile (30 dakika cache - çok daha hızlı!)
+    const { session, error: sessionError } = await getSafeSession(request)
+    
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Permission check - canRead kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canRead = await hasPermission('quote', 'read', session.user.id)
+    if (!canRead) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Teklif görüntüleme yetkiniz yok' },
+        { status: 403 }
+      )
     }
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
@@ -33,38 +35,70 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search') || ''
     const status = searchParams.get('status') || ''
+    const customerCompanyId = searchParams.get('customerCompanyId') || ''
+    const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
 
-    // OPTİMİZE: Sadece gerekli kolonları seç - performans için (JOIN kaldırıldı - çok yavaş)
-    let query = supabase
-      .from('Quote')
-      .select('id, title, status, total, dealId, createdAt')
-      .order('createdAt', { ascending: false })
-      .limit(100) // ULTRA AGRESİF limit - sadece 100 kayıt (instant load)
-    
-    if (!isSuperAdmin) {
-      query = query.eq('companyId', companyId)
-    }
+    // OPTİMİZE: Sadece gerekli kolonları seç - performans için
+    // SuperAdmin için Company bilgisi ekle
+    // DÜZELTME: Pagination ekle - Supabase varsayılan limiti 1000, tüm kayıtları çekmek için pagination yap
+    let allQuotes: any[] = []
+    let from = 0
+    const pageSize = 1000
+    let hasMore = true
 
-    if (search) {
-      query = query.or(`title.ilike.%${search}%`)
-    }
-
-    if (status) {
-      query = query.eq('status', status)
-    }
-
-    const { data, error } = await query
-
-    if (error) {
-      // Production'da console.error kaldırıldı
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Quotes API error:', error)
+    while (hasMore) {
+      let query = supabase
+        .from('Quote')
+        .select(`
+          id, title, status, totalAmount, dealId, createdAt, companyId,
+          Company:companyId (
+            id,
+            name
+          )
+        `)
+        .order('createdAt', { ascending: false })
+        .range(from, from + pageSize - 1)
+      
+      // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
+      if (!isSuperAdmin) {
+        query = query.eq('companyId', companyId)
+      } else if (filterCompanyId) {
+        // SuperAdmin firma filtresi seçtiyse sadece o firmayı göster
+        query = query.eq('companyId', filterCompanyId)
       }
-      return NextResponse.json(
-        { error: error.message || 'Failed to fetch quotes' },
-        { status: 500 }
-      )
+      // SuperAdmin ve firma filtresi yoksa tüm firmaları göster
+
+      if (search) {
+        query = query.or(`title.ilike.%${search}%`)
+      }
+
+      if (status) {
+        query = query.eq('status', status)
+      }
+
+      const { data, error } = await query
+
+      if (error) {
+        // Production'da console.error kaldırıldı
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Quotes API error:', error)
+        }
+        return NextResponse.json(
+          { error: error.message || 'Failed to fetch quotes' },
+          { status: 500 }
+        )
+      }
+
+      if (data && data.length > 0) {
+        allQuotes = [...allQuotes, ...data]
+        from += pageSize
+        hasMore = data.length === pageSize // Eğer tam sayfa geldiyse devam et
+      } else {
+        hasMore = false
+      }
     }
+
+    const data = allQuotes
 
     // ULTRA AGRESİF cache headers - 30 dakika cache (tek tıkla açılmalı)
     return NextResponse.json(data || [], {
@@ -89,22 +123,25 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Quotes POST API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    // Session kontrolü - cache ile (30 dakika cache - çok daha hızlı!)
+    const { session, error: sessionError } = await getSafeSession(request)
+    
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Permission check - canCreate kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canCreate = await hasPermission('quote', 'create', session.user.id)
+    if (!canCreate) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Teklif oluşturma yetkiniz yok' },
+        { status: 403 }
+      )
     }
 
     // Body parse - hata yakalama ile
@@ -131,19 +168,47 @@ export async function POST(request: Request) {
 
     const supabase = getSupabaseWithServiceRole()
 
+    // Otomatik teklif numarası oluştur (eğer quoteNumber gönderilmemişse)
+    // Not: Quote tablosunda quoteNumber kolonu yoksa, title'a eklenebilir veya ayrı bir kolon eklenebilir
+    // Şimdilik title'a ekleyeceğiz: "QUO-2024-01-0001 - [Başlık]" formatında
+    let quoteNumber = body.quoteNumber
+    let quoteTitle = body.title.trim()
+    
+    if (!quoteNumber || quoteNumber.trim() === '') {
+      const now = new Date()
+      const year = now.getFullYear()
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      
+      // Bu ay oluşturulan teklif sayısını al (title'da QUO- ile başlayanlar)
+      const { count } = await supabase
+        .from('Quote')
+        .select('*', { count: 'exact', head: true })
+        .eq('companyId', session.user.companyId)
+        .like('title', `QUO-${year}-${month}-%`)
+      
+      // Sıradaki numara
+      const nextNumber = String((count || 0) + 1).padStart(4, '0')
+      quoteNumber = `QUO-${year}-${month}-${nextNumber}`
+      
+      // Title'a numarayı ekle
+      quoteTitle = `${quoteNumber} - ${quoteTitle}`
+    }
+
     // Quote verilerini oluştur - SADECE schema.sql'de olan kolonları gönder
     // schema.sql: title, status, total, dealId, companyId
     // schema-extension.sql: description, validUntil, discount, taxRate (migration çalıştırılmamış olabilir - GÖNDERME!)
     // schema-vendor.sql: vendorId (migration çalıştırılmamış olabilir - GÖNDERME!)
+    // NOT: customerCompanyId kolonu Quote tablosunda yok - GÖNDERME!
     const quoteData: any = {
-      title: body.title.trim(),
+      title: quoteTitle, // Otomatik numara ile birlikte
       status: body.status || 'DRAFT',
-      total: body.total !== undefined ? parseFloat(body.total) : 0,
+      totalAmount: body.totalAmount !== undefined ? parseFloat(body.totalAmount) : (body.total !== undefined ? parseFloat(body.total) : 0),
       companyId: session.user.companyId,
     }
 
     // Sadece schema.sql'de olan alanlar
     if (body.dealId) quoteData.dealId = body.dealId
+    // NOT: customerCompanyId kolonu Quote tablosunda yok - GÖNDERME!
     // NOT: description, vendorId, validUntil, discount, taxRate schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
     // @ts-ignore - Supabase type inference issue with Quote table
@@ -177,7 +242,245 @@ export async function POST(request: Request) {
       },
     ])
 
-    return NextResponse.json(data, { status: 201 })
+    // Deal stage'ini PROPOSAL'a taşı (eğer dealId varsa ve deal CONTACTED veya LEAD aşamasındaysa)
+    let dealStageUpdated = false
+    if (body.dealId) {
+      try {
+        // Deal'ı çek - önce companyId olmadan kontrol et (service role ile RLS bypass)
+        const { data: dealById, error: errorById } = await supabase
+          .from('Deal')
+          .select('id, title, stage, companyId')
+          .eq('id', body.dealId)
+          .maybeSingle()
+
+        if (errorById) {
+          console.error('Deal fetch error (by ID):', {
+            dealId: body.dealId,
+            error: errorById.message,
+            code: errorById.code,
+          })
+        } else if (dealById) {
+          // Deal bulundu - companyId kontrolü yap
+          const deal = dealById as { id: string; title: string; stage: string; companyId: string }
+          const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+          
+          if (deal.companyId === session.user.companyId || isSuperAdmin) {
+            // Deal CONTACTED veya LEAD aşamasındaysa PROPOSAL'a taşı
+            const currentStage = deal.stage
+            
+            if (process.env.NODE_ENV === 'development') {
+              console.log('Quote deal stage check:', {
+                dealId: body.dealId,
+                dealTitle: deal.title,
+                currentStage,
+                shouldUpdate: currentStage === 'CONTACTED' || currentStage === 'LEAD',
+                expectedStages: ['CONTACTED', 'LEAD'],
+              })
+            }
+            
+            if (currentStage === 'CONTACTED' || currentStage === 'LEAD') {
+              // Deal'in kendi companyId'sini kullan
+              const dealCompanyId = deal.companyId || session.user.companyId
+              
+              // @ts-ignore - Supabase type inference issue
+              const { error: updateError, data: updatedDeal } = await supabase
+                .from('Deal')
+                // @ts-ignore - Supabase type inference issue
+                .update({ stage: 'PROPOSAL', updatedAt: new Date().toISOString() })
+                .eq('id', body.dealId)
+                .eq('companyId', dealCompanyId) // Deal'in kendi companyId'sini kullan
+                .select('id, stage')
+                .single()
+
+              if (!updateError && updatedDeal && (updatedDeal as any)?.stage === 'PROPOSAL') {
+                dealStageUpdated = true
+                
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('Deal stage successfully updated:', {
+                    dealId: body.dealId,
+                    from: currentStage,
+                    to: 'PROPOSAL',
+                    updatedDeal,
+                  })
+                }
+                // ActivityLog kaydı - Deal stage değişikliği
+                // @ts-ignore - Supabase type inference issue
+                await supabase.from('ActivityLog').insert([
+                  {
+                    entity: 'Deal',
+                    action: 'UPDATE',
+                    description: `Fırsat aşaması güncellendi: ${currentStage} → PROPOSAL (Teklif oluşturuldu)`,
+                    meta: { 
+                      entity: 'Deal', 
+                      action: 'stage_change', 
+                      id: body.dealId, 
+                      dealId: body.dealId,
+                      from: currentStage, 
+                      to: 'PROPOSAL',
+                      reason: 'quote_created',
+                      quoteId: (data as any).id,
+                      quoteTitle: body.title,
+                      companyId: session.user.companyId,
+                      createdBy: session.user.id,
+                    },
+                    userId: session.user.id,
+                    companyId: session.user.companyId,
+                  },
+                ])
+
+                // Notification oluştur - Deal stage değişikliği
+                try {
+                  const { createNotificationForRole } = await import('@/lib/notification-helper')
+                  
+                  // Deal başlığını kullan (zaten dealById'den var)
+                  const dealTitle = deal.title || 'Fırsat'
+                  
+                  await createNotificationForRole({
+                    companyId: session.user.companyId,
+                    role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+                    title: '📄 Fırsat Aşaması Güncellendi',
+                    message: `${dealTitle} fırsatı "Teklif" aşamasına taşındı. Teklif oluşturuldu.`,
+                    type: 'success',
+                    relatedTo: 'Deal',
+                    relatedId: body.dealId,
+                    link: `/deals/${body.dealId}`,
+                  })
+                } catch (notificationError) {
+                  // Notification hatası kritik değil
+                  if (process.env.NODE_ENV === 'development') {
+                    console.error('Deal stage notification error (non-critical):', notificationError)
+                  }
+                }
+              } else {
+                // Update hatası veya stage yanlış
+                console.warn('Deal stage update returned unexpected data:', {
+                  dealId: body.dealId,
+                  currentStage,
+                  targetStage: 'PROPOSAL',
+                  updateError,
+                  updatedDeal,
+                })
+              }
+            } else {
+              // Deal PROPOSAL'a taşınacak aşamada değil
+              if (process.env.NODE_ENV === 'development') {
+                console.log('Deal stage not CONTACTED/LEAD, skipping auto-update:', {
+                  dealId: body.dealId,
+                  dealTitle: deal.title,
+                  currentStage,
+                  expectedStages: ['CONTACTED', 'LEAD'],
+                })
+              }
+            }
+          } else {
+            console.warn('Deal found but companyId mismatch (not SuperAdmin):', {
+              dealId: body.dealId,
+              dealCompanyId: deal.companyId,
+              userCompanyId: session.user.companyId,
+              userRole: session.user.role,
+              dealTitle: deal.title,
+            })
+          }
+        } else {
+          console.warn('Deal not found:', {
+            dealId: body.dealId,
+            companyId: session.user.companyId,
+          })
+        }
+      } catch (dealUpdateError: any) {
+        // Deal güncelleme hatası kritik değil, sadece log
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Deal stage update error (non-critical):', dealUpdateError)
+        }
+      }
+    }
+
+    // AutoTaskFromQuote: Teklif oluşturulduğunda otomatik görev aç
+    // Görev: "Bu teklif için 3 gün içinde müşteriyi ara"
+    try {
+      const taskData = {
+        title: `Bu teklif için 3 gün içinde müşteriyi ara: ${body.title}`,
+        status: 'TODO',
+        assignedTo: session.user.id, // Teklif sahibine atanır
+        companyId: session.user.companyId,
+        description: `Teklif: ${body.title} - Müşteri ile 3 gün içinde görüşme yapılmalı`,
+        dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 3 gün sonra
+        priority: 'MEDIUM',
+      }
+      
+      // @ts-ignore - Supabase database type tanımları eksik
+      const { data: task, error: taskError } = await supabase.from('Task').insert([taskData]).select().single()
+      
+      if (task && !taskError) {
+        // Bildirim: Görev oluşturuldu
+        const { createNotification } = await import('@/lib/notification-helper')
+        await createNotification({
+          userId: session.user.id,
+          companyId: session.user.companyId,
+          title: 'Yeni Görev Oluşturuldu',
+          message: `Teklif için otomatik görev oluşturuldu. Görevi görmek ister misiniz?`,
+          type: 'info',
+          relatedTo: 'Task',
+          relatedId: (task as any).id,
+        })
+      }
+    } catch (taskError) {
+      // Görev oluşturma hatası ana işlemi engellemez
+      if (process.env.NODE_ENV === 'development') {
+        console.error('AutoTaskFromQuote error:', taskError)
+      }
+    }
+
+    // Bildirim: Teklif oluşturuldu
+    try {
+      const { createNotificationForRole } = await import('@/lib/notification-helper')
+      await createNotificationForRole({
+        companyId: session.user.companyId,
+        role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+        title: 'Yeni Teklif Oluşturuldu',
+        message: `Yeni bir teklif oluşturuldu. Detayları görmek ister misiniz?`,
+        type: 'info',
+        relatedTo: 'Quote',
+        relatedId: (data as any).id,
+      })
+    } catch (notificationError) {
+      // Bildirim hatası ana işlemi engellemez
+    }
+
+    // Response'a stage güncelleme bilgisini ekle
+    const responseData: any = { ...(data as any) }
+    if (body.dealId) {
+      responseData.dealId = body.dealId
+      responseData.dealStageUpdated = dealStageUpdated
+      
+      // Deal bilgilerini de ekle (frontend'de kontrol için)
+      try {
+        const { data: finalDealData, error: finalDealError } = await supabase
+          .from('Deal')
+          .select('id, title, stage, companyId')
+          .eq('id', body.dealId)
+          .maybeSingle()
+        
+        if (finalDealError) {
+          console.error('Final deal fetch error:', {
+            dealId: body.dealId,
+            error: finalDealError.message,
+            code: finalDealError.code,
+          })
+        } else if (finalDealData) {
+          // Deal bulundu - companyId kontrolü yap
+          const finalDeal = finalDealData as { id: string; title: string; stage: string; companyId: string }
+          if (finalDeal.companyId === session.user.companyId || session.user.role === 'SUPER_ADMIN') {
+            responseData.dealCurrentStage = finalDeal.stage
+            responseData.dealTitle = finalDeal.title
+          }
+        }
+      } catch (finalDealError) {
+        console.error('Final deal fetch exception:', finalDealError)
+      }
+    }
+
+    return NextResponse.json(responseData, { status: 201 })
   } catch (error: any) {
     if (process.env.NODE_ENV === 'development') {
       console.error('Quotes POST API error:', error)

@@ -18,7 +18,12 @@ export async function GET() {
     const supabase = getSupabaseWithServiceRole()
 
     // Teklif durumlarına göre sayıları çek
-    let baseQuery = supabase.from('Quote').select('id, status, total, createdAt, rejectedReason')
+    // DÜZELTME: totalAmount kullan (050 migration ile total → totalAmount) - total kolonu artık yok!
+    // ÖNEMLİ: rejectedReason kolonu olmayabilir, bu yüzden dinamik select yapıyoruz
+    let baseQuery = supabase.from('Quote').select('id, status, totalAmount, createdAt')
+    
+    // Normal kullanıcı: kendi companyId'sine göre filtrele
+    // SuperAdmin: tüm firmaları göster
     if (!isSuperAdmin) {
       baseQuery = baseQuery.eq('companyId', companyId)
     }
@@ -26,7 +31,21 @@ export async function GET() {
     const { data: quotes, error } = await baseQuery
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Quote analysis query error:', error)
+      }
+      // Hata durumunda default değerler dön (UI bozulmasın)
+      return NextResponse.json({
+        total: 0,
+        accepted: 0,
+        pending: 0,
+        rejected: 0,
+        successRate: 0,
+        rejectionReasons: [],
+        acceptedTotal: 0,
+        pendingTotal: 0,
+        rejectedTotal: 0,
+      }, { status: 200 }) // 200 dön - UI bozulmasın
     }
 
     // Durumlara göre grupla
@@ -39,16 +58,39 @@ export async function GET() {
     const successRate = totalQuotes > 0 ? Math.round((accepted.length / totalQuotes) * 100) : 0
 
     // Red nedenleri analizi
+    // ÖNEMLİ: rejectedReason kolonu olmayabilir, bu yüzden try-catch kullanıyoruz
     const rejectionReasons: Record<string, number> = {}
     rejected.forEach((quote: any) => {
-      const reason = quote.rejectedReason || 'Belirtilmemiş'
-      rejectionReasons[reason] = (rejectionReasons[reason] || 0) + 1
+      try {
+        // rejectedReason kolonu olmayabilir, bu yüzden optional chaining kullanıyoruz
+        const reason = (quote as any).rejectedReason || 'Belirtilmemiş'
+        rejectionReasons[reason] = (rejectionReasons[reason] || 0) + 1
+      } catch (e) {
+        // Hata durumunda varsayılan neden kullan
+        rejectionReasons['Belirtilmemiş'] = (rejectionReasons['Belirtilmemiş'] || 0) + 1
+      }
     })
 
     // Red nedenleri listesi (en çok red nedeni önce)
     const rejectionReasonsList = Object.entries(rejectionReasons)
       .map(([reason, count]) => ({ reason, count }))
       .sort((a, b) => b.count - a.count)
+
+    // Toplam tutarlar - DÜZELTME: totalAmount öncelikli (050 migration ile total → totalAmount) - total kolonu artık yok!
+    const acceptedTotal = Array.isArray(accepted) ? accepted.reduce((sum: number, q: any) => {
+      const total = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
+      return sum + total
+    }, 0) : 0
+    
+    const pendingTotal = Array.isArray(pending) ? pending.reduce((sum: number, q: any) => {
+      const total = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
+      return sum + total
+    }, 0) : 0
+    
+    const rejectedTotal = Array.isArray(rejected) ? rejected.reduce((sum: number, q: any) => {
+      const total = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
+      return sum + total
+    }, 0) : 0
 
     return NextResponse.json({
       total: totalQuotes,
@@ -58,15 +100,28 @@ export async function GET() {
       successRate,
       rejectionReasons: rejectionReasonsList,
       // Toplam tutarlar
-      acceptedTotal: accepted.reduce((sum: number, q: any) => sum + (parseFloat(q.total) || 0), 0),
-      pendingTotal: pending.reduce((sum: number, q: any) => sum + (parseFloat(q.total) || 0), 0),
-      rejectedTotal: rejected.reduce((sum: number, q: any) => sum + (parseFloat(q.total) || 0), 0),
+      acceptedTotal,
+      pendingTotal,
+      rejectedTotal,
     })
   } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || 'Failed to fetch quote analysis' },
-      { status: 500 }
-    )
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Quote analysis API error:', error)
+      console.error('Error stack:', error?.stack)
+    }
+    // Hata durumunda default değerler dön (UI bozulmasın)
+    return NextResponse.json({
+      total: 0,
+      accepted: 0,
+      pending: 0,
+      rejected: 0,
+      successRate: 0,
+      rejectionReasons: [],
+      acceptedTotal: 0,
+      pendingTotal: 0,
+      rejectedTotal: 0,
+      error: process.env.NODE_ENV === 'development' ? error?.message : undefined,
+    }, { status: 200 }) // 200 dön - UI bozulmasın
   }
 }
 

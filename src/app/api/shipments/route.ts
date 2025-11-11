@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 // Dynamic route - Status güncellemeleri için cache'i kapat
@@ -8,22 +7,25 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
-    // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Shipments GET API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    // Session kontrolü - cache ile (30 dakika cache - çok daha hızlı!)
+    const { session, error: sessionError } = await getSafeSession(request)
+    
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Permission check - canRead kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canRead = await hasPermission('shipment', 'read', session.user.id)
+    if (!canRead) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Sevkiyat görüntüleme yetkiniz yok' },
+        { status: 403 }
+      )
     }
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
@@ -35,10 +37,13 @@ export async function GET(request: Request) {
     const status = searchParams.get('status') || ''
     const dateFrom = searchParams.get('dateFrom') || ''
     const dateTo = searchParams.get('dateTo') || ''
+    const customerCompanyId = searchParams.get('customerCompanyId') || '' // Firma bazlı filtreleme
+    const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
 
     // YENİ: Shipment'ları çek (Invoice'ı ayrı query ile çekeceğiz - ilişki hatası nedeniyle)
     // estimatedDelivery kolonunu dinamik kontrol et
-    let selectColumns = 'id, tracking, status, invoiceId, createdAt, updatedAt'
+    // SuperAdmin için Company bilgisi ekle
+    let selectColumns = 'id, tracking, status, invoiceId, createdAt, updatedAt, companyId, Company:companyId(id, name)'
     
     // estimatedDelivery kolonunu kontrol et
     try {
@@ -57,9 +62,14 @@ export async function GET(request: Request) {
       .order('createdAt', { ascending: false })
       .limit(100) // ULTRA AGRESİF limit - sadece 100 kayıt (instant load)
     
+    // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
       query = query.eq('companyId', companyId)
+    } else if (filterCompanyId) {
+      // SuperAdmin firma filtresi seçtiyse sadece o firmayı göster
+      query = query.eq('companyId', filterCompanyId)
     }
+    // SuperAdmin ve firma filtresi yoksa tüm firmaları göster
 
     if (search) {
       query = query.or(`tracking.ilike.%${search}%`)
@@ -77,86 +87,97 @@ export async function GET(request: Request) {
       query = query.lte('createdAt', dateTo)
     }
 
+    // Firma bazlı filtreleme (customerCompanyId)
+    if (customerCompanyId) {
+      query = query.eq('customerCompanyId', customerCompanyId)
+    }
+
     const { data: shipments, error } = await query
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Invoice'ları ayrı query ile çek (ilişki hatası nedeniyle)
-    const shipmentsWithInvoices = await Promise.all(
-      (shipments || []).map(async (shipment: any) => {
-        if (!shipment.invoiceId) {
-          return shipment
-        }
+    // OPTİMİZE: N+1 query problemini çöz - tüm invoice'ları tek seferde çek
+    // Önceki: Her shipment için ayrı invoice query (N+1 problem - çok yavaş!)
+    // Yeni: Tüm invoice'ları tek query ile çek, JavaScript'te map et (çok daha hızlı!)
+    const invoiceIds = (shipments || [])
+      .map((s: any) => s.invoiceId)
+      .filter((id: any) => id) // null/undefined'ları filtrele
+      .filter((id: any, index: number, arr: any[]) => arr.indexOf(id) === index) // Duplicate'leri kaldır
 
-        try {
-          const { data: invoice } = await supabase
-            .from('Invoice')
-            .select(`
+    // Tüm invoice'ları tek seferde çek
+    const { data: allInvoices } = invoiceIds.length > 0
+      ? await supabase
+          .from('Invoice')
+          .select(`
+            id,
+            title,
+            invoiceNumber,
+            totalAmount,
+            createdAt,
+            quoteId,
+            Customer (
               id,
-              title,
-              invoiceNumber,
-              total,
-              createdAt,
+              name,
+              email
+            )
+          `)
+          .in('id', invoiceIds)
+          .eq('companyId', companyId)
+      : { data: [] }
+
+    // Quote ID'lerini topla (invoice'ların quoteId'lerinden)
+    const quoteIds = (allInvoices || [])
+      .map((inv: any) => inv.quoteId)
+      .filter((id: any) => id)
+      .filter((id: any, index: number, arr: any[]) => arr.indexOf(id) === index)
+
+    // Tüm quote'ları tek seferde çek
+    const { data: allQuotes } = quoteIds.length > 0
+      ? await supabase
+          .from('Quote')
+          .select(`
+            id,
+            Deal (
+              id,
               Customer (
                 id,
                 name,
                 email
               )
-            `)
-            .eq('id', shipment.invoiceId)
-            .eq('companyId', companyId)
-            .maybeSingle()
+            )
+          `)
+          .in('id', quoteIds)
+          .eq('companyId', companyId)
+      : { data: [] }
 
-          if (invoice) {
-            const invoiceObj = invoice as any
-            // Quote ve Deal bilgilerini ayrı çek (eğer varsa)
-            if (invoiceObj.quoteId) {
-              try {
-                const { data: quote } = await supabase
-                  .from('Quote')
-                  .select(`
-                    id,
-                    Deal (
-                      id,
-                      Customer (
-                        id,
-                        name,
-                        email
-                      )
-                    )
-                  `)
-                  .eq('id', invoiceObj.quoteId)
-                  .eq('companyId', companyId)
-                  .maybeSingle()
-                
-                if (quote) {
-                  return {
-                    ...shipment,
-                    Invoice: {
-                      ...invoiceObj,
-                      Quote: quote,
-                    },
-                  }
-                }
-              } catch (quoteErr) {
-                // Quote çekilemedi, sadece invoice ile devam et
-              }
-            }
+    // Invoice ve quote'ları Map'e çevir (hızlı lookup için)
+    const invoiceMap = new Map((allInvoices || []).map((inv: any) => [inv.id, inv]))
+    const quoteMap = new Map((allQuotes || []).map((q: any) => [q.id, q]))
 
-            return {
-              ...shipment,
-              Invoice: invoiceObj,
-            }
-          }
-        } catch (invoiceErr) {
-          // Invoice çekilemedi, shipment'ı olduğu gibi döndür
-        }
-
+    // Shipment'ları invoice ve quote bilgileriyle map et
+    const shipmentsWithInvoices = (shipments || []).map((shipment: any) => {
+      if (!shipment.invoiceId) {
         return shipment
-      })
-    )
+      }
+
+      const invoice = invoiceMap.get(shipment.invoiceId)
+      if (!invoice) {
+        return shipment
+      }
+
+      const invoiceObj = invoice as any
+      const quote = invoiceObj.quoteId ? quoteMap.get(invoiceObj.quoteId) : null
+
+      return {
+        ...shipment,
+        Invoice: {
+          ...invoiceObj,
+          ...(quote && { Quote: quote }),
+        },
+      }
+    })
 
     // Cache'i kapat - Status güncellemeleri için fresh data gerekli
     return NextResponse.json(shipmentsWithInvoices || [], {
@@ -194,6 +215,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Permission check - canCreate kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canCreate = await hasPermission('shipment', 'create', session.user.id)
+    if (!canCreate) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Sevkiyat oluşturma yetkiniz yok' },
+        { status: 403 }
+      )
+    }
+
     // Body parse - hata yakalama ile
     let body
     try {
@@ -227,7 +258,27 @@ export async function POST(request: Request) {
     }
 
     // Sadece schema.sql'de olan alanlar
-    if (body.invoiceId) shipmentData.invoiceId = body.invoiceId
+    if (body.invoiceId) {
+      shipmentData.invoiceId = body.invoiceId
+      // Invoice'dan customerCompanyId'yi çek (eğer varsa)
+      try {
+        const { data: invoice } = await supabase
+          .from('Invoice')
+          .select('customerCompanyId')
+          .eq('id', body.invoiceId)
+          .maybeSingle()
+        if (invoice?.customerCompanyId) {
+          shipmentData.customerCompanyId = invoice.customerCompanyId
+        }
+      } catch (invoiceError) {
+        // Invoice bulunamazsa devam et
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Invoice fetch error for customerCompanyId:', invoiceError)
+        }
+      }
+    }
+    // Firma bazlı ilişki (customerCompanyId) - body'den de alınabilir
+    if (body.customerCompanyId) shipmentData.customerCompanyId = body.customerCompanyId
     if (body.tracking !== undefined && body.tracking !== null && body.tracking !== '') {
       shipmentData.tracking = body.tracking
     }
@@ -316,7 +367,7 @@ export async function POST(request: Request) {
       {
         entity: 'Shipment',
         action: 'CREATE',
-        description: `Yeni sevkiyat oluşturuldu: ${body.tracking || 'Takipsiz'}`,
+        description: `Yeni sevkiyat oluşturuldu`,
         meta: { entity: 'Shipment', action: 'create', id: (data as any)?.id },
         userId: session.user.id,
         companyId: session.user.companyId,
@@ -327,6 +378,22 @@ export async function POST(request: Request) {
       if (process.env.NODE_ENV === 'development') {
         console.error('ActivityLog error:', activityError)
       }
+    }
+
+    // Bildirim: Sevkiyat oluşturuldu
+    try {
+      const { createNotificationForRole } = await import('@/lib/notification-helper')
+      await createNotificationForRole({
+        companyId: session.user.companyId,
+        role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+        title: 'Yeni Sevkiyat Oluşturuldu',
+        message: `Yeni bir sevkiyat oluşturuldu. Detayları görmek ister misiniz?`,
+        type: 'info',
+        relatedTo: 'Shipment',
+        relatedId: (data as any).id,
+      })
+    } catch (notificationError) {
+      // Bildirim hatası ana işlemi engellemez
     }
 
     return NextResponse.json(data, { status: 201 })

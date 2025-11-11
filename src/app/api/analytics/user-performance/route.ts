@@ -3,8 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
-// Agresif cache - 1 saat cache (instant navigation - <300ms hedef)
-export const revalidate = 3600
+// Cache kaldırıldı - multi-tenant güvenlik için fresh data gerekli
+export const revalidate = 0
 
 export async function GET() {
   try {
@@ -32,20 +32,69 @@ export async function GET() {
     const supabase = getSupabaseWithServiceRole()
 
     // Kullanıcıları çek - Sadece gerekli kolonlar
-    let usersQuery = supabase.from('User').select('id, name').limit(20) // Performans için limit
+    // MUTLAKA companyId filtresi uygula - multi-tenant güvenlik için kritik
+    let usersQuery = supabase
+      .from('User')
+      .select('id, name, companyId')
+      .not('companyId', 'is', null) // companyId null olanları filtrele
+      .limit(20) // Performans için limit
+    
+    // Normal kullanıcı: kendi companyId'sine göre filtrele
+    // SuperAdmin: tüm firmaları göster
     if (!isSuperAdmin) {
       usersQuery = usersQuery.eq('companyId', companyId)
     }
-    const { data: users } = await usersQuery
+    
+    const { data: usersRaw, error: usersError } = await usersQuery
+    
+    // Hata kontrolü
+    if (usersError) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('User Performance API - Users query error:', usersError)
+      }
+      return NextResponse.json(
+        { error: 'Failed to fetch users', message: usersError.message },
+        { status: 500 }
+      )
+    }
+    
+    // CRITICAL: Kullanıcıları bir kez daha filtrele - multi-tenant güvenlik için ekstra kontrol
+    // Normal kullanıcı: sadece aynı companyId'ye sahip kullanıcıları al
+    // SuperAdmin: tüm kullanıcıları göster
+    let users = usersRaw || []
+    if (!isSuperAdmin) {
+      users = users.filter((u: any) => u.companyId === companyId && u.companyId != null)
+    }
+    
+    // Debug: Users ve companyId kontrolü
+    if (process.env.NODE_ENV === 'development') {
+      console.log('User Performance API - Request companyId:', companyId)
+      console.log('User Performance API - Is SuperAdmin:', isSuperAdmin)
+      console.log('User Performance API - Raw users count:', usersRaw?.length || 0)
+      console.log('User Performance API - Filtered users count:', users.length)
+      console.log('User Performance API - Users:', users.map((u: any) => ({ id: u.id, name: u.name, companyId: u.companyId })))
+      
+      // Eğer SuperAdmin değilse, tüm kullanıcıların aynı companyId'ye sahip olduğunu kontrol et
+      if (!isSuperAdmin && users.length > 0) {
+        const wrongCompanyUsers = users.filter((u: any) => u.companyId !== companyId)
+        if (wrongCompanyUsers.length > 0) {
+          console.error('User Performance API - SECURITY ERROR: Found users from different company!', wrongCompanyUsers)
+          // Güvenlik hatası - yanlış kullanıcıları listeden çıkar
+          users = users.filter((u: any) => u.companyId === companyId)
+        }
+      }
+    }
 
     if (!users || users.length === 0) {
+      // Eğer kullanıcı yoksa, boş array döndür (grafik placeholder gösterir)
+      // Cache kaldırıldı - multi-tenant güvenlik için fresh data gerekli
       return NextResponse.json(
         { performance: [] },
         {
           headers: {
-            'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200, max-age=1800',
-            'CDN-Cache-Control': 'public, s-maxage=3600',
-            'Vercel-CDN-Cache-Control': 'public, s-maxage=3600',
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'CDN-Cache-Control': 'no-store',
+            'Vercel-CDN-Cache-Control': 'no-store',
           },
         }
       )
@@ -54,9 +103,9 @@ export async function GET() {
     // Invoice, Quote, Deal tablolarında userId kolonu YOK!
     // ActivityLog'dan kullanıcı bazlı veri çek veya toplam veriyi eşit dağıt
     const [allInvoices, allQuotes, allDeals, activityLogs] = await Promise.all([
-      // Tüm PAID invoice'ları çek (sadece total)
+      // Tüm PAID invoice'ları çek - DÜZELTME: totalAmount kullan (050 migration ile total → totalAmount)
       (() => {
-        let query = supabase.from('Invoice').select('total').eq('status', 'PAID').limit(100)
+        let query = supabase.from('Invoice').select('totalAmount, total').eq('status', 'PAID').limit(100)
         if (!isSuperAdmin) query = query.eq('companyId', companyId)
         return query
       })(),
@@ -84,8 +133,8 @@ export async function GET() {
       })(),
     ])
 
-    // Toplam değerleri hesapla
-    const totalSales = allInvoices.data?.reduce((sum, inv: { total?: number }) => sum + (inv.total || 0), 0) || 0
+    // Toplam değerleri hesapla - DÜZELTME: totalAmount kullan (050 migration ile total → totalAmount)
+    const totalSales = allInvoices.data?.reduce((sum, inv: { total?: number; totalAmount?: number; grandTotal?: number }) => sum + (inv.totalAmount || inv.total || inv.grandTotal || 0), 0) || 0
     const totalQuotes = allQuotes.count || 0
     const totalDeals = allDeals.count || 0
 
@@ -113,19 +162,19 @@ export async function GET() {
       }
       
       // Invoice PAID durumu - meta'dan status kontrol et
+      // NOT: avgSales henüz tanımlanmadı, bu yüzden sadece meta'dan gelen değeri kullan
       if (log.entity === 'Invoice' && log.action === 'UPDATE') {
         try {
           const meta = typeof log.meta === 'string' ? JSON.parse(log.meta) : log.meta
           if (meta?.status === 'PAID' || meta?.newStatus === 'PAID' || meta?.oldStatus === 'PAID') {
-            // PAID invoice değerini meta'dan al veya ortalama kullan
+            // PAID invoice değerini meta'dan al
             const invoiceValue = meta?.total || meta?.amount || meta?.value || 0
-            stats.sales += invoiceValue > 0 ? invoiceValue : Math.round(avgSales) // Ortalama değer kullan
+            if (invoiceValue > 0) {
+              stats.sales += invoiceValue
+            }
           }
         } catch (e) {
-          // Meta parse edilemezse, action string'inde PAID aranabilir
-          if (log.action?.includes('PAID') || log.action?.includes('paid')) {
-            stats.sales += Math.round(avgSales) // Ortalama değer kullan
-          }
+          // Meta parse edilemezse, sadece log action'ına bak (değer ekleme)
         }
       }
       
@@ -158,37 +207,34 @@ export async function GET() {
     const performance = users.map((user: { id: string; name: string }) => {
       const stats = userStats.get(user.id) || { sales: 0, quotes: 0, deals: 0 }
       
-      // Eğer ActivityLog'dan veri yoksa, eşit dağıtım kullan
-      // Ama en az 1 değer olsun ki grafikte görünsün
+      // ActivityLog'dan gelen gerçek verileri kullan - sahte değerler verme
+      // Eğer veri yoksa 0 göster, minimum değerler verme (multi-tenant güvenlik için)
       let finalSales = stats.sales
       let finalQuotes = stats.quotes
       let finalDeals = stats.deals
       
-      // Eğer ActivityLog'dan veri yoksa, eşit dağıtım kullan
-      if (finalSales === 0 && avgSales > 0) {
+      // Eğer ActivityLog'dan veri yoksa ve toplam değerler varsa, eşit dağıtım kullan
+      // Ama sadece gerçek veri varsa - sahte minimum değerler verme
+      if (finalSales === 0 && avgSales > 0 && hasActivityData) {
         finalSales = Math.round(avgSales)
-      } else if (finalSales === 0 && totalSales > 0) {
+      } else if (finalSales === 0 && totalSales > 0 && hasActivityData) {
         finalSales = Math.round(totalSales / userCount)
-      } else if (finalSales === 0 && !hasActivityData) {
-        // Hiç veri yoksa, her kullanıcıya minimum değer ver (grafik görünsün)
-        finalSales = 100
       }
+      // Hiç veri yoksa 0 göster - sahte değerler verme
       
-      if (finalQuotes === 0 && avgQuotes > 0) {
+      if (finalQuotes === 0 && avgQuotes > 0 && hasActivityData) {
         finalQuotes = avgQuotes
-      } else if (finalQuotes === 0 && totalQuotes > 0) {
+      } else if (finalQuotes === 0 && totalQuotes > 0 && hasActivityData) {
         finalQuotes = Math.round(totalQuotes / userCount)
-      } else if (finalQuotes === 0 && !hasActivityData) {
-        finalQuotes = 1
       }
+      // Hiç veri yoksa 0 göster - sahte değerler verme
       
-      if (finalDeals === 0 && avgDeals > 0) {
+      if (finalDeals === 0 && avgDeals > 0 && hasActivityData) {
         finalDeals = avgDeals
-      } else if (finalDeals === 0 && totalDeals > 0) {
+      } else if (finalDeals === 0 && totalDeals > 0 && hasActivityData) {
         finalDeals = Math.round(totalDeals / userCount)
-      } else if (finalDeals === 0 && !hasActivityData) {
-        finalDeals = 1
       }
+      // Hiç veri yoksa 0 göster - sahte değerler verme
       
       return {
         user: user.name || 'Kullanıcı',
@@ -198,13 +244,20 @@ export async function GET() {
       }
     })
 
+    // Debug: Performance verisini logla
+    if (process.env.NODE_ENV === 'development') {
+      console.log('User Performance API - Performance array length:', performance.length)
+      console.log('User Performance API - Performance data:', performance)
+    }
+
+    // Cache kaldırıldı - multi-tenant güvenlik için fresh data gerekli
     return NextResponse.json(
       { performance },
       {
         headers: {
-          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200, max-age=1800',
-          'CDN-Cache-Control': 'public, s-maxage=3600',
-          'Vercel-CDN-Cache-Control': 'public, s-maxage=3600',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'CDN-Cache-Control': 'no-store',
+          'Vercel-CDN-Cache-Control': 'no-store',
         },
       }
     )

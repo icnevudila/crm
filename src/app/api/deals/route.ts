@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 // Dynamic route - POST sonrası fresh data için cache'i kapat
@@ -8,22 +7,25 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
-    // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Deals API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    // Session kontrolü - cache ile (30 dakika cache - çok daha hızlı!)
+    const { session, error: sessionError } = await getSafeSession(request)
+    
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Permission check - canRead kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canRead = await hasPermission('deal', 'read', session.user.id)
+    if (!canRead) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Fırsat görüntüleme yetkiniz yok' },
+        { status: 403 }
+      )
     }
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
@@ -33,22 +35,42 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const stage = searchParams.get('stage') || ''
     const customerId = searchParams.get('customerId') || ''
+    const customerCompanyId = searchParams.get('customerCompanyId') || '' // Firma bazlı filtreleme
+    const leadSource = searchParams.get('leadSource') || '' // Lead source filtreleme (migration 025)
     const search = searchParams.get('search') || ''
     const minValue = searchParams.get('minValue')
     const maxValue = searchParams.get('maxValue')
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
 
-    // OPTİMİZE: Sadece gerekli alanlar ve limit (JOIN kaldırıldı - çok yavaş)
+    // SuperAdmin için firma filtresi
+    const filterCompanyId = searchParams.get('filterCompanyId') || ''
+    
+    // OPTİMİZE: Sadece gerekli alanlar ve limit
+    // migration 020: priorityScore, isPriority (lead scoring)
+    // migration 025: leadSource (lead source tracking)
+    // migration 033: LeadScore JOIN (score, temperature) - OPSIYONEL (tablo yoksa hata vermez)
+    // SuperAdmin için Company bilgisi ekle
     let query = supabase
       .from('Deal')
-      .select('id, title, stage, value, status, customerId, createdAt', { count: 'exact' })
+      .select(`
+        id, title, stage, value, status, customerId, priorityScore, isPriority, leadSource, createdAt, companyId,
+        Company:companyId (
+          id,
+          name
+        )
+      `, { count: 'exact' })
       .order('createdAt', { ascending: false })
       .limit(100) // ULTRA AGRESİF limit - sadece 100 kayıt (instant load)
     
+    // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
       query = query.eq('companyId', companyId)
+    } else if (filterCompanyId) {
+      // SuperAdmin firma filtresi seçtiyse sadece o firmayı göster
+      query = query.eq('companyId', filterCompanyId)
     }
+    // SuperAdmin ve firma filtresi yoksa tüm firmaları göster
 
     if (stage) {
       query = query.eq('stage', stage)
@@ -56,6 +78,16 @@ export async function GET(request: Request) {
 
     if (customerId) {
       query = query.eq('customerId', customerId)
+    }
+
+    // Firma bazlı filtreleme (customerCompanyId)
+    if (customerCompanyId) {
+      query = query.eq('customerCompanyId', customerCompanyId)
+    }
+
+    // Lead Source filtreleme (migration 025)
+    if (leadSource) {
+      query = query.eq('leadSource', leadSource)
     }
 
     if (search) {
@@ -124,6 +156,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Permission check - canCreate kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canCreate = await hasPermission('deal', 'create', session.user.id)
+    if (!canCreate) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Fırsat oluşturma yetkiniz yok' },
+        { status: 403 }
+      )
+    }
+
     // Body parse - hata yakalama ile
     let body
     try {
@@ -151,6 +193,7 @@ export async function POST(request: Request) {
     // Deal verilerini oluştur - SADECE schema.sql'de olan kolonları gönder
     // schema.sql: title, stage, value, status, companyId, customerId
     // schema-extension.sql: winProbability, expectedCloseDate, description (migration çalıştırılmamış olabilir - GÖNDERME!)
+    // migration 025: leadSource (lead source tracking)
     const dealData: any = {
       title: body.title.trim(),
       stage: body.stage || 'LEAD',
@@ -161,6 +204,10 @@ export async function POST(request: Request) {
 
     // Sadece schema.sql'de olan alanlar
     if (body.customerId) dealData.customerId = body.customerId
+    // Firma bazlı ilişki (customerCompanyId)
+    if (body.customerCompanyId) dealData.customerCompanyId = body.customerCompanyId
+    // Lead Source (migration 025)
+    if (body.leadSource) dealData.leadSource = body.leadSource
     // NOT: description, winProbability, expectedCloseDate schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
     // @ts-ignore - Supabase database type tanımları eksik, insert metodu dinamik tip bekliyor
@@ -199,6 +246,22 @@ export async function POST(request: Request) {
       if (process.env.NODE_ENV === 'development') {
         console.error('ActivityLog insert error:', logError)
       }
+    }
+
+    // Bildirim: Fırsat oluşturuldu
+    try {
+      const { createNotificationForRole } = await import('@/lib/notification-helper')
+      await createNotificationForRole({
+        companyId: session.user.companyId,
+        role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+        title: 'Yeni Fırsat Oluşturuldu',
+        message: `Yeni bir fırsat oluşturuldu. Detayları görmek ister misiniz?`,
+        type: 'info',
+        relatedTo: 'Deal',
+        relatedId: (data as any).id,
+      })
+    } catch (notificationError) {
+      // Bildirim hatası ana işlemi engellemez
     }
 
     return NextResponse.json(data, { status: 201 })

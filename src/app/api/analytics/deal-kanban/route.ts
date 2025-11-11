@@ -30,22 +30,52 @@ export async function GET(request: Request) {
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     const companyId = session.user.companyId
     const supabase = getSupabaseWithServiceRole()
-    const { searchParams } = new URL(request.url)
     
-    // Filtre parametreleri
-    const customerId = searchParams.get('customerId') || ''
-    const search = searchParams.get('search') || ''
-    const minValue = searchParams.get('minValue')
-    const maxValue = searchParams.get('maxValue')
-    const startDate = searchParams.get('startDate')
-    const endDate = searchParams.get('endDate')
+    // Filtre parametreleri - güvenli parse
+    let customerId = ''
+    let search = ''
+    let minValue: string | null = null
+    let maxValue: string | null = null
+    let startDate: string | null = null
+    let endDate: string | null = null
+    
+    try {
+      const { searchParams } = new URL(request.url)
+      customerId = searchParams.get('customerId') || ''
+      search = searchParams.get('search') || ''
+      minValue = searchParams.get('minValue')
+      maxValue = searchParams.get('maxValue')
+      startDate = searchParams.get('startDate')
+      endDate = searchParams.get('endDate')
+    } catch (error) {
+      // request.url undefined veya geçersizse, filtreler boş kalır
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Deal Kanban API: Could not parse request.url', error)
+      }
+    }
 
-    // Base query - OPTİMİZE: Limit ve sadece gerekli alanlar (JOIN kaldırıldı - çok yavaş)
+    // Tüm deal'ları çek - limit yok (tüm verileri çek)
+    // Customer join'i ekle (performans için sadece gerekli alanlar)
+    // NOT: lostReason kolonu migration 033'te eklenmiş olmalı, yoksa hata verir
+    // PERFORMANS: Sadece gerekli kolonları çek, updatedAt index'i kullan
     let query = supabase
       .from('Deal')
-      .select('id, title, stage, value, customerId, createdAt', { count: 'exact' })
-      .order('createdAt', { ascending: false })
-      .limit(100) // ULTRA AGRESİF limit - sadece 100 kayıt (instant load)
+      .select(`
+        id, 
+        title, 
+        stage, 
+        value, 
+        customerId, 
+        createdAt, 
+        updatedAt,
+        status,
+        Customer:customerId (
+          id,
+          name
+        )
+      `)
+      .order('updatedAt', { ascending: false }) // En son güncellenen en üstte (idx_deal_updated_at index'i kullanılır)
+      .order('createdAt', { ascending: false }) // Aynı updatedAt için createdAt'e göre
     
     if (!isSuperAdmin) {
       query = query.eq('companyId', companyId)
@@ -78,6 +108,18 @@ export async function GET(request: Request) {
 
     const { data: deals, error: queryError } = await query
 
+    // Debug: Deals verisini logla
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Deal Kanban API - Deals count:', deals?.length || 0)
+      console.log('Deal Kanban API - Deals sample:', deals?.slice(0, 3)) // İlk 3 deal'i göster
+      if (deals && deals.length > 0) {
+        console.log('Deal Kanban API - First deal:', deals[0])
+        console.log('Deal Kanban API - Deal stages:', [...new Set(deals.map((d: any) => d.stage))])
+      } else {
+        console.warn('Deal Kanban API - No deals found!')
+      }
+    }
+
     if (queryError) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
@@ -90,6 +132,14 @@ export async function GET(request: Request) {
     const stages = ['LEAD', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST']
     const kanban = stages.map((stage) => {
       const stageDeals = (deals || []).filter((deal: any) => deal.stage === stage)
+      
+      // ✅ ÇÖZÜM: Her stage kolonu içinde updatedAt'e göre sırala - en son güncellenen en üstte
+      stageDeals.sort((a: any, b: any) => {
+        const aUpdated = new Date(a.updatedAt || a.createdAt).getTime()
+        const bUpdated = new Date(b.updatedAt || b.createdAt).getTime()
+        return bUpdated - aUpdated // En son güncellenen en üstte
+      })
+      
       // Her stage için toplam tutar hesapla - value string olabilir, parseFloat kullan
       const totalValue = stageDeals.reduce((sum: number, deal: any) => {
         const dealValue = typeof deal.value === 'string' ? parseFloat(deal.value) || 0 : (deal.value || 0)
@@ -101,7 +151,7 @@ export async function GET(request: Request) {
         console.log(`Deal Kanban API - Stage: ${stage}`, {
           stageDealsCount: stageDeals.length,
           totalValue,
-          deals: stageDeals.map((d: any) => ({ id: d.id, title: d.title, value: d.value, valueType: typeof d.value })),
+          deals: stageDeals.map((d: any) => ({ id: d.id, title: d.title, value: d.value, valueType: typeof d.value, updatedAt: d.updatedAt })),
         })
       }
       
@@ -113,21 +163,35 @@ export async function GET(request: Request) {
           id: deal.id,
           title: deal.title,
           value: typeof deal.value === 'string' ? parseFloat(deal.value) || 0 : (deal.value || 0),
-          customer: deal.Customer ? { name: deal.Customer.name } : undefined,
-          Customer: deal.Customer ? { name: deal.Customer.name } : undefined,
+          customerId: deal.customerId,
+          customer: deal.Customer ? { name: deal.Customer.name, id: deal.Customer.id } : undefined,
+          Customer: deal.Customer ? { name: deal.Customer.name, id: deal.Customer.id } : undefined,
           status: deal.status,
           createdAt: deal.createdAt,
+          updatedAt: deal.updatedAt || deal.createdAt, // ✅ ÇÖZÜM: updatedAt ekle - sıralama için
+          lostReason: deal.lostReason || undefined, // Kayıp sebebi (migration 033 - eğer kolon yoksa undefined)
         })),
       }
     })
 
-    // Cache headers - POST sonrası fresh data için cache'i kapat
-    // NOT: dynamic = 'force-dynamic' ile cache zaten kapalı
+    // Debug: Kanban verisini logla
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Deal Kanban API - Kanban array length:', kanban.length)
+      console.log('Deal Kanban API - Kanban data:', kanban.map((col: any) => ({
+        stage: col.stage,
+        count: col.count,
+        totalValue: col.totalValue,
+        dealsCount: col.deals?.length || 0,
+      })))
+    }
+
+    // Cache headers - Performans için 60 saniye cache (repo kurallarına uygun)
+    // NOT: dynamic = 'force-dynamic' ile cache zaten kapalı ama Next.js edge cache kullanabiliriz
     return NextResponse.json(
       { kanban },
       {
         headers: {
-          'Cache-Control': 'no-store, must-revalidate', // POST sonrası fresh data için cache'i kapat
+          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120', // 60 saniye cache, 120 saniye stale-while-revalidate
         },
       }
     )

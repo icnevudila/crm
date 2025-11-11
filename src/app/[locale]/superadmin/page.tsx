@@ -104,6 +104,12 @@ export default function SuperAdminPage() {
   const [companyModuleIds, setCompanyModuleIds] = useState<string[]>([])
   const [savingCompany, setSavingCompany] = useState(false)
   const [deletingCompany, setDeletingCompany] = useState<string | null>(null)
+  // Admin atama için state
+  const [adminData, setAdminData] = useState({
+    adminName: '',
+    adminEmail: '',
+    adminPassword: '',
+  })
 
   // Roles Tab State
   const [selectedRole, setSelectedRole] = useState<Role | null>(null)
@@ -155,9 +161,11 @@ export default function SuperAdminPage() {
     if (company) {
       setCompanyFormData(company)
       setCompanyModuleIds(company.moduleIds || [])
+      setAdminData({ adminName: '', adminEmail: '', adminPassword: '' }) // Düzenleme modunda admin bilgileri gösterilmez
     } else {
       setCompanyFormData({})
       setCompanyModuleIds([])
+      setAdminData({ adminName: '', adminEmail: '', adminPassword: '' }) // Yeni kurum için admin bilgileri temizle
     }
     setCompanyFormOpen(true)
   }
@@ -184,6 +192,15 @@ export default function SuperAdminPage() {
           sector: companyFormData.sector,
           city: companyFormData.city,
           status: companyFormData.status || 'ACTIVE',
+          maxUsers: companyFormData.maxUsers || null,
+          maxModules: companyFormData.maxModules || null,
+          adminUserLimit: companyFormData.adminUserLimit || null,
+          // Yeni kurum oluştururken admin bilgileri gönder
+          ...(method === 'POST' && adminData.adminEmail && adminData.adminName && adminData.adminPassword ? {
+            adminName: adminData.adminName,
+            adminEmail: adminData.adminEmail,
+            adminPassword: adminData.adminPassword,
+          } : {}),
         }),
       })
 
@@ -215,6 +232,7 @@ export default function SuperAdminPage() {
       setCompanyFormOpen(false)
       setCompanyFormData({})
       setCompanyModuleIds([])
+      setAdminData({ adminName: '', adminEmail: '', adminPassword: '' })
       alert('Şirket başarıyla kaydedildi!')
     } catch (error: any) {
       console.error('Error saving company:', error)
@@ -424,13 +442,14 @@ export default function SuperAdminPage() {
                       <TableHead>Şehir</TableHead>
                       <TableHead>Durum</TableHead>
                       <TableHead>Modüller</TableHead>
+                      <TableHead>Limitasyonlar</TableHead>
                       <TableHead className="text-right">İşlemler</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {companies.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                           Kurum bulunamadı
                         </TableCell>
                       </TableRow>
@@ -456,6 +475,28 @@ export default function SuperAdminPage() {
                                 <Badge variant="outline" className="text-xs">
                                   +{company.modules.length - 3}
                                 </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="text-xs space-y-1">
+                              {company.maxUsers && (
+                                <div className="text-gray-600">
+                                  Kullanıcı: <span className="font-medium">{company.maxUsers}</span>
+                                </div>
+                              )}
+                              {company.maxModules && (
+                                <div className="text-gray-600">
+                                  Modül: <span className="font-medium">{company.maxModules}</span>
+                                </div>
+                              )}
+                              {company.adminUserLimit && (
+                                <div className="text-gray-600">
+                                  Admin Limit: <span className="font-medium">{company.adminUserLimit}</span>
+                                </div>
+                              )}
+                              {!company.maxUsers && !company.maxModules && !company.adminUserLimit && (
+                                <span className="text-gray-400">Sınırsız</span>
                               )}
                             </div>
                           </TableCell>
@@ -820,6 +861,86 @@ export default function SuperAdminPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Limitasyonlar - Hem yeni kurum hem de düzenleme için */}
+            <div className="space-y-4 p-4 bg-slate-50 rounded-lg border border-slate-200">
+              <h3 className="text-sm font-semibold text-slate-900">Limitasyonlar</h3>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Maksimum Kullanıcı Sayısı</label>
+                <Input
+                  type="number"
+                  value={companyFormData.maxUsers || ''}
+                  onChange={(e) =>
+                    setCompanyFormData({ ...companyFormData, maxUsers: e.target.value ? parseInt(e.target.value) : null })
+                  }
+                  placeholder="Sınırsız için boş bırakın"
+                  min="1"
+                />
+                <p className="text-xs text-gray-500">Kurumun ekleyebileceği maksimum kullanıcı sayısı (boş = sınırsız)</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Maksimum Modül Sayısı</label>
+                <Input
+                  type="number"
+                  value={companyFormData.maxModules || ''}
+                  onChange={(e) =>
+                    setCompanyFormData({ ...companyFormData, maxModules: e.target.value ? parseInt(e.target.value) : null })
+                  }
+                  placeholder="Sınırsız için boş bırakın"
+                  min="1"
+                />
+                <p className="text-xs text-gray-500">Kurumun kullanabileceği maksimum modül sayısı (boş = sınırsız)</p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Admin Kullanıcı Limiti</label>
+                <Input
+                  type="number"
+                  value={companyFormData.adminUserLimit || ''}
+                  onChange={(e) =>
+                    setCompanyFormData({ ...companyFormData, adminUserLimit: e.target.value ? parseInt(e.target.value) : null })
+                  }
+                  placeholder="Sınırsız için boş bırakın"
+                  min="1"
+                />
+                <p className="text-xs text-gray-500">Admin rolündeki kullanıcıların ekleyebileceği maksimum kullanıcı sayısı (boş = sınırsız)</p>
+              </div>
+            </div>
+
+            {/* Admin Atama - Sadece yeni kurum oluştururken */}
+            {!companyFormData.id && (
+              <div className="space-y-4 p-4 bg-indigo-50 rounded-lg border border-indigo-200">
+                <h3 className="text-sm font-semibold text-indigo-900">Kurum Admin'i Atama (Opsiyonel)</h3>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Admin Adı</label>
+                  <Input
+                    value={adminData.adminName}
+                    onChange={(e) => setAdminData({ ...adminData, adminName: e.target.value })}
+                    placeholder="Admin kullanıcı adı"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Admin E-posta</label>
+                  <Input
+                    type="email"
+                    value={adminData.adminEmail}
+                    onChange={(e) => setAdminData({ ...adminData, adminEmail: e.target.value })}
+                    placeholder="admin@kurum.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Admin Şifre</label>
+                  <Input
+                    type="password"
+                    value={adminData.adminPassword}
+                    onChange={(e) => setAdminData({ ...adminData, adminPassword: e.target.value })}
+                    placeholder="En az 6 karakter"
+                  />
+                </div>
+                <p className="text-xs text-gray-600">Kurum oluşturulduktan sonra bu bilgilerle admin kullanıcısı otomatik oluşturulacak</p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Modül İzinleri</label>

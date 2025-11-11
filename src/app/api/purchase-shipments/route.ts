@@ -51,26 +51,24 @@ export async function GET(request: Request) {
       throw tableError
     }
 
-    // PurchaseTransaction'ları Invoice ve Vendor bilgileriyle çek
+    // PurchaseTransaction'ları Invoice bilgileriyle çek
+    // Vendor ilişkisi opsiyonel (Invoice'da vendorId olmayabilir)
     let query = supabase
       .from('PurchaseTransaction')
       .select(`
         id,
         status,
         invoiceId,
+        companyId,
         createdAt,
         updatedAt,
         Invoice (
           id,
           title,
-          invoiceNumber,
-          total,
+          totalAmount,
           createdAt,
-          Vendor (
-            id,
-            name,
-            email
-          )
+          companyId,
+          vendorId
         )
       `)
       .order('createdAt', { ascending: false })
@@ -94,7 +92,13 @@ export async function GET(request: Request) {
     const { data, error } = await query
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error('PurchaseTransaction query error:', error)
+      // Daha detaylı hata mesajı
+      return NextResponse.json({ 
+        error: error.message || 'Failed to fetch purchase transactions',
+        details: error.details || error.hint || null,
+        code: error.code || null
+      }, { status: 500 })
     }
 
     return NextResponse.json(data || [], {
@@ -102,9 +106,14 @@ export async function GET(request: Request) {
         'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200, max-age=1800',
       },
     })
-  } catch (error) {
+  } catch (error: any) {
+    console.error('PurchaseTransaction GET error:', error)
     return NextResponse.json(
-      { error: 'Failed to fetch purchase shipments' },
+      { 
+        error: error?.message || 'Failed to fetch purchase shipments',
+        details: error?.details || error?.hint || null,
+        code: error?.code || null
+      },
       { status: 500 }
     )
   }
@@ -163,7 +172,7 @@ export async function POST(request: Request) {
       await supabase.from('ActivityLog').insert([{
         entity: 'PurchaseTransaction',
         action: 'CREATE',
-        description: `Yeni mal kabul kaydı oluşturuldu: Fatura #${body.invoiceId.substring(0, 8)}`,
+        description: `Yeni mal kabul kaydı oluşturuldu`,
         meta: { entity: 'PurchaseTransaction', action: 'create', id: insertData.id },
         userId: session.user.id,
         companyId: session.user.companyId,

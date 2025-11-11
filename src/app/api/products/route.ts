@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 // Dynamic route - her zaman fresh data
@@ -8,22 +7,25 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
-    // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Products GET API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    // Session kontrolü - cache ile (30 dakika cache - çok daha hızlı!)
+    const { session, error: sessionError } = await getSafeSession(request)
+    
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Permission check - canRead kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canRead = await hasPermission('product', 'read', session.user.id)
+    if (!canRead) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Ürün görüntüleme yetkiniz yok' },
+        { status: 403 }
+      )
     }
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
@@ -35,14 +37,16 @@ export async function GET(request: Request) {
     const stockFilter = searchParams.get('stock') || '' // inStock, lowStock, outOfStock
     const categoryFilter = searchParams.get('category') || ''
     const statusFilter = searchParams.get('status') || ''
+    const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
 
     // OPTİMİZE: Sadece gerekli kolonları seç - performans için
+    // SuperAdmin için Company bilgisi ekle
     // ÖNEMLİ: Migration kolonları yoksa hata vermeden atla
     // EN GÜVENLİ YAKLAŞIM: Sadece kesinlikle var olan temel kolonları kullan
     // Migration kolonları yoksa hata vermeden atlanır
     // NOT: Migration kolonları (category, sku, barcode, status, minStock, maxStock, unit, reservedQuantity, incomingQuantity)
     // migration dosyaları çalıştırılmadıysa olmayabilir, bu yüzden sadece temel kolonları kullanıyoruz
-    const selectColumns = 'id, name, price, stock, companyId, createdAt, updatedAt'
+    const selectColumns = 'id, name, price, stock, companyId, createdAt, updatedAt, Company:companyId(id, name)'
     
     let query = supabase
       .from('Product')
@@ -50,9 +54,14 @@ export async function GET(request: Request) {
       .order('createdAt', { ascending: false })
       .limit(10000) // Tüm ürünleri getir (limit artırıldı)
     
+    // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
       query = query.eq('companyId', companyId)
+    } else if (filterCompanyId) {
+      // SuperAdmin firma filtresi seçtiyse sadece o firmayı göster
+      query = query.eq('companyId', filterCompanyId)
     }
+    // SuperAdmin ve firma filtresi yoksa tüm firmaları göster
 
     if (search) {
       // Sadece name ile arama (migration kolonları yoksa hata vermeden atla)
@@ -70,6 +79,7 @@ export async function GET(request: Request) {
     // Migration kolonları yoksa filtreleme yapma (hata vermeden atla)
     // categoryFilter ve statusFilter migration kolonları gerektirir
     // NOT: Migration çalıştırılmadıysa bu filtreler çalışmayacak
+    // NOT: statusFilter kullanılmıyor çünkü Product tablosunda status kolonu yok!
 
     const { data, error } = await query
 
@@ -126,22 +136,25 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Products POST API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    // Session kontrolü - cache ile (30 dakika cache - çok daha hızlı!)
+    const { session, error: sessionError } = await getSafeSession(request)
+    
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Permission check - canCreate kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canCreate = await hasPermission('product', 'create', session.user.id)
+    if (!canCreate) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Ürün oluşturma yetkiniz yok' },
+        { status: 403 }
+      )
     }
 
     // Body parse - hata yakalama ile
@@ -216,7 +229,7 @@ export async function POST(request: Request) {
       .from('Product')
       // @ts-expect-error - Supabase database type tanımları eksik
       .insert([productData])
-      .select('id, name, price, stock, category, sku, barcode, status, minStock, maxStock, unit, companyId, createdAt, updatedAt')
+      .select('id, name, price, stock, companyId, createdAt, updatedAt')
     
     if (error) {
       if (process.env.NODE_ENV === 'development') {

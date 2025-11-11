@@ -18,99 +18,100 @@ export async function GET() {
     const companyId = session.user.companyId
     const supabase = getSupabaseWithServiceRole()
 
-    const [
-      { count: total },
-      { count: draft },
-      { count: sent },
-      { count: accepted },
-      { count: rejected },
-      { data: quoteData },
-      { count: thisMonth },
-    ] = await Promise.all([
-      // Toplam teklif sayısı
-      (() => {
-        let query = supabase.from('Quote').select('*', { count: 'exact', head: true })
-        if (!isSuperAdmin) query = query.eq('companyId', companyId)
-        return query
-      })(),
-      // DRAFT teklifler
-      (() => {
-        let query = supabase.from('Quote').select('*', { count: 'exact', head: true }).eq('status', 'DRAFT')
-        if (!isSuperAdmin) query = query.eq('companyId', companyId)
-        return query
-      })(),
-      // SENT teklifler
-      (() => {
-        let query = supabase.from('Quote').select('*', { count: 'exact', head: true }).eq('status', 'SENT')
-        if (!isSuperAdmin) query = query.eq('companyId', companyId)
-        return query
-      })(),
-      // ACCEPTED teklifler
-      (() => {
-        let query = supabase.from('Quote').select('*', { count: 'exact', head: true }).eq('status', 'ACCEPTED')
-        if (!isSuperAdmin) query = query.eq('companyId', companyId)
-        return query
-      })(),
-      // REJECTED teklifler
-      (() => {
-        let query = supabase.from('Quote').select('*', { count: 'exact', head: true }).eq('status', 'REJECTED')
-        if (!isSuperAdmin) query = query.eq('companyId', companyId)
-        return query
-      })(),
-      // Toplam teklif değerleri - TÜM verileri çek (limit yok, status hesaplaması için gerekli)
-      (() => {
-        let query = supabase.from('Quote').select('total, status').limit(10000)
-        if (!isSuperAdmin) query = query.eq('companyId', companyId)
-        return query
-      })(),
-      // Bu ay oluşturulan teklifler
-      (() => {
-        let query = supabase
-          .from('Quote')
-          .select('*', { count: 'exact', head: true })
-          .gte('createdAt', new Date(new Date().setDate(1)).toISOString())
-        if (!isSuperAdmin) query = query.eq('companyId', companyId)
-        return query
-      })(),
-    ])
-
-    // ÖNEMLİ: quoteData üzerinden doğrudan hesaplama yap - count değerlerine güvenme
-    // Çünkü count değerleri yanlış olabilir ama quoteData gerçek veriyi içerir
-    const quotes = quoteData || []
+    // Tüm quote'ları çek - limit yok (tüm verileri çek)
+    let query = supabase
+      .from('Quote')
+      .select('id, status, totalAmount, createdAt') // DÜZELTME: totalAmount kullan (050 migration ile total → totalAmount)
+      .order('createdAt', { ascending: false })
     
-    // Status bazlı sayıları quoteData'dan hesapla (count yerine)
+    if (!isSuperAdmin) {
+      query = query.eq('companyId', companyId)
+    }
+    
+    const { data: quotes, error } = await query
+    
+    if (error) {
+      console.error('[Stats Quotes API] Quote data fetch error:', error)
+      return NextResponse.json(
+        { error: error.message || 'Failed to fetch quote stats' },
+        { status: 500 }
+      )
+    }
+    
+    // Null check - quotes undefined olabilir
+    if (!quotes || !Array.isArray(quotes)) {
+      console.error('[Stats Quotes API] Quotes is not an array:', quotes)
+      return NextResponse.json(
+        { error: 'Invalid quotes data' },
+        { status: 500 }
+      )
+    }
+    
+    // JavaScript'te say (quote-kanban API'si ile aynı mantık - DOĞRU SONUÇ)
     const draftCount = quotes.filter((q: any) => q.status === 'DRAFT').length
     const sentCount = quotes.filter((q: any) => q.status === 'SENT').length
     const acceptedCount = quotes.filter((q: any) => q.status === 'ACCEPTED').length
     const rejectedCount = quotes.filter((q: any) => q.status === 'REJECTED').length
     const waitingCount = quotes.filter((q: any) => q.status === 'WAITING').length
+    const totalCount = quotes.length
     
-    const totalValue = quotes.reduce((sum: number, quote: any) => sum + (quote.total || 0), 0) || 0
+    // Bu ay oluşturulan teklifler - doğru hesaplama
+    const now = new Date()
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+    const thisMonthCount = quotes.filter((q: any) => {
+      if (!q.createdAt) return false
+      const quoteDate = new Date(q.createdAt)
+      return quoteDate >= new Date(firstDayOfMonth)
+    }).length
+    
+    // Debug: JavaScript'te sayılan değerleri logla - HER ZAMAN logla (sorun tespiti için)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Stats Quotes API] Counted from quotes array:', {
+        draftCount,
+        sentCount,
+        acceptedCount,
+        rejectedCount,
+        waitingCount,
+        totalCount,
+        thisMonthCount,
+        totalQuotesFetched: quotes?.length || 0,
+        firstDayOfMonth,
+      })
+    }
+    
+    // Total value hesaplaması (tüm quote'ların totalAmount'ını topla) - DÜZELTME: totalAmount kullan (050 migration ile total → totalAmount, total kolonu artık yok!)
+    const totalValue = quotes.reduce((sum: number, quote: any) => {
+      const quoteValue = quote.totalAmount || (typeof quote.totalAmount === 'string' ? parseFloat(quote.totalAmount) || 0 : 0)
+      return sum + quoteValue
+    }, 0) || 0
+    
     const pending = draftCount + sentCount
     // Aktif teklifler: SENT, WAITING, ACCEPTED durumundaki teklifler
-    // ÖNEMLİ: quoteData'dan hesapla, count değerlerine güvenme
     const active = sentCount + acceptedCount + waitingCount
-    // Aktif tekliflerin toplam tutarı
+    // Aktif tekliflerin toplam tutarı - DÜZELTME: totalAmount kullan (050 migration ile total → totalAmount, total kolonu artık yok!)
     const activeQuotes = quotes.filter((q: any) => q.status === 'SENT' || q.status === 'ACCEPTED' || q.status === 'WAITING') || []
-    const activeValue = activeQuotes.reduce((sum: number, quote: any) => sum + (quote.total || 0), 0) || 0
+    const activeValue = activeQuotes.reduce((sum: number, quote: any) => {
+      const quoteValue = quote.totalAmount || (typeof quote.totalAmount === 'string' ? parseFloat(quote.totalAmount) || 0 : 0)
+      return sum + quoteValue
+    }, 0) || 0
     
-    // Mantıksal kontrol: TOPLAM = DRAFT + SENT + ACCEPTED + REJECTED + WAITING olmalı
-    // Eğer eşleşmiyorsa, quoteData'dan hesaplanan total'i kullan
-    const calculatedTotal = draftCount + sentCount + acceptedCount + rejectedCount + waitingCount
-    const finalTotal = calculatedTotal > 0 ? calculatedTotal : (total || 0)
+    // Toplam sayı: JavaScript'te sayılan değerleri kullan (quote-kanban API'si ile aynı mantık)
+    // Bu yöntem DOĞRU çünkü quote-kanban API'si de aynı şekilde çalışıyor ve doğru sonuç veriyor
+    const finalTotal = totalCount
 
     return NextResponse.json(
       {
-        total: finalTotal, // quoteData'dan hesaplanan total (mantıksal kontrol ile)
-        draft: draftCount, // quoteData'dan hesaplanan draft count
-        sent: sentCount, // quoteData'dan hesaplanan sent count
-        accepted: acceptedCount, // quoteData'dan hesaplanan accepted count
-        rejected: rejectedCount, // quoteData'dan hesaplanan rejected count
-        pending, // DRAFT + SENT (quoteData'dan hesaplanan)
-        active, // Aktif teklifler (SENT + ACCEPTED + WAITING) (quoteData'dan hesaplanan)
-        totalValue,
+        total: finalTotal, // JavaScript'te sayılan toplam (quote-kanban API'si ile aynı mantık - DOĞRU)
+        draft: draftCount, // JavaScript'te sayılan draft count
+        sent: sentCount, // JavaScript'te sayılan sent count
+        accepted: acceptedCount, // JavaScript'te sayılan accepted count
+        rejected: rejectedCount, // JavaScript'te sayılan rejected count
+        waiting: waitingCount, // JavaScript'te sayılan waiting count
+        pending, // DRAFT + SENT
+        active, // Aktif teklifler (SENT + ACCEPTED + WAITING)
+        totalValue, // Tüm quote'ların toplam tutarı
         activeValue, // Aktif tekliflerin toplam tutarı
-        thisMonth: thisMonth || 0,
+        thisMonth: thisMonthCount, // JavaScript'te sayılan bu ay count
       },
       {
         headers: {

@@ -92,7 +92,7 @@ export async function GET(
             `
             id,
             title,
-            total,
+            totalAmount,
             Deal (
               id,
               title,
@@ -288,22 +288,22 @@ function generateUBLTRXML(invoice: any): string {
   <cac:InvoiceLine>
     <cbc:ID>1</cbc:ID>
     <cbc:InvoicedQuantity unitCode="C62">1</cbc:InvoicedQuantity>
-    <cbc:LineExtensionAmount currencyID="TRY">${(invoice.total || 0).toFixed(2)}</cbc:LineExtensionAmount>
+    <cbc:LineExtensionAmount currencyID="TRY">${(invoice.totalAmount || 0).toFixed(2)}</cbc:LineExtensionAmount>
     <cac:Item>
       <cbc:Name>${escapeXML(invoice.title || 'Fatura')}</cbc:Name>
       <cbc:Description>${escapeXML(invoice.description || '')}</cbc:Description>
     </cac:Item>
     <cac:Price>
-      <cbc:PriceAmount currencyID="TRY">${(invoice.total || 0).toFixed(2)}</cbc:PriceAmount>
+      <cbc:PriceAmount currencyID="TRY">${(invoice.totalAmount || 0).toFixed(2)}</cbc:PriceAmount>
     </cac:Price>
   </cac:InvoiceLine>
   
   <!-- Vergi Bilgileri -->
   <cac:TaxTotal>
-    <cbc:TaxAmount currencyID="TRY">${((invoice.total || 0) * (invoice.taxRate || 0) / 100).toFixed(2)}</cbc:TaxAmount>
+    <cbc:TaxAmount currencyID="TRY">${((invoice.totalAmount || 0) * (invoice.taxRate || 0) / 100).toFixed(2)}</cbc:TaxAmount>
     <cac:TaxSubtotal>
-      <cbc:TaxableAmount currencyID="TRY">${((invoice.total || 0) / (1 + (invoice.taxRate || 0) / 100)).toFixed(2)}</cbc:TaxableAmount>
-      <cbc:TaxAmount currencyID="TRY">${((invoice.total || 0) * (invoice.taxRate || 0) / 100).toFixed(2)}</cbc:TaxAmount>
+      <cbc:TaxableAmount currencyID="TRY">${((invoice.totalAmount || 0) / (1 + (invoice.taxRate || 0) / 100)).toFixed(2)}</cbc:TaxableAmount>
+      <cbc:TaxAmount currencyID="TRY">${((invoice.totalAmount || 0) * (invoice.taxRate || 0) / 100).toFixed(2)}</cbc:TaxAmount>
       <cac:TaxCategory>
         <cac:TaxScheme>
           <cbc:Name>KDV</cbc:Name>
@@ -315,10 +315,10 @@ function generateUBLTRXML(invoice: any): string {
   
   <!-- Toplam Tutar -->
   <cac:LegalMonetaryTotal>
-    <cbc:LineExtensionAmount currencyID="TRY">${((invoice.total || 0) / (1 + (invoice.taxRate || 0) / 100)).toFixed(2)}</cbc:LineExtensionAmount>
-    <cbc:TaxExclusiveAmount currencyID="TRY">${((invoice.total || 0) / (1 + (invoice.taxRate || 0) / 100)).toFixed(2)}</cbc:TaxExclusiveAmount>
-    <cbc:TaxInclusiveAmount currencyID="TRY">${(invoice.total || 0).toFixed(2)}</cbc:TaxInclusiveAmount>
-    <cbc:PayableAmount currencyID="TRY">${(invoice.total || 0).toFixed(2)}</cbc:PayableAmount>
+    <cbc:LineExtensionAmount currencyID="TRY">${((invoice.totalAmount || 0) / (1 + (invoice.taxRate || 0) / 100)).toFixed(2)}</cbc:LineExtensionAmount>
+    <cbc:TaxExclusiveAmount currencyID="TRY">${((invoice.totalAmount || 0) / (1 + (invoice.taxRate || 0) / 100)).toFixed(2)}</cbc:TaxExclusiveAmount>
+    <cbc:TaxInclusiveAmount currencyID="TRY">${(invoice.totalAmount || 0).toFixed(2)}</cbc:TaxInclusiveAmount>
+    <cbc:PayableAmount currencyID="TRY">${(invoice.totalAmount || 0).toFixed(2)}</cbc:PayableAmount>
   </cac:LegalMonetaryTotal>
   
   <!-- Ödeme Bilgileri -->

@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { toast } from '@/lib/toast'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
+import { useSession } from 'next-auth/react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,14 +26,26 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-const userSchema = z.object({
-  name: z.string().min(1, 'Ad soyad gereklidir'),
-  email: z.string().email('Geçerli bir email adresi giriniz'),
-  password: z.string().min(6, 'Şifre en az 6 karakter olmalıdır').optional(),
-  role: z.enum(['ADMIN', 'SALES', 'SUPER_ADMIN']).default('SALES'),
-})
-
-type UserFormData = z.infer<typeof userSchema>
+// Schema'yı dinamik olarak oluştur (SuperAdmin kontrolü için)
+const createUserSchema = (isSuperAdmin: boolean) => {
+  if (isSuperAdmin) {
+    return z.object({
+      name: z.string().min(1, 'Ad soyad gereklidir'),
+      email: z.string().email('Geçerli bir email adresi giriniz'),
+      password: z.string().min(6, 'Şifre en az 6 karakter olmalıdır').optional(),
+      role: z.enum(['ADMIN', 'SALES', 'SUPER_ADMIN']).default('SALES'),
+      companyId: z.string().min(1, 'Kurum seçimi zorunludur'), // SuperAdmin için kurum seçimi zorunlu
+    })
+  } else {
+    return z.object({
+      name: z.string().min(1, 'Ad soyad gereklidir'),
+      email: z.string().email('Geçerli bir email adresi giriniz'),
+      password: z.string().min(6, 'Şifre en az 6 karakter olmalıdır').optional(),
+      role: z.enum(['ADMIN', 'SALES', 'SUPER_ADMIN']).default('SALES'),
+      companyId: z.string().optional(), // Normal admin için companyId session'dan gelir
+    })
+  }
+}
 
 interface UserFormProps {
   user?: any
@@ -43,7 +57,23 @@ interface UserFormProps {
 export default function UserForm({ user, open, onClose, onSuccess }: UserFormProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const { data: session } = useSession()
   const [loading, setLoading] = useState(false)
+  const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+
+  // SuperAdmin için kurumları çek - her zaman çek (hem SuperAdmin hem de normal admin için)
+  const { data: companies = [] } = useQuery({
+    queryKey: ['companies'],
+    queryFn: async () => {
+      const res = await fetch('/api/companies')
+      if (!res.ok) throw new Error('Failed to fetch companies')
+      return res.json()
+    },
+    enabled: open,
+  })
+
+  const userSchema = createUserSchema(isSuperAdmin)
+  type UserFormData = z.infer<typeof userSchema>
 
   const {
     register,
@@ -59,10 +89,12 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
       email: '',
       password: '',
       role: 'SALES',
+      companyId: '',
     },
   })
 
   const role = watch('role')
+  const companyId = watch('companyId')
 
   // User prop değiştiğinde veya modal açıldığında form'u güncelle
   useEffect(() => {
@@ -74,6 +106,7 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
           email: user.email || '',
           password: '', // Şifreyi gösterme
           role: user.role || 'SALES',
+          companyId: user.companyId || '',
         })
       } else {
         // Yeni kayıt modu - form'u temizle
@@ -82,10 +115,11 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
           email: '',
           password: '',
           role: 'SALES',
+          companyId: isSuperAdmin ? '' : (session?.user?.companyId || ''),
         })
       }
     }
-  }, [user, open, reset])
+  }, [user, open, reset, isSuperAdmin, session?.user?.companyId])
 
   const mutation = useMutation({
     mutationFn: async (data: UserFormData) => {
@@ -96,6 +130,11 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
       if (user && !data.password) {
         const { password, ...rest } = data
         data = rest as any
+      }
+
+      // SuperAdmin değilse companyId'yi session'dan al
+      if (!isSuperAdmin) {
+        data.companyId = session?.user?.companyId
       }
 
       const res = await fetch(url, {
@@ -121,7 +160,7 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
     },
     onError: (error: any) => {
       console.error('Error:', error)
-      alert(error.message || 'Kullanıcı kaydedilemedi')
+      toast.error('Kullanıcı kaydedilemedi', error.message)
     },
   })
 
@@ -200,10 +239,40 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
               <SelectContent>
                 <SelectItem value="SALES">Satış</SelectItem>
                 <SelectItem value="ADMIN">Admin</SelectItem>
-                <SelectItem value="SUPER_ADMIN">Süper Admin</SelectItem>
+                {isSuperAdmin && (
+                  <SelectItem value="SUPER_ADMIN">Süper Admin</SelectItem>
+                )}
               </SelectContent>
             </Select>
           </div>
+
+          {/* SuperAdmin için kurum seçimi - ZORUNLU */}
+          {isSuperAdmin && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Kurum *</label>
+              <Select
+                value={companyId || ''}
+                onValueChange={(value) => setValue('companyId', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Kurum seçin (zorunlu)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {companies.map((company: any) => (
+                    <SelectItem key={company.id} value={company.id}>
+                      {company.name} {company.city ? `(${company.city})` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.companyId && (
+                <p className="text-sm text-red-600">{errors.companyId.message}</p>
+              )}
+              {!companyId && (
+                <p className="text-xs text-gray-500">SuperAdmin olarak kullanıcı eklerken kurum seçimi zorunludur</p>
+              )}
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-4">
             <Button type="button" variant="outline" onClick={onClose} disabled={loading}>

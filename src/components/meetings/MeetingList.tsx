@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { toast } from '@/lib/toast'
 import { useLocale } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye, Calendar, Building2, User, FileText, Download, FileSpreadsheet, FileText as FileTextIcon, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -22,7 +23,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import { AutomationInfo } from '@/components/automation/AutomationInfo'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import { useSession } from 'next-auth/react'
@@ -84,12 +87,13 @@ interface Meeting {
 
 export default function MeetingList() {
   const locale = useLocale()
+  const router = useRouter()
   const { data: session } = useSession()
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('')
+  const [status, setStatus] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [userId, setUserId] = useState('') // Admin filtreleme için
+  const [userId, setUserId] = useState('all') // Admin filtreleme için
   const [formOpen, setFormOpen] = useState(false)
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null)
   const [expenseWarningOpen, setExpenseWarningOpen] = useState(false)
@@ -118,8 +122,10 @@ export default function MeetingList() {
   
   const apiUrl = `/api/meetings?${params.toString()}`
   const { data: meetings = [], isLoading, error, mutate: mutateMeetings } = useData<Meeting[]>(apiUrl, {
-    dedupingInterval: 5000,
-    revalidateOnFocus: false,
+    dedupingInterval: 5000, // 5 saniye cache (daha kısa - güncellemeler daha hızlı)
+    revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
+    keepPreviousData: true, // Hata durumunda önceki veriyi göster
+    fallbackData: [], // İlk yüklemede boş array göster
   })
 
   // Kullanıcı listesi (Admin filtreleme için) - sadece admin için çek
@@ -170,7 +176,7 @@ export default function MeetingList() {
       ])
     } catch (error: any) {
       console.error('Delete error:', error)
-      alert(error?.message || 'Silme işlemi başarısız oldu')
+      toast.error('Silinemedi', error?.message)
     }
   }
 
@@ -209,7 +215,7 @@ export default function MeetingList() {
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
     } catch (error) {
-      alert('Export işlemi başarısız oldu')
+      toast.warning('Dışa aktarılamadı')
     }
   }
 
@@ -219,6 +225,29 @@ export default function MeetingList() {
 
   return (
     <div className="space-y-6">
+      {/* Otomasyon Bilgileri */}
+      <AutomationInfo
+        title="Görüşmeler Modülü Otomasyonları"
+        automations={[
+          {
+            action: 'Görüşme oluşturulduğunda',
+            result: 'Hatırlatıcı bildirimi ayarlanır',
+            details: [
+              'Görüşme tarihinden 1 gün önce sistem içi kullanıcılara (Admin, Sales) bildirim gönderilir',
+              '"Aktiviteler" sayfasında görüşme kaydı görünür',
+            ],
+          },
+          {
+            action: 'Görüşme tamamlandığında',
+            result: 'Görüşme kaydı oluşturulur',
+            details: [
+              '"Aktiviteler" sayfasında tamamlanma kaydı görünür',
+              'İlgili modüle (Deal, Customer) bağlıysa bilgilendirme yapılır',
+            ],
+          },
+        ]}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -267,7 +296,7 @@ export default function MeetingList() {
             <SelectValue placeholder="Durum" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">Tümü</SelectItem>
+            <SelectItem value="all">Tümü</SelectItem>
             <SelectItem value="PLANNED">Planlandı</SelectItem>
             <SelectItem value="DONE">Tamamlandı</SelectItem>
             <SelectItem value="CANCELLED">İptal Edildi</SelectItem>
@@ -296,7 +325,7 @@ export default function MeetingList() {
               <SelectValue placeholder="Tüm kullanıcılar" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Tüm kullanıcılar</SelectItem>
+              <SelectItem value="all">Tüm kullanıcılar</SelectItem>
               {users.map((user: any) => (
                 <SelectItem key={user.id} value={user.id}>
                   {user.name}
@@ -323,7 +352,16 @@ export default function MeetingList() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {meetings.length === 0 ? (
+            {isLoading && meetings.length === 0 ? (
+              // Loading skeleton - her satır için
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={`skeleton-${i}`}>
+                  <TableCell colSpan={8}>
+                    <div className="h-12 bg-gray-100 animate-pulse rounded" />
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : meetings.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="text-center py-8 text-gray-500">
                   Görüşme bulunamadı
@@ -463,6 +501,9 @@ export default function MeetingList() {
               setNewMeetingId(savedMeeting.id)
               setExpenseWarningOpen(true)
             }
+            
+            // Yeni görüşme oluşturulduğunda detay sayfasına yönlendir
+            router.push(`/${locale}/meetings/${savedMeeting.id}`)
           }
           
           // Cache'i güncelle

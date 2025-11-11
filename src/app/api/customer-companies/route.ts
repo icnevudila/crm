@@ -1,63 +1,58 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 // Dynamic route - cache'i kapat (POST sonrası fresh data için)
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
+  // CRITICAL: Her zaman log ekle - 403 hatasını debug etmek için
+  console.log('CustomerCompanies GET - Request received:', {
+    url: request.url,
+    method: request.method,
+    timestamp: new Date().toISOString(),
+  })
+
   try {
-    // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('CustomerCompanies GET API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    // Session kontrolü - cache ile (30 dakika cache - çok daha hızlı!)
+    const { session, error: sessionError } = await getSafeSession(request)
+    
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('CustomerCompanies GET - No session or companyId:', { session: !!session, companyId: session?.user?.companyId })
-      }
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // SUPER_ADMIN bu sayfayı kullanmaz (kendi sayfası var)
-    // Sadece ADMIN ve normal kullanıcılar müşteri firmalarını görebilir
-    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
-    if (isSuperAdmin) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('CustomerCompanies GET - SuperAdmin tried to access:', { role: session.user.role })
-      }
-      return NextResponse.json({ error: 'Forbidden', message: 'SuperAdmin bu sayfayı kullanamaz' }, { status: 403 })
-    }
+    // KURUM İÇİ FİRMA YÖNETİMİ: Tüm kullanıcılar (SuperAdmin dahil) müşteri firmalarını görebilir
+    // SuperAdmin kontrolü kaldırıldı - herkes CustomerCompany görebilir
+    // NOT: Permissions kontrolü yapılmıyor - tüm kullanıcılar müşteri firmalarını görebilir
 
-    // Debug: Development'ta session bilgilerini logla
-    if (process.env.NODE_ENV === 'development') {
-      console.log('CustomerCompanies GET - Session info:', {
-        userId: session.user.id,
-        companyId: session.user.companyId,
-        role: session.user.role,
-      })
-    }
+    console.log('CustomerCompanies GET - Session validated:', {
+      userId: session.user.id,
+      companyId: session.user.companyId,
+      role: session.user.role,
+    })
 
     const { searchParams } = new URL(request.url)
     const searchParam = searchParams.get('search')
     const statusParam = searchParams.get('status')
 
+    // CRITICAL: Query başlamadan önce log ekle
+    console.log('CustomerCompanies GET - Starting query:', {
+      searchParam,
+      statusParam,
+      companyId: session.user.companyId,
+    })
+
     const supabase = getSupabaseWithServiceRole()
 
     // Query builder oluştur - önce müşteri firmalarını çek
+    // NOT: district kolonu veritabanında yok, bu yüzden select'te kullanmıyoruz
     let query = supabase
       .from('CustomerCompany')
-      .select('id, name, sector, city, status, createdAt', { count: 'exact' })
+      .select('id, name, sector, city, status, taxOffice, taxNumber, lastMeetingDate, createdAt, updatedAt, contactPerson, phone, countryCode, logoUrl, address, email, website, description', { count: 'exact' })
       .eq('companyId', session.user.companyId) // Sadece kendi şirketinin müşteri firmaları
       .order('name', { ascending: true })
       .limit(1000) // Maksimum 1000 kayıt - performans için
@@ -107,42 +102,58 @@ export async function GET(request: Request) {
       })
     }
 
-    // Her müşteri firması için müşteri sayısını çek (paralel)
-    const companies = await Promise.all(
-      (companiesData || []).map(async (company: any) => {
-        // Bu firmada çalışan müşteri sayısı
-        const { count: customersCount, error: customerCountError } = await supabase
-          .from('Customer')
-          .select('*', { count: 'exact', head: true })
-          .eq('customerCompanyId', company.id)
-          .eq('companyId', session.user.companyId)
+    // OPTİMİZE: N+1 query problemini çöz - tüm customer'ları tek seferde çek ve grupla
+    // Önceki: Her company için ayrı query (N+1 problem - çok yavaş!)
+    // Yeni: Tek query ile tüm customer'ları çek, JavaScript'te grupla (çok daha hızlı!)
+    const { data: allCustomers, error: customersError } = await supabase
+      .from('Customer')
+      .select('id, customerCompanyId')
+      .eq('companyId', session.user.companyId)
 
-        if (customerCountError && process.env.NODE_ENV === 'development') {
-          console.warn('CustomerCompanies GET - Customer count error:', customerCountError)
+    if (customersError && process.env.NODE_ENV === 'development') {
+      console.warn('CustomerCompanies GET - Customers fetch error:', customersError)
+    }
+
+    // Customer sayılarını grupla (companyId bazında)
+    const customerCounts = new Map<string, number>()
+    if (allCustomers) {
+      allCustomers.forEach((customer) => {
+        if (customer.customerCompanyId) {
+          customerCounts.set(
+            customer.customerCompanyId,
+            (customerCounts.get(customer.customerCompanyId) || 0) + 1
+          )
         }
-
-        return {
-          id: company.id,
-          name: company.name,
-          sector: company.sector,
-          city: company.city,
-          status: company.status,
-          createdAt: company.createdAt,
-          stats: {
-            customers: customersCount || 0,
-          },
-        }
-      })
-    )
-
-    // Debug: Development'ta log ekle - veritabanından gelen veriyi göster
-    if (process.env.NODE_ENV === 'development') {
-      console.log('CustomerCompanies GET - Final companies:', {
-        count: companies.length,
-        companies: companies.map(c => ({ id: c.id, name: c.name, status: c.status })),
-        rawDataCount: companiesData?.length || 0,
       })
     }
+
+    // Company'leri map et ve customer sayılarını ekle
+    const companies = (companiesData || []).map((company: any) => ({
+      id: company.id,
+      name: company.name,
+      sector: company.sector || null,
+      city: company.city || null,
+      status: company.status,
+      taxOffice: company.taxOffice || null,
+      taxNumber: company.taxNumber || null,
+      lastMeetingDate: company.lastMeetingDate || null,
+      contactPerson: company.contactPerson || null,
+      phone: company.phone || null,
+      countryCode: company.countryCode || null,
+      logoUrl: company.logoUrl || null,
+      createdAt: company.createdAt,
+      stats: {
+        customers: customerCounts.get(company.id) || 0,
+      },
+    }))
+
+    // CRITICAL: Her zaman log ekle - 403 hatasını debug etmek için
+    console.log('CustomerCompanies GET - Success:', {
+      count: companies.length,
+      companies: companies.map(c => ({ id: c.id, name: c.name, status: c.status })),
+      rawDataCount: companiesData?.length || 0,
+      companyId: session.user.companyId,
+    })
 
     // Cache headers - POST sonrası fresh data için cache'i kapat
     // NOT: dynamic = 'force-dynamic' ile cache zaten kapalı
@@ -187,11 +198,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // SUPER_ADMIN bu sayfayı kullanmaz
-    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
-    if (isSuperAdmin) {
-      return NextResponse.json({ error: 'Forbidden', message: 'SuperAdmin bu sayfayı kullanamaz' }, { status: 403 })
-    }
+    // KURUM İÇİ FİRMA YÖNETİMİ: Tüm kullanıcılar (SuperAdmin dahil) müşteri firması ekleyebilir
+    // SuperAdmin kontrolü kaldırıldı - herkes CustomerCompany ekleyebilir
 
     // Request body'yi parse et - hata yakalama ile
     let body
@@ -207,10 +215,34 @@ export async function POST(request: Request) {
       )
     }
     
-    // Body validation - name zorunlu
+    // Body validation - zorunlu alanlar: name, contactPerson, phone, taxOffice, taxNumber
     if (!body.name || typeof body.name !== 'string' || body.name.trim().length === 0) {
       return NextResponse.json(
         { error: 'Validation error', message: 'Firma adı gereklidir' },
+        { status: 400 }
+      )
+    }
+    if (!body.contactPerson || typeof body.contactPerson !== 'string' || body.contactPerson.trim().length === 0) {
+      return NextResponse.json(
+        { error: 'Validation error', message: 'Kontak kişi gereklidir' },
+        { status: 400 }
+      )
+    }
+    if (!body.phone || typeof body.phone !== 'string' || body.phone.trim().length === 0) {
+      return NextResponse.json(
+        { error: 'Validation error', message: 'Telefon gereklidir' },
+        { status: 400 }
+      )
+    }
+    if (!body.taxOffice || typeof body.taxOffice !== 'string' || body.taxOffice.trim().length === 0) {
+      return NextResponse.json(
+        { error: 'Validation error', message: 'Vergi dairesi gereklidir' },
+        { status: 400 }
+      )
+    }
+    if (!body.taxNumber || typeof body.taxNumber !== 'string' || body.taxNumber.trim().length === 0) {
+      return NextResponse.json(
+        { error: 'Validation error', message: 'Vergi numarası gereklidir' },
         { status: 400 }
       )
     }
@@ -225,20 +257,24 @@ export async function POST(request: Request) {
       .insert([
         {
           name: body.name,
+          contactPerson: body.contactPerson || null,
+          phone: body.phone || null,
+          countryCode: body.countryCode || '+90',
+          taxOffice: body.taxOffice || null,
+          taxNumber: body.taxNumber || null,
           sector: body.sector || null,
           city: body.city || null,
+          // district kolonu veritabanında yok, bu yüzden kaldırıldı
           address: body.address || null,
-          phone: body.phone || null,
           email: body.email || null,
           website: body.website || null,
-          taxNumber: body.taxNumber || null,
-          taxOffice: body.taxOffice || null,
           description: body.description || null,
-          status: body.status || 'ACTIVE',
+          status: body.status || 'POT',
+          logoUrl: body.logoUrl || null,
           companyId: session.user.companyId, // Multi-tenant: Hangi CRM şirketine ait
         },
       ])
-      .select()
+      .select('id, name, sector, city, status, taxOffice, taxNumber, lastMeetingDate, createdAt, updatedAt, contactPerson, phone, countryCode, logoUrl, address, email, website, description, companyId')
       .single()
 
     if (error) {

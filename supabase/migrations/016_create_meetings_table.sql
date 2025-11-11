@@ -19,7 +19,21 @@ CREATE TABLE IF NOT EXISTS "Meeting" (
   "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 2. Finance tablosuna Meeting ilişkisi için relatedTo ve relatedId kolonları ekle (eğer yoksa)
+-- 2. MeetingExpense tablosu oluştur
+CREATE TABLE IF NOT EXISTS "MeetingExpense" (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  "meetingId" UUID NOT NULL REFERENCES "Meeting"(id) ON DELETE CASCADE,
+  "expenseType" VARCHAR(20) NOT NULL, -- FUEL, ACCOMMODATION, FOOD, OTHER
+  amount DECIMAL(15, 2) NOT NULL,
+  description TEXT,
+  "expenseDate" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  "companyId" UUID NOT NULL REFERENCES "Company"(id) ON DELETE CASCADE,
+  "createdBy" UUID REFERENCES "User"(id) ON DELETE SET NULL,
+  "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- 3. Finance tablosuna Meeting ilişkisi için relatedTo ve relatedId kolonları ekle (eğer yoksa)
 -- NOT: Finance tablosu zaten var, sadece Meeting ilişkisi için kolonları kontrol et
 DO $$
 BEGIN
@@ -41,12 +55,15 @@ BEGIN
 END $$;
 
 -- 3. Index'ler (performans için)
+-- Meeting tablosu için index'ler
 CREATE INDEX IF NOT EXISTS idx_meeting_company ON "Meeting"("companyId");
 CREATE INDEX IF NOT EXISTS idx_meeting_customer ON "Meeting"("customerId");
 CREATE INDEX IF NOT EXISTS idx_meeting_deal ON "Meeting"("dealId");
 CREATE INDEX IF NOT EXISTS idx_meeting_date ON "Meeting"("meetingDate");
 CREATE INDEX IF NOT EXISTS idx_meeting_status ON "Meeting"("status");
 CREATE INDEX IF NOT EXISTS idx_meeting_created_by ON "Meeting"("createdBy");
+
+-- MeetingExpense tablosu için index'ler (tablo oluşturulduktan sonra)
 CREATE INDEX IF NOT EXISTS idx_meeting_expense_meeting ON "MeetingExpense"("meetingId");
 CREATE INDEX IF NOT EXISTS idx_meeting_expense_company ON "MeetingExpense"("companyId");
 CREATE INDEX IF NOT EXISTS idx_meeting_expense_type ON "MeetingExpense"("expenseType");

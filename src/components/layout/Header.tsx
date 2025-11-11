@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, memo, useCallback, useEffect } from 'react'
-import { useSession, signOut } from 'next-auth/react'
-import { useRouter } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { useLocale } from 'next-intl'
-import { Bell, Search, User, LogOut, Settings } from 'lucide-react'
+import NotificationMenu from '@/components/NotificationMenu'
+import Breadcrumbs from '@/components/layout/Breadcrumbs'
+import LocaleSwitcher from '@/components/layout/LocaleSwitcher'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -14,139 +14,115 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Input } from '@/components/ui/input'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import LocaleSwitcher from './LocaleSwitcher'
+import { User, LogOut, Settings, HelpCircle, BookOpen, MessageCircle } from 'lucide-react'
+import { signOut } from 'next-auth/react'
 import Link from 'next/link'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
-function Header() {
+export default function Header() {
   const { data: session } = useSession()
-  const router = useRouter()
   const locale = useLocale()
-  const [searchQuery, setSearchQuery] = useState('')
-  const [mounted, setMounted] = useState(false)
-  
-  // Hydration hatasını önlemek için client-side'da set et
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  const handleLogout = useCallback(async () => {
-    await signOut({ redirect: false })
-    router.push('/login')
-    // router.refresh() kaldırdık - performans için
-  }, [router])
 
   return (
-    <header className="fixed top-0 right-0 z-30 ml-64 flex h-16 items-center border-b bg-white px-6 shadow-sm">
-      <div className="flex w-full items-center justify-between">
-        {/* Search */}
-        <div className="flex flex-1 items-center gap-4">
-          <div className="relative w-full max-w-md">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-            <Input
-              type="search"
-              placeholder="Ara..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-        </div>
+    <header className="fixed top-0 left-64 right-0 h-16 bg-white border-b border-gray-200 z-40 flex items-center justify-between px-6">
+      <div className="flex items-center gap-4 flex-1">
+        <Breadcrumbs items={[]} />
+      </div>
 
-        {/* Right side */}
-        <div className="flex items-center gap-4">
-          {/* Locale Switcher */}
-          <LocaleSwitcher />
+      <div className="flex items-center gap-3">
+        {/* Bildirimler */}
+        {session?.user?.id && (
+          <NotificationMenu userId={session.user.id} />
+        )}
 
-          {/* Notifications */}
+        {/* Dil Değiştirici */}
+        <LocaleSwitcher />
+
+        {/* Kullanıcı Menüsü */}
+        {session?.user && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="relative"
-                aria-label="Bildirimleri görüntüle"
-              >
-                <Bell className="h-5 w-5" />
-                <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-accent-500" aria-hidden="true"></span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80">
-              <DropdownMenuLabel>Bildirimler</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <div className="max-h-96 overflow-y-auto">
-                <div className="p-4 text-center text-gray-500 text-sm">
-                  Henüz bildirim yok
-                </div>
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* User menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="rounded-full"
-                aria-label={mounted ? `${session?.user?.name || 'Kullanıcı'} menüsünü aç` : 'Kullanıcı menüsünü aç'}
-                suppressHydrationWarning
-              >
+              <Button variant="ghost" size="icon" className="rounded-full hover:bg-indigo-50 transition-colors">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage 
-                    src={mounted ? ((session?.user as any)?.image || '') : ''} 
-                    alt={mounted ? (session?.user?.name || 'Kullanıcı avatarı') : 'Kullanıcı avatarı'} 
-                  />
-                  <AvatarFallback 
-                    className="bg-gradient-to-r from-primary-600 to-purple-600 text-white"
-                    suppressHydrationWarning
-                  >
-                    {mounted ? (session?.user?.name?.charAt(0).toUpperCase() || 'U') : 'U'}
+                  <AvatarImage src={(session.user as any)?.image || ''} alt={session.user.name || ''} />
+                  <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-sm">
+                    {session.user.name?.charAt(0).toUpperCase() || 'U'}
                   </AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-64">
               <DropdownMenuLabel>
-                <div className="flex flex-col">
-                  <span className="font-medium">{session?.user?.name}</span>
-                  <span className="text-xs text-gray-500">{session?.user?.email}</span>
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium">{session.user.name}</p>
+                  <p className="text-xs text-muted-foreground">{session.user.email}</p>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <Link href={`/${locale}/profile`} prefetch={true}>
-                <DropdownMenuItem asChild>
-                  <div className="cursor-pointer">
-                    <User className="mr-2 h-4 w-4" />
-                    Profil
-                  </div>
-                </DropdownMenuItem>
-              </Link>
-              <Link href={`/${locale}/settings`} prefetch={true}>
-                <DropdownMenuItem asChild>
-                  <div className="cursor-pointer">
-                    <Settings className="mr-2 h-4 w-4" />
-                    Ayarlar
-                  </div>
-                </DropdownMenuItem>
-              </Link>
+              <DropdownMenuItem asChild>
+                <Link href={`/${locale}/profile`} className="flex items-center cursor-pointer">
+                  <User className="mr-2 h-4 w-4" />
+                  Profil
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={`/${locale}/settings`} className="flex items-center cursor-pointer">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Ayarlar
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href={`/${locale}/help`} className="flex items-center cursor-pointer">
+                  <HelpCircle className="mr-2 h-4 w-4" />
+                  Yardım
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={`/${locale}/kullanim-kilavuzu`} className="flex items-center cursor-pointer">
+                  <BookOpen className="mr-2 h-4 w-4" />
+                  Kullanım Kılavuzu
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href={`/${locale}/faq`} className="flex items-center cursor-pointer">
+                  <MessageCircle className="mr-2 h-4 w-4" />
+                  SSS
+                </Link>
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="text-red-600 cursor-pointer"
-                onClick={handleLogout}
+                onClick={() => signOut({ callbackUrl: `/${locale}/login` })}
+                className="text-red-600 focus:text-red-600 cursor-pointer"
               >
                 <LogOut className="mr-2 h-4 w-4" />
                 Çıkış Yap
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
+        )}
       </div>
     </header>
   )
 }
 
-// Memoize Header - re-render'ları önle
-export default memo(Header)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

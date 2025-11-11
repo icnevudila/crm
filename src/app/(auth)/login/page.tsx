@@ -3,10 +3,8 @@
 import React, { useState, useEffect, memo, useCallback } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { useQuery } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import {
-  Building2,
   Mail,
   Lock,
   Loader2,
@@ -23,52 +21,33 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
-interface Company {
-  id: string
-  name: string
-  sector: string
-  city: string
-}
-
-// Optimize edilmiş fetch - agresif cache
-async function fetchCompanies(): Promise<Company[]> {
-  const res = await fetch('/api/companies', {
-    cache: 'force-cache', // Aggressive cache
-    next: { revalidate: 300 }, // 5 dakika cache
-  })
-  if (!res.ok) throw new Error('Failed to fetch companies')
-  return res.json()
+// Premium Animated Title - Premium Sky Blue & Deep Space Blue
+function AnimatedTitle({ text }: { text: string }) {
+  return (
+    <span
+      className="bg-clip-text text-transparent"
+      style={{
+        backgroundImage: 'linear-gradient(to right, #00AEEF, #1890FF, #1B263B)',
+        animation: 'color-shift 4s ease-in-out infinite',
+        backgroundSize: '200% 100%',
+        willChange: 'background-position',
+      }}
+    >
+      {text}
+    </span>
+  )
 }
 
 function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [companyId, setCompanyId] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [mounted, setMounted] = useState(false)
-
-  // Şirketleri çek - agresif cache (5 dakika)
-  const { data: companies = [], isLoading: companiesLoading, error: companiesError } = useQuery({
-    queryKey: ['companies'],
-    queryFn: fetchCompanies,
-    retry: 1, // Sadece 1 retry (hızlı)
-    staleTime: 5 * 60 * 1000, // 5 dakika cache
-    gcTime: 10 * 60 * 1000, // 10 dakika garbage collection
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-  })
 
   useEffect(() => {
     setMounted(true)
@@ -87,7 +66,6 @@ function LoginPage() {
       const result = await signIn('credentials', {
         email,
         password,
-        companyId,
         redirect: false,
       })
 
@@ -109,7 +87,7 @@ function LoginPage() {
       setError('Giriş yapılırken bir hata oluştu')
       setLoading(false)
     }
-  }, [email, password, companyId, router])
+  }, [email, password, router])
 
   // Animation variants - optimize edilmiş
   const containerVariants = {
@@ -136,12 +114,84 @@ function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-50 via-white to-secondary-50 p-4 relative overflow-hidden">
-      {/* Animated background gradient - performans için will-change */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ willChange: 'transform' }}>
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-primary-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob" />
-        <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-secondary-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-2000" />
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-accent-300 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-blob animation-delay-4000" />
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50 p-4 relative overflow-hidden">
+      {/* Premium Animated Background - Premium Güven Veren Mavi Tema */}
+      <div 
+        className="absolute inset-0 overflow-hidden pointer-events-none" 
+        style={{ 
+          willChange: 'transform',
+          contain: 'layout style paint',
+          isolation: 'isolate',
+        }}
+      >
+        {/* Premium Animated gradient blobs - Sky Blue & Deep Space Blue */}
+        <div 
+          className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full mix-blend-multiply filter blur-3xl opacity-20"
+          style={{
+            background: 'linear-gradient(135deg, #00AEEF, #1890FF)',
+            animation: 'blob-premium 20s ease-in-out infinite',
+            transform: 'translate3d(0, 0, 0)',
+            willChange: 'transform',
+            contain: 'layout style paint',
+          }}
+        />
+        <div 
+          className="absolute -bottom-40 -left-40 w-[600px] h-[600px] rounded-full mix-blend-multiply filter blur-3xl opacity-20"
+          style={{
+            background: 'linear-gradient(135deg, #1890FF, #1B263B)',
+            animation: 'blob-premium 25s ease-in-out infinite 2s',
+            transform: 'translate3d(0, 0, 0)',
+            willChange: 'transform',
+            contain: 'layout style paint',
+          }}
+        />
+        <div 
+          className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full mix-blend-multiply filter blur-3xl opacity-15"
+          style={{
+            background: 'linear-gradient(135deg, #1B263B, #00AEEF)',
+            animation: 'blob-premium 30s ease-in-out infinite 4s',
+            transform: 'translate3d(0, 0, 0)',
+            willChange: 'transform',
+            contain: 'layout style paint',
+          }}
+        />
+        {/* Floating particles effect - Premium Sky Blue & Deep Space Blue */}
+        <div 
+          className="absolute top-1/4 left-1/4 w-2 h-2 rounded-full opacity-30 blur-sm"
+          style={{
+            background: '#00AEEF',
+            animation: 'blob-premium 15s ease-in-out infinite 1s',
+            transform: 'translate3d(0, 0, 0)',
+            willChange: 'transform',
+          }}
+        />
+        <div 
+          className="absolute bottom-1/4 right-1/4 w-3 h-3 rounded-full opacity-25 blur-sm"
+          style={{
+            background: '#1890FF',
+            animation: 'blob-premium 18s ease-in-out infinite 3s',
+            transform: 'translate3d(0, 0, 0)',
+            willChange: 'transform',
+          }}
+        />
+        <div 
+          className="absolute top-1/2 right-1/3 w-1.5 h-1.5 rounded-full opacity-30 blur-sm"
+          style={{
+            background: '#1B263B',
+            animation: 'blob-premium 22s ease-in-out infinite 5s',
+            transform: 'translate3d(0, 0, 0)',
+            willChange: 'transform',
+          }}
+        />
+        {/* Subtle grid pattern overlay */}
+        <div 
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage: 'linear-gradient(to right, #000 1px, transparent 1px), linear-gradient(to bottom, #000 1px, transparent 1px)',
+            backgroundSize: '32px 32px',
+            willChange: 'auto',
+          }}
+        />
       </div>
 
       <motion.div
@@ -151,112 +201,137 @@ function LoginPage() {
         className="relative z-10 w-full max-w-md"
       >
         <motion.div variants={itemVariants}>
-          <Card className="border-0 shadow-2xl bg-white/95 backdrop-blur-sm hover:shadow-3xl transition-all duration-300">
-            <CardHeader className="space-y-4 text-center pb-6">
-              <motion.div
-                initial={{ scale: 0, rotate: -180 }}
-                animate={mounted ? { scale: 1, rotate: 0 } : { scale: 0, rotate: -180 }}
-                transition={{ type: 'spring', duration: 0.6, delay: 0.2 }}
-                className="inline-flex items-center justify-center w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-r from-primary-600 to-secondary-600 shadow-xl"
-              >
-                <Sparkles className="h-8 w-8 text-white" />
-              </motion.div>
-              <CardTitle className="text-3xl font-bold bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">
-                CRM Enterprise V3
-              </CardTitle>
-              <CardDescription className="text-base text-gray-600">
-                Hesabınıza giriş yapın ve işinizi yönetmeye başlayın
-              </CardDescription>
-            </CardHeader>
+          {/* Premium Glassmorphism Card with Glow */}
+          <div className="relative">
+            {/* Glow effect - Premium Sky Blue & Deep Space Blue */}
+            <div 
+              className="absolute -inset-1 rounded-2xl blur-2xl opacity-20 group-hover:opacity-30 transition-opacity duration-500"
+              style={{
+                background: 'linear-gradient(to right, #00AEEF, #1890FF, #1B263B)',
+                transform: 'translate3d(0, 0, 0)',
+                willChange: 'opacity',
+                isolation: 'isolate',
+              }}
+            />
+            <Card 
+              className="relative border-0 shadow-2xl bg-white/90 backdrop-blur-xl hover:bg-white/95 transition-all duration-500 overflow-hidden"
+              style={{
+                contain: 'layout style paint',
+                isolation: 'isolate',
+              }}
+            >
+              {/* Shine effect on hover - CSS only */}
+              <div 
+                className="absolute inset-0 opacity-0 hover:opacity-100 transition-opacity duration-700 pointer-events-none"
+                style={{
+                  background: 'linear-gradient(110deg, transparent 40%, rgba(255,255,255,0.3) 50%, transparent 60%)',
+                  transform: 'translate3d(-100%, 0, 0)',
+                  transition: 'transform 1s ease-in-out, opacity 0.7s ease-in-out',
+                  willChange: 'transform, opacity',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translate3d(100%, 0, 0)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translate3d(-100%, 0, 0)'
+                }}
+              />
+              
+              <CardHeader className="space-y-4 text-center pb-6 relative z-10">
+                {/* Premium Icon with animated gradient */}
+                <motion.div
+                  initial={{ scale: 0, rotate: -180 }}
+                  animate={mounted ? { scale: 1, rotate: 0 } : { scale: 0, rotate: -180 }}
+                  transition={{ type: 'spring', duration: 0.6, delay: 0.2, bounce: 0.4 }}
+                  className="relative inline-flex items-center justify-center w-20 h-20 mx-auto mb-4 rounded-2xl overflow-hidden group"
+                  style={{
+                    transform: 'translate3d(0, 0, 0)',
+                    willChange: 'transform',
+                  }}
+                >
+                  {/* Animated gradient background - Premium Sky Blue */}
+                  <div 
+                    className="absolute inset-0 bg-[length:200%_100%]"
+                    style={{
+                      background: 'linear-gradient(to right, #00AEEF, #1890FF, #096DD9)',
+                      animation: 'gradient-shift 5s ease-in-out infinite',
+                      transform: 'translate3d(0, 0, 0)',
+                      willChange: 'background-position',
+                    }}
+                  />
+                  {/* Glow effect - Premium Sky Blue */}
+                  <div className="absolute inset-0 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{ background: 'linear-gradient(to right, rgba(0, 174, 239, 0.5), rgba(24, 144, 255, 0.5), rgba(9, 109, 217, 0.5))' }} />
+                  <Sparkles className="relative z-10 h-10 w-10 text-white drop-shadow-lg" />
+                </motion.div>
+                <CardTitle className="text-4xl font-extrabold tracking-tight">
+                  <AnimatedTitle text="CRM Enterprise V3" />
+                </CardTitle>
+                <CardDescription className="text-base text-gray-600 font-medium">
+                  Hesabınıza giriş yapın ve işinizi yönetmeye başlayın
+                </CardDescription>
+              </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-5">
-                {/* Company Selection */}
-                <motion.div variants={itemVariants} className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <Building2 className="h-4 w-4 text-primary-600" />
-                    Şirket
-                  </label>
-                  <Select
-                    value={companyId}
-                    onValueChange={setCompanyId}
-                    disabled={companiesLoading || loading}
-                  >
-                    <SelectTrigger className="w-full h-11 border-2 focus:border-primary-500 transition-colors hover:border-primary-400">
-                      <SelectValue placeholder="Şirket seçin" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {companies.map((company) => (
-                        <SelectItem key={company.id} value={company.id}>
-                          <div className="flex items-center gap-2">
-                            <Building2 className="h-4 w-4 text-primary-600" />
-                            <span className="font-medium">{company.name}</span>
-                            <span className="text-xs text-gray-500">({company.city})</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {companiesError && (
-                    <motion.p
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="text-xs text-red-600 mt-1 flex items-center gap-1"
-                    >
-                      <Shield className="h-3 w-3" />
-                      Şirketler yüklenemedi. Lütfen sayfayı yenileyin.
-                    </motion.p>
-                  )}
-                  {companiesLoading && (
-                    <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      Şirketler yükleniyor...
-                    </p>
-                  )}
-                </motion.div>
-
-                {/* Email */}
+                {/* Email - Premium Input */}
                 <motion.div variants={itemVariants} className="space-y-2">
                   <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                     <Mail className="h-4 w-4 text-primary-600" />
                     E-posta
                   </label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+                  <div className="relative group">
+                    <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-600 transition-colors z-10" />
                     <Input
                       type="email"
                       placeholder="ornek@email.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       disabled={loading}
-                      className="pl-10 h-11 border-2 focus:border-primary-500 transition-colors hover:border-primary-400"
+                      className="pl-10 h-12 border-2 border-gray-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all duration-300 hover:border-primary-400 bg-white/80 backdrop-blur-sm"
                       required
+                    />
+                    {/* Focus glow effect - Premium Sky Blue */}
+                    <div 
+                      className="absolute inset-0 rounded-md opacity-0 focus-within:opacity-100 transition-opacity duration-300 pointer-events-none"
+                      style={{ 
+                        background: 'linear-gradient(to right, rgba(0, 174, 239, 0), rgba(0, 174, 239, 0.1), rgba(0, 174, 239, 0))',
+                        transform: 'translate3d(0, 0, 0)' 
+                      }}
                     />
                   </div>
                 </motion.div>
 
-                {/* Password */}
+                {/* Password - Premium Input */}
                 <motion.div variants={itemVariants} className="space-y-2">
                   <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                     <Lock className="h-4 w-4 text-primary-600" />
                     Şifre
                   </label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+                  <div className="relative group">
+                    <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-600 transition-colors z-10" />
                     <Input
                       type={showPassword ? 'text' : 'password'}
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       disabled={loading}
-                      className="pl-10 pr-10 h-11 border-2 focus:border-primary-500 transition-colors hover:border-primary-400"
+                      className="pl-10 pr-10 h-12 border-2 border-gray-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all duration-300 hover:border-primary-400 bg-white/80 backdrop-blur-sm"
                       required
+                    />
+                    {/* Focus glow effect - Premium Sky Blue */}
+                    <div 
+                      className="absolute inset-0 rounded-md opacity-0 focus-within:opacity-100 transition-opacity duration-300 pointer-events-none"
+                      style={{ 
+                        background: 'linear-gradient(to right, rgba(0, 174, 239, 0), rgba(0, 174, 239, 0.1), rgba(0, 174, 239, 0))',
+                        transform: 'translate3d(0, 0, 0)' 
+                      }}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary-600 focus:outline-none transition-colors z-10"
                       disabled={loading}
                       aria-label={showPassword ? 'Şifreyi gizle' : 'Şifreyi göster'}
+                      style={{ transform: 'translate3d(0, -50%, 0)' }}
                     >
                       {showPassword ? (
                         <EyeOff className="h-5 w-5" />
@@ -279,25 +354,61 @@ function LoginPage() {
                   </motion.div>
                 )}
 
-                {/* Submit Button */}
+                {/* Submit Button - Premium with Shine */}
                 <motion.div variants={itemVariants}>
-                  <Button
-                    type="submit"
-                    className="w-full h-12 bg-gradient-to-r from-primary-600 to-secondary-600 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                    disabled={loading || !companyId}
-                  >
-                    {loading ? (
-                      <>
-                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                        Giriş yapılıyor...
-                      </>
-                    ) : (
-                      <>
-                        Giriş Yap
-                        <ArrowRight className="ml-2 h-5 w-5" />
-                      </>
-                    )}
-                  </Button>
+                  <div className="relative group">
+                    {/* Glow effect - Premium Sky Blue */}
+                    <div 
+                      className="absolute -inset-1 rounded-lg blur-lg opacity-30 group-hover:opacity-50 transition-opacity duration-500"
+                      style={{
+                        background: 'linear-gradient(to right, #00AEEF, #1890FF, #096DD9)',
+                        transform: 'translate3d(0, 0, 0)',
+                        willChange: 'opacity',
+                      }}
+                    />
+                    <Button
+                      type="submit"
+                      className="relative w-full h-14 text-white font-bold text-base shadow-2xl hover:shadow-primary-500/50 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 overflow-hidden"
+                      disabled={loading}
+                      style={{
+                        background: 'linear-gradient(to right, #00AEEF, #1890FF, #096DD9)',
+                        transform: 'translate3d(0, 0, 0)',
+                        willChange: 'transform',
+                      }}
+                    >
+                      {/* Animated gradient overlay - Premium Sky Blue */}
+                      <div 
+                        className="absolute inset-0 bg-[length:200%_100%] opacity-0 group-hover:opacity-100 transition-opacity duration-500"
+                        style={{
+                          background: 'linear-gradient(to right, #00AEEF, #1890FF, #096DD9, #00AEEF)',
+                          animation: 'gradient-shift 3s ease-in-out infinite',
+                          transform: 'translate3d(0, 0, 0)',
+                          willChange: 'background-position',
+                        }}
+                      />
+                      {/* Shine effect */}
+                      <div 
+                        className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                        style={{
+                          transform: 'translate3d(-100%, 0, 0)',
+                          willChange: 'transform',
+                        }}
+                      />
+                      <span className="relative z-10 flex items-center justify-center gap-2">
+                        {loading ? (
+                          <>
+                            <Loader2 className="h-5 w-5 animate-spin" />
+                            Giriş yapılıyor...
+                          </>
+                        ) : (
+                          <>
+                            Giriş Yap
+                            <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                          </>
+                        )}
+                      </span>
+                    </Button>
+                  </div>
                 </motion.div>
 
                 {/* Demo Info */}
@@ -321,37 +432,114 @@ function LoginPage() {
               </form>
             </CardContent>
           </Card>
+          </div>
 
-          {/* Features Preview */}
+          {/* Features Preview - Premium Cards */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={mounted ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
             transition={{ delay: 0.6 }}
-            className="mt-6 grid grid-cols-3 gap-4 text-center"
+            className="mt-8 grid grid-cols-3 gap-4 text-center"
           >
             <motion.div
-              whileHover={{ scale: 1.05, y: -2 }}
-              className="p-4 rounded-xl bg-white/80 backdrop-blur-sm border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer"
+              whileHover={{ scale: 1.08, y: -4 }}
+              className="relative p-5 rounded-2xl bg-white/70 backdrop-blur-xl border border-white/30 shadow-xl hover:shadow-2xl transition-all duration-500 cursor-pointer overflow-hidden group"
+              style={{
+                transform: 'translate3d(0, 0, 0)',
+                willChange: 'transform',
+                contain: 'layout style paint',
+              }}
             >
-              <Zap className="h-6 w-6 text-primary-600 mx-auto mb-2" />
-              <p className="text-xs font-semibold text-gray-700">Hızlı</p>
-              <p className="text-xs text-gray-500 mt-1">&lt;300ms</p>
+              {/* Gradient background on hover - Premium Sky Blue */}
+              <div 
+                className="absolute inset-0 transition-all duration-500"
+                style={{ 
+                  background: 'linear-gradient(to bottom right, rgba(0, 174, 239, 0), rgba(24, 144, 255, 0))',
+                  transform: 'translate3d(0, 0, 0)' 
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(0, 174, 239, 0.1), rgba(24, 144, 255, 0.1))'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(0, 174, 239, 0), rgba(24, 144, 255, 0))'
+                }}
+              />
+              <motion.div
+                whileHover={{ rotate: 360 }}
+                transition={{ duration: 0.6 }}
+                className="relative z-10"
+                style={{ transform: 'translate3d(0, 0, 0)' }}
+              >
+                <Zap className="h-7 w-7 text-primary-600 mx-auto mb-3 drop-shadow-lg" />
+                <p className="text-sm font-bold text-gray-800">Hızlı</p>
+                <p className="text-xs text-gray-600 mt-1 font-medium">&lt;300ms</p>
+              </motion.div>
             </motion.div>
             <motion.div
-              whileHover={{ scale: 1.05, y: -2 }}
-              className="p-4 rounded-xl bg-white/80 backdrop-blur-sm border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer"
+              whileHover={{ scale: 1.08, y: -4 }}
+              className="relative p-5 rounded-2xl bg-white/70 backdrop-blur-xl border border-white/30 shadow-xl hover:shadow-2xl transition-all duration-500 cursor-pointer overflow-hidden group"
+              style={{
+                transform: 'translate3d(0, 0, 0)',
+                willChange: 'transform',
+                contain: 'layout style paint',
+              }}
             >
-              <Shield className="h-6 w-6 text-primary-600 mx-auto mb-2" />
-              <p className="text-xs font-semibold text-gray-700">Güvenli</p>
-              <p className="text-xs text-gray-500 mt-1">Enterprise</p>
+              <div 
+                className="absolute inset-0 transition-all duration-500"
+                style={{ 
+                  background: 'linear-gradient(to bottom right, rgba(24, 144, 255, 0), rgba(27, 38, 59, 0))',
+                  transform: 'translate3d(0, 0, 0)' 
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(24, 144, 255, 0.1), rgba(27, 38, 59, 0.1))'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(24, 144, 255, 0), rgba(27, 38, 59, 0))'
+                }}
+              />
+              <motion.div
+                whileHover={{ rotate: 360 }}
+                transition={{ duration: 0.6 }}
+                className="relative z-10"
+                style={{ transform: 'translate3d(0, 0, 0)' }}
+              >
+                <Shield className="h-7 w-7 text-primary-500 mx-auto mb-3 drop-shadow-lg" />
+                <p className="text-sm font-bold text-gray-800">Güvenli</p>
+                <p className="text-xs text-gray-600 mt-1 font-medium">Enterprise</p>
+              </motion.div>
             </motion.div>
             <motion.div
-              whileHover={{ scale: 1.05, y: -2 }}
-              className="p-4 rounded-xl bg-white/80 backdrop-blur-sm border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer"
+              whileHover={{ scale: 1.08, y: -4 }}
+              className="relative p-5 rounded-2xl bg-white/70 backdrop-blur-xl border border-white/30 shadow-xl hover:shadow-2xl transition-all duration-500 cursor-pointer overflow-hidden group"
+              style={{
+                transform: 'translate3d(0, 0, 0)',
+                willChange: 'transform',
+                contain: 'layout style paint',
+              }}
             >
-              <TrendingUp className="h-6 w-6 text-primary-600 mx-auto mb-2" />
-              <p className="text-xs font-semibold text-gray-700">Güvenilir</p>
-              <p className="text-xs text-gray-500 mt-1">%99.9</p>
+              <div 
+                className="absolute inset-0 transition-all duration-500"
+                style={{ 
+                  background: 'linear-gradient(to bottom right, rgba(27, 38, 59, 0), rgba(0, 174, 239, 0))',
+                  transform: 'translate3d(0, 0, 0)' 
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(27, 38, 59, 0.1), rgba(0, 174, 239, 0.1))'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(27, 38, 59, 0), rgba(0, 174, 239, 0))'
+                }}
+              />
+              <motion.div
+                whileHover={{ rotate: 360 }}
+                transition={{ duration: 0.6 }}
+                className="relative z-10"
+                style={{ transform: 'translate3d(0, 0, 0)' }}
+              >
+                <TrendingUp className="h-7 w-7 text-primary-500 mx-auto mb-3 drop-shadow-lg" />
+                <p className="text-sm font-bold text-gray-800">Güvenilir</p>
+                <p className="text-xs text-gray-600 mt-1 font-medium">%99.9</p>
+              </motion.div>
             </motion.div>
           </motion.div>
         </motion.div>
@@ -362,3 +550,4 @@ function LoginPage() {
 
 // Memoize - re-render'ları önle
 export default memo(LoginPage)
+

@@ -26,6 +26,20 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Permission check - canRead kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canRead = await hasPermission('product', 'read', session.user.id)
+    if (!canRead) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Ürün görüntüleme yetkiniz yok' },
+        { status: 403 }
+      )
+    }
+
+    // SuperAdmin tüm şirketlerin verilerini görebilir
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    const companyId = session.user.companyId
+
     const { id } = await params
     const supabase = getSupabaseWithServiceRole()
 
@@ -37,11 +51,17 @@ export async function GET(
     // migration dosyaları çalıştırılmadıysa olmayabilir, bu yüzden sadece temel kolonları kullanıyoruz
     const selectColumns = 'id, name, price, stock, companyId, createdAt, updatedAt'
     
-    const { data: productData, error } = await supabase
+    let productQuery = supabase
       .from('Product')
       .select(selectColumns)
       .eq('id', id)
-      .eq('companyId', session.user.companyId)
+    
+    // SuperAdmin değilse companyId filtresi ekle
+    if (!isSuperAdmin) {
+      productQuery = productQuery.eq('companyId', companyId)
+    }
+    
+    const { data: productData, error } = await productQuery
     
     if (error) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 })
@@ -197,7 +217,7 @@ export async function GET(
       .limit(100)
 
     // ActivityLog'ları çek
-    const { data: activities } = await supabase
+    let activityQuery = supabase
       .from('ActivityLog')
       .select(
         `
@@ -208,9 +228,15 @@ export async function GET(
         )
       `
       )
-      .eq('companyId', session.user.companyId)
       .eq('entity', 'Product')
       .eq('meta->>id', id)
+    
+    // SuperAdmin değilse MUTLAKA companyId filtresi uygula
+    if (!isSuperAdmin) {
+      activityQuery = activityQuery.eq('companyId', companyId)
+    }
+    
+    const { data: activities } = await activityQuery
       .order('createdAt', { ascending: false })
       .limit(20)
 
@@ -252,6 +278,16 @@ export async function PUT(
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Permission check - canUpdate kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canUpdate = await hasPermission('product', 'update', session.user.id)
+    if (!canUpdate) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Ürün güncelleme yetkiniz yok' },
+        { status: 403 }
+      )
     }
 
     const { id } = await params
@@ -331,7 +367,7 @@ export async function PUT(
       .update(productData)
       .eq('id', id)
       .eq('companyId', session.user.companyId)
-      .select('id, name, price, stock, category, sku, barcode, status, minStock, maxStock, unit, companyId, createdAt, updatedAt')
+      .select('id, name, price, stock, companyId, createdAt, updatedAt')
     
     if (error) {
       if (process.env.NODE_ENV === 'development') {
@@ -353,7 +389,7 @@ export async function PUT(
         {
           entity: 'Product',
           action: 'UPDATE',
-          description: `Ürün güncellendi: ${body.name || (data as any)?.name || 'Unknown'}`,
+          description: `Ürün bilgileri güncellendi: ${body.name || (data as any)?.name || ''}`,
           meta: { entity: 'Product', action: 'update', id },
           userId: session.user.id,
           companyId: session.user.companyId,
@@ -401,8 +437,71 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Permission check - canDelete kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canDelete = await hasPermission('product', 'delete', session.user.id)
+    if (!canDelete) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Ürün silme yetkiniz yok' },
+        { status: 403 }
+      )
+    }
+
     const { id } = await params
     const supabase = getSupabaseWithServiceRole()
+
+    // ÖNEMLİ: Product silinmeden önce ilişkili InvoiceItem/QuoteItem kontrolü
+    // İlişkili InvoiceItem kontrolü
+    const { data: invoiceItems, error: invoiceItemsError } = await supabase
+      .from('InvoiceItem')
+      .select('id, invoiceId')
+      .eq('productId', id)
+      .limit(1)
+    
+    if (invoiceItemsError && process.env.NODE_ENV === 'development') {
+      console.error('Product DELETE - InvoiceItem check error:', invoiceItemsError)
+    }
+    
+    if (invoiceItems && invoiceItems.length > 0) {
+      return NextResponse.json(
+        { 
+          error: 'Ürün silinemez',
+          message: 'Bu ürün faturalarda kullanılıyor. Ürünü silmek için önce ilgili fatura kalemlerini silmeniz gerekir.',
+          reason: 'PRODUCT_HAS_INVOICE_ITEMS',
+          relatedItems: {
+            invoiceItems: invoiceItems.length,
+            exampleInvoiceId: invoiceItems[0]?.invoiceId
+          }
+        },
+        { status: 403 }
+      )
+    }
+    
+    // İlişkili QuoteItem kontrolü
+    const { data: quoteItems, error: quoteItemsError } = await supabase
+      .from('QuoteItem')
+      .select('id, quoteId')
+      .eq('productId', id)
+      .limit(1)
+    
+    if (quoteItemsError && process.env.NODE_ENV === 'development') {
+      console.error('Product DELETE - QuoteItem check error:', quoteItemsError)
+    }
+    
+    if (quoteItems && quoteItems.length > 0) {
+      return NextResponse.json(
+        { 
+          error: 'Ürün silinemez',
+          message: 'Bu ürün tekliflerde kullanılıyor. Ürünü silmek için önce ilgili teklif kalemlerini silmeniz gerekir.',
+          reason: 'PRODUCT_HAS_QUOTE_ITEMS',
+          relatedItems: {
+            quoteItems: quoteItems.length,
+            exampleQuoteId: quoteItems[0]?.quoteId
+          }
+        },
+        { status: 403 }
+      )
+    }
 
     const { data: product } = await supabase
       .from('Product')

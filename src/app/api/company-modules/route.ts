@@ -74,6 +74,41 @@ export async function POST(request: Request) {
 
     const supabase = getSupabaseWithServiceRole()
 
+    // maxModules kontrolü - sadece modül eklenirken (enabled = true)
+    if (enabled) {
+      // Kurumun mevcut aktif modül sayısını kontrol et
+      const { count: currentModuleCount } = await supabase
+        .from('CompanyModule')
+        .select('*', { count: 'exact', head: true })
+        .eq('companyId', companyId)
+        .eq('enabled', true)
+
+      // Kurum limitasyonlarını kontrol et
+      const { data: company } = await supabase
+        .from('Company')
+        .select('maxModules')
+        .eq('id', companyId)
+        .single()
+
+      if (company && company.maxModules !== null) {
+        // Eğer bu modül zaten aktifse, sayıyı artırmayız
+        const { data: existingModule } = await supabase
+          .from('CompanyModule')
+          .select('enabled')
+          .eq('companyId', companyId)
+          .eq('module', module)
+          .single()
+
+        // Modül zaten aktif değilse ve limit aşılıyorsa hata ver
+        if (!existingModule?.enabled && currentModuleCount !== null && currentModuleCount >= company.maxModules) {
+          return NextResponse.json(
+            { error: 'Modül limiti aşıldı', message: `Bu kurumun maksimum modül sayısı ${company.maxModules}. Mevcut aktif modül sayısı: ${currentModuleCount}` },
+            { status: 403 }
+          )
+        }
+      }
+    }
+
     // Upsert - varsa güncelle, yoksa oluştur
     const upsertData = {
       companyId,

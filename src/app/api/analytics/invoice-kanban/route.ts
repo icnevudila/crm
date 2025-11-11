@@ -30,20 +30,30 @@ export async function GET(request: Request) {
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     const companyId = session.user.companyId
     const supabase = getSupabaseWithServiceRole()
-    const { searchParams } = new URL(request.url)
     
-    // Filtre parametreleri
-    const quoteId = searchParams.get('quoteId') || ''
-    const search = searchParams.get('search') || ''
-    const invoiceType = searchParams.get('invoiceType') || '' // SALES veya PURCHASE
+    // Filtre parametreleri - güvenli parse
+    let quoteId = ''
+    let search = ''
+    let invoiceType = ''
+    
+    try {
+      const { searchParams } = new URL(request.url)
+      quoteId = searchParams.get('quoteId') || ''
+      search = searchParams.get('search') || ''
+      invoiceType = searchParams.get('invoiceType') || '' // SALES veya PURCHASE
+    } catch (error) {
+      // request.url undefined veya geçersizse, filtreler boş kalır
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Invoice Kanban API: Could not parse request.url', error)
+      }
+    }
 
-    // Base query - OPTİMİZE: JOIN kaldırıldı - çok yavaş
-    // ÖNEMLİ: Limit 10000'e çıkarıldı - Stats API ile tutarlı olması için (tüm faturaları çek)
+    // Tüm invoice'ları çek - limit yok (tüm verileri çek)
+    // ÖNEMLİ: totalAmount kolonunu çek (050 migration ile total → totalAmount olarak değiştirildi)
     let query = supabase
       .from('Invoice')
-      .select('id, title, status, total, quoteId, createdAt, invoiceType')
+      .select('id, title, status, totalAmount, quoteId, createdAt, invoiceType')
       .order('createdAt', { ascending: false })
-      .limit(10000) // Stats API ile tutarlı olması için limit 10000 (tüm faturaları çek)
     
     if (!isSuperAdmin) {
       query = query.eq('companyId', companyId)
@@ -65,6 +75,12 @@ export async function GET(request: Request) {
 
     const { data: invoices, error } = await query
 
+    // Debug: Invoices verisini logla
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Invoice Kanban API - Invoices count:', invoices?.length || 0)
+      console.log('Invoice Kanban API - Invoices sample:', invoices?.slice(0, 3)) // İlk 3 invoice'i göster
+    }
+
     if (error) {
       console.error('Invoice kanban error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
@@ -78,9 +94,10 @@ export async function GET(request: Request) {
     const statuses = ['DRAFT', 'SENT', 'SHIPPED', 'RECEIVED', 'PAID', 'OVERDUE', 'CANCELLED']
     const kanban = statuses.map((status) => {
       const statusInvoices = invoices.filter((invoice: any) => invoice.status === status)
-      // Her status için toplam tutarı hesapla
+      // Her status için toplam tutarı hesapla - totalAmount kullan (050 migration ile total → totalAmount olarak değiştirildi)
       const totalValue = statusInvoices.reduce((sum: number, invoice: any) => {
-        const invoiceValue = typeof invoice.total === 'string' ? parseFloat(invoice.total) || 0 : (invoice.total || 0)
+        const value = invoice.totalAmount
+        const invoiceValue = typeof value === 'string' ? parseFloat(value) || 0 : (value || 0)
         return sum + invoiceValue
       }, 0)
       
@@ -101,12 +118,23 @@ export async function GET(request: Request) {
         invoices: statusInvoices.map((invoice: any) => ({
           id: invoice.id,
           title: invoice.title,
-          total: invoice.total || 0,
+          totalAmount: invoice.totalAmount || 0,
           quoteId: invoice.quoteId,
           createdAt: invoice.createdAt,
         })),
       }
     })
+
+    // Debug: Kanban verisini logla
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Invoice Kanban API - Kanban array length:', kanban.length)
+      console.log('Invoice Kanban API - Kanban data:', kanban.map((col: any) => ({
+        status: col.status,
+        count: col.count,
+        totalValue: col.totalValue,
+        invoicesCount: col.invoices?.length || 0,
+      })))
+    }
 
     return NextResponse.json(
       { kanban },

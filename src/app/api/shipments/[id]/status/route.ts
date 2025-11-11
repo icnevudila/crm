@@ -5,6 +5,25 @@ import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
+// Shipment tipi (Supabase type cache güncel olmayabilir)
+interface Shipment {
+  id: string
+  status: string
+  invoiceId: string | null
+  tracking?: string | null
+  companyId: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+// Invoice tipi
+interface Invoice {
+  id: string
+  title?: string | null
+  invoiceNumber?: string | null
+  status: string
+}
+
 // PUT: Sevkiyat durumunu güncelle
 export async function PUT(
   request: Request,
@@ -31,16 +50,23 @@ export async function PUT(
     }
 
     // Mevcut sevkiyatı al
-    const { data: currentShipment } = await supabase
+    const { data: currentShipmentData, error: fetchError } = await supabase
       .from('Shipment')
       .select('status, invoiceId')
       .eq('id', id)
       .eq('companyId', session.user.companyId)
-      .single()
+      .maybeSingle()
 
-    if (!currentShipment) {
+    if (fetchError) {
+      return NextResponse.json({ error: fetchError.message || 'Sevkiyat bulunamadı' }, { status: 500 })
+    }
+
+    if (!currentShipmentData) {
       return NextResponse.json({ error: 'Sevkiyat bulunamadı' }, { status: 404 })
     }
+
+    // Type assertion - Supabase type cache güncel olmayabilir
+    const currentShipment = currentShipmentData as Shipment
 
     // ÖNEMLİ: Onaylı sevkiyatlar iptal edilemez veya durumu değiştirilemez (sadece IN_TRANSIT ve DELIVERED'a geçilebilir)
     if (currentShipment.status?.toUpperCase() === 'APPROVED') {
@@ -123,16 +149,19 @@ export async function PUT(
     }
 
     // ÖNEMLİ: Database'den güncellenmiş veriyi tekrar çek (güncelleme başarılı olduğundan emin ol)
-    const { data: verifyData, error: verifyError } = await supabase
+    const { data: verifyDataRaw, error: verifyError } = await supabase
       .from('Shipment')
       .select('id, status, tracking, invoiceId, updatedAt')
       .eq('id', id)
       .eq('companyId', session.user.companyId)
-      .single()
+      .maybeSingle()
 
     if (verifyError) {
       console.error('Shipment verify error:', verifyError)
     }
+
+    // Type assertion - Supabase type cache güncel olmayabilir
+    const verifyData = verifyDataRaw ? (verifyDataRaw as Shipment) : null
 
     // Debug: Database'den gelen veriyi kontrol et
     if (process.env.NODE_ENV === 'development') {
@@ -168,18 +197,117 @@ export async function PUT(
       // ActivityLog hatası ana işlemi engellemez
     }
 
+    // Shipment DELIVERED olduğunda özel ActivityLog kaydı ve otomatik gider kaydı
+    if (body.status === 'DELIVERED' && currentShipment.status !== 'DELIVERED') {
+      try {
+        const trackingNumber = (finalData as any)?.tracking || id.substring(0, 8)
+        // @ts-expect-error - Supabase database type tanımları eksik
+        await supabase.from('ActivityLog').insert([{
+          entity: 'Shipment',
+          action: 'UPDATE',
+          description: `Sevkiyat teslim edildi: ${trackingNumber} - Sevkiyat başarıyla teslim edildi.`,
+          meta: { 
+            entity: 'Shipment', 
+            action: 'delivered', 
+            id,
+            tracking: trackingNumber,
+            status: 'DELIVERED',
+            deliveredAt: new Date().toISOString(),
+          },
+          userId: session.user.id,
+          companyId: session.user.companyId,
+        }])
+
+        // Shipment DELIVERED olduğunda otomatik gider kaydı oluştur (sevkiyat maliyeti)
+        // Önce bu shipment için Finance kaydı var mı kontrol et (duplicate önleme)
+        const { data: existingFinance } = await supabase
+          .from('Finance')
+          .select('id')
+          .eq('relatedEntityType', 'SHIPMENT')
+          .eq('relatedEntityId', id)
+          .eq('companyId', session.user.companyId)
+          .maybeSingle()
+
+        // Eğer Finance kaydı yoksa oluştur
+        if (!existingFinance) {
+          // Shipment maliyeti (shippingCost kolonu varsa onu kullan, yoksa 0)
+          const shippingCost = (finalData as any)?.shippingCost || 0
+          
+          // Eğer maliyet varsa gider kaydı oluştur
+          if (shippingCost > 0) {
+            const { data: finance } = await supabase
+              .from('Finance')
+              // @ts-expect-error - Supabase database type tanımları eksik
+              .insert([
+                {
+                  type: 'EXPENSE',
+                  amount: shippingCost,
+                  relatedEntityType: 'SHIPMENT',
+                  relatedEntityId: id,
+                  relatedTo: `Shipment: ${id}`,
+                  companyId: session.user.companyId,
+                  category: 'SHIPPING',
+                  description: `Sevkiyat maliyeti: ${trackingNumber}`,
+                  paymentDate: new Date().toISOString().split('T')[0],
+                },
+              ])
+              .select()
+              .single()
+
+            if (finance) {
+              // ActivityLog kaydı
+              await supabase.from('ActivityLog').insert([
+                {
+                  entity: 'Finance',
+                  action: 'CREATE',
+                  description: `Sevkiyat teslim edildi, gider kaydı oluşturuldu`,
+                  meta: {
+                    entity: 'Finance',
+                    action: 'create',
+                    id: (finance as any).id,
+                    fromShipment: id,
+                  },
+                  userId: session.user.id,
+                  companyId: session.user.companyId,
+                },
+              ])
+            }
+          }
+        }
+
+        // Bildirim: Sevkiyat teslim edildi
+        const { createNotificationForRole } = await import('@/lib/notification-helper')
+        await createNotificationForRole({
+          companyId: session.user.companyId,
+          role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+          title: 'Sevkiyat Teslim Edildi',
+          message: `Sevkiyat başarıyla teslim edildi. Detayları görmek ister misiniz?`,
+          type: 'success',
+          relatedTo: 'Shipment',
+          relatedId: id,
+        })
+      } catch (deliveredActivityError) {
+        // ActivityLog hatası ana işlemi engellemez
+        if (process.env.NODE_ENV === 'development') {
+          console.error('DELIVERED ActivityLog error:', deliveredActivityError)
+        }
+      }
+    }
+
     // Sevkiyat onaylandığında (APPROVED) faturaya bildirim ekle ve fatura durumunu güncelle
     if (body.status === 'APPROVED' && currentShipment.status !== 'APPROVED' && currentShipment.invoiceId) {
       try {
         // Fatura bilgilerini al (sevkiyat ismi için)
-        const { data: invoiceData } = await supabase
+        const { data: invoiceDataRaw } = await supabase
           .from('Invoice')
           .select('id, title, invoiceNumber, status')
           .eq('id', currentShipment.invoiceId)
           .eq('companyId', session.user.companyId)
           .maybeSingle()
 
-        if (invoiceData) {
+        if (invoiceDataRaw) {
+          // Type assertion - Supabase type cache güncel olmayabilir
+          const invoiceData = invoiceDataRaw as Invoice
           const invoiceTitle = invoiceData.title || invoiceData.invoiceNumber || `Fatura #${currentShipment.invoiceId.substring(0, 8)}`
           const shipmentTracking = (data as any)?.tracking || id.substring(0, 8)
 
@@ -193,6 +321,7 @@ export async function PUT(
           // Fatura tablosunu güncelle
           const { error: invoiceUpdateError } = await supabase
             .from('Invoice')
+            // @ts-expect-error - Supabase database type tanımları eksik
             .update(invoiceUpdateData)
             .eq('id', currentShipment.invoiceId)
             .eq('companyId', session.user.companyId)

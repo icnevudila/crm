@@ -18,9 +18,24 @@ export default function LocaleSwitcher() {
   const pathname = usePathname()
 
   const switchLocale = (newLocale: string) => {
-    // Pathname /tr/customers gibi bir format olabilir
-    const pathnameWithoutLocale = pathname.replace(`/${locale}`, '') || '/dashboard'
-    router.push(`/${newLocale}${pathnameWithoutLocale}`)
+    // Pathname'i düzgün parse et - çift locale prefix'i önle
+    let pathnameWithoutLocale = pathname
+    
+    // Mevcut locale'i kaldır
+    if (pathname.startsWith(`/${locale}/`)) {
+      pathnameWithoutLocale = pathname.replace(`/${locale}/`, '/')
+    } else if (pathname === `/${locale}`) {
+      pathnameWithoutLocale = '/'
+    } else if (pathname.startsWith(`/${locale}`)) {
+      pathnameWithoutLocale = pathname.replace(`/${locale}`, '')
+    }
+    
+    // Yeni locale ile pathname oluştur
+    const newPath = pathnameWithoutLocale === '/' 
+      ? `/${newLocale}/dashboard` 
+      : `/${newLocale}${pathnameWithoutLocale.startsWith('/') ? pathnameWithoutLocale : '/' + pathnameWithoutLocale}`
+    
+    router.push(newPath)
     // router.refresh() kaldırdık - performans için
   }
 
@@ -28,7 +43,7 @@ export default function LocaleSwitcher() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" className="gap-2">
-          <Globe className="h-4 w-4" />
+          <Globe className="h-4 w-4 text-gray-600" />
           <span>{localeNames[locale as keyof typeof localeNames]}</span>
         </Button>
       </DropdownMenuTrigger>

@@ -40,29 +40,31 @@ export async function GET() {
       // Ürün satış dağılımı (en çok satılan ürünler) - Sadece gerekli kolonlar
       (() => {
         let query = supabase.from('Product').select('id, name, price').order('price', { ascending: false }).limit(10)
-        if (!isSuperAdmin) query = query.eq('companyId', companyId)
+        if (!isSuperAdmin) {
+          query = query.eq('companyId', companyId)
+        }
         return query
       })(),
       // Müşteri sektör dağılımı (müşteri isimleri ile) - Sadece gerekli kolonlar
       // sector null olabilir, tüm müşterileri çek sonra filtrele
       (() => {
         let query = supabase.from('Customer').select('id, name, sector').limit(100)
-        if (!isSuperAdmin) query = query.eq('companyId', companyId)
+        if (!isSuperAdmin) {
+          query = query.eq('companyId', companyId)
+        }
         return query
       })(),
       // Müşteri firma sektör dağılımı (müşteri firmaları) - Sadece gerekli kolonlar
       // SUPER_ADMIN bu sayfayı kullanmaz ama yine de kontrol edelim
+      // NOT: status filtresi kaldırıldı - tüm firmaları göster (aktif/pasif fark etmez)
       (() => {
-        if (isSuperAdmin) {
-          // SuperAdmin tüm firmaları görebilir ama bu endpoint'i kullanmaz
-          return supabase.from('CustomerCompany').select('id, name, sector, status').eq('status', 'ACTIVE').limit(1000)
-        }
         let query = supabase
           .from('CustomerCompany')
           .select('id, name, sector, status')
-          .eq('status', 'ACTIVE')
-          .eq('companyId', companyId)
           .limit(1000)
+        if (!isSuperAdmin) {
+          query = query.eq('companyId', companyId)
+        }
         return query
       })(),
     ])
@@ -138,8 +140,9 @@ export async function GET() {
     
     // Debug: companySectors verisini logla
     if (process.env.NODE_ENV === 'development') {
-      console.log('companySectors count:', companySectors.length)
-      console.log('companySectors data:', companySectors)
+      console.log('Distribution API - CustomerCompanies count:', customerCompanies?.length || 0)
+      console.log('Distribution API - CompanySectors count:', companySectors.length)
+      console.log('Distribution API - CompanySectors data:', companySectors)
     }
 
     return NextResponse.json(

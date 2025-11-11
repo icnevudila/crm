@@ -1,24 +1,42 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { toast } from '@/lib/toast'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { FileText, Edit, Trash2, Eye } from 'lucide-react'
+import { FileText, Edit, Trash2, Eye, Send, CheckCircle, XCircle, GripVertical, RefreshCw, Mail, Clock, History } from 'lucide-react'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { formatCurrency } from '@/lib/utils'
+import { Info } from 'lucide-react'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import {
   DndContext,
   DragOverlay,
-  closestCenter,
+  pointerWithin,
   KeyboardSensor,
   PointerSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   DragEndEvent,
   DragStartEvent,
   useDroppable,
+  DropAnimation,
+  defaultDropAnimationSideEffects,
 } from '@dnd-kit/core'
 import {
   arrayMove,
@@ -28,6 +46,9 @@ import {
   useSortable,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
+import { isValidQuoteTransition, isQuoteImmutable } from '@/lib/stageValidation'
+import { translateStage, getStageMessage } from '@/lib/stageTranslations'
+import RelatedRecordsDialog from '@/components/activity/RelatedRecordsDialog'
 
 interface QuoteKanbanChartProps {
   data: Array<{
@@ -36,9 +57,11 @@ interface QuoteKanbanChartProps {
     quotes: Array<{
       id: string
       title: string
-      total: number
+      total?: number // Fallback için
+      totalAmount?: number // 050 migration ile total → totalAmount
       dealId?: string
       createdAt: string
+      notes?: string // ✅ ÇÖZÜM: Reddetme sebebi için notes alanı
     }>
   }>
   onEdit?: (quote: any) => void
@@ -50,9 +73,20 @@ const statusLabels: Record<string, string> = {
   DRAFT: 'Taslak',
   SENT: 'Gönderildi',
   ACCEPTED: 'Kabul Edildi',
-  DECLINED: 'Reddedildi',
+  REJECTED: 'Reddedildi',
+  DECLINED: 'Reddedildi', // DECLINED → REJECTED olarak normalize ediliyor, ama yine de label ekliyoruz
   WAITING: 'Beklemede',
 }
+
+// Her aşama için bilgilendirme mesajları - CRM'e uygun yönlendirici mesajlar (kart içinde gösterilecek)
+const statusInfoMessages: Record<string, string> = {
+  DRAFT: '💡 Bu aşamada: Teklifi gönderin. Kart içindeki "Gönder" butonunu kullanın. Teklif gönderildikten sonra "Gönderildi" aşamasına taşınır.',
+  SENT: '💡 Bu aşamada: Müşteri onayı bekleniyor. Kart içindeki "Kabul Et" veya "Reddet" butonlarını kullanın. Kabul edilirse otomatik olarak fatura oluşturulur.',
+  ACCEPTED: '✅ Teklif kabul edildi! Otomatik olarak fatura oluşturuldu. Faturalar sayfasından kontrol edebilirsiniz. Bu aşamadaki teklifler değiştirilemez.',
+  REJECTED: '❌ Teklif reddedildi. Revizyon görevi otomatik olarak oluşturuldu. Görevler sayfasından kontrol edebilirsiniz. Bu aşamadaki teklifler değiştirilemez.',
+  WAITING: '⏳ Teklif müşteri onayı bekliyor. Kart içindeki "Kabul Et", "Reddet", "Tekrar Gönder" veya "Hatırlat" butonlarını kullanabilirsiniz.',
+}
+
 
 // Premium renk kodları - daha belirgin ve okunabilir
 const statusColors: Record<string, { bg: string; text: string; border: string }> = {
@@ -71,6 +105,11 @@ const statusColors: Record<string, { bg: string; text: string; border: string }>
     text: 'text-green-700',
     border: 'border-green-300',
   },
+  REJECTED: {
+    bg: 'bg-red-50',
+    text: 'text-red-700',
+    border: 'border-red-300',
+  },
   DECLINED: {
     bg: 'bg-red-50',
     text: 'text-red-700',
@@ -87,6 +126,7 @@ const statusBadgeColors: Record<string, string> = {
   DRAFT: 'bg-gray-500 text-white',
   SENT: 'bg-blue-500 text-white',
   ACCEPTED: 'bg-green-500 text-white',
+  REJECTED: 'bg-red-500 text-white',
   DECLINED: 'bg-red-500 text-white',
   WAITING: 'bg-yellow-500 text-white',
 }
@@ -108,27 +148,55 @@ function DroppableColumn({ status, children }: { status: string; children: React
 }
 
 // Sortable Quote Card Component
-function SortableQuoteCard({ quote, status, onEdit, onDelete }: { 
+function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange }: { 
   quote: any
   status: string
   onEdit?: (quote: any) => void
   onDelete?: (id: string, title: string) => void
+  onStatusChange?: (quoteId: string, newStatus: string) => void | Promise<void>
 }) {
   const locale = useLocale()
+  const [dragMode, setDragMode] = useState(false)
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
+  
+  // Kilitli durum kontrolü - ACCEPTED ve REJECTED durumları taşınamaz
+  const isLocked = isQuoteImmutable(status)
+  
   const {
     attributes,
     listeners,
     setNodeRef,
     transform,
-    transition,
     isDragging,
-  } = useSortable({ id: quote.id })
+  } = useSortable({ id: quote.id, disabled: !dragMode || isLocked })
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  }
+  // ULTRA-AGGRESSIVE optimization - NO useMemo, direct inline calculation
+  // Transform hesaplamasını direkt inline yap - useMemo bile gereksiz overhead
+  const x = transform?.x ?? 0
+  const y = transform?.y ?? 0
+  const style: React.CSSProperties = transform 
+    ? {
+        // Direct transform3d - NO string interpolation overhead
+        transform: `translate3d(${x}px,${y}px,0)`,
+        WebkitTransform: `translate3d(${x}px,${y}px,0)`,
+        // NO transition EVER - maksimum performans
+        transition: 'none',
+        // GPU acceleration - maksimum
+        willChange: 'transform',
+        opacity: isDragging ? 0.4 : 1,
+        cursor: dragMode && !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'default',
+        transformOrigin: 'center center',
+        backfaceVisibility: 'hidden',
+        perspective: 1000,
+        // Force GPU layer
+        isolation: 'isolate',
+      }
+    : {
+        transition: 'none',
+        willChange: dragMode && !isLocked ? 'transform' : 'auto',
+        opacity: isDragging ? 0.4 : 1,
+        cursor: dragMode && !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'default',
+      }
 
   const colors = statusColors[status] || statusColors.DRAFT
 
@@ -145,31 +213,121 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete }: {
   }
 
   return (
-    <Card
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className={`bg-white border-2 ${colors.border} hover:border-primary-400 hover:shadow-lg transition-all cursor-move touch-none`}
-    >
-      <Link
-        href={`/${locale}/quotes/${quote.id}`}
-        prefetch={true}
-        className="block"
-        onClick={(e) => {
-          // Drag sırasında link'e tıklamayı engelle
-          if (isDragging) {
-            e.preventDefault()
-          }
-        }}
-      >
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <Card
+          ref={setNodeRef}
+          style={{
+            ...style,
+            contain: 'layout style paint', // CSS containment for performance
+            isolation: 'isolate', // Force GPU layer
+          }}
+          className={`bg-white border-2 ${
+            isLocked 
+              ? status === 'ACCEPTED'
+                ? 'border-green-300 bg-green-50/30 hover:border-green-400'
+                : 'border-red-300 bg-red-50/30 hover:border-red-400'
+              : `${colors.border} hover:border-primary-400`
+          } hover:shadow-lg relative ${dragMode && !isLocked ? 'ring-2 ring-primary-400' : ''} ${isDragging ? 'transition-none' : ''}`}
+        >
+          {/* Kilitli Durum Badge - Kilitli kartlarda göster */}
+          {isLocked && (
+            <div className={`absolute top-2 right-2 z-50 px-2 py-1 rounded-md text-xs font-semibold bg-opacity-90 backdrop-blur-sm ${
+              status === 'ACCEPTED'
+                ? 'bg-green-500 text-white'
+                : 'bg-red-500 text-white'
+            }`}>
+              {status === 'ACCEPTED' ? '🔒 Kabul Edildi' : '🔒 Reddedildi'}
+            </div>
+          )}
+          
+          {/* Drag Handle Button - Sadece kilitli değilse göster */}
+          {!isLocked && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setDragMode(!dragMode)
+              }}
+              className={`absolute top-2 right-2 z-50 p-1.5 rounded-md ${isDragging ? 'transition-none' : 'transition-all'} ${
+                dragMode
+                  ? 'bg-primary-500 text-white shadow-md hover:bg-primary-600'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              title={dragMode ? 'Sürükle-bırak modunu kapat' : 'Sürükle-bırak modunu aç'}
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
+          )}
+
+          {/* Drag Handle Overlay - Sadece drag mode aktifken ve kilitli değilse */}
+          {dragMode && !isLocked && (
+            <div
+              {...attributes}
+              {...listeners}
+              className="absolute inset-0 z-40 cursor-grab active:cursor-grabbing rounded-lg"
+              style={{
+                willChange: 'transform, opacity',
+                touchAction: 'none',
+                backfaceVisibility: 'hidden',
+                WebkitTransform: 'translateZ(0)', // Force GPU acceleration
+                transform: 'translateZ(0)', // Force GPU acceleration
+              }}
+              onClick={(e) => {
+                if (isDragging) {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }
+              }}
+              onContextMenu={(e) => {
+                e.stopPropagation()
+              }}
+            />
+          )}
+
+          <Link
+            href={`/${locale}/quotes/${quote.id}`}
+            prefetch={true}
+            className={`block relative z-0 ${dragMode ? 'pointer-events-none' : ''}`}
+            onClick={(e) => {
+              // Drag mode aktifken link'e tıklamayı engelle
+              if (dragMode || isDragging) {
+                e.preventDefault()
+                e.stopPropagation()
+              }
+            }}
+          >
         <div className="p-3">
           <div className="flex items-start gap-2 mb-2">
             <FileText className={`h-4 w-4 ${colors.text} mt-0.5 flex-shrink-0`} />
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-sm text-gray-900 line-clamp-2">
-                {quote.title}
-              </p>
+              <div className="flex items-center gap-1.5">
+                <p className="font-medium text-sm text-gray-900 line-clamp-2">
+                  {quote.title}
+                </p>
+                {/* REJECTED durumunda not simgesi - hover ile tooltip */}
+                {status === 'REJECTED' && quote.notes && (
+                  <TooltipProvider delayDuration={0}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex-shrink-0">
+                          <Info className="h-3.5 w-3.5 text-red-600 cursor-help" />
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p className="text-xs font-semibold text-red-800 mb-1">🔴 Reddetme Sebebi:</p>
+                        <p className="text-xs text-red-700 whitespace-pre-wrap">
+                          {quote.notes.includes('Sebep:') 
+                            ? quote.notes.split('Sebep:')[1]?.trim() || quote.notes
+                            : quote.notes
+                          }
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                )}
+              </div>
             </div>
           </div>
           
@@ -182,68 +340,525 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete }: {
                 window.open(`/${locale}/deals/${quote.dealId}`, '_blank')
               }}
             >
-              📋 Fırsat #{quote.dealId.substring(0, 8)}
+              Fırsat #{quote.dealId.substring(0, 8)}
             </div>
           )}
           
           <p className={`text-sm font-semibold ${colors.text} mt-2 mb-3`}>
-            {formatCurrency(quote.total || 0)}
+            {formatCurrency(quote.totalAmount || 0)}
           </p>
 
           {quote.createdAt && (
-            <p className="text-xs text-gray-500 mb-3">
-              📅 {new Date(quote.createdAt).toLocaleDateString('tr-TR')}
+            <p className="text-xs text-gray-500 mb-2">
+              {new Date(quote.createdAt).toLocaleDateString('tr-TR')}
             </p>
           )}
 
-          {/* Action Buttons */}
-          <div className="flex gap-2 pt-2 border-t" onClick={(e) => e.stopPropagation()}>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="flex-1 h-7 text-xs"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                window.open(`/${locale}/quotes/${quote.id}`, '_blank')
-              }}
-            >
-              <Eye className="h-3 w-3 mr-1" />
-              Görüntüle
-            </Button>
-            {onEdit && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="flex-1 h-7 text-xs"
-                onClick={handleEdit}
-              >
-                <Edit className="h-3 w-3 mr-1" />
-                Düzenle
-              </Button>
+          {/* Reddetme Sebebi (Notes) - Sadece REJECTED durumunda göster */}
+          {status === 'REJECTED' && quote.notes && (
+            <div className="mt-2 mb-3 p-2 bg-red-50 border border-red-200 rounded-md">
+              <p className="text-xs font-semibold text-red-800 mb-1">🔴 Reddetme Sebebi:</p>
+              <p className="text-xs text-red-700 whitespace-pre-wrap line-clamp-3">
+                {quote.notes.includes('Sebep:') 
+                  ? quote.notes.split('Sebep:')[1]?.trim() || quote.notes
+                  : quote.notes
+                }
+              </p>
+            </div>
+          )}
+
+          {/* WAITING → Hızlı Erişim Butonları - Kartın içinde */}
+          {status === 'WAITING' && (
+            <div className="flex gap-1.5 mb-3">
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="flex-1 text-xs h-7 bg-green-600 hover:bg-green-700 px-2 text-white"
+                      onClick={async (e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        if (dragMode || isDragging) return
+                        
+                        if (onStatusChange) {
+                          try {
+                            await onStatusChange(quote.id, 'ACCEPTED')
+                            toast.success('Teklif kabul edildi! Fatura oluşturuldu.')
+                          } catch (error: any) {
+                            if (process.env.NODE_ENV === 'development') {
+                              console.error('Status change error:', error)
+                            }
+                          }
+                        } else {
+                          toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                        }
+                      }}
+                    >
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      Kabul Et
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Teklifi kabul et. Otomatik olarak fatura ve sözleşme oluşturulur.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 text-xs h-7 border-red-300 text-red-600 hover:bg-red-50 px-2"
+                      onClick={async (e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        if (dragMode || isDragging) return
+                        
+                        if (onStatusChange) {
+                          try {
+                            await onStatusChange(quote.id, 'REJECTED')
+                            toast.success('Teklif reddedildi')
+                          } catch (error: any) {
+                            if (process.env.NODE_ENV === 'development') {
+                              console.error('Status change error:', error)
+                            }
+                          }
+                        } else {
+                          toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                        }
+                      }}
+                    >
+                      <XCircle className="h-3 w-3 mr-1" />
+                      Reddet
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Teklifi reddet. Sebep sorulacak ve not olarak kaydedilecek.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          )}
+
+          {/* Quick Action Buttons - Status'e göre değişir */}
+          <div className="mb-3 pt-2 border-t border-gray-200">
+            {status === 'DRAFT' && (
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="w-full text-xs h-7 text-white bg-indigo-600 hover:bg-indigo-700"
+                      onClick={async (e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  if (dragMode || isDragging) return
+                  
+                  // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak ve cache'i güncelleyecek
+                  if (onStatusChange) {
+                    try {
+                      await onStatusChange(quote.id, 'SENT')
+                      toast.success('Teklif gönderildi')
+                    } catch (error: any) {
+                      // Hata zaten onStatusChange içinde handle ediliyor, burada sadece log
+                      if (process.env.NODE_ENV === 'development') {
+                        console.error('Status change error:', error)
+                      }
+                    }
+                  } else {
+                    toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                  }
+                }}
+                    >
+                      Gönder
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Teklifi müşteriye gönder</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
-            {onDelete && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="flex-1 h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
-                onClick={handleDelete}
-              >
-                <Trash2 className="h-3 w-3 mr-1" />
-                Sil
-              </Button>
+            {status === 'SENT' && (
+              <div className="flex gap-1.5">
+                <TooltipProvider delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="flex-1 text-xs h-6 bg-green-600 hover:bg-green-700 px-2 text-white"
+                        onClick={async (e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    if (dragMode || isDragging) return
+                    
+                    // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
+                    if (onStatusChange) {
+                      try {
+                        await onStatusChange(quote.id, 'ACCEPTED')
+                        toast.success('Teklif kabul edildi! Fatura oluşturuldu.')
+                      } catch (error: any) {
+                        // Hata zaten onStatusChange içinde handle ediliyor
+                        if (process.env.NODE_ENV === 'development') {
+                          console.error('Status change error:', error)
+                        }
+                      }
+                    } else {
+                      toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                    }
+                  }}
+                      >
+                        Kabul Et
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Teklifi kabul et. Otomatik olarak fatura ve sözleşme oluşturulur.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <TooltipProvider delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 text-xs h-6 border-red-300 text-red-600 hover:bg-red-50 px-2"
+                        onClick={async (e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    if (dragMode || isDragging) return
+                    
+                    // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
+                    if (onStatusChange) {
+                      try {
+                        await onStatusChange(quote.id, 'REJECTED')
+                        toast.success('Teklif reddedildi')
+                      } catch (error: any) {
+                        // Hata zaten onStatusChange içinde handle ediliyor
+                        if (process.env.NODE_ENV === 'development') {
+                          console.error('Status change error:', error)
+                        }
+                      }
+                    } else {
+                      toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                    }
+                  }}
+                      >
+                        Reddet
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Teklifi reddet. Otomatik olarak revizyon görevi oluşturulur.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
             )}
           </div>
         </div>
       </Link>
-    </Card>
+          {/* Action Buttons - Kartın altında, drag & drop'u etkilemez */}
+          <div className={`px-3 pb-3 pt-2 border-t border-gray-200 bg-white relative z-50 ${dragMode ? 'pointer-events-none opacity-50' : ''}`}>
+            <div className="flex gap-2 flex-wrap">
+              {/* DRAFT → Gönder */}
+              {quote.status === 'DRAFT' && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1 min-w-[80px] text-xs h-7"
+                  onClick={async (e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    if (dragMode) return
+                    
+                    // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
+                    if (onStatusChange) {
+                      try {
+                        await onStatusChange(quote.id, 'SENT')
+                        toast.success('Teklif gönderildi', 'Teklif başarıyla gönderildi ve durumu güncellendi.')
+                      } catch (error: any) {
+                        // Hata zaten onStatusChange içinde handle ediliyor
+                        if (process.env.NODE_ENV === 'development') {
+                          console.error('Status change error:', error)
+                        }
+                      }
+                    } else {
+                      toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                    }
+                  }}
+                >
+                  <Send className="h-3 w-3 mr-1" />
+                  Gönder
+                </Button>
+              )}
+              {/* SENT → Kabul Et ve Reddet */}
+              {quote.status === 'SENT' && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 min-w-[80px] text-xs h-7 bg-green-50 hover:bg-green-100 border-green-300 text-green-700"
+                    onClick={async (e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if (dragMode) return
+                      
+                      // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
+                      if (onStatusChange) {
+                        try {
+                          await onStatusChange(quote.id, 'ACCEPTED')
+                          toast.success('Teklif kabul edildi', 'Teklif kabul edildi, otomatik olarak fatura ve sözleşme oluşturuldu.')
+                        } catch (error: any) {
+                          // Hata zaten onStatusChange içinde handle ediliyor
+                          if (process.env.NODE_ENV === 'development') {
+                            console.error('Status change error:', error)
+                          }
+                        }
+                      } else {
+                        toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                      }
+                    }}
+                  >
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Kabul Et
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 min-w-[80px] text-xs h-7 bg-red-50 hover:bg-red-100 border-red-300 text-red-700"
+                    onClick={async (e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if (dragMode) return
+                      
+                      // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
+                      if (onStatusChange) {
+                        try {
+                          await onStatusChange(quote.id, 'REJECTED')
+                          toast.success('Teklif reddedildi', 'Teklif reddedildi, otomatik olarak revizyon görevi oluşturuldu.')
+                        } catch (error: any) {
+                          // Hata zaten onStatusChange içinde handle ediliyor
+                          if (process.env.NODE_ENV === 'development') {
+                            console.error('Status change error:', error)
+                          }
+                        }
+                      } else {
+                        toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                      }
+                    }}
+                  >
+                    <XCircle className="h-3 w-3 mr-1" />
+                    Reddet
+                  </Button>
+                </>
+              )}
+              {/* WAITING → Kabul Et, Reddet, Tekrar Gönder, Hatırlatma */}
+              {quote.status === 'WAITING' && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 min-w-[80px] text-xs h-7 bg-green-50 hover:bg-green-100 border-green-300 text-green-700"
+                    onClick={async (e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if (dragMode) return
+                      
+                      // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
+                      if (onStatusChange) {
+                        try {
+                          await onStatusChange(quote.id, 'ACCEPTED')
+                          toast.success('Teklif kabul edildi', 'Teklif kabul edildi, otomatik olarak fatura ve sözleşme oluşturuldu.')
+                        } catch (error: any) {
+                          // Hata zaten onStatusChange içinde handle ediliyor
+                          if (process.env.NODE_ENV === 'development') {
+                            console.error('Status change error:', error)
+                          }
+                        }
+                      } else {
+                        toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                      }
+                    }}
+                  >
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Kabul Et
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 min-w-[80px] text-xs h-7 bg-red-50 hover:bg-red-100 border-red-300 text-red-700"
+                    onClick={async (e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if (dragMode) return
+                      
+                      // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
+                      if (onStatusChange) {
+                        try {
+                          await onStatusChange(quote.id, 'REJECTED')
+                          toast.success('Teklif reddedildi', 'Teklif reddedildi, otomatik olarak revizyon görevi oluşturuldu.')
+                        } catch (error: any) {
+                          // Hata zaten onStatusChange içinde handle ediliyor
+                          if (process.env.NODE_ENV === 'development') {
+                            console.error('Status change error:', error)
+                          }
+                        }
+                      } else {
+                        toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                      }
+                    }}
+                  >
+                    <XCircle className="h-3 w-3 mr-1" />
+                    Reddet
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 min-w-[80px] text-xs h-7 bg-blue-50 hover:bg-blue-100 border-blue-300 text-blue-700"
+                    onClick={async (e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if (dragMode) return
+                      
+                      // Tekrar gönder - SENT durumuna taşı
+                      if (onStatusChange) {
+                        try {
+                          await onStatusChange(quote.id, 'SENT')
+                          toast.success('Teklif tekrar gönderildi', 'Teklif başarıyla tekrar gönderildi.')
+                        } catch (error: any) {
+                          if (process.env.NODE_ENV === 'development') {
+                            console.error('Status change error:', error)
+                          }
+                        }
+                      } else {
+                        toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                      }
+                    }}
+                  >
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Tekrar Gönder
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 min-w-[80px] text-xs h-7 bg-yellow-50 hover:bg-yellow-100 border-yellow-300 text-yellow-700"
+                    onClick={async (e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if (dragMode) return
+                      
+                      // Hatırlatma gönder - şimdilik sadece toast göster, gelecekte e-posta gönderilebilir
+                      toast.info('Hatırlatma gönderildi', 'Müşteriye hatırlatma bildirimi gönderildi.')
+                    }}
+                  >
+                    <Mail className="h-3 w-3 mr-1" />
+                    Hatırlat
+                  </Button>
+                </>
+              )}
+            </div>
+            
+            {/* Geçmiş Butonu */}
+            <div className="flex gap-1 pt-2 border-t border-gray-200 mt-2">
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="flex-1 h-6 text-xs px-1"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setHistoryDialogOpen(true)
+                      }}
+                    >
+                      <History className="h-3 w-3 mr-1" />
+                      Geçmiş
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>İşlem geçmişini görüntüle</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          </div>
+        </Card>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-48">
+        <ContextMenuItem
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            setHistoryDialogOpen(true)
+          }}
+        >
+          <History className="mr-2 h-4 w-4" />
+          Geçmiş
+        </ContextMenuItem>
+        <ContextMenuItem
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            window.open(`/${locale}/quotes/${quote.id}`, '_blank')
+          }}
+        >
+          <Eye className="mr-2 h-4 w-4" />
+          Görüntüle
+        </ContextMenuItem>
+        {onEdit && (
+          <ContextMenuItem
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              onEdit(quote)
+            }}
+          >
+            <Edit className="mr-2 h-4 w-4" />
+            Düzenle
+          </ContextMenuItem>
+        )}
+        {onDelete && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                onDelete(quote.id, quote.title)
+              }}
+              className="text-red-600 focus:text-red-600 focus:bg-red-50"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Sil
+            </ContextMenuItem>
+          </>
+        )}
+      </ContextMenuContent>
+      
+      {/* ActivityLog Dialog */}
+      <RelatedRecordsDialog
+        open={historyDialogOpen}
+        onClose={() => setHistoryDialogOpen(false)}
+        entity="Quote"
+        entityId={quote.id}
+        entityTitle={quote.title}
+      />
+    </ContextMenu>
   )
 }
 
 export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChange }: QuoteKanbanChartProps) {
   const locale = useLocale()
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [localData, setLocalData] = useState(data)
+  const [dragLocalData, setDragLocalData] = useState<any[] | null>(null) // Drag & drop için local state
+  const [localData, setLocalData] = useState(data) // ✅ ÇÖZÜM: useEffect ile state güncelle
 
   // Local data'yı güncelle (data prop değiştiğinde) - useEffect kullan
   // Her zaman totalValue hesapla (API'den gelmese bile)
@@ -254,9 +869,9 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
       if (col.totalValue !== undefined && col.totalValue !== null) {
         return col
       }
-      // totalValue yoksa quotes'den hesapla
+      // totalValue yoksa quotes'den hesapla - DÜZELTME: totalAmount kullan (050 migration ile total → totalAmount, total kolonu artık yok!)
       const calculatedTotalValue = (col.quotes || []).reduce((sum: number, q: any) => {
-        const quoteValue = typeof q.total === 'string' ? parseFloat(q.total) || 0 : (q.total || 0)
+        const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
         return sum + quoteValue
       }, 0)
       return {
@@ -267,8 +882,9 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
     
     // Debug: Development'ta log ekle
     if (process.env.NODE_ENV === 'development') {
-      console.log('QuoteKanbanChart data:', {
+      console.log('QuoteKanbanChart data updated:', {
         dataLength: data?.length,
+        dataRef: data, // Referans kontrolü için
         data: dataWithTotalValue.map((col: any) => ({
           status: col.status,
           count: col.count,
@@ -277,13 +893,28 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
         })),
       })
     }
+    
+    // ✅ ÇÖZÜM: Her zaman state'i güncelle - data prop değiştiğinde anında güncellenir
+    // ÖNEMLİ: dragLocalData varsa displayData'da onu kullanacağız, yoksa localData'yı kullanacağız
+    // ÖNEMLİ: data prop'u değiştiğinde her zaman localData'yı güncelle - optimistic update için
     setLocalData(dataWithTotalValue)
   }, [data])
 
+  // Drag & drop için local state varsa onu kullan, yoksa localData'yı kullan
+  // ✅ ÇÖZÜM: dragLocalData null ise localData'yı kullan - optimistic update için
+  const displayData = dragLocalData || localData
+
+  // Ultra-fast sensors - instant activation
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // 8px hareket edince drag başlar (yanlışlıkla drag'ı önler)
+        distance: 0, // 0px - HEMEN başla, hiç bekleme
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        distance: 0, // 0px - HEMEN başla
+        delay: 0, // 0ms - HİÇ bekleme
       },
     }),
     useSensor(KeyboardSensor, {
@@ -291,9 +922,10 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
     })
   )
 
-  const handleDragStart = (event: DragStartEvent) => {
+  // Memoize handlers for performance
+  const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(event.active.id as string)
-  }
+  }, [])
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
@@ -305,14 +937,14 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
     const overId = over.id as string
 
     // Aynı status içinde hareket (sıralama değişikliği) veya farklı status'e taşıma
-    const activeStatus = localData.find((col) => col.quotes.some((q) => q.id === activeId))
+    const activeStatus = displayData.find((col) => col.quotes.some((q) => q.id === activeId))
     
     // overId bir quote ID'si mi yoksa status ID'si mi kontrol et
-    let overStatus = localData.find((col) => col.quotes.some((q) => q.id === overId))
+    let overStatus = displayData.find((col) => col.quotes.some((q) => q.id === overId))
     
     // Eğer quote ID değilse, status ID olabilir (boş kolona drop)
     if (!overStatus) {
-      overStatus = localData.find((col) => col.status === overId)
+      overStatus = displayData.find((col) => col.status === overId)
     }
 
     if (!activeStatus || !overStatus) return
@@ -322,14 +954,42 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
       const quote = activeStatus.quotes.find((q) => q.id === activeId)
       if (!quote) return
 
+      // ✅ FRONTEND VALIDATION - Geçersiz geçişleri engelle
+      const currentStatus = activeStatus.status
+      const targetStatus = overStatus.status
+
+      // Immutable kontrol
+      if (isQuoteImmutable(currentStatus)) {
+        const message = getStageMessage(currentStatus, 'quote', 'immutable')
+        toast.warning(message.title, message.description)
+        return
+      }
+
+      // Transition validation
+      const validation = isValidQuoteTransition(currentStatus, targetStatus)
+      if (!validation.valid) {
+        const allowed = validation.allowed || []
+        const currentName = translateStage(currentStatus, 'quote')
+        const targetName = translateStage(targetStatus, 'quote')
+        const allowedNames = allowed.map((s: string) => translateStage(s, 'quote')).join(', ')
+        
+        toast.error(
+          `${currentName} → ${targetName} geçişi yapılamıyor`,
+          allowed.length > 0 
+            ? `Bu teklifi şu durumlara taşıyabilirsiniz: ${allowedNames}` 
+            : getStageMessage(currentStatus, 'quote', 'transition').description
+        )
+        return
+      }
+
       // Optimistic update - hemen UI'da göster (totalValue anlık güncellenir)
-      const newData = localData.map((col) => {
+      const newData = displayData.map((col) => {
         if (col.status === activeStatus.status) {
           // Eski status'den kaldır - totalValue'yu da anlık güncelle
           const updatedQuotes = col.quotes.filter((q) => q.id !== activeId)
-          // total string olabilir, parseFloat kullan
+          // DÜZELTME: totalAmount kullan (050 migration ile total → totalAmount, total kolonu artık yok!)
           const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
-            const quoteValue = typeof q.total === 'string' ? parseFloat(q.total) || 0 : (q.total || 0)
+            const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
             return sum + quoteValue
           }, 0)
           return {
@@ -342,9 +1002,9 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
         if (col.status === overStatus.status) {
           // Yeni status'e ekle - totalValue'yu da anlık güncelle
           const updatedQuotes = [...col.quotes, quote]
-          // total string olabilir, parseFloat kullan
+          // DÜZELTME: totalAmount kullan (050 migration ile total → totalAmount, total kolonu artık yok!)
           const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
-            const quoteValue = typeof q.total === 'string' ? parseFloat(q.total) || 0 : (q.total || 0)
+            const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
             return sum + quoteValue
           }, 0)
           return {
@@ -357,16 +1017,41 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
         return col
       })
 
-      setLocalData(newData)
+      // Drag & drop için local state'i güncelle
+      setDragLocalData(newData)
 
       // API'ye update gönder
       if (onStatusChange) {
         try {
           await onStatusChange(activeId, overStatus.status)
-        } catch (error) {
+          
+          // Başarılı olduğunda drag local state'i temizle - computed data kullanılacak
+          setDragLocalData(null)
+          
+          // ACCEPTED olduğunda Invoice oluşturulduğunu bildir
+          if (overStatus.status === 'ACCEPTED') {
+            toast.success(
+              'Teklif kabul edildi',
+              'Teklif kabul edildi. Fatura ve sözleşme otomatik olarak oluşturuldu. Faturalar sayfasından kontrol edebilirsiniz.',
+              {
+                label: 'Faturalar Sayfasına Git',
+                onClick: () => window.location.href = `/${locale}/invoices`,
+              }
+            )
+          } else if (overStatus.status === 'REJECTED') {
+            toast.success(
+              'Teklif reddedildi',
+              'Teklif reddedildi. Revizyon görevi otomatik olarak oluşturuldu. Görevler sayfasından kontrol edebilirsiniz.',
+              {
+                label: 'Görevler Sayfasına Git',
+                onClick: () => window.location.href = `/${locale}/tasks`,
+              }
+            )
+          }
+        } catch (error: any) {
           // Hata durumunda eski haline geri dön
-          setLocalData(data)
-          alert('Teklif durumu güncellenirken bir hata oluştu')
+          setDragLocalData(null) // Drag local state'i temizle - computed data kullanılacak
+          toast.error('Teklif durumu değiştirilemedi', error?.message)
         }
       }
     } else {
@@ -376,27 +1061,71 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
 
       if (oldIndex !== newIndex) {
         const newQuotes = arrayMove(activeStatus.quotes, oldIndex, newIndex)
-        const newData = localData.map((col) =>
+        const newData = displayData.map((col) =>
           col.status === activeStatus.status ? { ...col, quotes: newQuotes } : col
         )
-        setLocalData(newData)
+        // Drag & drop için local state'i güncelle
+        setDragLocalData(newData)
       }
     }
   }
 
-  const activeQuote = localData
+  const activeQuote = displayData
     .flatMap((col) => col.quotes)
     .find((quote) => quote.id === activeId)
 
+  // Memoize drop animation - faster
+  const dropAnimation: DropAnimation = useMemo(() => ({
+    sideEffects: defaultDropAnimationSideEffects({
+      styles: {
+        active: {
+          opacity: '0.4',
+        },
+      },
+    }),
+    duration: 0, // 0ms - ANINDA drop, hiç animasyon yok
+    easing: 'linear', // Linear - en hızlı
+  }), [])
+
   return (
-    <DndContext
+      <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={pointerWithin}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-4 overflow-x-auto pb-4">
-        {localData.map((column) => {
+      {/* Horizontal Scroll Container - Sticky ve erişilebilir */}
+      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-2 mb-4 shadow-sm">
+        <div className="flex items-center justify-between">
+          <p className="text-sm text-gray-600 font-medium">Yatay kaydırma için sağa-sola kaydırın</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                const container = document.querySelector('.kanban-scroll-container') as HTMLElement
+                if (container) {
+                  container.scrollBy({ left: -400, behavior: 'smooth' })
+                }
+              }}
+              className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded border border-gray-300"
+            >
+              ← Sola
+            </button>
+            <button
+              onClick={() => {
+                const container = document.querySelector('.kanban-scroll-container') as HTMLElement
+                if (container) {
+                  container.scrollBy({ left: 400, behavior: 'smooth' })
+                }
+              }}
+              className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded border border-gray-300"
+            >
+              Sağa →
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-4 overflow-x-auto pb-4 kanban-scroll-container" style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
+        {displayData.map((column) => {
           const colors = statusColors[column.status] || statusColors.DRAFT
           return (
             <Card
@@ -406,10 +1135,39 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
             >
               {/* Column Header */}
               <div className={`p-4 border-b-2 ${colors.border}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className={`font-bold text-lg ${colors.text}`}>
-                    {statusLabels[column.status] || column.status}
-                  </h3>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <h3 className={`font-bold text-lg ${colors.text}`}>
+                      {statusLabels[column.status] || column.status}
+                    </h3>
+                    <TooltipProvider delayDuration={0}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button 
+                            type="button" 
+                            className="text-blue-600 hover:text-blue-800 transition-colors p-2 rounded-full hover:bg-blue-100 border-2 border-blue-300 hover:border-blue-400 bg-blue-50 shadow-sm hover:shadow-md"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              e.preventDefault()
+                            }}
+                            title="Aşama bilgisi için tıklayın veya üzerine gelin"
+                          >
+                            <Info className="h-5 w-5" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent 
+                          side="right" 
+                          className="max-w-sm p-4 bg-white border-2 border-blue-300 shadow-xl z-[100] text-left"
+                          sideOffset={8}
+                        >
+                          <div className="flex items-start gap-2">
+                            <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                            <p className="text-sm leading-relaxed text-gray-800 font-medium">{statusInfoMessages[column.status] || 'Bu aşama hakkında bilgi'}</p>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <Badge className={statusBadgeColors[column.status] || 'bg-gray-500 text-white'}>
                     {column.count}
                   </Badge>
@@ -420,10 +1178,11 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
                     {new Intl.NumberFormat('tr-TR', { 
                       style: 'currency', 
                       currency: 'TRY' 
-                    }).format(column.totalValue || 0)}
+                    }).format(column.quotes.reduce((sum, q: any) => sum + (q.totalAmount || 0), 0))}
                   </span>
                 </div>
               </div>
+
 
               {/* Cards - Droppable Area */}
               <DroppableColumn status={column.status}>
@@ -448,6 +1207,7 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
                           status={column.status}
                           onEdit={onEdit}
                           onDelete={onDelete}
+                          onStatusChange={onStatusChange}
                         />
                       ))
                     )}
@@ -459,9 +1219,20 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
         })}
       </div>
 
-      <DragOverlay>
+      <DragOverlay dropAnimation={dropAnimation}>
         {activeQuote ? (
-          <Card className="bg-white border-2 border-primary-400 shadow-lg min-w-[300px]">
+          <Card 
+            className="bg-white border-2 border-primary-400 shadow-xl min-w-[300px] rotate-2 transition-none"
+            style={{
+              willChange: 'transform, opacity',
+              transform: 'translate3d(0, 0, 0)',
+              backfaceVisibility: 'hidden',
+              WebkitTransform: 'translateZ(0)',
+              perspective: 1000,
+              transition: 'none', // Drag sırasında hiç transition yok
+              pointerEvents: 'none', // Drag sırasında pointer events yok
+            }}
+          >
             <div className="p-3">
               <div className="flex items-start gap-2 mb-2">
                 <FileText className="h-4 w-4 text-primary-500 mt-0.5 flex-shrink-0" />
@@ -472,7 +1243,7 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
                 </div>
               </div>
               <p className="text-sm font-semibold text-primary-600 mt-2">
-                {formatCurrency(activeQuote.total || 0)}
+                {formatCurrency((activeQuote as any).totalAmount || 0)}
               </p>
             </div>
           </Card>

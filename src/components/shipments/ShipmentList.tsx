@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { toast } from '@/lib/toast'
 import { useLocale } from 'next-intl'
+import { useSession } from 'next-auth/react'
 import { Plus, Search, Edit, Trash2, Eye, CheckCircle, MoreVertical, Calendar, FileText, Truck, BarChart3, X } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -45,6 +47,7 @@ import {
 } from '@/components/ui/tooltip'
 import ShipmentForm from './ShipmentForm'
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import { AutomationInfo } from '@/components/automation/AutomationInfo'
 import Link from 'next/link'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
@@ -56,6 +59,11 @@ interface Shipment {
   tracking: string
   status: string
   invoiceId?: string
+  companyId?: string
+  Company?: {
+    id: string
+    name: string
+  }
   createdAt: string
   updatedAt?: string
   estimatedDelivery?: string
@@ -151,16 +159,32 @@ const statusRowColors: Record<string, string> = {
 
 export default function ShipmentList() {
   const locale = useLocale()
+  const { data: session } = useSession()
+  
+  // SuperAdmin kontrolü
+  const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+  
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin için firma filtresi
   const [formOpen, setFormOpen] = useState(false)
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [detailShipment, setDetailShipment] = useState<Shipment | null>(null)
   const [reportModalOpen, setReportModalOpen] = useState(false)
   const [statusChangingId, setStatusChangingId] = useState<string | null>(null)
+  
+  // SuperAdmin için firmaları çek
+  const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
+    isSuperAdmin ? '/api/superadmin/companies' : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
+  // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
+  const companies = (companiesData?.companies || []).filter((company, index, self) => 
+    index === self.findIndex((c) => c.id === company.id)
+  )
 
   // Debounced search
   const [debouncedSearch, setDebouncedSearch] = useState(search)
@@ -179,6 +203,7 @@ export default function ShipmentList() {
   if (statusFilter) params.append('status', statusFilter)
   if (dateFrom) params.append('dateFrom', dateFrom)
   if (dateTo) params.append('dateTo', dateTo)
+  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId) // SuperAdmin için firma filtresi
   
   const apiUrl = `/api/shipments?${params.toString()}`
   const { data: shipmentsData = [], isLoading, error, mutate: mutateShipments } = useData<Shipment[]>(apiUrl, {
@@ -216,7 +241,10 @@ export default function ShipmentList() {
     // Onaylı sevkiyatlar iptal edilemez
     const currentShipment = shipments.find(s => s.id === id)
     if (currentShipment?.status?.toUpperCase() === 'APPROVED' && newStatus === 'CANCELLED') {
-      alert('Onaylı sevkiyatlar iptal edilemez!')
+      toast.warning(
+        'Onaylı sevkiyat iptal edilemez',
+        'Bu sevkiyat onaylandı ve ürünler stoktan düşüldü. İptal etmek için önce sevkiyatı "Taslak" durumuna geri almanız ve stok işlemini geri almanız gerekir.'
+      )
       return
     }
     
@@ -230,7 +258,7 @@ export default function ShipmentList() {
 
       if (!res.ok) {
         const error = await res.json()
-        throw new Error(error.error || 'Durum değiştirilemedi')
+        throw new Error(error.error || 'Durum güncellenemedi')
       }
 
       const result = await res.json()
@@ -294,15 +322,18 @@ export default function ShipmentList() {
       
       let message = ''
       if (newStatus === 'APPROVED') {
-        message = `✅ Sevkiyat onaylandı!\n\n${shipmentName} sevkiyatı başarıyla onaylandı. Stok düşümü yapıldı.`
+        message = `${shipmentName} sevkiyatı başarıyla onaylandı ve ürünler stoktan düşüldü. Faturaya "Sevk Edildi" bildirimi gönderildi.`
+        toast.success('Sevkiyat onaylandı!', message)
       } else {
-        message = `✅ Durum güncellendi!\n\n${shipmentName} sevkiyatının durumu "${statusLabel}" olarak güncellendi.`
+        message = `${shipmentName} sevkiyatının durumu "${statusLabel}" olarak değiştirildi.`
+        toast.success('Durum güncellendi!', message)
       }
-      
-      alert(message)
     } catch (error: any) {
       console.error('Status change error:', error)
-      alert(error?.message || 'Durum değiştirilemedi')
+      toast.error(
+        'Durum güncellenemedi',
+        error?.message || 'Sevkiyat durumu değiştirilirken bir hata oluştu. Lütfen tekrar deneyin.'
+      )
     } finally {
       setStatusChangingId(null)
     }
@@ -374,7 +405,10 @@ export default function ShipmentList() {
   const handleDelete = useCallback(async (id: string, tracking: string, status?: string) => {
     // Onaylı sevkiyatlar silinemez
     if (status?.toUpperCase() === 'APPROVED') {
-      alert('Onaylı sevkiyatlar silinemez!')
+      toast.warning(
+        'Onaylı sevkiyat silinemez',
+        'Bu sevkiyat onaylandı ve ürünler stoktan düşüldü. Silmek için önce sevkiyatı "Taslak" durumuna geri alın ve stok işlemini iptal edin.'
+      )
       return
     }
 
@@ -416,7 +450,10 @@ export default function ShipmentList() {
       }, 500)
     } catch (error: any) {
         console.error('Delete error:', error)
-      alert(error?.message || 'Silme işlemi başarısız oldu')
+      toast.error(
+        'Sevkiyat silinemedi',
+        error?.message || 'Sevkiyat kaydı silinirken bir hata oluştu. Lütfen tekrar deneyin.'
+      )
     }
   }, [shipments, mutateShipments, apiUrl])
 
@@ -428,7 +465,10 @@ export default function ShipmentList() {
   const handleEdit = useCallback((shipment: Shipment) => {
     // Onaylı sevkiyatlar düzenlenemez
     if (shipment.status?.toUpperCase() === 'APPROVED') {
-      alert('Onaylı sevkiyatlar düzenlenemez!')
+      toast.warning(
+        'Onaylı sevkiyat düzenlenemez',
+        'Bu sevkiyat onaylandı ve ürünler stoktan düşüldü. Düzenlemek için önce sevkiyatı "Taslak" durumuna geri alın.'
+      )
       return
     }
     setSelectedShipment(shipment)
@@ -580,6 +620,38 @@ export default function ShipmentList() {
         </motion.div>
       </div>
 
+      {/* Otomasyon Bilgileri */}
+      <AutomationInfo
+        title="Sevkiyatlar Modülü Otomasyonları"
+        automations={[
+          {
+            action: 'Sevkiyatı "Onaylandı" yaparsan',
+            result: '"Ürünler" sayfasındaki ilgili ürünlerin stokları otomatik olarak rezerve edilir',
+            details: [
+              'Rezerve miktar artar (ürünler rezerve edilir)',
+            ],
+          },
+          {
+            action: 'Sevkiyatı "Gönderildi" yaparsan',
+            result: '"Ürünler" sayfasındaki ilgili ürünlerin stokları otomatik olarak düşer',
+            details: [
+              'Stok miktarı azalır (ürünler gönderildi)',
+              'Rezerve edilmiş stoklar otomatik olarak serbest bırakılır',
+              '"Aktiviteler" sayfasında gönderim kaydı görünür',
+            ],
+          },
+          {
+            action: 'Sevkiyatı "Teslim Edildi" yaparsan',
+            result: 'Otomatik olarak müşteriye bildirim gönderilir',
+            details: [
+              'E-posta bildirimi gönderilir',
+              '"Aktiviteler" sayfasında teslimat kaydı görünür',
+              'Bildirim gönderilir (müşteriye ve ekibe)',
+            ],
+          },
+        ]}
+      />
+
       {/* 4️⃣ Gelişmiş Filtreleme */}
       <div className="flex gap-4 flex-wrap">
         <div className="flex-1 relative min-w-[200px]">
@@ -592,6 +664,21 @@ export default function ShipmentList() {
             className="pl-10"
           />
         </div>
+        {isSuperAdmin && (
+          <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Firma Seç" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tüm Firmalar</SelectItem>
+              {companies.map((company) => (
+                <SelectItem key={company.id} value={company.id}>
+                  {company.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Select value={statusFilter || 'all'} onValueChange={(v) => setStatusFilter(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Durum" />
@@ -630,6 +717,7 @@ export default function ShipmentList() {
           <TableHeader>
             <TableRow>
               <TableHead>Sevkiyat İsmi</TableHead>
+              {isSuperAdmin && <TableHead>Firma</TableHead>}
               <TableHead>Takip Numarası</TableHead>
               <TableHead>Durum</TableHead>
               <TableHead>Fatura</TableHead>
@@ -642,7 +730,7 @@ export default function ShipmentList() {
           <TableBody>
             {shipments.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                <TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-8 text-gray-500">
                   Sevkiyat bulunamadı
                 </TableCell>
               </TableRow>
@@ -675,6 +763,13 @@ export default function ShipmentList() {
                       )}
                     </div>
                   </TableCell>
+                  {isSuperAdmin && (
+                    <TableCell>
+                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                        {shipment.Company?.name || '-'}
+                      </Badge>
+                    </TableCell>
+                  )}
                   <TableCell className="font-medium font-mono text-sm text-gray-600">
                     {shipment.tracking || shipment.id.substring(0, 8)}
                   </TableCell>
@@ -744,7 +839,7 @@ export default function ShipmentList() {
                                 <p><strong>Fatura No:</strong> {shipment.Invoice.invoiceNumber || shipment.invoiceId.substring(0, 8)}</p>
                                 <p><strong>Başlık:</strong> {shipment.Invoice.title || '-'}</p>
                                 <p><strong>Müşteri:</strong> {getCustomerName(shipment)}</p>
-                                <p><strong>Toplam:</strong> {formatCurrency(shipment.Invoice.total || 0)}</p>
+                                <p><strong>Toplam:</strong> {formatCurrency(shipment.Invoice.totalAmount || 0)}</p>
                                 <p><strong>Tarih:</strong> {new Date(shipment.Invoice.createdAt).toLocaleDateString('tr-TR')}</p>
                               </div>
                             </TooltipContent>
@@ -791,7 +886,7 @@ export default function ShipmentList() {
                           onClick={() => handleViewDetail(shipment)}
                           aria-label="Detayları görüntüle"
                         >
-                          <Eye className="h-4 w-4" />
+                          <Eye className="h-4 w-4 text-gray-600" />
                         </Button>
                       ) : (
                         // Onaylanmamış sevkiyatlar için göz ikonu + context menü
@@ -803,14 +898,14 @@ export default function ShipmentList() {
                             onClick={() => handleViewDetail(shipment)}
                             aria-label="Detayları görüntüle"
                           >
-                            <Eye className="h-4 w-4" />
+                            <Eye className="h-4 w-4 text-gray-600" />
                           </Button>
                           
                           {/* Context Menü (3-dot) */}
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon">
-                                <MoreVertical className="h-4 w-4" />
+                                <MoreVertical className="h-4 w-4 text-gray-600" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
@@ -844,8 +939,18 @@ export default function ShipmentList() {
                               )}
                               <DropdownMenuSeparator />
                               <DropdownMenuItem 
-                                onClick={() => handleDelete(shipment.id, shipment.tracking || '', shipment.status)}
-                                className="text-red-600"
+                                onClick={() => {
+                                  if (shipment.status === 'DELIVERED') {
+                                    toast.warning(
+                                      'Teslim edilmiş sevkiyat silinemez',
+                                      'Bu sevkiyat müşteriye teslim edildi ve işlem tamamlandı. Silmek için önce sevkiyat durumunu değiştirin.'
+                                    )
+                                    return
+                                  }
+                                  handleDelete(shipment.id, shipment.tracking || '', shipment.status)
+                                }}
+                                disabled={shipment.status === 'DELIVERED'}
+                                className="text-red-600 disabled:opacity-50"
                               >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 Sil
@@ -972,7 +1077,7 @@ export default function ShipmentList() {
                       const taxAmount = (subtotal * taxRate) / 100
                       const totalWithTax = subtotal + taxAmount
                       // Invoice'dan gelen total'ı kullan (eğer varsa), yoksa hesaplanan total'ı kullan
-                      const finalTotal = (detailShipment.Invoice as any).total || totalWithTax
+                      const finalTotal = (detailShipment.Invoice as any).totalAmount || totalWithTax
 
                       return (
                         <div className="space-y-3 pt-3 border-t">

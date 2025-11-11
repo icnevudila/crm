@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { createRecord } from '@/lib/crud'
 
@@ -9,22 +8,25 @@ export const revalidate = 3600
 
 export async function GET(request: Request) {
   try {
-    // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Invoices GET API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    // Session kontrolü - cache ile (30 dakika cache - çok daha hızlı!)
+    const { session, error: sessionError } = await getSafeSession(request)
+    
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Permission check - canRead kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canRead = await hasPermission('invoice', 'read', session.user.id)
+    if (!canRead) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Fatura görüntüleme yetkiniz yok' },
+        { status: 403 }
+      )
     }
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
@@ -35,17 +37,32 @@ export async function GET(request: Request) {
     const search = searchParams.get('search') || ''
     const status = searchParams.get('status') || ''
     const invoiceType = searchParams.get('invoiceType') || '' // SALES veya PURCHASE
+    const customerCompanyId = searchParams.get('customerCompanyId') || '' // Firma bazlı filtreleme
+    const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
 
-    // OPTİMİZE: Sadece gerekli kolonları seç - performans için (JOIN kaldırıldı - çok yavaş)
+    // OPTİMİZE: Sadece gerekli kolonları seç - performans için
+    // SuperAdmin için Company bilgisi ekle
+    // ÖNEMLİ: totalAmount kolonunu çek (050 migration ile total → totalAmount olarak değiştirildi)
     let query = supabase
       .from('Invoice')
-      .select('id, title, status, total, quoteId, createdAt, invoiceType')
+      .select(`
+        id, title, status, totalAmount, quoteId, createdAt, invoiceType, companyId,
+        Company:companyId (
+          id,
+          name
+        )
+      `)
       .order('createdAt', { ascending: false })
       .limit(100) // ULTRA AGRESİF limit - sadece 100 kayıt (instant load)
     
+    // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
       query = query.eq('companyId', companyId)
+    } else if (filterCompanyId) {
+      // SuperAdmin firma filtresi seçtiyse sadece o firmayı göster
+      query = query.eq('companyId', filterCompanyId)
     }
+    // SuperAdmin ve firma filtresi yoksa tüm firmaları göster
 
     if (search) {
       query = query.or(`title.ilike.%${search}%`)
@@ -58,6 +75,11 @@ export async function GET(request: Request) {
     // invoiceType filtresi (SALES veya PURCHASE)
     if (invoiceType && (invoiceType === 'SALES' || invoiceType === 'PURCHASE')) {
       query = query.eq('invoiceType', invoiceType)
+    }
+
+    // Firma bazlı filtreleme (customerCompanyId)
+    if (customerCompanyId) {
+      query = query.eq('customerCompanyId', customerCompanyId)
     }
 
     const { data, error } = await query
@@ -102,6 +124,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Permission check - canCreate kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canCreate = await hasPermission('invoice', 'create', session.user.id)
+    if (!canCreate) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Fatura oluşturma yetkiniz yok' },
+        { status: 403 }
+      )
+    }
+
     // Body parse - hata yakalama ile
     let body
     try {
@@ -126,19 +158,41 @@ export async function POST(request: Request) {
 
     const supabase = getSupabaseWithServiceRole()
 
-    // Invoice verilerini oluştur - SADECE schema.sql'de olan kolonları gönder
-    // schema.sql: title, status, total, quoteId, companyId
+    // Otomatik fatura numarası oluştur (eğer invoiceNumber gönderilmemişse)
+    let invoiceNumber = body.invoiceNumber
+    if (!invoiceNumber || invoiceNumber.trim() === '') {
+      const now = new Date()
+      const year = now.getFullYear()
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      
+      // Bu ay oluşturulan fatura sayısını al (invoiceNumber ile başlayanlar)
+      const { count } = await supabase
+        .from('Invoice')
+        .select('*', { count: 'exact', head: true })
+        .eq('companyId', session.user.companyId)
+        .like('invoiceNumber', `INV-${year}-${month}-%`)
+      
+      // Sıradaki numara
+      const nextNumber = String((count || 0) + 1).padStart(4, '0')
+      invoiceNumber = `INV-${year}-${month}-${nextNumber}`
+    }
+
+    // Invoice verilerini oluştur - totalAmount kullan (050 migration ile total → totalAmount olarak değiştirildi)
+    // schema.sql: title, status, totalAmount, quoteId, companyId
     // schema-extension.sql: invoiceNumber, dueDate, paymentDate, taxRate (migration çalıştırılmamış olabilir - GÖNDERME!)
     // schema-vendor.sql: vendorId (migration çalıştırılmamış olabilir - GÖNDERME!)
     const invoiceData: any = {
       title: body.title.trim(),
       status: body.status || 'DRAFT',
-      total: body.total !== undefined ? parseFloat(body.total) : 0,
+      totalAmount: body.totalAmount !== undefined ? parseFloat(body.totalAmount) : (body.total !== undefined ? parseFloat(body.total) : 0),
       companyId: session.user.companyId,
+      invoiceNumber: invoiceNumber, // Otomatik oluşturulan numara
     }
 
     // Sadece schema.sql'de olan alanlar
     if (body.quoteId) invoiceData.quoteId = body.quoteId
+    // Firma bazlı ilişki (customerCompanyId)
+    if (body.customerCompanyId) invoiceData.customerCompanyId = body.customerCompanyId
     // ÖNEMLİ: invoiceType ekle (PURCHASE veya SALES) - mal kabul/sevkiyat kaydı açmak için gerekli
     if (body.invoiceType && (body.invoiceType === 'PURCHASE' || body.invoiceType === 'SALES')) {
       invoiceData.invoiceType = body.invoiceType
@@ -330,7 +384,7 @@ export async function POST(request: Request) {
             await supabase.from('ActivityLog').insert([{
               entity: 'PurchaseTransaction',
               action: 'CREATE',
-              description: `Fatura için taslak mal kabul oluşturuldu: #${(purchaseData as any).id}`,
+              description: `Fatura için taslak mal kabul oluşturuldu`,
               meta: { 
                 entity: 'PurchaseTransaction', 
                 action: 'create', 
@@ -470,7 +524,7 @@ export async function POST(request: Request) {
             await supabase.from('ActivityLog').insert([{
               entity: 'Shipment',
               action: 'CREATE',
-              description: `Fatura için taslak sevkiyat oluşturuldu: #${(shipmentData as any).id}`,
+              description: `Fatura için taslak sevkiyat oluşturuldu`,
               meta: { 
                 entity: 'Shipment', 
                 action: 'create', 
@@ -492,6 +546,24 @@ export async function POST(request: Request) {
       } catch (error) {
         // Hata olsa bile invoice oluşturuldu, sadece logla
         console.error('Reserved stock and shipment creation error:', error)
+      }
+    }
+
+    // Bildirim: Fatura oluşturuldu
+    if (invoiceResult?.id) {
+      try {
+        const { createNotificationForRole } = await import('@/lib/notification-helper')
+        await createNotificationForRole({
+          companyId: session.user.companyId,
+          role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+          title: 'Yeni Fatura Oluşturuldu',
+          message: `Yeni bir fatura oluşturuldu. Detayları görmek ister misiniz?`,
+          type: 'info',
+          relatedTo: 'Invoice',
+          relatedId: (invoiceResult as any).id,
+        })
+      } catch (notificationError) {
+        // Bildirim hatası ana işlemi engellemez
       }
     }
 

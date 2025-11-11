@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { toast } from '@/lib/toast'
 import {
   Dialog,
   DialogContent,
@@ -165,7 +166,10 @@ export default function CustomerForm({
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      alert(error.message)
+      toast.error(
+        'Müşteri kaydedilemedi',
+        error.message || 'Müşteri kaydetme işlemi sırasında bir hata oluştu. Lütfen tüm alanları kontrol edip tekrar deneyin.'
+      )
     } finally {
       setLoading(false)
     }

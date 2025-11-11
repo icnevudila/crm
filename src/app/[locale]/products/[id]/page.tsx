@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { mutate } from 'swr'
 import Image from 'next/image'
-import { ArrowLeft, Edit, Package, ShoppingCart, FileText, TrendingUp, TrendingDown, Minus, Plus, RotateCcw, History } from 'lucide-react'
+import { ArrowLeft, Edit, Package, ShoppingCart, FileText, TrendingUp, TrendingDown, Minus, Plus, RotateCcw, History, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -18,6 +18,7 @@ import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import StockMovementForm from '@/components/stock/StockMovementForm'
 import Link from 'next/link'
 import { useData } from '@/hooks/useData'
+import ProductForm from '@/components/products/ProductForm'
 
 async function fetchProduct(id: string) {
   const res = await fetch(`/api/products/${id}`)
@@ -32,6 +33,8 @@ export default function ProductDetailPage() {
   const id = params.id as string
   const [stockFormOpen, setStockFormOpen] = useState(false)
   const [stockFormType, setStockFormType] = useState<'IN' | 'OUT' | 'ADJUSTMENT' | 'RETURN' | undefined>(undefined)
+  const [formOpen, setFormOpen] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const { data: product, isLoading, refetch: refetchProduct } = useQuery({
     queryKey: ['product', id],
@@ -46,10 +49,13 @@ export default function ProductDetailPage() {
     {
       dedupingInterval: 0, // Cache'i devre dışı bırak (her zaman fresh data)
       revalidateOnFocus: true, // Focus'ta yeniden fetch yap
-      revalidateOnReconnect: true, // Bağlantı yenilendiğinde fetch yap
       refreshInterval: 0, // Otomatik refresh yok (manuel kontrol)
     }
   )
+
+  // İlgili Quote ve Invoice'ları çek
+  const { data: relatedQuotes = [] } = useData<any[]>(`/api/products/${id}/quotes`)
+  const { data: relatedInvoices = [] } = useData<any[]>(`/api/products/${id}/invoices`)
 
   // Sayfa yüklendiğinde cache'i invalidate et (fresh data için)
   useEffect(() => {
@@ -154,13 +160,44 @@ export default function ProductDetailPage() {
             </p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => router.push(`/${locale}/products`)}
-        >
-          <Edit className="mr-2 h-4 w-4" />
-          Düzenle
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => router.push(`/${locale}/products`)}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Geri
+          </Button>
+          <Button variant="outline" onClick={() => setFormOpen(true)}>
+            <Edit className="mr-2 h-4 w-4" />
+            Düzenle
+          </Button>
+          <Button
+            variant="outline"
+            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            onClick={async () => {
+              if (!confirm(`${product.name} ürününü silmek istediğinize emin misiniz?`)) {
+                return
+              }
+              setDeleteLoading(true)
+              try {
+                const res = await fetch(`/api/products/${id}`, {
+                  method: 'DELETE',
+                })
+                if (!res.ok) {
+                  const errorData = await res.json().catch(() => ({}))
+                  throw new Error(errorData.error || 'Silme işlemi başarısız')
+                }
+                router.push(`/${locale}/products`)
+              } catch (error: any) {
+                alert(error?.message || 'Silme işlemi başarısız oldu')
+              } finally {
+                setDeleteLoading(false)
+              }
+            }}
+            disabled={deleteLoading}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Sil
+          </Button>
+        </div>
       </div>
 
       {/* Info Cards */}
@@ -552,6 +589,17 @@ export default function ProductDetailPage() {
         onSuccess={() => {
           refetchProduct()
           mutateStockMovements()
+        }}
+      />
+
+      {/* Product Form Modal */}
+      <ProductForm
+        product={product}
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSuccess={async () => {
+          // Form başarılı olduğunda sayfayı yenile
+          refetchProduct()
         }}
       />
     </div>

@@ -1,13 +1,16 @@
 'use client'
 
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { ArrowLeft, Edit, MessageSquare, User, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, MessageSquare, User, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
+import CommentsSection from '@/components/ui/CommentsSection'
+import TicketForm from '@/components/tickets/TicketForm'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import Link from 'next/link'
 
@@ -19,7 +22,13 @@ interface Ticket {
   priority: string
   tags?: string[]
   customerId?: string
+  assignedTo?: string
   Customer?: {
+    id: string
+    name: string
+    email?: string
+  }
+  User?: {
     id: string
     name: string
     email?: string
@@ -40,8 +49,10 @@ export default function TicketDetailPage() {
   const router = useRouter()
   const locale = useLocale()
   const id = params.id as string
+  const [formOpen, setFormOpen] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
-  const { data: ticket, isLoading } = useQuery({
+  const { data: ticket, isLoading, refetch } = useQuery({
     queryKey: ['ticket', id],
     queryFn: () => fetchTicket(id),
   })
@@ -90,6 +101,45 @@ export default function TicketDetailPage() {
     LOW: 'Düşük',
     MEDIUM: 'Orta',
     HIGH: 'Yüksek',
+    URGENT: 'Acil',
+  }
+
+  const handleDelete = async () => {
+    if (!ticket) return
+    
+    // RESOLVED veya CLOSED ticket'ları silinemez
+    if (ticket.status === 'RESOLVED' || ticket.status === 'CLOSED') {
+      alert('Çözülmüş veya kapatılmış talepler silinemez')
+      return
+    }
+
+    if (!confirm(`${ticket.subject} destek talebini silmek istediğinize emin misiniz?`)) {
+      return
+    }
+
+    setDeleteLoading(true)
+    try {
+      const res = await fetch(`/api/tickets/${id}`, {
+        method: 'DELETE',
+      })
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to delete ticket')
+      }
+      
+      router.push(`/${locale}/tickets`)
+    } catch (error: any) {
+      console.error('Delete error:', error)
+      alert(error?.message || 'Silme işlemi başarısız oldu')
+    } finally {
+      setDeleteLoading(false)
+    }
+  }
+
+  const handleFormClose = () => {
+    setFormOpen(false)
+    refetch() // Form kapandığında veriyi yenile
   }
 
   return (
@@ -111,6 +161,26 @@ export default function TicketDetailPage() {
             </h1>
             <p className="mt-1 text-gray-600">Destek Talebi Detayları</p>
           </div>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setFormOpen(true)}
+          >
+            <Edit className="mr-2 h-4 w-4" />
+            Düzenle
+          </Button>
+          {(ticket.status !== 'RESOLVED' && ticket.status !== 'CLOSED') && (
+            <Button
+              variant="outline"
+              onClick={handleDelete}
+              disabled={deleteLoading}
+              className="text-red-600 hover:text-red-700"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {deleteLoading ? 'Siliniyor...' : 'Sil'}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -191,10 +261,26 @@ export default function TicketDetailPage() {
         </Card>
       </div>
 
+      {/* Yorumlar Bölümü */}
+      <CommentsSection
+        entityType="Ticket"
+        entityId={ticket.id}
+      />
+
       {/* Activity Timeline */}
       {ticket.activities && ticket.activities.length > 0 && (
         <ActivityTimeline activities={ticket.activities} />
       )}
+
+      {/* Form Modal */}
+      <TicketForm
+        ticket={ticket}
+        open={formOpen}
+        onClose={handleFormClose}
+        onSuccess={async () => {
+          refetch() // Form kapandığında veriyi yenile
+        }}
+      />
     </div>
   )
 }

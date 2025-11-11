@@ -1,7 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { toast } from '@/lib/toast'
 import { useLocale } from 'next-intl'
+import { useSearchParams } from 'next/navigation'
+import { useSession } from 'next-auth/react'
 import { Plus, Search, Edit, Trash2, Eye, Package, AlertTriangle, TrendingUp, TrendingDown, Clock } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -27,6 +30,7 @@ import {
 import ProductForm from './ProductForm'
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import ModuleStats from '@/components/stats/ModuleStats'
+import { AutomationInfo } from '@/components/automation/AutomationInfo'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
 
@@ -44,18 +48,50 @@ interface Product {
   unit?: string
   description?: string
   imageUrl?: string
+  companyId?: string
+  Company?: {
+    id: string
+    name: string
+  }
   createdAt: string
   updatedAt?: string
 }
 
 export default function ProductList() {
   const locale = useLocale()
-  const [search, setSearch] = useState('')
+  const searchParams = useSearchParams()
+  const { data: session } = useSession()
+  
+  // SuperAdmin kontrolü
+  const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+  
+  // URL parametrelerinden filtreleri oku
+  const searchFromUrl = searchParams.get('search') || ''
+  
+  const [search, setSearch] = useState(searchFromUrl)
+  
+  // URL'den gelen search parametresini state'e set et
+  useEffect(() => {
+    if (searchFromUrl && searchFromUrl !== search) {
+      setSearch(searchFromUrl)
+    }
+  }, [searchFromUrl])
   const [stockFilter, setStockFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin için firma filtresi
   const [formOpen, setFormOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  
+  // SuperAdmin için firmaları çek
+  const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
+    isSuperAdmin ? '/api/superadmin/companies' : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
+  // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
+  const companies = (companiesData?.companies || []).filter((company, index, self) => 
+    index === self.findIndex((c) => c.id === company.id)
+  )
 
   // Debounced search - performans için
   const [debouncedSearch, setDebouncedSearch] = useState(search)
@@ -74,6 +110,7 @@ export default function ProductList() {
   if (stockFilter) params.append('stock', stockFilter)
   if (categoryFilter) params.append('category', categoryFilter)
   if (statusFilter) params.append('status', statusFilter)
+  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId) // SuperAdmin için firma filtresi
   
   const apiUrl = `/api/products?${params.toString()}`
   const { data: productsData, isLoading, error, mutate: mutateProducts } = useData<Product[]>(apiUrl, {
@@ -138,7 +175,7 @@ export default function ProductList() {
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      alert(error?.message || 'Silme işlemi başarısız oldu')
+      toast.error('Silinemedi', error?.message)
     }
   }, [products, mutateProducts, apiUrl])
 
@@ -204,7 +241,7 @@ export default function ProductList() {
             Ürünler yüklenirken bir hata oluştu. 
             {error?.message?.includes('incomingQuantity') || error?.message?.includes('reservedQuantity') ? (
               <span className="block mt-2 text-sm">
-                Veritabanı migration'ı eksik olabilir. Lütfen migration dosyalarını çalıştırın.
+                Veritabanı migration&apos;ı eksik olabilir. Lütfen migration dosyalarını çalıştırın.
               </span>
             ) : (
               <span className="block mt-2 text-sm">{error?.message || 'Bilinmeyen hata'}</span>
@@ -222,6 +259,45 @@ export default function ProductList() {
     <div className="space-y-6">
       {/* İstatistikler */}
       <ModuleStats module="products" statsUrl="/api/stats/products" />
+
+      {/* Otomasyon Bilgileri */}
+      <AutomationInfo
+        title="Ürünler Modülü Otomasyonları"
+        automations={[
+          {
+            action: 'Teklif "Kabul Edildi" yapıldığında (otomatik)',
+            result: '"Ürünler" sayfasındaki ilgili ürünlerin stokları rezerve edilir',
+            details: [
+              'Rezerve miktar artar (ürünler rezerve edilir)',
+              'Stok miktarı değişmez, sadece rezerve miktar artar',
+            ],
+          },
+          {
+            action: 'Fatura "Ödendi" yapıldığında (otomatik)',
+            result: '"Ürünler" sayfasındaki ilgili ürünlerin stokları düşer',
+            details: [
+              'Stok miktarı azalır (ürünler satıldı)',
+              'Rezerve edilmiş stoklar otomatik olarak serbest bırakılır',
+            ],
+          },
+          {
+            action: 'Sevkiyat "Gönderildi" yapıldığında (otomatik)',
+            result: '"Ürünler" sayfasındaki ilgili ürünlerin stokları düşer',
+            details: [
+              'Stok miktarı azalır (ürünler gönderildi)',
+              'Rezerve edilmiş stoklar otomatik olarak serbest bırakılır',
+            ],
+          },
+          {
+            action: 'Stok kritik seviyeye düştüğünde (otomatik)',
+            result: 'Sistem içi kullanıcılara (Admin, Sales) bildirim gönderilir',
+            details: [
+              'Minimum stok seviyesinin altına düşen ürünler için uyarı',
+              '"Aktiviteler" sayfasında stok uyarısı kaydı görünür',
+            ],
+          },
+        ]}
+      />
       
       {/* Stok Durumu İstatistik Kartları */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -321,6 +397,21 @@ export default function ProductList() {
             className="pl-10"
           />
         </div>
+        {isSuperAdmin && (
+          <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Firma Seç" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tüm Firmalar</SelectItem>
+              {companies.map((company) => (
+                <SelectItem key={company.id} value={company.id}>
+                  {company.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Select value={stockFilter || 'all'} onValueChange={(v) => setStockFilter(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Stok Durumu" />
@@ -362,6 +453,7 @@ export default function ProductList() {
           <TableHeader>
             <TableRow>
               <TableHead>Ürün Adı</TableHead>
+              {isSuperAdmin && <TableHead>Firma</TableHead>}
               <TableHead>Kategori</TableHead>
               <TableHead>SKU/Barkod</TableHead>
               <TableHead>Fiyat</TableHead>
@@ -374,7 +466,7 @@ export default function ProductList() {
           <TableBody>
             {products.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                <TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-8 text-gray-500">
                   Ürün bulunamadı
                 </TableCell>
               </TableRow>
@@ -397,9 +489,16 @@ export default function ProductList() {
                       )}
                     </div>
                   </TableCell>
+                  {isSuperAdmin && (
+                    <TableCell>
+                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                        {product.Company?.name || '-'}
+                      </Badge>
+                    </TableCell>
+                  )}
                   <TableCell>
                     {product.category ? (
-                      <Badge variant="outline">{product.category}</Badge>
+                      <Badge variant="outline" className="text-gray-700 border-gray-300">{product.category}</Badge>
                     ) : (
                       <span className="text-gray-400">-</span>
                     )}
@@ -463,7 +562,7 @@ export default function ProductList() {
                     <div className="flex justify-end gap-2">
                       <Link href={`/${locale}/products/${product.id}`} prefetch={true}>
                         <Button variant="ghost" size="icon" aria-label={`${product.name} ürününü görüntüle`}>
-                          <Eye className="h-4 w-4" />
+                          <Eye className="h-4 w-4 text-gray-600" />
                         </Button>
                       </Link>
                       <Button
@@ -472,7 +571,7 @@ export default function ProductList() {
                         onClick={() => handleEdit(product)}
                         aria-label={`${product.name} ürününü düzenle`}
                       >
-                        <Edit className="h-4 w-4" />
+                        <Edit className="h-4 w-4 text-gray-600" />
                       </Button>
                       <Button
                         variant="ghost"
@@ -481,7 +580,7 @@ export default function ProductList() {
                         className="text-red-600 hover:text-red-700"
                         aria-label={`${product.name} ürününü sil`}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4 text-red-600" />
                       </Button>
                     </div>
                   </TableCell>

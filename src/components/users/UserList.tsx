@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { toast } from '@/lib/toast'
 import { useSession } from 'next-auth/react'
 import { useLocale } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye, User as UserIcon } from 'lucide-react'
@@ -100,7 +101,7 @@ export default function UserList() {
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      alert(error?.message || 'Silme işlemi başarısız oldu')
+      toast.error('Silinemedi', error?.message)
     }
   }, [users, mutateUsers, apiUrl])
 

@@ -23,11 +23,10 @@ export const authOptions: NextAuthOptions = {
       credentials: {
         email: { label: 'Email', type: 'email' },
         password: { label: 'Password', type: 'password' },
-        companyId: { label: 'Company ID', type: 'text' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password || !credentials?.companyId) {
-          throw new Error('Email, password ve company ID gereklidir')
+        if (!credentials?.email || !credentials?.password) {
+          throw new Error('Email ve password gereklidir')
         }
 
         // Login için service role key kullan (RLS bypass)
@@ -63,12 +62,12 @@ export const authOptions: NextAuthOptions = {
 
         // Sonuç kontrolü
         if (!user) {
-          throw new Error('Kullanıcı bulunamadı. Email veya şirket bilgisi hatalı olabilir.')
+          throw new Error('Kullanıcı bulunamadı. Email veya şifre hatalı olabilir.')
         }
 
-        // SuperAdmin değilse companyId kontrolü yap
-        if (user.role !== 'SUPER_ADMIN' && user.companyId !== credentials.companyId) {
-          throw new Error('Kullanıcı bulunamadı. Email veya şirket bilgisi hatalı olabilir.')
+        // Kullanıcının companyId'si yoksa hata ver
+        if (!user.companyId) {
+          throw new Error('Kullanıcının şirket bilgisi bulunamadı. Lütfen yöneticinizle iletişime geçin.')
         }
 
         // Şifre kontrolü
@@ -84,67 +83,20 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Şifre hatalı')
         }
 
-        // Şirket bilgisini al (SuperAdmin için kendi companyId'sini kullan)
-        // SuperAdmin için seçilen companyId yerine kendi companyId'sini kullan
-        const targetCompanyId = user.role === 'SUPER_ADMIN' ? user.companyId : credentials.companyId
-        
-        // SuperAdmin için company lookup'ı bypass et - kendi companyId'sini kullan
-        let company
-        if (user.role === 'SUPER_ADMIN') {
-          // SuperAdmin için kendi companyId'sini kullan
-          const { data: superAdminCompany, error: companyError } = await supabase
-            .from('Company')
-            .select('id, name')
-            .eq('id', user.companyId)
-            .maybeSingle()
+        // Şirket bilgisini al - kullanıcının kendi companyId'sini kullan
+        const { data: company, error: companyError } = await supabase
+          .from('Company')
+          .select('id, name')
+          .eq('id', user.companyId)
+          .maybeSingle()
 
-          if (companyError) {
-            console.error('Company lookup error:', companyError)
-            throw new Error(`Şirket bulunamadı: ${companyError.message}`)
-          }
+        if (companyError) {
+          console.error('Company lookup error:', companyError)
+          throw new Error(`Şirket bulunamadı: ${companyError.message}`)
+        }
 
-          if (!superAdminCompany) {
-            // SuperAdmin için varsayılan company oluştur
-            const { data: newCompany, error: createError } = await supabase
-              .from('Company')
-              .insert([
-                {
-                  name: 'CRM System',
-                  sector: 'Sistem',
-                  city: 'İstanbul',
-                  status: 'ACTIVE',
-                },
-              ])
-              .select('id, name')
-              .single()
-
-            if (createError) {
-              console.error('Company creation error:', createError)
-              throw new Error(`Şirket oluşturulamadı: ${createError.message}`)
-            }
-
-            company = newCompany
-          } else {
-            company = superAdminCompany
-          }
-        } else {
-          // Normal kullanıcı için seçilen companyId'yi kullan
-          const { data: normalCompany, error: companyError } = await supabase
-            .from('Company')
-            .select('id, name')
-            .eq('id', credentials.companyId)
-            .maybeSingle()
-
-          if (companyError) {
-            console.error('Company lookup error:', companyError)
-            throw new Error(`Şirket bulunamadı: ${companyError.message}`)
-          }
-
-          if (!normalCompany) {
-            throw new Error('Şirket bulunamadı. Lütfen şirket seçimini kontrol edin.')
-          }
-
-          company = normalCompany
+        if (!company) {
+          throw new Error('Kullanıcının şirket bilgisi bulunamadı. Lütfen yöneticinizle iletişime geçin.')
         }
 
         return {

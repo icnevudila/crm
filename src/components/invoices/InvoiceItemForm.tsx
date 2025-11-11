@@ -130,7 +130,7 @@ export default function InvoiceItemForm({
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      alert(error?.message || 'Ürün ekleme işlemi başarısız oldu')
+      toast.error('Ürün ekleme işlemi başarısız oldu', error?.message)
     } finally {
       setLoading(false)
     }

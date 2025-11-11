@@ -34,8 +34,6 @@ export async function getRecords(options: CrudOptions) {
     throw new Error('Unauthorized')
   }
 
-  // SuperAdmin tüm şirketlerin verilerini görebilir
-  const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
   const companyId = session.user.companyId
 
   // Service role key ile RLS bypass (infinite recursion sorununu çözmek için)
@@ -44,16 +42,20 @@ export async function getRecords(options: CrudOptions) {
 
   // NOT: companyId kontrolü API seviyesinde yapılıyor (güvenlik)
   // Performans için: Sadece gerekli kolonları çek (varsayılan: tüm kolonlar)
+  // ÖNEMLİ: Product tablosunda status kolonu yok - select = '*' kullanılırsa hata verir
+  // Product tablosu için sadece temel kolonları seç
+  const safeSelect = table === 'Product' && select === '*' 
+    ? 'id, name, price, stock, companyId, createdAt, updatedAt'
+    : select
+  
   let query = supabase
     .from(table)
-    .select(select)
+    .select(safeSelect)
     .order(orderBy, { ascending: orderDirection === 'asc' })
     .limit(limit || 500) // Performans için limit (max 500 kayıt - daha hızlı)
   
-  // SuperAdmin değilse companyId filtresi ekle
-  if (!isSuperAdmin) {
-    query = query.eq('companyId', companyId)
-  }
+  // MUTLAKA companyId filtresi uygula - multi-tenant güvenlik için kritik
+  query = query.eq('companyId', companyId)
 
   // Arama filtresi
   if (filters.search) {

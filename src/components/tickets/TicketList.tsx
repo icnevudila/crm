@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { toast } from '@/lib/toast'
 import { useLocale } from 'next-intl'
+import { useSession } from 'next-auth/react'
 import { Plus, Edit, Trash2, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -22,6 +24,7 @@ import {
 } from '@/components/ui/select'
 import TicketForm from './TicketForm'
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import { AutomationInfo } from '@/components/automation/AutomationInfo'
 import Link from 'next/link'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
@@ -32,6 +35,13 @@ interface Ticket {
   status: string
   priority: string
   customerId?: string
+  assignedTo?: string
+  companyId?: string
+  User?: { name: string; email: string }
+  Company?: {
+    id: string
+    name: string
+  }
   createdAt: string
 }
 
@@ -61,15 +71,32 @@ const priorityLabels: Record<string, string> = {
 
 export default function TicketList() {
   const locale = useLocale()
+  const { data: session } = useSession()
+  
+  // SuperAdmin kontrolü
+  const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+  
   const [status, setStatus] = useState('')
   const [priority, setPriority] = useState('')
+  const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin için firma filtresi
   const [formOpen, setFormOpen] = useState(false)
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
+  
+  // SuperAdmin için firmaları çek
+  const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
+    isSuperAdmin ? '/api/superadmin/companies' : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
+  // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
+  const companies = (companiesData?.companies || []).filter((company, index, self) => 
+    index === self.findIndex((c) => c.id === company.id)
+  )
 
   // SWR ile veri çekme (repo kurallarına uygun)
   const params = new URLSearchParams()
   if (status) params.append('status', status)
   if (priority) params.append('priority', priority)
+  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId) // SuperAdmin için firma filtresi
   
   const apiUrl = `/api/tickets?${params.toString()}`
   const { data: tickets = [], isLoading, error, mutate: mutateTickets } = useData<Ticket[]>(apiUrl, {
@@ -109,7 +136,7 @@ export default function TicketList() {
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      alert(error?.message || 'Silme işlemi başarısız oldu')
+      toast.error('Silinemedi', error?.message)
     }
   }, [tickets, mutateTickets, apiUrl])
 
@@ -135,6 +162,30 @@ export default function TicketList() {
 
   return (
     <div className="space-y-6">
+      {/* Otomasyon Bilgileri */}
+      <AutomationInfo
+        title="Destek Talepleri Modülü Otomasyonları"
+        automations={[
+          {
+            action: 'Destek talebini "Kapatıldı" yaparsan',
+            result: 'Talep kapatılır ve arşivlenir',
+            details: [
+              '"Aktiviteler" sayfasında kapanış kaydı görünür',
+              'Müşteri memnuniyeti takibi yapılabilir',
+            ],
+          },
+          {
+            action: 'Destek talebi yanıtlanmadığında (otomatik)',
+            result: 'Yükseltme (escalation) bildirimi gönderilir',
+            details: [
+              'Belirli süre yanıtlanmayan talepler otomatik yükseltilir',
+              'Sistem içi kullanıcılara (Admin, Sales) bildirim gönderilir',
+              '"Aktiviteler" sayfasında yükseltme kaydı görünür',
+            ],
+          },
+        ]}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -151,7 +202,22 @@ export default function TicketList() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4">
+      <div className="flex gap-4 flex-wrap">
+        {isSuperAdmin && (
+          <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Firma Seç" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tüm Firmalar</SelectItem>
+              {companies.map((company) => (
+                <SelectItem key={company.id} value={company.id}>
+                  {company.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Select value={status || 'all'} onValueChange={(v) => setStatus(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Durum" />
@@ -182,9 +248,11 @@ export default function TicketList() {
           <TableHeader>
             <TableRow>
               <TableHead>Konu</TableHead>
+              {isSuperAdmin && <TableHead>Firma</TableHead>}
               <TableHead>Durum</TableHead>
               <TableHead>Öncelik</TableHead>
               <TableHead>Müşteri</TableHead>
+              <TableHead>Atanan</TableHead>
               <TableHead>Tarih</TableHead>
               <TableHead className="text-right">İşlemler</TableHead>
             </TableRow>
@@ -192,7 +260,7 @@ export default function TicketList() {
           <TableBody>
             {tickets.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-gray-500">
+                <TableCell colSpan={isSuperAdmin ? 8 : 7} className="text-center py-8 text-gray-500">
                   Destek talebi bulunamadı
                 </TableCell>
               </TableRow>
@@ -200,6 +268,13 @@ export default function TicketList() {
               tickets.map((ticket) => (
                 <TableRow key={ticket.id}>
                   <TableCell className="font-medium">{ticket.subject}</TableCell>
+                  {isSuperAdmin && (
+                    <TableCell>
+                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                        {ticket.Company?.name || '-'}
+                      </Badge>
+                    </TableCell>
+                  )}
                   <TableCell>
                     <Badge className={statusColors[ticket.status] || 'bg-gray-100'}>
                       {statusLabels[ticket.status] || ticket.status}
@@ -224,13 +299,16 @@ export default function TicketList() {
                     )}
                   </TableCell>
                   <TableCell>
+                    {ticket.User?.name || '-'}
+                  </TableCell>
+                  <TableCell>
                     {new Date(ticket.createdAt).toLocaleDateString('tr-TR')}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       <Link href={`/${locale}/tickets/${ticket.id}`} prefetch={true}>
                         <Button variant="ghost" size="icon" aria-label={`${ticket.subject} destek talebini görüntüle`}>
-                          <Eye className="h-4 w-4" />
+                          <Eye className="h-4 w-4 text-gray-600" />
                         </Button>
                       </Link>
                       <Button
@@ -239,7 +317,7 @@ export default function TicketList() {
                         onClick={() => handleEdit(ticket)}
                         aria-label={`${ticket.subject} destek talebini düzenle`}
                       >
-                        <Edit className="h-4 w-4" />
+                        <Edit className="h-4 w-4 text-gray-600" />
                       </Button>
                       <Button
                         variant="ghost"
@@ -248,7 +326,7 @@ export default function TicketList() {
                         className="text-red-600 hover:text-red-700"
                         aria-label={`${ticket.subject} destek talebini sil`}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4 text-red-600" />
                       </Button>
                     </div>
                   </TableCell>

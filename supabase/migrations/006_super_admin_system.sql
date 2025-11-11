@@ -183,3 +183,13 @@ CROSS JOIN "Module" m
 WHERE r.code = 'USER'
 ON CONFLICT ("roleId", "moduleId") DO NOTHING;
 
+
+
+
+
+
+
+
+
+
+

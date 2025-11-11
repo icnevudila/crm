@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts'
 import { Card } from '@/components/ui/card'
 
 interface InvoiceStatusChartProps {
@@ -72,7 +72,12 @@ export default function InvoiceStatusChart({ data, onStatusClick }: InvoiceStatu
         layout="vertical"
       >
         <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-        <XAxis type="number" tick={{ fill: '#6B7280', fontSize: 12 }} />
+        <XAxis 
+          type="number" 
+          tick={{ fill: '#6B7280', fontSize: 12 }} 
+          tickFormatter={(value) => Math.round(value).toString()} // Tam sayı göster
+          allowDecimals={false} // Ondalık sayıları gösterme
+        />
         <YAxis
           type="category"
           dataKey="name"
@@ -137,6 +142,13 @@ export default function InvoiceStatusChart({ data, onStatusClick }: InvoiceStatu
           {chartData.map((entry, index) => (
             <Cell key={`cell-${index}`} fill={statusColors[entry.status] || '#6B7280'} />
           ))}
+          {/* Bar'ların üzerine tam sayıları göster */}
+          <LabelList
+            dataKey="count"
+            position="right"
+            style={{ fill: '#374151', fontSize: '12px', fontWeight: 600 }}
+            formatter={(value: number) => `${value}`} // Tam sayı göster
+          />
         </Bar>
       </BarChart>
     </ResponsiveContainer>

@@ -130,7 +130,8 @@ interface InvoicePDFProps {
     id: string
     title: string
     status: string
-    total: number
+    totalAmount: number
+    total?: number // Backward compatibility
     invoiceNumber?: string
     createdAt: string
     dueDate?: string
@@ -176,7 +177,7 @@ interface InvoicePDFProps {
 export default function InvoicePDF({ invoice }: InvoicePDFProps) {
   // Türkiye Fatura Mevzuatına Uygun Hesaplamalar
   const taxRate = invoice.taxRate || 18 // Varsayılan %18 KDV
-  const totalAmount = invoice.total || 0
+  const totalAmount = invoice.totalAmount || invoice.total || 0
   // KDV dahil toplamdan KDV hariç tutarı hesapla
   const subtotal = totalAmount / (1 + taxRate / 100)
   const kdv = totalAmount - subtotal

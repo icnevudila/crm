@@ -1,14 +1,16 @@
 'use client'
 
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { ArrowLeft, Edit, DollarSign } from 'lucide-react'
+import { ArrowLeft, Edit, DollarSign, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
+import FinanceForm from '@/components/finance/FinanceForm'
 
 interface Finance {
   id: string
@@ -31,6 +33,8 @@ export default function FinanceDetailPage() {
   const router = useRouter()
   const locale = useLocale()
   const id = params.id as string
+  const [formOpen, setFormOpen] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const { data: finance, isLoading } = useQuery({
     queryKey: ['finance', id],
@@ -78,6 +82,44 @@ export default function FinanceDetailPage() {
               {finance.type === 'INCOME' ? 'Gelir' : 'Gider'} Detayları
             </p>
           </div>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => router.push(`/${locale}/finance`)}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Geri
+          </Button>
+          <Button variant="outline" onClick={() => setFormOpen(true)}>
+            <Edit className="mr-2 h-4 w-4" />
+            Düzenle
+          </Button>
+          <Button
+            variant="outline"
+            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            onClick={async () => {
+              if (!confirm('Bu finans kaydını silmek istediğinize emin misiniz?')) {
+                return
+              }
+              setDeleteLoading(true)
+              try {
+                const res = await fetch(`/api/finance/${id}`, {
+                  method: 'DELETE',
+                })
+                if (!res.ok) {
+                  const errorData = await res.json().catch(() => ({}))
+                  throw new Error(errorData.error || 'Silme işlemi başarısız')
+                }
+                router.push(`/${locale}/finance`)
+              } catch (error: any) {
+                alert(error?.message || 'Silme işlemi başarısız oldu')
+              } finally {
+                setDeleteLoading(false)
+              }
+            }}
+            disabled={deleteLoading}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Sil
+          </Button>
         </div>
       </div>
 
@@ -142,6 +184,17 @@ export default function FinanceDetailPage() {
       {finance.activities && finance.activities.length > 0 && (
         <ActivityTimeline activities={finance.activities} />
       )}
+
+      {/* Form Modal */}
+      <FinanceForm
+        finance={finance}
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSuccess={async () => {
+          // Form başarılı olduğunda sayfayı yenile
+          window.location.reload()
+        }}
+      />
     </div>
   )
 }

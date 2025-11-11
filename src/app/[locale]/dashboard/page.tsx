@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Suspense, useMemo, useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
+import { motion } from 'framer-motion'
 import {
   Dialog,
   DialogContent,
@@ -22,18 +23,10 @@ import { Eye } from 'lucide-react'
 import SkeletonDashboard from '@/components/skeletons/SkeletonDashboard'
 import { useRealtimeKPIs } from '@/hooks/useRealtimeKPIs' // Hook'lar dynamic import edilemez
 import { Card } from '@/components/ui/card' // Basit component - normal import
-const GradientCard = dynamic(() => import('@/components/ui/GradientCard'), {
-  ssr: false,
-  loading: () => <div className="h-32 animate-pulse bg-gray-100 rounded" />,
-})
-const AnimatedCounter = dynamic(() => import('@/components/ui/AnimatedCounter'), {
-  ssr: false,
-  loading: () => <div className="h-8 w-24 animate-pulse bg-gray-100 rounded" />,
-})
-const ActivityTimeline = dynamic(() => import('@/components/ui/ActivityTimeline'), {
-  ssr: false,
-  loading: () => <div className="h-64 animate-pulse bg-gray-100 rounded" />,
-})
+import SmartReminder from '@/components/automations/SmartReminder' // Client Component - direkt import
+import GradientCard from '@/components/ui/GradientCard'
+import AnimatedCounter from '@/components/ui/AnimatedCounter'
+import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import {
   TrendingUp,
   FileText,
@@ -45,40 +38,26 @@ import {
   Briefcase,
   DollarSign,
   Clock,
+  Sparkles,
+  Zap,
 } from 'lucide-react'
 
-// Lazy load chart components - error boundary ile korunuyor
-const SalesTrendChart = dynamic(() => import('@/components/charts/SalesTrendChart'), {
+// Chart components - direkt import (geçici olarak dynamic import kaldırıldı)
+import SalesTrendChart from '@/components/charts/SalesTrendChart'
+import ProductSalesChart from '@/components/charts/ProductSalesChart'
+import CustomerSectorChart from '@/components/charts/CustomerSectorChart'
+import CompanySectorChart from '@/components/charts/CompanySectorChart'
+import CompanyPerformanceChart from '@/components/charts/CompanyPerformanceChart'
+import InvoiceStatusChart from '@/components/charts/InvoiceStatusChart'
+import DealStatusChart from '@/components/charts/DealStatusChart'
+
+// Sales Reports Charts - lazy load
+const MonthlySalesBarChart = dynamic(() => import('@/components/reports/charts/MonthlySalesBarChart'), {
   ssr: false,
   loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
 })
 
-const ProductSalesChart = dynamic(() => import('@/components/charts/ProductSalesChart'), {
-  ssr: false,
-  loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
-})
-
-const CustomerSectorChart = dynamic(() => import('@/components/charts/CustomerSectorChart'), {
-  ssr: false,
-  loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
-})
-
-const CompanySectorChart = dynamic(() => import('@/components/charts/CompanySectorChart'), {
-  ssr: false,
-  loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
-})
-
-const CompanyPerformanceChart = dynamic(() => import('@/components/charts/CompanyPerformanceChart'), {
-  ssr: false,
-  loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
-})
-
-const DealKanbanChart = dynamic(() => import('@/components/charts/DealKanbanChart'), {
-  ssr: false,
-  loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
-})
-
-const InvoiceStatusChart = dynamic(() => import('@/components/charts/InvoiceStatusChart'), {
+const CustomerGrowthLineChart = dynamic(() => import('@/components/reports/charts/CustomerGrowthLineChart'), {
   ssr: false,
   loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
 })
@@ -86,43 +65,41 @@ const InvoiceStatusChart = dynamic(() => import('@/components/charts/InvoiceStat
 async function fetchKPIs() {
   try {
     const res = await fetch('/api/analytics/kpis', {
-      cache: 'force-cache', // ULTRA AGRESİF: Cache kullan (instant navigation için)
-      credentials: 'include', // Session cookie'lerini gönder
-      next: { revalidate: 3600 }, // 1 saat cache - Next.js ISR
+      cache: 'no-store',
+      credentials: 'include',
     })
     if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}))
-      console.error('KPIs API error:', res.status, errorData)
-      // Hata durumunda default değerler dön (UI bozulmasın)
-      return {
-        totalSales: 0,
-        totalQuotes: 0,
-        successRate: 0,
-        activeCompanies: 0,
-        recentActivity: 0,
-        totalInvoices: 0,
-        totalCustomers: 0,
-        totalDeals: 0,
-        avgDealValue: 0,
-        pendingInvoices: 0,
+      // DÜZELTME: Hata durumunda log ekle - sorunun ne olduğunu anla
+      if (process.env.NODE_ENV === 'development') {
+        console.error('KPIs API error - Response not OK:', {
+          status: res.status,
+          statusText: res.statusText,
+          url: res.url,
+        })
       }
+      // Hata durumunda bile boş obje dönme - undefined dön ki TanStack Query hata olarak işlesin
+      throw new Error(`KPIs API error: ${res.status} ${res.statusText}`)
     }
-    return res.json()
+    const data = await res.json()
+    
+    // DÜZELTME: Gelen veriyi logla - sorunun ne olduğunu anla
+    if (process.env.NODE_ENV === 'development') {
+      console.log('KPIs API response:', data)
+    }
+    
+    // DÜZELTME: Veri yoksa veya hatalıysa hata fırlat
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid KPIs data format')
+    }
+    
+    return data
   } catch (error: any) {
-    console.error('fetchKPIs error:', error)
-    // Hata durumunda default değerler dön (UI bozulmasın)
-    return {
-      totalSales: 0,
-      totalQuotes: 0,
-      successRate: 0,
-      activeCompanies: 0,
-      recentActivity: 0,
-      totalInvoices: 0,
-      totalCustomers: 0,
-      totalDeals: 0,
-      avgDealValue: 0,
-      pendingInvoices: 0,
+    // DÜZELTME: Hata durumunda log ekle - sorunun ne olduğunu anla
+    if (process.env.NODE_ENV === 'development') {
+      console.error('KPIs fetch error:', error)
     }
+    // Hata durumunda throw et - TanStack Query hata olarak işlesin
+    throw error
   }
 }
 
@@ -133,41 +110,33 @@ async function fetchTrends() {
       credentials: 'include', // Session cookie'lerini gönder
     })
     if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}))
-      console.error('Trends API error:', res.status, errorData)
-      // Hata durumunda boş trend data dön
-      return { monthlyData: [] }
+      // Hata durumunda boş trend data dön - API { trends } formatında döndürüyor
+      return { trends: [] }
     }
-    return res.json()
+    const data = await res.json().catch(() => ({ trends: [] }))
+    return data
   } catch (error: any) {
-    console.error('fetchTrends error:', error)
-    // Hata durumunda boş trend data dön
-    return { monthlyData: [] }
+    // Sadece development'ta logla - production'da sessiz
+    if (process.env.NODE_ENV === 'development') {
+      console.error('fetchTrends error:', error)
+    }
+    // Hata durumunda boş trend data dön - API { trends } formatında döndürüyor
+    return { trends: [] }
   }
 }
 
 async function fetchDistribution() {
   try {
     const res = await fetch('/api/analytics/distribution', {
-      cache: 'no-store', // Sektör atandığında fresh data için cache'i kapat
-      credentials: 'include', // Session cookie'lerini gönder
+      cache: 'no-store',
+      credentials: 'include',
     })
     if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}))
-      console.error('Distribution API error:', res.status, errorData)
-      // Hata durumunda boş distribution data dön
       return { customerSectors: [], productSales: [], companySectors: [] }
     }
-    const data = await res.json()
-    // Debug: API'den gelen veriyi logla
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Distribution API response:', data)
-      console.log('companySectors in response:', data?.companySectors)
-    }
+    const data = await res.json().catch(() => ({ customerSectors: [], productSales: [], companySectors: [] }))
     return data
   } catch (error: any) {
-    console.error('fetchDistribution error:', error)
-    // Hata durumunda boş distribution data dön
     return { customerSectors: [], productSales: [], companySectors: [] }
   }
 }
@@ -175,20 +144,15 @@ async function fetchDistribution() {
 async function fetchUserPerformance() {
   try {
     const res = await fetch('/api/analytics/user-performance', {
-      cache: 'force-cache', // ULTRA AGRESİF: Cache kullan (instant navigation için)
-      credentials: 'include', // Session cookie'lerini gönder
-      next: { revalidate: 3600 }, // 1 saat cache - Next.js ISR
+      cache: 'no-store',
+      credentials: 'include',
     })
     if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}))
-      console.error('User Performance API error:', res.status, errorData)
-      // Hata durumunda boş performance data dön
       return { performance: [] }
     }
-    return res.json()
+    const data = await res.json().catch(() => ({ performance: [] }))
+    return data
   } catch (error: any) {
-    console.error('fetchUserPerformance error:', error)
-    // Hata durumunda boş performance data dön
     return { performance: [] }
   }
 }
@@ -196,40 +160,35 @@ async function fetchUserPerformance() {
 async function fetchDealKanban() {
   try {
     const res = await fetch('/api/analytics/deal-kanban', {
-      cache: 'force-cache', // ULTRA AGRESİF: Cache kullan (instant navigation için)
-      credentials: 'include', // Session cookie'lerini gönder
-      next: { revalidate: 3600 }, // 1 saat cache - Next.js ISR
+      cache: 'no-store',
+      credentials: 'include',
     })
     if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}))
-      console.error('Deal Kanban API error:', res.status, errorData)
-      // Hata durumunda boş kanban data dön
-      return { columns: [] }
+      return { kanban: [] }
     }
-    return res.json()
+    const data = await res.json().catch(() => ({ kanban: [] }))
+    return data
   } catch (error: any) {
-    console.error('fetchDealKanban error:', error)
-    // Hata durumunda boş kanban data dön
-    return { columns: [] }
+    return { kanban: [] }
   }
 }
 
 async function fetchInvoiceKanban() {
   try {
     const res = await fetch('/api/analytics/invoice-kanban', {
-      cache: 'force-cache', // ULTRA AGRESİF: Cache kullan (instant navigation için)
+      cache: 'no-store', // Fresh data için cache'i kapat
       credentials: 'include', // Session cookie'lerini gönder
-      next: { revalidate: 3600 }, // 1 saat cache - Next.js ISR
     })
     if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}))
-      console.error('Invoice Kanban API error:', res.status, errorData)
       // Hata durumunda boş kanban data dön
       return { kanban: [] }
     }
-    return res.json()
+    const data = await res.json().catch(() => ({ kanban: [] }))
+    return data
   } catch (error: any) {
-    console.error('fetchInvoiceKanban error:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('fetchInvoiceKanban error:', error)
+    }
     // Hata durumunda boş kanban data dön
     return { kanban: [] }
   }
@@ -238,20 +197,15 @@ async function fetchInvoiceKanban() {
 async function fetchRecentActivities() {
   try {
     const res = await fetch('/api/analytics/recent-activities', {
-      cache: 'force-cache', // ULTRA AGRESİF: Cache kullan (instant navigation için)
-      credentials: 'include', // Session cookie'lerini gönder
-      next: { revalidate: 1800 }, // 30 dakika cache - aktivite logları için
+      credentials: 'include',
+      next: { revalidate: 0 },
     })
     if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}))
-      console.error('Recent Activities API error:', res.status, errorData)
-      // Hata durumunda boş activities data dön
       return { activities: [] }
     }
-    return res.json()
+    const data = await res.json().catch(() => ({ activities: [] }))
+    return data
   } catch (error: any) {
-    console.error('fetchRecentActivities error:', error)
-    // Hata durumunda boş activities data dön
     return { activities: [] }
   }
 }
@@ -273,25 +227,49 @@ const statusColors: Record<string, string> = {
   CANCELLED: 'bg-yellow-100 text-yellow-800',
 }
 
+// Stage labels ve colors - Deal modal için
+const stageLabels: Record<string, string> = {
+  LEAD: 'Potansiyel',
+  CONTACTED: 'İletişimde',
+  PROPOSAL: 'Teklif',
+  NEGOTIATION: 'Pazarlık',
+  WON: 'Kazanıldı',
+  LOST: 'Kaybedildi',
+}
+
+const stageColors: Record<string, string> = {
+  LEAD: 'bg-blue-100 text-blue-800',
+  CONTACTED: 'bg-purple-100 text-purple-800',
+  PROPOSAL: 'bg-yellow-100 text-yellow-800',
+  NEGOTIATION: 'bg-orange-100 text-orange-800',
+  WON: 'bg-green-100 text-green-800',
+  LOST: 'bg-red-100 text-red-800',
+}
+
 export default function DashboardPage() {
   const { data: session } = useSession()
   const t = useTranslations('dashboard')
   const locale = useLocale()
+  
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null)
   const [statusModalOpen, setStatusModalOpen] = useState(false)
+  const [selectedStage, setSelectedStage] = useState<string | null>(null)
+  const [stageModalOpen, setStageModalOpen] = useState(false)
   
 
   // Dashboard KPI'larını çek (TanStack Query ile)
-  // Cache stratejisi: 5 dakika stale time (yeni deal eklendiğinde güncellensin)
+  // DÜZELTME: Cache stratejisini güncelle - her zaman fresh data çek
   const { data: initialKPIs, isLoading, error: kpisError } = useQuery({
     queryKey: ['kpis'],
     queryFn: fetchKPIs,
-    staleTime: 5 * 60 * 1000, // 5 DAKİKA stale time (yeni deal eklendiğinde güncellensin)
-    gcTime: 10 * 60 * 1000, // 10 dakika garbage collection time
-    refetchOnWindowFocus: false, // Focus'ta refetch yok
-    refetchOnMount: true, // Mount'ta refetch yap (yeni deal eklendiğinde güncellensin)
-    retry: 1,
-    retryDelay: 500,
+    staleTime: 0, // Cache yok - her zaman fresh data
+    gcTime: 0, // Garbage collection yok - cache tutma
+    refetchOnWindowFocus: true, // Focus'ta refetch yap (fresh data için)
+    refetchOnMount: true, // Mount'ta refetch yap (fresh data için)
+    retry: 3, // 3 kez dene (artırıldı)
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
+    // DÜZELTME: Hata durumunda varsayılan değerler kullan - UI bozulmasın
+    throwOnError: false, // Hata fırlatma - varsayılan değerler kullan
   })
 
   // Development'ta hataları ve başarıları logla
@@ -308,60 +286,148 @@ export default function DashboardPage() {
 
   // Chart verilerini çek - PARALEL ve AGRESİF cache
   // Tüm chart'lar paralel çekilir - beklemez birbirini
-  const { data: trendsData } = useQuery({
+  const { data: trendsData, error: trendsError, isLoading: trendsLoading } = useQuery({
     queryKey: ['trends'],
     queryFn: fetchTrends,
-    staleTime: 5 * 60 * 1000, // 5 dakika stale time (fresh data için)
-    gcTime: 10 * 60 * 1000, // 10 dakika garbage collection time
-    refetchOnWindowFocus: false, // Focus'ta refetch yok
+    staleTime: 0, // Cache yok - her seferinde fresh data
+    gcTime: 0, // Garbage collection yok - cache tutma
+    refetchOnWindowFocus: true, // Focus'ta refetch yap (fresh data için)
     refetchOnMount: true, // Mount'ta refetch yap (fresh data için)
     retry: 2,
     retryDelay: 1000,
   })
 
-  const { data: distributionData } = useQuery({
+  // Debug: Trends verisini logla
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      if (trendsError) {
+        console.error('Trends query error:', trendsError)
+      }
+      if (trendsData) {
+        console.log('Trends data loaded:', trendsData)
+        console.log('Trends array:', trendsData?.trends)
+        console.log('Trends length:', trendsData?.trends?.length)
+        console.log('Trends data sample:', trendsData?.trends?.slice(0, 3))
+      }
+    }
+  }, [trendsData, trendsError])
+
+  const { data: distributionData, error: distributionError, isLoading: distributionLoading } = useQuery({
     queryKey: ['distribution'],
     queryFn: fetchDistribution,
-    staleTime: 5 * 60 * 1000, // 5 dakika stale time (yeni sektör atandığında güncellensin)
-    gcTime: 10 * 60 * 1000, // 10 dakika garbage collection time
-    refetchOnWindowFocus: false, // Focus'ta refetch yok
-    refetchOnMount: true, // Mount'ta refetch yap (yeni sektör atandığında güncellensin)
+    staleTime: 0, // Cache yok - her seferinde fresh data
+    gcTime: 0, // Garbage collection yok - cache tutma
+    refetchOnWindowFocus: true, // Focus'ta refetch yap (fresh data için)
+    refetchOnMount: true, // Mount'ta refetch yap (fresh data için)
     retry: 2,
     retryDelay: 1000,
   })
 
-  const { data: userPerformanceData } = useQuery({
+  // Debug: Distribution verisini logla
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      if (distributionError) {
+        console.error('Distribution query error:', distributionError)
+      }
+      if (distributionData) {
+        console.log('Distribution data loaded:', distributionData)
+        console.log('Company sectors:', distributionData?.companySectors)
+        console.log('Company sectors length:', distributionData?.companySectors?.length || 0)
+        console.log('Company sectors sample:', distributionData?.companySectors?.slice(0, 3))
+        console.log('Customer sectors:', distributionData?.customerSectors)
+        console.log('Customer sectors length:', distributionData?.customerSectors?.length || 0)
+        console.log('Product sales:', distributionData?.productSales)
+        console.log('Product sales length:', distributionData?.productSales?.length || 0)
+      }
+    }
+  }, [distributionData, distributionError])
+
+  const { data: userPerformanceData, error: userPerformanceError, isLoading: userPerformanceLoading } = useQuery({
     queryKey: ['user-performance'],
     queryFn: fetchUserPerformance,
-    staleTime: 60 * 60 * 1000, // ULTRA AGRESİF: 60 DAKİKA stale time (cache'den göster - instant navigation)
-    gcTime: 120 * 60 * 1000, // 120 dakika garbage collection time
-    refetchOnWindowFocus: false, // Focus'ta refetch yok
-    refetchOnMount: false, // ULTRA AGRESİF: Mount'ta refetch yok (cache'den göster)
+    staleTime: 0, // Cache yok - her seferinde fresh data
+    gcTime: 0, // Garbage collection yok - cache tutma
+    refetchOnWindowFocus: true, // Focus'ta refetch yap (fresh data için)
+    refetchOnMount: true, // Mount'ta refetch yap (fresh data için)
     retry: 2,
     retryDelay: 1000,
   })
 
-  const { data: dealKanbanData } = useQuery({
+  // Debug: User Performance verisini logla
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      if (userPerformanceError) {
+        console.error('User Performance query error:', userPerformanceError)
+      }
+      if (userPerformanceData) {
+        console.log('User Performance data loaded:', userPerformanceData)
+        console.log('Performance array:', userPerformanceData?.performance)
+        console.log('Performance length:', userPerformanceData?.performance?.length)
+        console.log('Performance sample:', userPerformanceData?.performance?.slice(0, 3))
+      }
+    }
+  }, [userPerformanceData, userPerformanceError])
+
+  const { data: dealKanbanData, error: dealKanbanError, isLoading: dealKanbanLoading } = useQuery({
     queryKey: ['deal-kanban'],
     queryFn: fetchDealKanban,
-    staleTime: 60 * 60 * 1000, // ULTRA AGRESİF: 60 DAKİKA stale time (cache'den göster - instant navigation)
-    gcTime: 120 * 60 * 1000, // 120 dakika garbage collection time
-    refetchOnWindowFocus: false, // Focus'ta refetch yok
-    refetchOnMount: false, // ULTRA AGRESİF: Mount'ta refetch yok (cache'den göster)
+    staleTime: 0, // Cache yok - her seferinde fresh data
+    gcTime: 0, // Garbage collection yok - cache tutma
+    refetchOnWindowFocus: true, // Focus'ta refetch yap (fresh data için)
+    refetchOnMount: true, // Mount'ta refetch yap (fresh data için)
     retry: 2,
     retryDelay: 1000,
   })
 
-  const { data: invoiceKanbanData } = useQuery({
+  // Debug: Deal Kanban verisini logla
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      if (dealKanbanError) {
+        console.error('Deal Kanban query error:', dealKanbanError)
+      }
+      if (dealKanbanData) {
+        console.log('Deal Kanban data loaded:', dealKanbanData)
+        console.log('Deal Kanban array:', dealKanbanData?.kanban)
+        console.log('Deal Kanban length:', dealKanbanData?.kanban?.length)
+        console.log('Deal Kanban sample:', dealKanbanData?.kanban?.slice(0, 3))
+        console.log('Deal Kanban with counts:', dealKanbanData?.kanban?.map((col: any) => ({
+          stage: col.stage,
+          count: col.count,
+          totalValue: col.totalValue,
+        })))
+      }
+    }
+  }, [dealKanbanData, dealKanbanError])
+
+  const { data: invoiceKanbanData, error: invoiceKanbanError, isLoading: invoiceKanbanLoading } = useQuery({
     queryKey: ['invoice-kanban'],
     queryFn: fetchInvoiceKanban,
-    staleTime: 5 * 60 * 1000, // 5 dakika stale time (yeni fatura eklendiğinde güncellensin)
-    gcTime: 10 * 60 * 1000, // 10 dakika garbage collection time
-    refetchOnWindowFocus: false, // Focus'ta refetch yok
-    refetchOnMount: true, // Mount'ta refetch yap (yeni fatura eklendiğinde güncellensin)
+    staleTime: 0, // Cache yok - her seferinde fresh data
+    gcTime: 0, // Garbage collection yok - cache tutma
+    refetchOnWindowFocus: true, // Focus'ta refetch yap (fresh data için)
+    refetchOnMount: true, // Mount'ta refetch yap (fresh data için)
     retry: 2,
     retryDelay: 1000,
   })
+
+  // Debug: Invoice Kanban verisini logla
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      if (invoiceKanbanError) {
+        console.error('Invoice Kanban query error:', invoiceKanbanError)
+      }
+      if (invoiceKanbanData) {
+        console.log('Invoice Kanban data loaded:', invoiceKanbanData)
+        console.log('Invoice Kanban array:', invoiceKanbanData?.kanban)
+        console.log('Invoice Kanban length:', invoiceKanbanData?.kanban?.length)
+        console.log('Invoice Kanban items:', invoiceKanbanData?.kanban?.map((col: any) => ({
+          status: col.status,
+          count: col.count,
+          totalValue: col.totalValue,
+        })))
+      }
+    }
+  }, [invoiceKanbanData, invoiceKanbanError])
 
   // Son aktiviteler - daha sık güncellenir (1 dakika cache)
   const { data: recentActivitiesData } = useQuery({
@@ -396,7 +462,18 @@ export default function DashboardPage() {
           rejectedTotal: 0,
         }
       }
-      return res.json()
+      const data = await res.json().catch(() => ({
+        total: 0,
+        accepted: 0,
+        pending: 0,
+        rejected: 0,
+        successRate: 0,
+        rejectionReasons: [],
+        acceptedTotal: 0,
+        pendingTotal: 0,
+        rejectedTotal: 0,
+      }))
+      return data
     } catch (error) {
       return {
         total: 0,
@@ -423,9 +500,75 @@ export default function DashboardPage() {
     retryDelay: 500,
   })
 
+  // Satış Raporları - Reports modülünden
+  async function fetchSalesReports() {
+    try {
+      const res = await fetch('/api/reports/sales', {
+        cache: 'no-store',
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        return {
+          monthlyComparison: [],
+        }
+      }
+      const data = await res.json().catch(() => ({ monthlyComparison: [] }))
+      return data
+    } catch (error: any) {
+      return {
+        monthlyComparison: [],
+      }
+    }
+  }
+
+  const { data: salesReportsData } = useQuery({
+    queryKey: ['sales-reports'],
+    queryFn: fetchSalesReports,
+    staleTime: 5 * 60 * 1000, // 5 dakika cache
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
+    retry: 1,
+    retryDelay: 500,
+    enabled: true, // Her zaman aktif
+  })
+
+  // Müşteri Raporları - Müşteri büyüme trendi
+  async function fetchCustomerReports() {
+    try {
+      const res = await fetch('/api/reports/customers', {
+        cache: 'no-store',
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        return {
+          growthTrend: [],
+        }
+      }
+      const data = await res.json().catch(() => ({ growthTrend: [] }))
+      return data
+    } catch (error: any) {
+      return {
+        growthTrend: [],
+      }
+    }
+  }
+
+  const { data: customerReportsData } = useQuery({
+    queryKey: ['customer-reports'],
+    queryFn: fetchCustomerReports,
+    staleTime: 5 * 60 * 1000, // 5 dakika cache
+    gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: true,
+    retry: 1,
+    retryDelay: 500,
+    enabled: true, // Her zaman aktif
+  })
+
   // Realtime güncellemeler - sadece initial data ile başla
   // Realtime hook sonra günceller (lazy - performans için)
-  // Hata durumunda varsayılan değerler kullan
+  // DÜZELTME: Hata durumunda varsayılan değerler kullan - ama önce initialKPIs'i kontrol et
   const defaultKPIs = {
     totalSales: 0,
     totalQuotes: 0,
@@ -437,8 +580,21 @@ export default function DashboardPage() {
     totalDeals: 0,
     avgDealValue: 0,
     pendingInvoices: 0,
+    pendingShipments: 0,
+    pendingPurchaseShipments: 0,
+    monthlyKPIs: [],
   }
+  
+  // DÜZELTME: initialKPIs varsa kullan, yoksa defaultKPIs kullan
+  // Ama kpisError varsa ve initialKPIs yoksa, hata mesajı göster
   const kpis = useRealtimeKPIs(initialKPIs || defaultKPIs)
+  
+  // DÜZELTME: Hata durumunda log ekle - sorunun ne olduğunu anla
+  if (kpisError && !initialKPIs) {
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Dashboard KPIs error - No data loaded:', kpisError)
+    }
+  }
 
   // Dashboard anında göster - skeleton sadece ilk yüklemede
   // Veriler paralel çekilirken bile sayfa görünür
@@ -464,22 +620,54 @@ export default function DashboardPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-[1920px] mx-auto p-4 space-y-4">
-        {/* Welcome Section */}
-        <div className="border-b border-gray-200 pb-4">
-          <h1 className="text-2xl font-bold text-gray-900">
-            {t('title')}
-          </h1>
-          <p className="mt-1 text-sm text-gray-600">
-            Hoş geldiniz, <span className="font-semibold text-primary-600">{session?.user?.name}</span>
-          </p>
+      <div className="max-w-[1920px] mx-auto p-4 space-y-6">
+        {/* Smart Reminder - Günlük bildirimler */}
+        <SmartReminder />
+        
+        {/* Premium Welcome Section - Optimized */}
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-purple-600 via-pink-600 to-rose-600 p-8 text-white shadow-2xl shadow-purple-500/50 mb-8">
+          <div className="relative z-10">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-3 mb-3 flex-wrap">
+                  <div className="p-3 rounded-xl bg-white/20 backdrop-blur-md shadow-lg border border-white/20">
+                    <Sparkles className="h-7 w-7 drop-shadow-lg" />
+                  </div>
+                  <h1 className="text-4xl font-extrabold drop-shadow-lg">
+                    {t('title')}
+                  </h1>
+                </div>
+                <p className="text-indigo-100 text-lg mb-6 font-medium">
+                  {t('welcome')}, <span className="font-bold text-white">{session?.user?.name}</span>
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/15 backdrop-blur-md border border-white/20 shadow-lg hover:bg-white/20 transition-all duration-300">
+                    <Zap className="h-5 w-5 text-yellow-300" />
+                    <span className="text-sm font-semibold">{t('realtime')}</span>
+                  </div>
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/15 backdrop-blur-md border border-white/20 shadow-lg hover:bg-white/20 transition-all duration-300">
+                    <Activity className="h-5 w-5 text-green-300" />
+                    <span className="text-sm font-semibold">{kpis?.recentActivity || 0} {t('activity')}</span>
+                  </div>
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/15 backdrop-blur-md border border-white/20 shadow-lg hover:bg-white/20 transition-all duration-300">
+                    <TrendingUp className="h-5 w-5 text-blue-300" />
+                    <span className="text-sm font-semibold">
+                      {formatCurrency(kpis?.totalSales || 0, 'TRY')} {t('sales')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* Grid pattern overlay */}
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff08_1px,transparent_1px),linear-gradient(to_bottom,#ffffff08_1px,transparent_1px)] bg-[size:32px_32px] opacity-30" />
         </div>
 
         {/* Genel KPI Cards Section */}
         <section>
           <div className="mb-3">
-            <h2 className="text-base font-semibold text-gray-900">Genel Bakış</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Temel performans göstergeleri</p>
+            <h2 className="text-base font-semibold text-gray-900">{t('overview')}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{t('overviewDescription')}</p>
           </div>
           <Suspense fallback={<SkeletonDashboard />}>
             <KPICards kpis={kpis} t={t} locale={locale} />
@@ -490,8 +678,8 @@ export default function DashboardPage() {
         {kpis?.monthlyKPIs && kpis.monthlyKPIs.length > 0 && (
           <section>
             <div className="mb-2">
-              <h2 className="text-sm font-semibold text-gray-900">Aylık Bakış</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Son 3 ayın performans göstergeleri</p>
+              <h2 className="text-sm font-semibold text-gray-900">{t('monthlyOverview')}</h2>
+              <p className="text-xs text-gray-500 mt-0.5">{t('monthlyOverviewDescription')}</p>
             </div>
             <Suspense fallback={<SkeletonDashboard />}>
               <MonthlyKPICards monthlyKPIs={kpis.monthlyKPIs} t={t} locale={locale} />
@@ -499,110 +687,149 @@ export default function DashboardPage() {
           </section>
         )}
 
-        {/* Sales & Performance Section */}
+        {/* Sales & Performance Section - 3 Kart */}
         <section>
           <div className="mb-3">
             <h2 className="text-base font-semibold text-gray-900">Satış & Performans Analizi</h2>
             <p className="text-xs text-gray-500 mt-0.5">Aylık trendler ve dağılım analizleri</p>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Sales Trend Chart - Daha güzel ve anlaşılır */}
-            <Card className="p-6 shadow-card hover:shadow-card-hover transition-shadow bg-gradient-to-br from-white to-indigo-50/30">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-base font-semibold text-gray-900">Aylık Satış Trendi</h3>
-                  <p className="text-xs text-gray-500 mt-1">Son 12 ayın satış performansı</p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Sol: Aylık Satış Karşılaştırması */}
+            <div className="relative group">
+              <Card className="relative p-6 shadow-lg hover:shadow-xl transition-all duration-300 bg-white border border-gray-200">
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">Aylık Satış Karşılaştırması</h3>
+                      <p className="text-xs text-gray-600 mt-1 font-medium">Aylar arası satış karşılaştırması</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 shadow-lg">
+                      <DollarSign className="h-6 w-6 text-blue-600" />
+                    </div>
+                  </div>
+                  <Suspense fallback={<div className="h-[300px] animate-pulse bg-gray-100 rounded-lg" />}>
+                    <MonthlySalesBarChart data={salesReportsData?.monthlyComparison || []} />
+                  </Suspense>
                 </div>
-                <div className="p-2 rounded-lg bg-indigo-100">
-                  <TrendingUp className="h-5 w-5 text-indigo-600" />
-                </div>
-              </div>
-              <Suspense fallback={<div className="h-[300px] animate-pulse bg-gray-100 rounded" />}>
-                <SalesTrendChart data={trendsData?.trends || []} />
-              </Suspense>
-            </Card>
+              </Card>
+            </div>
 
-            {/* Company Performance Chart - Kurum bazlı performans */}
-            <Card className="p-6 shadow-card hover:shadow-card-hover transition-shadow bg-gradient-to-br from-white to-purple-50/30">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-base font-semibold text-gray-900">Kurum Performansı</h3>
-                  <p className="text-xs text-gray-500 mt-1">Firma bazlı satış, teklif ve fırsat analizi</p>
+            {/* Sağ: Müşteri Büyüme Trendi */}
+            <div className="relative group">
+              <Card className="relative p-6 shadow-lg hover:shadow-xl transition-all duration-300 bg-white border border-gray-200">
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-bold text-gray-900">Müşteri Büyüme Trendi</h3>
+                      <p className="text-xs text-gray-600 mt-1 font-medium">Zaman içinde müşteri sayısı değişimi</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-100 shadow-lg">
+                      <Users className="h-6 w-6 text-emerald-600" />
+                    </div>
+                  </div>
+                  <Suspense fallback={<div className="h-[300px] animate-pulse bg-gray-100 rounded-lg" />}>
+                    <CustomerGrowthLineChart data={customerReportsData?.growthTrend || []} />
+                  </Suspense>
                 </div>
-                <div className="p-2 rounded-lg bg-purple-100">
-                  <Building2 className="h-5 w-5 text-purple-600" />
-                </div>
-              </div>
-              <Suspense fallback={<div className="h-[300px] animate-pulse bg-gray-100 rounded" />}>
-                <CompanyPerformanceChart data={userPerformanceData?.performance || []} />
-              </Suspense>
-            </Card>
-        </div>
-      </section>
+              </Card>
+            </div>
+          </div>
+        </section>
 
         {/* Distribution Analysis Section */}
         <section>
           <div className="mb-3">
-            <h2 className="text-base font-semibold text-gray-900">Dağılım Analizi</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Ürün, müşteri ve müşteri firma sektör dağılımları</p>
+            <h2 className="text-base font-semibold text-gray-900">{t('distributionAnalysis')}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{t('distributionAnalysisDescription')}</p>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Product Sales Chart */}
-            <Card className="p-4 shadow-card hover:shadow-card-hover transition-shadow">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-900">Ürün Satış Dağılımı</h3>
-              </div>
-              <Suspense fallback={<div className="h-[250px] animate-pulse bg-gray-100 rounded" />}>
-                <ProductSalesChart data={distributionData?.productSales || []} />
-              </Suspense>
-            </Card>
+            <div className="relative group">
+              <Card className="relative p-5 shadow-lg hover:shadow-xl transition-all duration-300 bg-white border border-gray-200">
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-bold text-gray-900">{t('productSalesDistribution')}</h3>
+                  </div>
+                  <Suspense fallback={<div className="h-[250px] animate-pulse bg-gray-100 rounded-lg" />}>
+                    <ProductSalesChart data={distributionData?.productSales || []} />
+                  </Suspense>
+                </div>
+              </Card>
+            </div>
 
             {/* Customer Sector Chart */}
-            <Card className="p-4 shadow-card hover:shadow-card-hover transition-shadow">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-900">Müşteri Sektör Dağılımı</h3>
-              </div>
-              <Suspense fallback={<div className="h-[250px] animate-pulse bg-gray-100 rounded" />}>
-                <CustomerSectorChart data={distributionData?.customerSectors || []} />
-              </Suspense>
-            </Card>
+            <div className="relative group">
+              <Card className="relative p-5 shadow-lg hover:shadow-xl transition-all duration-300 bg-white border border-gray-200">
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-bold text-gray-900">{t('customerSectorDistribution')}</h3>
+                  </div>
+                  <Suspense fallback={<div className="h-[250px] animate-pulse bg-gray-100 rounded-lg" />}>
+                    <CustomerSectorChart data={distributionData?.customerSectors || []} />
+                  </Suspense>
+                </div>
+              </Card>
+            </div>
 
-            {/* Company Sector Chart - Müşteri Firma Sektör Dağılımı */}
-            <Card className="p-4 shadow-card hover:shadow-card-hover transition-shadow">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-900">Müşteri Firma Sektör Dağılımı</h3>
-              </div>
-              <Suspense fallback={<div className="h-[250px] animate-pulse bg-gray-100 rounded" />}>
-                <CompanySectorChart data={distributionData?.companySectors || []} />
-              </Suspense>
-            </Card>
+            {/* Company Sector Chart */}
+            <div className="relative group">
+              <Card className="relative p-5 shadow-lg hover:shadow-xl transition-all duration-300 bg-white border border-gray-200">
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-bold text-gray-900">{t('companySectorDistribution')}</h3>
+                  </div>
+                  <Suspense fallback={<div className="h-[250px] animate-pulse bg-gray-100 rounded-lg" />}>
+                    <CompanySectorChart data={distributionData?.companySectors || []} />
+                  </Suspense>
+                </div>
+              </Card>
+            </div>
         </div>
       </section>
 
-        {/* Pipeline Management Section */}
+        {/* Deal Status Section - Fırsat Durumu Grafik */}
         <section>
           <div className="mb-3">
-            <h2 className="text-base font-semibold text-gray-900">Fırsat Yönetimi</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Fırsatların pipeline durumu</p>
+            <h2 className="text-base font-semibold text-gray-900">{t('dealStatus')}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{t('dealStatusDescription')}</p>
           </div>
-          <Card className="p-4 shadow-card hover:shadow-card-hover transition-shadow">
-            <Suspense fallback={<div className="h-[350px] animate-pulse bg-gray-100 rounded" />}>
-              <DealKanbanChart data={dealKanbanData?.kanban || []} />
-            </Suspense>
-          </Card>
+          <div className="relative group">
+            <Card className="relative p-6 shadow-lg hover:shadow-xl transition-all duration-300 bg-white border border-gray-200">
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900">{t('dealStatusDistribution')}</h3>
+                    <p className="text-xs text-gray-600 mt-1 font-medium">{t('dealStatusDistributionDescription')}</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-gradient-to-br from-indigo-100 to-purple-100 shadow-lg">
+                    <Briefcase className="h-6 w-6 text-indigo-600" />
+                  </div>
+                </div>
+                <Suspense fallback={<div className="h-[300px] animate-pulse bg-gray-100 rounded-lg" />}>
+                  <DealStatusChart 
+                    data={dealKanbanData?.kanban || []} 
+                    onStageClick={(stage) => {
+                      setSelectedStage(stage)
+                      setStageModalOpen(true)
+                    }}
+                  />
+                </Suspense>
+              </div>
+            </Card>
+          </div>
         </section>
 
         {/* Invoice Status Section */}
         <section>
           <div className="mb-3">
-            <h2 className="text-base font-semibold text-gray-900">Fatura Durumu</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Faturaların durum bazlı dağılımı</p>
+            <h2 className="text-base font-semibold text-gray-900">{t('invoiceStatus')}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{t('invoiceStatusDescription')}</p>
           </div>
           <Card className="p-6 shadow-card hover:shadow-card-hover transition-shadow bg-gradient-to-br from-white to-green-50/30">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-base font-semibold text-gray-900">Fatura Durum Dağılımı</h3>
-                <p className="text-xs text-gray-500 mt-1">Status bazlı fatura sayısı</p>
+                <h3 className="text-base font-semibold text-gray-900">{t('invoiceStatusDistribution')}</h3>
+                <p className="text-xs text-gray-500 mt-1">{t('invoiceStatusDistributionDescription')}</p>
               </div>
               <div className="p-2 rounded-lg bg-green-100">
                 <Receipt className="h-5 w-5 text-green-600" />
@@ -620,19 +847,91 @@ export default function DashboardPage() {
           </Card>
         </section>
 
+        {/* Deal Stage Detail Modal */}
+        <Dialog open={stageModalOpen} onOpenChange={setStageModalOpen}>
+          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                {selectedStage && dealKanbanData?.kanban?.find((col: any) => col.stage === selectedStage) 
+                  ? `${stageLabels[selectedStage] || selectedStage} ${t('dealsInStage')}`
+                  : t('dealDetails')}
+              </DialogTitle>
+              <DialogDescription>
+                {selectedStage && dealKanbanData?.kanban?.find((col: any) => col.stage === selectedStage)
+                  ? `${dealKanbanData.kanban.find((col: any) => col.stage === selectedStage)?.count || 0} ${t('dealsFound')}`
+                  : t('dealList')}
+              </DialogDescription>
+            </DialogHeader>
+            {selectedStage && dealKanbanData?.kanban && (
+              <div className="mt-4">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t('dealTitle')}</TableHead>
+                      <TableHead>{t('status')}</TableHead>
+                      <TableHead>{t('amount')}</TableHead>
+                      <TableHead>{t('customer')}</TableHead>
+                      <TableHead>{t('createdAt')}</TableHead>
+                      <TableHead className="text-right">{t('actions')}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {dealKanbanData.kanban
+                      .find((col: any) => col.stage === selectedStage)
+                      ?.deals?.map((deal: any) => (
+                        <TableRow key={deal.id}>
+                          <TableCell className="font-medium">{deal.title || t('untitled')}</TableCell>
+                          <TableCell>
+                            <Badge className={stageColors[selectedStage] || 'bg-gray-100'}>
+                              {stageLabels[selectedStage] || selectedStage}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-semibold">
+                            {formatCurrency(deal.value || 0, 'TRY')}
+                          </TableCell>
+                          <TableCell>
+                            {deal.customer?.name || deal.Customer?.name || '-'}
+                          </TableCell>
+                          <TableCell>
+                            {deal.createdAt 
+                              ? new Date(deal.createdAt).toLocaleDateString('tr-TR')
+                              : '-'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <Link href={`/${locale}/deals/${deal.id}`} prefetch={true}>
+                              <Button variant="ghost" size="icon">
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      )) || (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center text-gray-500 py-8">
+                            {t('noDealsInStatus')}
+                          </TableCell>
+                        </TableRow>
+                      )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
         {/* Invoice Status Detail Modal */}
         <Dialog open={statusModalOpen} onOpenChange={setStatusModalOpen}>
           <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {selectedStatus && invoiceKanbanData?.kanban?.find((col: any) => col.status === selectedStatus) 
-                  ? `${statusLabels[selectedStatus] || selectedStatus} Durumundaki Faturalar`
-                  : 'Fatura Detayları'}
+                  ? `${statusLabels[selectedStatus] || selectedStatus} ${t('invoicesInStatus')}`
+                  : t('invoiceDetails')}
               </DialogTitle>
               <DialogDescription>
                 {selectedStatus && invoiceKanbanData?.kanban?.find((col: any) => col.status === selectedStatus)
-                  ? `${invoiceKanbanData.kanban.find((col: any) => col.status === selectedStatus)?.count || 0} fatura bulundu`
-                  : 'Fatura listesi'}
+                  ? `${invoiceKanbanData.kanban.find((col: any) => col.status === selectedStatus)?.count || 0} ${t('invoicesFound')}`
+                  : t('invoiceList')}
               </DialogDescription>
             </DialogHeader>
             {selectedStatus && invoiceKanbanData?.kanban && (
@@ -640,11 +939,11 @@ export default function DashboardPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Fatura Başlığı</TableHead>
-                      <TableHead>Durum</TableHead>
-                      <TableHead>Tutar</TableHead>
-                      <TableHead>Oluşturulma</TableHead>
-                      <TableHead className="text-right">İşlemler</TableHead>
+                      <TableHead>{t('invoiceNumber')}</TableHead>
+                      <TableHead>{t('status')}</TableHead>
+                      <TableHead>{t('total')}</TableHead>
+                      <TableHead>{t('createdAt')}</TableHead>
+                      <TableHead className="text-right">{t('actions')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -659,7 +958,8 @@ export default function DashboardPage() {
                             </Badge>
                           </TableCell>
                           <TableCell className="font-semibold">
-                            {formatCurrency(invoice.total || 0)}
+                            {/* DÜZELTME: totalAmount kullan (050 migration ile total → totalAmount) */}
+                            {formatCurrency(invoice.totalAmount || invoice.total || 0)}
                           </TableCell>
                           <TableCell>
                             {new Date(invoice.createdAt).toLocaleDateString('tr-TR')}
@@ -675,7 +975,7 @@ export default function DashboardPage() {
                       )) || (
                         <TableRow>
                           <TableCell colSpan={5} className="text-center text-gray-500 py-8">
-                            Bu durumda fatura bulunamadı
+                            {t('noInvoicesInStatus')}
                           </TableCell>
                         </TableRow>
                       )}
@@ -710,214 +1010,180 @@ export default function DashboardPage() {
   )
 }
 
-// Memoized KPI Cards component for better performance
+// Memoized KPI Cards component for better performance - PREMIUM DESIGN
 const KPICards = ({ kpis, t, locale }: { kpis: any; t: any; locale: string }) => {
   const memoizedCards = useMemo(
     () => (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 2xl:grid-cols-10 gap-4">
-        {/* Net Satış */}
-        <Link href={`/${locale}/invoices`} prefetch={true} className="block h-full" title="Fatura kısmından ödenen faturaların toplam tutarını gösterir">
-          <GradientCard gradient="primary" className="cursor-pointer h-full min-h-[120px] flex flex-col">
-          <div className="flex items-start justify-between flex-1">
-            <div className="flex-1 flex flex-col justify-end">
-              <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-2">
-                {t('totalSales')}
-              </p>
-              <AnimatedCounter
-                value={kpis?.totalSales || 0}
-                prefix="₺"
-                className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"
-              />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
+        {/* Net Satış - Featured Card */}
+        <Link href={`/${locale}/invoices`} prefetch={true} className="block h-full group" title="Fatura kısmından ödenen faturaların toplam tutarını gösterir">
+          <Card className="p-5 bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border-indigo-200/60 cursor-pointer h-full transition-all duration-300 group-hover:shadow-xl group-hover:shadow-indigo-200/50 group-hover:border-indigo-300 group-hover:-translate-y-1 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-indigo-200/20 to-purple-200/20 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
+            <div className="relative z-10 flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+                  {t('totalSales')}
+                </p>
+                <AnimatedCounter
+                  value={kpis?.totalSales || 0}
+                  prefix="₺"
+                  className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent break-words leading-tight"
+                />
+              </div>
+              <div className="p-3.5 rounded-xl bg-gradient-to-br from-indigo-100 to-purple-100 flex-shrink-0 ml-3 group-hover:scale-110 transition-transform duration-300">
+                <TrendingUp className="h-6 w-6 text-indigo-600" />
+              </div>
             </div>
-            <div className="p-2 rounded-lg bg-gradient-to-br from-indigo-500/10 to-purple-500/10">
-              <TrendingUp className="h-5 w-5 text-indigo-600" />
-            </div>
-          </div>
-          </GradientCard>
+          </Card>
         </Link>
 
         {/* Teklif Adedi */}
-        <Link href={`/${locale}/quotes`} prefetch={true} className="block h-full" title="Teklifler kısmından tüm tekliflerin toplam sayısını gösterir">
-          <GradientCard gradient="secondary" className="cursor-pointer h-full min-h-[120px] flex flex-col">
-          <div className="flex items-start justify-between flex-1">
-            <div className="flex-1 flex flex-col justify-end">
-              <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-2">
-                {t('totalQuotes')}
-              </p>
-              <AnimatedCounter
-                value={kpis?.totalQuotes || 0}
-                className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent"
-              />
+        <Link href={`/${locale}/quotes`} prefetch={true} className="block h-full group" title="Teklifler kısmından tüm tekliflerin toplam sayısını gösterir">
+          <Card className="p-5 bg-gradient-to-br from-purple-50 via-pink-50 to-rose-50 border-purple-200/60 cursor-pointer h-full transition-all duration-300 group-hover:shadow-xl group-hover:shadow-purple-200/50 group-hover:border-purple-300 group-hover:-translate-y-1 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-purple-200/20 to-pink-200/20 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
+            <div className="relative z-10 flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+                  {t('totalQuotes')}
+                </p>
+                <AnimatedCounter
+                  value={kpis?.totalQuotes || 0}
+                  className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent break-words leading-tight"
+                />
+              </div>
+              <div className="p-3.5 rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 flex-shrink-0 ml-3 group-hover:scale-110 transition-transform duration-300">
+                <FileText className="h-6 w-6 text-purple-600" />
+              </div>
             </div>
-            <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10">
-              <FileText className="h-5 w-5 text-purple-600" />
-            </div>
-          </div>
-          </GradientCard>
+          </Card>
         </Link>
 
         {/* Başarı Oranı */}
-        <Link href={`/${locale}/reports`} prefetch={true} className="block h-full" title="Teklifler kısmından kabul edilen tekliflerin toplam tekliflere oranını gösterir">
-          <GradientCard gradient="success" className="cursor-pointer h-full min-h-[120px] flex flex-col">
-          <div className="flex items-start justify-between flex-1">
-            <div className="flex-1 flex flex-col justify-end">
-              <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-2">
-                {t('successRate')}
-              </p>
-              <AnimatedCounter
-                value={kpis?.successRate || 0}
-                suffix="%"
-                className="text-xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent"
-              />
+        <Link href={`/${locale}/reports`} prefetch={true} className="block h-full group" title="Teklifler kısmından kabul edilen tekliflerin toplam tekliflere oranını gösterir">
+          <Card className="p-5 bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 border-green-200/60 cursor-pointer h-full transition-all duration-300 group-hover:shadow-xl group-hover:shadow-green-200/50 group-hover:border-green-300 group-hover:-translate-y-1 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-green-200/20 to-emerald-200/20 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
+            <div className="relative z-10 flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+                  {t('successRate')}
+                </p>
+                <AnimatedCounter
+                  value={kpis?.successRate || 0}
+                  suffix="%"
+                  className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent break-words leading-tight"
+                />
+              </div>
+              <div className="p-3.5 rounded-xl bg-gradient-to-br from-green-100 to-emerald-100 flex-shrink-0 ml-3 group-hover:scale-110 transition-transform duration-300">
+                <Target className="h-6 w-6 text-green-600" />
+              </div>
             </div>
-            <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-500/10 to-teal-500/10">
-              <Target className="h-5 w-5 text-emerald-600" />
-            </div>
-          </div>
-          </GradientCard>
+          </Card>
         </Link>
 
         {/* Aktif Firma */}
-        <Link href={`/${locale}/companies`} prefetch={true} className="block h-full" title="Müşteri Firmaları kısmından aktif durumdaki firmaların toplam sayısını gösterir">
-          <GradientCard gradient="info" className="cursor-pointer h-full min-h-[120px] flex flex-col">
-          <div className="flex items-start justify-between flex-1">
-            <div className="flex-1 flex flex-col justify-end">
-              <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-2">
-                {t('activeCompanies')}
-              </p>
-              <AnimatedCounter
-                value={kpis?.activeCompanies || 0}
-                className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent"
-              />
+        <Link href={`/${locale}/companies`} prefetch={true} className="block h-full group" title="Müşteri Firmaları kısmından aktif durumdaki firmaların toplam sayısını gösterir">
+          <Card className="p-5 bg-gradient-to-br from-blue-50 via-indigo-50 to-cyan-50 border-blue-200/60 cursor-pointer h-full transition-all duration-300 group-hover:shadow-xl group-hover:shadow-blue-200/50 group-hover:border-blue-300 group-hover:-translate-y-1 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-200/20 to-indigo-200/20 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
+            <div className="relative z-10 flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+                  {t('activeCompanies')}
+                </p>
+                <AnimatedCounter
+                  value={kpis?.activeCompanies || 0}
+                  className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent break-words leading-tight"
+                />
+              </div>
+              <div className="p-3.5 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 flex-shrink-0 ml-3 group-hover:scale-110 transition-transform duration-300">
+                <Building2 className="h-6 w-6 text-blue-600" />
+              </div>
             </div>
-            <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500/10 to-indigo-500/10">
-              <Building2 className="h-5 w-5 text-blue-600" />
-            </div>
-          </div>
-          </GradientCard>
+          </Card>
         </Link>
 
         {/* Son Aktivite */}
-        <Link href={`/${locale}/activity`} prefetch={true} className="block h-full" title="Aktivite Logları kısmından son 30 gün içindeki aktivitelerin toplam sayısını gösterir">
-          <GradientCard gradient="accent" className="cursor-pointer h-full min-h-[120px] flex flex-col">
-          <div className="flex items-start justify-between flex-1">
-            <div className="flex-1 flex flex-col justify-end">
-              <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-2">
-                {t('recentActivity')}
-              </p>
-              <AnimatedCounter
-                value={kpis?.recentActivity || 0}
-                className="text-xl font-bold bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent"
-              />
+        <Link href={`/${locale}/activity`} prefetch={true} className="block h-full group" title="Aktivite Logları kısmından son 30 gün içindeki aktivitelerin toplam sayısını gösterir">
+          <Card className="p-5 bg-gradient-to-br from-pink-50 via-rose-50 to-fuchsia-50 border-pink-200/60 cursor-pointer h-full transition-all duration-300 group-hover:shadow-xl group-hover:shadow-pink-200/50 group-hover:border-pink-300 group-hover:-translate-y-1 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-pink-200/20 to-rose-200/20 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
+            <div className="relative z-10 flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+                  {t('recentActivity')}
+                </p>
+                <AnimatedCounter
+                  value={kpis?.recentActivity || 0}
+                  className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-pink-600 to-rose-600 bg-clip-text text-transparent break-words leading-tight"
+                />
+              </div>
+              <div className="p-3.5 rounded-xl bg-gradient-to-br from-pink-100 to-rose-100 flex-shrink-0 ml-3 group-hover:scale-110 transition-transform duration-300">
+                <Activity className="h-6 w-6 text-pink-600" />
+              </div>
             </div>
-            <div className="p-2 rounded-lg bg-gradient-to-br from-pink-500/10 to-rose-500/10">
-              <Activity className="h-5 w-5 text-pink-600" />
-            </div>
-          </div>
-          </GradientCard>
-        </Link>
-
-        {/* Toplam Fatura */}
-        <Link href={`/${locale}/invoices`} prefetch={true} className="block h-full" title="Fatura kısmından tüm faturaların toplam tutarını gösterir">
-          <GradientCard gradient="primary" className="cursor-pointer h-full min-h-[120px] flex flex-col">
-          <div className="flex items-start justify-between flex-1">
-            <div className="flex-1 flex flex-col justify-end">
-              <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-2">
-                {t('totalInvoices')}
-              </p>
-              <AnimatedCounter
-                value={kpis?.totalInvoices || 0}
-                prefix="₺"
-                className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"
-              />
-            </div>
-            <div className="p-2 rounded-lg bg-gradient-to-br from-indigo-500/10 to-purple-500/10">
-              <Receipt className="h-5 w-5 text-indigo-600" />
-            </div>
-          </div>
-          </GradientCard>
+          </Card>
         </Link>
 
         {/* Müşteriler */}
-        <Link href={`/${locale}/customers`} prefetch={true} className="block h-full" title="Müşteriler kısmından tüm müşterilerin toplam sayısını gösterir">
-          <GradientCard gradient="info" className="cursor-pointer h-full min-h-[120px] flex flex-col">
-          <div className="flex items-start justify-between flex-1">
-            <div className="flex-1 flex flex-col justify-end">
-              <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-2">
-                Müşteriler
-              </p>
-              <AnimatedCounter
-                value={kpis?.totalCustomers || 0}
-                className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent"
-              />
+        <Link href={`/${locale}/customers`} prefetch={true} className="block h-full group" title="Müşteriler kısmından tüm müşterilerin toplam sayısını gösterir">
+          <Card className="p-5 bg-gradient-to-br from-blue-50 via-cyan-50 to-sky-50 border-blue-200/60 cursor-pointer h-full transition-all duration-300 group-hover:shadow-xl group-hover:shadow-blue-200/50 group-hover:border-blue-300 group-hover:-translate-y-1 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-200/20 to-cyan-200/20 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
+            <div className="relative z-10 flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+                  Müşteriler
+                </p>
+                <AnimatedCounter
+                  value={kpis?.totalCustomers || 0}
+                  className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent break-words leading-tight"
+                />
+              </div>
+              <div className="p-3.5 rounded-xl bg-gradient-to-br from-blue-100 to-cyan-100 flex-shrink-0 ml-3 group-hover:scale-110 transition-transform duration-300">
+                <Users className="h-6 w-6 text-blue-600" />
+              </div>
             </div>
-            <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500/10 to-indigo-500/10">
-              <Users className="h-5 w-5 text-blue-600" />
-            </div>
-          </div>
-          </GradientCard>
+          </Card>
         </Link>
 
         {/* Fırsatlar */}
-        <Link href={`/${locale}/deals`} prefetch={true} className="block h-full" title="Fırsatlar kısmından tüm fırsatların toplam sayısını gösterir">
-          <GradientCard gradient="secondary" className="cursor-pointer h-full min-h-[120px] flex flex-col">
-          <div className="flex items-start justify-between flex-1">
-            <div className="flex-1 flex flex-col justify-end">
-              <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-2">
-                Fırsatlar
-              </p>
-              <AnimatedCounter
-                value={kpis?.totalDeals || 0}
-                className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent"
-              />
-            </div>
-            <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10">
-              <Briefcase className="h-5 w-5 text-purple-600" />
-            </div>
-          </div>
-          </GradientCard>
-        </Link>
-
-        {/* Ortalama Fırsat */}
-        <Link href={`/${locale}/deals`} prefetch={true} className="block h-full" title="Fırsatlar kısmından tüm fırsatların ortalama değerini gösterir">
-          <GradientCard gradient="success" className="cursor-pointer h-full min-h-[120px] flex flex-col">
-            <div className="flex items-start justify-between flex-1">
-              <div className="flex-1 flex flex-col justify-end">
-                <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-2">
-                  Ort. Fırsat
+        <Link href={`/${locale}/deals`} prefetch={true} className="block h-full group" title="Fırsatlar kısmından tüm fırsatların toplam sayısını gösterir">
+          <Card className="p-5 bg-gradient-to-br from-purple-50 via-violet-50 to-fuchsia-50 border-purple-200/60 cursor-pointer h-full transition-all duration-300 group-hover:shadow-xl group-hover:shadow-purple-200/50 group-hover:border-purple-300 group-hover:-translate-y-1 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-purple-200/20 to-violet-200/20 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
+            <div className="relative z-10 flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+                  Fırsatlar
                 </p>
                 <AnimatedCounter
-                  value={kpis?.avgDealValue || 0}
-                  prefix="₺"
-                  className="text-xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent"
+                  value={kpis?.totalDeals || 0}
+                  className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-purple-600 to-violet-600 bg-clip-text text-transparent break-words leading-tight"
                 />
               </div>
-              <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-500/10 to-teal-500/10">
-                <DollarSign className="h-5 w-5 text-emerald-600" />
+              <div className="p-3.5 rounded-xl bg-gradient-to-br from-purple-100 to-violet-100 flex-shrink-0 ml-3 group-hover:scale-110 transition-transform duration-300">
+                <Briefcase className="h-6 w-6 text-purple-600" />
               </div>
             </div>
-          </GradientCard>
+          </Card>
         </Link>
 
         {/* Bekleyen */}
-        <Link href={`/${locale}/invoices?status=SENT`} prefetch={true} className="block h-full" title="Fatura kısmından gönderilmiş ancak henüz ödenmemiş faturaların toplam tutarını gösterir">
-          <GradientCard gradient="warning" className="cursor-pointer h-full min-h-[120px] flex flex-col">
-            <div className="flex items-start justify-between flex-1">
-              <div className="flex-1 flex flex-col justify-end">
-                <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wider mb-2">
+        <Link href={`/${locale}/invoices?status=SENT`} prefetch={true} className="block h-full group" title="Fatura kısmından gönderilmiş ancak henüz ödenmemiş faturaların toplam tutarını gösterir">
+          <Card className="p-5 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 border-amber-200/60 cursor-pointer h-full transition-all duration-300 group-hover:shadow-xl group-hover:shadow-amber-200/50 group-hover:border-amber-300 group-hover:-translate-y-1 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-amber-200/20 to-orange-200/20 rounded-full blur-2xl -translate-y-1/2 translate-x-1/2" />
+            <div className="relative z-10 flex items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
                   Bekleyen
                 </p>
                 <AnimatedCounter
                   value={kpis?.pendingInvoices || 0}
                   prefix="₺"
-                  className="text-xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent"
+                  className="text-xl sm:text-2xl md:text-3xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent break-words leading-tight"
                 />
               </div>
-              <div className="p-2 rounded-lg bg-gradient-to-br from-amber-500/10 to-orange-500/10">
-                <Clock className="h-5 w-5 text-amber-600" />
+              <div className="p-3.5 rounded-xl bg-gradient-to-br from-amber-100 to-orange-100 flex-shrink-0 ml-3 group-hover:scale-110 transition-transform duration-300">
+                <Clock className="h-6 w-6 text-amber-600" />
               </div>
             </div>
-          </GradientCard>
+          </Card>
         </Link>
       </div>
     ),

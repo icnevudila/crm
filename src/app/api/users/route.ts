@@ -37,13 +37,18 @@ export async function GET(request: Request) {
     
     const supabase = getSupabaseWithServiceRole()
 
+    // OPTİMİZE: SuperAdmin'leri tamamen filtrele + companyId kontrolü
+    // ÖNEMLİ: SuperAdmin'lerin companyId'si null veya farklı olabilir, bu yüzden hem role hem de companyId kontrolü yapıyoruz
     let query = supabase
       .from('User')
       .select('id, name, email, role, companyId, createdAt')
-      .eq('companyId', companyId)
+      .eq('companyId', companyId) // ÖNCE companyId filtresi (SuperAdmin'ler farklı companyId'ye sahip olabilir)
+      .neq('role', 'SUPER_ADMIN') // SuperAdmin'i filtrele - admin panelinde görünmesin (sadece normal kullanıcılar)
+      .not('companyId', 'is', null) // companyId null olanları filtrele (güvenlik için)
       .order('name')
 
-    if (role) {
+    // Role filtresi - ama SuperAdmin'i asla gösterme
+    if (role && role !== 'SUPER_ADMIN') {
       query = query.eq('role', role)
     }
 
@@ -112,6 +117,49 @@ export async function POST(request: Request) {
     // SUPER_ADMIN herhangi bir Company'ye kullanıcı ekleyebilir
     // ADMIN sadece kendi Company'sine kullanıcı ekleyebilir
     const targetCompanyId = isSuperAdmin && body.companyId ? body.companyId : session.user.companyId
+
+    // Limitasyon kontrolleri
+    if (targetCompanyId) {
+      // Kurumun mevcut kullanıcı sayısını kontrol et
+      const { count: currentUserCount } = await supabase
+        .from('User')
+        .select('*', { count: 'exact', head: true })
+        .eq('companyId', targetCompanyId)
+        .neq('role', 'SUPER_ADMIN')
+
+      // Kurum limitasyonlarını kontrol et
+      const { data: company } = await supabase
+        .from('Company')
+        .select('maxUsers, adminUserLimit')
+        .eq('id', targetCompanyId)
+        .single()
+
+      if (company) {
+        // maxUsers kontrolü
+        if (company.maxUsers !== null && currentUserCount !== null && currentUserCount >= company.maxUsers) {
+          return NextResponse.json(
+            { error: 'Limit aşıldı', message: `Bu kurumun maksimum kullanıcı sayısı ${company.maxUsers}. Mevcut kullanıcı sayısı: ${currentUserCount}` },
+            { status: 403 }
+          )
+        }
+
+        // Admin kullanıcı limiti kontrolü (sadece ADMIN rolü için)
+        if (body.role === 'ADMIN' && company.adminUserLimit !== null) {
+          const { count: adminCount } = await supabase
+            .from('User')
+            .select('*', { count: 'exact', head: true })
+            .eq('companyId', targetCompanyId)
+            .eq('role', 'ADMIN')
+
+          if (adminCount !== null && adminCount >= company.adminUserLimit) {
+            return NextResponse.json(
+              { error: 'Admin limiti aşıldı', message: `Bu kurumun maksimum admin sayısı ${company.adminUserLimit}. Mevcut admin sayısı: ${adminCount}` },
+              { status: 403 }
+            )
+          }
+        }
+      }
+    }
 
     // Şifreyi hash'le
     const hashedPassword = await bcrypt.hash(body.password, 10)

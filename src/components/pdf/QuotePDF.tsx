@@ -147,7 +147,7 @@ interface QuotePDFProps {
 }
 
 export default function QuotePDF({ quote }: QuotePDFProps) {
-  const subtotal = quote.total || 0
+  const subtotal = quote.totalAmount || 0
   const kdv = subtotal * 0.18 // %18 KDV
   const total = subtotal + kdv
 

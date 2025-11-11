@@ -26,6 +26,16 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Permission check - canRead kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canRead = await hasPermission('shipment', 'read', session.user.id)
+    if (!canRead) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Sevkiyat görüntüleme yetkiniz yok' },
+        { status: 403 }
+      )
+    }
+
     const { id } = await params
     const supabase = getSupabaseWithServiceRole()
 
@@ -86,7 +96,7 @@ export async function GET(
             title,
             invoiceNumber,
             status,
-            total,
+            totalAmount,
             taxRate,
             discount,
             createdAt,
@@ -212,8 +222,12 @@ export async function GET(
       // Hata olsa bile devam et
     }
 
+    // SuperAdmin tüm şirketlerin verilerini görebilir
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    const companyId = session.user.companyId
+
     // ActivityLog'ları çek
-    const { data: activities } = await supabase
+    let activityQuery = supabase
       .from('ActivityLog')
       .select(
         `
@@ -224,9 +238,15 @@ export async function GET(
         )
       `
       )
-      .eq('companyId', session.user.companyId)
       .eq('entity', 'Shipment')
       .eq('meta->>id', id)
+    
+    // SuperAdmin değilse MUTLAKA companyId filtresi uygula
+    if (!isSuperAdmin) {
+      activityQuery = activityQuery.eq('companyId', companyId)
+    }
+    
+    const { data: activities } = await activityQuery
       .order('createdAt', { ascending: false })
       .limit(20)
 
@@ -268,6 +288,16 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Permission check - canUpdate kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canUpdate = await hasPermission('shipment', 'update', session.user.id)
+    if (!canUpdate) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Sevkiyat güncelleme yetkiniz yok' },
+        { status: 403 }
+      )
+    }
+
     const { id } = await params
     const body = await request.json()
     const supabase = getSupabaseWithServiceRole()
@@ -276,10 +306,22 @@ export async function PUT(
     // Mevcut sevkiyat durumunu kontrol et
     const { data: currentShipment } = await supabase
       .from('Shipment')
-      .select('status')
+      .select('status, tracking')
       .eq('id', id)
       .eq('companyId', session.user.companyId)
       .maybeSingle()
+
+    // ÖNEMLİ: Shipment DELIVERED olduğunda değiştirilemez (Teslim edildiği için)
+    if (currentShipment?.status?.toUpperCase() === 'DELIVERED') {
+      return NextResponse.json(
+        { 
+          error: 'Teslim edilmiş sevkiyatlar değiştirilemez',
+          message: 'Bu sevkiyat teslim edildi. Sevkiyat bilgilerini değiştirmek mümkün değildir.',
+          reason: 'DELIVERED_SHIPMENT_CANNOT_BE_UPDATED'
+        },
+        { status: 403 }
+      )
+    }
 
     if (currentShipment?.status?.toUpperCase() === 'APPROVED') {
       // Onaylı sevkiyatlar için sadece status endpoint'i kullanılabilir (status değişikliği için)
@@ -287,7 +329,9 @@ export async function PUT(
       if (body.status && body.status.toUpperCase() !== 'APPROVED') {
         // Status değişikliği yapılıyor - status endpoint'ini kullan
         return NextResponse.json({ 
-          error: 'Onaylı sevkiyatlar için durum değişikliği /api/shipments/[id]/status endpoint\'i üzerinden yapılmalıdır' 
+          error: 'Onaylı sevkiyatlar için durum değişikliği /api/shipments/[id]/status endpoint\'i üzerinden yapılmalıdır',
+          message: 'Onaylı sevkiyatların durumunu değiştirmek için özel status endpoint\'ini kullanın.',
+          reason: 'APPROVED_SHIPMENT_STATUS_CHANGE'
         }, { status: 400 })
       }
       
@@ -296,7 +340,9 @@ export async function PUT(
           body.shippingCompany !== undefined || body.estimatedDelivery !== undefined || 
           body.deliveryAddress !== undefined) {
         return NextResponse.json({ 
-          error: 'Onaylı sevkiyatlar düzenlenemez!' 
+          error: 'Onaylı sevkiyatlar düzenlenemez',
+          message: 'Bu sevkiyat onaylandı ve stok işlemi yapıldı. Sevkiyat bilgilerini değiştirmek için önce sevkiyatı iptal etmeniz gerekir.',
+          reason: 'APPROVED_SHIPMENT_CANNOT_BE_UPDATED'
         }, { status: 400 })
       }
     }
@@ -357,7 +403,7 @@ export async function PUT(
         {
           entity: 'Shipment',
           action: 'UPDATE',
-          description: `Sevkiyat güncellendi: ${body.tracking || (data as any)?.tracking || 'Takipsiz'}`,
+          description: `Sevkiyat bilgileri güncellendi`,
           meta: { entity: 'Shipment', action: 'update', id },
           userId: session.user.id,
           companyId: session.user.companyId,
@@ -402,6 +448,16 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Permission check - canDelete kontrolü
+    const { hasPermission } = await import('@/lib/permissions')
+    const canDelete = await hasPermission('shipment', 'delete', session.user.id)
+    if (!canDelete) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Sevkiyat silme yetkiniz yok' },
+        { status: 403 }
+      )
+    }
+
     const { id } = await params
     const supabase = getSupabaseWithServiceRole()
 
@@ -414,11 +470,11 @@ export async function DELETE(
       })
     }
 
-    // ÖNEMLİ: Onaylı sevkiyatlar silinemez
+    // ÖNEMLİ: Onaylı ve teslim edilmiş sevkiyatlar silinemez
     // SuperAdmin kontrolü ekle
     let shipmentQuery = supabase
       .from('Shipment')
-      .select('status, tracking')
+      .select('status, tracking, invoiceId')
       .eq('id', id)
     
     // SuperAdmin değilse companyId kontrolü yap
@@ -446,9 +502,29 @@ export async function DELETE(
       return NextResponse.json({ error: 'Sevkiyat bulunamadı' }, { status: 404 })
     }
 
+    // ÖNEMLİ: Shipment DELIVERED olduğunda silinemez (Teslim edildiği için)
+    if (currentShipment.status?.toUpperCase() === 'DELIVERED') {
+      return NextResponse.json(
+        { 
+          error: 'Teslim edilmiş sevkiyatlar silinemez',
+          message: 'Bu sevkiyat teslim edildi. Sevkiyatı silmek mümkün değildir.',
+          reason: 'DELIVERED_SHIPMENT_CANNOT_BE_DELETED'
+        },
+        { status: 403 }
+      )
+    }
+
     // Onaylı sevkiyatlar silinemez
     if (currentShipment.status?.toUpperCase() === 'APPROVED') {
-      return NextResponse.json({ error: 'Onaylı sevkiyatlar silinemez!' }, { status: 400 })
+      return NextResponse.json(
+        { 
+          error: 'Onaylı sevkiyatlar silinemez',
+          message: 'Bu sevkiyat onaylandı ve stok işlemi yapıldı. Sevkiyatı silmek için önce sevkiyatı iptal etmeniz ve stok işlemini geri almanız gerekir.',
+          reason: 'APPROVED_SHIPMENT_CANNOT_BE_DELETED',
+          action: 'Sevkiyatı iptal edip stok işlemini geri alın'
+        },
+        { status: 403 }
+      )
     }
 
     // Silme işlemi - SuperAdmin kontrolü ekle

@@ -1,14 +1,16 @@
 'use client'
 
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { ArrowLeft, Edit, CheckSquare, User } from 'lucide-react'
+import { ArrowLeft, Edit, CheckSquare, User, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
+import TaskForm from '@/components/tasks/TaskForm'
 
 interface Task {
   id: string
@@ -38,6 +40,8 @@ export default function TaskDetailPage() {
   const router = useRouter()
   const locale = useLocale()
   const id = params.id as string
+  const [formOpen, setFormOpen] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const { data: task, isLoading } = useQuery({
     queryKey: ['task', id],
@@ -97,6 +101,44 @@ export default function TaskDetailPage() {
             </h1>
             <p className="mt-1 text-gray-600">Görev Detayları</p>
           </div>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => router.push(`/${locale}/tasks`)}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Geri
+          </Button>
+          <Button variant="outline" onClick={() => setFormOpen(true)}>
+            <Edit className="mr-2 h-4 w-4" />
+            Düzenle
+          </Button>
+          <Button
+            variant="outline"
+            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            onClick={async () => {
+              if (!confirm(`${task.title} görevini silmek istediğinize emin misiniz?`)) {
+                return
+              }
+              setDeleteLoading(true)
+              try {
+                const res = await fetch(`/api/tasks/${id}`, {
+                  method: 'DELETE',
+                })
+                if (!res.ok) {
+                  const errorData = await res.json().catch(() => ({}))
+                  throw new Error(errorData.error || 'Silme işlemi başarısız')
+                }
+                router.push(`/${locale}/tasks`)
+              } catch (error: any) {
+                alert(error?.message || 'Silme işlemi başarısız oldu')
+              } finally {
+                setDeleteLoading(false)
+              }
+            }}
+            disabled={deleteLoading}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Sil
+          </Button>
         </div>
       </div>
 
@@ -179,6 +221,17 @@ export default function TaskDetailPage() {
       {task.activities && task.activities.length > 0 && (
         <ActivityTimeline activities={task.activities} />
       )}
+
+      {/* Form Modal */}
+      <TaskForm
+        task={task}
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSuccess={async () => {
+          // Form başarılı olduğunda sayfayı yenile
+          window.location.reload()
+        }}
+      />
     </div>
   )
 }

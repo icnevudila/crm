@@ -3,8 +3,12 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
-// Dynamic route - POST/PUT sonrası fresh data için cache'i kapat
-export const dynamic = 'force-dynamic'
+// ✅ %100 KESİN ÇÖZÜM: Cache'i tamamen kapat - her çağrıda fresh data
+// ÖNEMLİ: Next.js App Router'ın API route cache'ini tamamen kapat
+export const revalidate = 0 // Revalidation'ı kapat
+export const dynamic = 'force-dynamic' // Dynamic route - her zaman çalıştır
+export const fetchCache = 'force-no-store' // Fetch cache'ini kapat
+export const runtime = 'nodejs' // Edge yerine Node zorla (cache sorunlarını önlemek için)
 
 export async function GET(request: Request) {
   try {
@@ -30,18 +34,27 @@ export async function GET(request: Request) {
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     const companyId = session.user.companyId
     const supabase = getSupabaseWithServiceRole()
-    const { searchParams } = new URL(request.url)
     
-    // Filtre parametreleri
-    const dealId = searchParams.get('dealId') || ''
-    const search = searchParams.get('search') || ''
+    // Filtre parametreleri - güvenli parse
+    let dealId = ''
+    let search = ''
+    
+    try {
+      const { searchParams } = new URL(request.url)
+      dealId = searchParams.get('dealId') || ''
+      search = searchParams.get('search') || ''
+    } catch (error) {
+      // request.url undefined veya geçersizse, filtreler boş kalır
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Quote Kanban API: Could not parse request.url', error)
+      }
+    }
 
-    // Base query - OPTİMİZE: JOIN kaldırıldı - çok yavaş (JOIN kaldırıldı - çok yavaş)
+    // Tüm quote'ları çek - limit yok (tüm verileri çek)
     let query = supabase
       .from('Quote')
-      .select('id, title, status, total, dealId, createdAt')
-      .order('createdAt', { ascending: false })
-      .limit(100) // ULTRA AGRESİF limit - sadece 100 kayıt (instant load)
+        .select('id, title, status, totalAmount, dealId, createdAt, updatedAt, notes') // ✅ ÇÖZÜM: notes kolonu migration ile eklendi (057_add_quote_notes.sql)
+      .order('updatedAt', { ascending: false }) // ✅ ÇÖZÜM: updatedAt'e göre sırala - en son güncellenen en üstte
     
     if (!isSuperAdmin) {
       query = query.eq('companyId', companyId)
@@ -57,23 +70,38 @@ export async function GET(request: Request) {
     }
 
     const { data: quotes, error } = await query
-
+    
     if (error) {
-      console.error('Quote kanban error:', error)
+      console.error('[Quote Kanban API] Quote data fetch error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    if (!quotes) {
+    if (!quotes || quotes.length === 0) {
       return NextResponse.json({ kanban: [] })
     }
 
-    // Status'lere göre grupla
-    const statuses = ['DRAFT', 'SENT', 'WAITING', 'ACCEPTED', 'DECLINED']
+    // Status'lere göre grupla - REJECTED ve DECLINED ikisini tek kolonda birleştir
+    // ÖNEMLİ: DECLINED status'ünü REJECTED olarak normalize et - tek kolon göster
+    const normalizedQuotes = quotes.map((quote: any) => {
+      // DECLINED → REJECTED olarak normalize et
+      if (quote.status === 'DECLINED') {
+        return { ...quote, status: 'REJECTED' }
+      }
+      return quote
+    })
+    
+    const statuses = ['DRAFT', 'SENT', 'WAITING', 'ACCEPTED', 'REJECTED']
     const kanban = statuses.map((status) => {
-      const statusQuotes = quotes.filter((quote: any) => quote.status === status)
-      // Her status için toplam tutarı hesapla
+      const statusQuotes = normalizedQuotes.filter((quote: any) => quote.status === status)
+      // ✅ ÇÖZÜM: Her status kolonu içinde updatedAt'e göre sırala - en son güncellenen en üstte
+      statusQuotes.sort((a: any, b: any) => {
+        const aUpdated = new Date(a.updatedAt || a.createdAt).getTime()
+        const bUpdated = new Date(b.updatedAt || b.createdAt).getTime()
+        return bUpdated - aUpdated // En son güncellenen en üstte
+      })
+      // Her status için toplam tutarı hesapla - DÜZELTME: totalAmount öncelikli (050 migration ile total → totalAmount) - total kolonu artık yok!
       const totalValue = statusQuotes.reduce((sum: number, quote: any) => {
-        const quoteValue = typeof quote.total === 'string' ? parseFloat(quote.total) || 0 : (quote.total || 0)
+        const quoteValue = quote.totalAmount || (typeof quote.totalAmount === 'string' ? parseFloat(quote.totalAmount) || 0 : 0)
         return sum + quoteValue
       }, 0)
       return {
@@ -83,10 +111,12 @@ export async function GET(request: Request) {
         quotes: statusQuotes.map((quote: any) => ({
           id: quote.id,
           title: quote.title,
-          total: quote.total || 0,
+          totalAmount: quote.totalAmount || 0, // DÜZELTME: totalAmount kullan (total kolonu artık yok!)
           dealId: quote.dealId,
           createdAt: quote.createdAt,
-        })),
+            updatedAt: quote.updatedAt, // ✅ ÇÖZÜM: updatedAt ekle - status güncellemesi sonrası sıralama için
+            notes: quote.notes || null, // ✅ ÇÖZÜM: notes kolonu migration ile eklendi (057_add_quote_notes.sql)
+          })),
       }
     })
 
@@ -94,7 +124,9 @@ export async function GET(request: Request) {
       { kanban },
       {
         headers: {
-          'Cache-Control': 'no-store, must-revalidate', // POST/PUT sonrası fresh data için cache'i kapat
+          'Cache-Control': 'no-store, must-revalidate, max-age=0', // ✅ ÇÖZÜM: Cache'i tamamen kapat - her zaman fresh data çek
+          'Pragma': 'no-cache', // ✅ ÇÖZÜM: Eski browser'lar için cache'i kapat
+          'Expires': '0', // ✅ ÇÖZÜM: Cache'i hemen expire et
         },
       }
     )
@@ -106,6 +138,7 @@ export async function GET(request: Request) {
     )
   }
 }
+
 
 
 

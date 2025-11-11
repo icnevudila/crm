@@ -2,6 +2,7 @@
 
 import { Clock, CheckCircle2, XCircle, Plus, Edit, Trash2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
+import { formatUserFriendlyMessage, formatEntity } from '@/lib/logger'
 
 interface ActivityLog {
   id: string
@@ -70,7 +71,9 @@ export default function ActivityTimeline({ activities }: ActivityTimelineProps) 
 
             {/* Activity content */}
             <div className="space-y-1">
-              <p className="font-medium text-gray-900">{activity.description}</p>
+              <p className="font-medium text-gray-900">
+                {formatUserFriendlyMessage(activity.description, activity.meta)}
+              </p>
               <div className="flex items-center gap-2 text-sm text-gray-500">
                 <span>{new Date(activity.createdAt).toLocaleString('tr-TR')}</span>
                 {activity.User && (
@@ -80,7 +83,7 @@ export default function ActivityTimeline({ activities }: ActivityTimelineProps) 
                   </>
                 )}
                 <span className="ml-auto text-xs px-2 py-1 bg-gray-100 rounded">
-                  {activity.entity}
+                  {formatEntity(activity.entity)}
                 </span>
               </div>
             </div>

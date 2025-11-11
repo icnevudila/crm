@@ -1,90 +1,124 @@
 'use client'
 
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
-import { useLocale } from 'next-intl'
-import { ArrowLeft, Edit, FileText, Receipt, Package, Trash2, Users } from 'lucide-react'
+import { useState } from 'react'
+import { ArrowLeft, FileText, Copy, AlertTriangle, RefreshCw, Plus, Info, Edit, Trash2 } from 'lucide-react'
 import Link from 'next/link'
+import { useLocale } from 'next-intl'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
-import { formatCurrency } from '@/lib/utils'
-import ActivityTimeline from '@/components/ui/ActivityTimeline'
-import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
-import dynamic from 'next/dynamic'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { useData } from '@/hooks/useData'
+import { toast } from '@/lib/toast'
+import WorkflowStepper from '@/components/ui/WorkflowStepper'
+import { getQuoteWorkflowSteps } from '@/lib/workflowSteps'
+import StatusInfoNote from '@/components/workflow/StatusInfoNote'
+import NextStepButtons from '@/components/workflow/NextStepButtons'
+import RelatedRecordsSuggestions from '@/components/workflow/RelatedRecordsSuggestions'
+import { Calendar } from 'lucide-react'
+import QuoteForm from '@/components/quotes/QuoteForm'
 
-// Lazy load QuoteForm - performans için
-const QuoteForm = dynamic(() => import('@/components/quotes/QuoteForm'), {
-  ssr: false,
-  loading: () => null,
-})
-
-async function fetchQuote(id: string) {
-  const res = await fetch(`/api/quotes/${id}`, {
-    cache: 'no-store',
-  })
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}))
-    throw new Error(errorData.error || 'Teklif yüklenirken bir hata oluştu')
+interface Quote {
+  id: string
+  quoteNumber: string
+  title: string
+  status: string
+  totalAmount: number
+  version: number
+  parentQuoteId?: string
+  revisionNotes?: string
+  notes?: string
+  customer?: {
+    name: string
   }
-  return res.json()
-}
-
-const statusColors: Record<string, string> = {
-  DRAFT: 'bg-gray-100 text-gray-800',
-  SENT: 'bg-blue-100 text-blue-800',
-  ACCEPTED: 'bg-green-100 text-green-800',
-  DECLINED: 'bg-red-100 text-red-800',
-  WAITING: 'bg-yellow-100 text-yellow-800',
-}
-
-const statusLabels: Record<string, string> = {
-  DRAFT: 'Taslak',
-  SENT: 'Gönderildi',
-  ACCEPTED: 'Kabul Edildi',
-  DECLINED: 'Reddedildi',
-  WAITING: 'Beklemede',
+  deal?: {
+    id: string
+    title: string
+  }
+  Deal?: {
+    id: string
+    title: string
+  }
+  invoice?: {
+    id: string
+    title: string
+  }
+  Invoice?: {
+    id: string
+    title: string
+  }
+  createdAt: string
 }
 
 export default function QuoteDetailPage() {
   const params = useParams()
   const router = useRouter()
   const locale = useLocale()
-  const id = params.id as string
+  const quoteId = params.id as string
+  const [creatingRevision, setCreatingRevision] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
-  const { data: quote, isLoading, error, refetch } = useQuery({
-    queryKey: ['quote', id],
-    queryFn: () => fetchQuote(id),
-    retry: 1,
-    retryDelay: 500,
-  })
+  const { data: quote, isLoading, mutate } = useData<Quote>(`/api/quotes/${quoteId}`)
 
-  if (isLoading) {
-    return <SkeletonDetail />
+  const handleCreateRevision = async () => {
+    if (!confirm('Bu teklifin yeni bir revizyonunu oluşturmak istiyor musunuz?')) {
+      return
+    }
+
+    setCreatingRevision(true)
+    try {
+      const res = await fetch(`/api/quotes/${quoteId}/revise`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          revisionNotes: 'Revizyon oluşturuldu'
+        })
+      })
+
+      if (!res.ok) {
+        throw new Error('Revizyon oluşturulamadı')
+      }
+
+      const newQuote = await res.json()
+      
+      // Yeni quote'a yönlendir
+      window.location.href = `/${locale}/quotes/${newQuote.id}`
+    } catch (error: any) {
+      alert(error.message || 'Revizyon oluşturulamadı')
+    } finally {
+      setCreatingRevision(false)
+    }
   }
 
-  if (error || !quote) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Teklif Bulunamadı
-          </h1>
-          {error && (
-            <p className="text-sm text-gray-600 mb-4">
-              {(error as any)?.message || 'Teklif yüklenirken bir hata oluştu'}
-            </p>
-          )}
-          <Button onClick={() => router.push(`/${locale}/quotes`)}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Geri Dön
-          </Button>
-        </div>
+      <div className="animate-pulse space-y-4">
+        <div className="h-8 bg-gray-200 rounded w-1/4"></div>
+        <div className="h-64 bg-gray-200 rounded"></div>
       </div>
     )
+  }
+
+  if (!quote) {
+    return <div>Teklif bulunamadı</div>
+  }
+
+  const statusColors: Record<string, string> = {
+    DRAFT: 'bg-gray-100 text-gray-800',
+    SENT: 'bg-blue-100 text-blue-800',
+    ACCEPTED: 'bg-green-100 text-green-800',
+    REJECTED: 'bg-red-100 text-red-800',
+    EXPIRED: 'bg-orange-100 text-orange-800',
+  }
+
+  const statusLabels: Record<string, string> = {
+    DRAFT: 'Taslak',
+    SENT: 'Gönderildi',
+    ACCEPTED: 'Kabul Edildi',
+    REJECTED: 'Reddedildi',
+    EXPIRED: 'Süresi Doldu',
   }
 
   return (
@@ -94,31 +128,34 @@ export default function QuoteDetailPage() {
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
+            size="icon"
             onClick={() => router.push(`/${locale}/quotes`)}
           >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Geri Dön
+            <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">{quote.title}</h1>
-            <p className="mt-1 text-gray-600">
-              Oluşturulma: {new Date(quote.createdAt).toLocaleDateString('tr-TR')}
+            <h1 className="text-3xl font-bold">{quote.title}</h1>
+            <p className="text-gray-600">
+              {quote.quoteNumber} • Versiyon {quote.version}
             </p>
+            {quote.parentQuoteId && (
+              <p className="text-sm text-blue-600">
+                Bu bir revizyon teklifdir
+              </p>
+            )}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <Badge className={statusColors[quote.status] || 'bg-gray-100'}>
+            {statusLabels[quote.status] || quote.status}
+          </Badge>
+          <Button variant="outline" onClick={() => router.push(`/${locale}/quotes`)}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Geri
+          </Button>
           <Button variant="outline" onClick={() => setFormOpen(true)}>
             <Edit className="mr-2 h-4 w-4" />
             Düzenle
-          </Button>
-          <Button
-            className="bg-gradient-primary text-white"
-            onClick={() => {
-              window.open(`/api/pdf/quote/${id}`, '_blank')
-            }}
-          >
-            <FileText className="mr-2 h-4 w-4" />
-            PDF İndir
           </Button>
           <Button
             variant="outline"
@@ -129,10 +166,13 @@ export default function QuoteDetailPage() {
               }
               setDeleteLoading(true)
               try {
-                const res = await fetch(`/api/quotes/${id}`, {
+                const res = await fetch(`/api/quotes/${quoteId}`, {
                   method: 'DELETE',
                 })
-                if (!res.ok) throw new Error('Silme işlemi başarısız')
+                if (!res.ok) {
+                  const errorData = await res.json().catch(() => ({}))
+                  throw new Error(errorData.error || 'Silme işlemi başarısız')
+                }
                 router.push(`/${locale}/quotes`)
               } catch (error: any) {
                 alert(error?.message || 'Silme işlemi başarısız oldu')
@@ -148,210 +188,194 @@ export default function QuoteDetailPage() {
         </div>
       </div>
 
-      {/* Info Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* EXPIRED Uyarısı ve Öneriler */}
+      {quote.status === 'EXPIRED' && (
+        <Alert className="border-orange-200 bg-orange-50">
+          <AlertTriangle className="h-4 w-4 text-orange-600" />
+          <AlertTitle className="text-orange-900 font-semibold">
+            ⚠️ Bu Teklif Süresi Doldu
+          </AlertTitle>
+          <AlertDescription className="text-orange-800 mt-2">
+            <p className="mb-3">
+              Bu teklif 30 gün geçtiği için otomatik olarak süresi doldu (EXPIRED). 
+              Müşteri ile iletişime geçip yeni bir teklif oluşturmanız önerilir.
+            </p>
+            <div className="flex gap-2 mt-4">
+              <Button
+                onClick={handleCreateRevision}
+                disabled={creatingRevision}
+                className="bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                {creatingRevision ? 'Oluşturuluyor...' : 'Revizyon Oluştur'}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => router.push(`/${locale}/quotes/new`)}
+                className="border-orange-300 text-orange-700 hover:bg-orange-100"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Yeni Teklif Oluştur
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Workflow Stepper */}
+      <WorkflowStepper
+        steps={getQuoteWorkflowSteps(quote.status)}
+        currentStep={['DRAFT', 'SENT', 'ACCEPTED'].indexOf(quote.status)}
+        title="Teklif İş Akışı"
+      />
+
+      {/* Status Info Note */}
+      <StatusInfoNote
+        entityType="quote"
+        status={quote.status}
+        relatedRecords={[
+          ...(quote.customer ? [{
+            type: 'customer',
+            count: 1,
+            message: `Müşteri: ${quote.customer.name}`
+          }] : []),
+        ]}
+      />
+
+      {/* Next Step Buttons */}
+      <NextStepButtons
+        entityType="quote"
+        currentStatus={quote.status}
+        onAction={async (actionId) => {
+          // Status değiştirme işlemi
+          try {
+            const res = await fetch(`/api/quotes/${quoteId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ status: actionId }),
+            })
+            if (!res.ok) {
+              const error = await res.json().catch(() => ({}))
+              toast.error(
+                'Durum değiştirilemedi',
+                error.message || 'Bir hata oluştu. Lütfen tekrar deneyin.'
+              )
+              return
+            }
+            toast.success('Durum değiştirildi')
+            mutate()
+          } catch (error: any) {
+            toast.error('Durum değiştirilemedi', error.message || 'Bir hata oluştu.')
+          }
+        }}
+        onCreateRelated={(type) => {
+          if (type === 'meeting') {
+            window.location.href = `/${locale}/meetings/new?quoteId=${quoteId}`
+          }
+        }}
+      />
+
+      {/* Related Records Suggestions */}
+      <RelatedRecordsSuggestions
+        entityType="quote"
+        entityId={quoteId}
+        relatedRecords={[
+          ...(quote.deal || quote.Deal ? [{
+            id: (quote.deal || quote.Deal)!.id,
+            type: 'deal',
+            title: (quote.deal || quote.Deal)!.title,
+            link: `/${locale}/deals/${(quote.deal || quote.Deal)!.id}`,
+          }] : []),
+          ...(quote.invoice || quote.Invoice ? [{
+            id: (quote.invoice || quote.Invoice)!.id,
+            type: 'invoice',
+            title: (quote.invoice || quote.Invoice)!.title,
+            link: `/${locale}/invoices/${(quote.invoice || quote.Invoice)!.id}`,
+          }] : []),
+        ]}
+        missingRecords={[
+          ...(quote.status === 'SENT' ? [{
+            type: 'meeting',
+            label: 'Görüşme Planla',
+            icon: <Calendar className="h-4 w-4" />,
+            onCreate: () => window.location.href = `/${locale}/meetings/new?quoteId=${quoteId}`,
+            description: 'Teklif sunumu için görüşme planlayın',
+          }] : []),
+        ]}
+      />
+
+      {/* Info Card */}
+      <Card className="p-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <p className="text-sm text-gray-600 mb-1">Toplam Tutar</p>
+            <p className="text-2xl font-bold">
+              {new Intl.NumberFormat('tr-TR', {
+                style: 'currency',
+                currency: 'TRY'
+              }).format(quote.totalAmount)}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-600 mb-1">Müşteri</p>
+            <p className="text-lg font-semibold">
+              {quote.customer?.name || '-'}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-600 mb-1">Oluşturulma Tarihi</p>
+            <p className="text-lg font-semibold">
+              {new Date(quote.createdAt).toLocaleDateString('tr-TR')}
+            </p>
+          </div>
+        </div>
+
+        {quote.revisionNotes && (
+          <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+            <p className="text-sm font-semibold text-blue-900 mb-1">Revizyon Notları:</p>
+            <p className="text-sm text-blue-800">{quote.revisionNotes}</p>
+          </div>
+        )}
+
+        {/* REJECTED durumunda reddetme notu - kırmızı renkle */}
+        {quote.status === 'REJECTED' && quote.notes && (
+          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <Info className="h-5 w-5 text-red-600 flex-shrink-0" />
+              <p className="text-sm font-bold text-red-900">REDDEDİLDİ</p>
+            </div>
+            <p className="text-sm font-semibold text-red-800 mb-2">Reddetme Sebebi:</p>
+            <p className="text-sm text-red-700 whitespace-pre-wrap">
+              {quote.notes.includes('Sebep:') 
+                ? quote.notes.split('Sebep:')[1]?.trim() || quote.notes
+                : quote.notes
+              }
+            </p>
+          </div>
+        )}
+      </Card>
+
+      {/* Actions */}
+      {quote.status !== 'ACCEPTED' && quote.status !== 'REJECTED' && (
         <Card className="p-6">
-          <p className="text-sm text-gray-600 mb-1">Durum</p>
-          <Badge className={statusColors[quote.status] || 'bg-gray-100'}>
-            {statusLabels[quote.status] || quote.status}
-          </Badge>
-        </Card>
-        <Card className="p-6">
-          <p className="text-sm text-gray-600 mb-1">Toplam</p>
-          <p className="text-2xl font-bold text-gray-900">
-            {formatCurrency(quote.total || 0)}
+          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            İşlemler
+          </h2>
+          <div className="flex gap-2">
+            <Button
+              onClick={handleCreateRevision}
+              disabled={creatingRevision}
+              className="gap-2"
+            >
+              <Copy className="h-4 w-4" />
+              {creatingRevision ? 'Oluşturuluyor...' : 'Revizyon Oluştur'}
+            </Button>
+          </div>
+          <p className="text-sm text-gray-600 mt-2">
+            Revizyon oluşturduğunuzda, bu teklifin kopyası versiyon numarası artırılarak oluşturulur.
           </p>
         </Card>
-        <Card className="p-6">
-          <p className="text-sm text-gray-600 mb-1">Fırsat</p>
-          {quote.Deal ? (
-            <Link href={`/${locale}/deals/${quote.Deal.id}`} className="text-lg font-semibold text-primary-600 hover:underline">
-              {quote.Deal.title}
-            </Link>
-          ) : (
-            <p className="text-lg font-semibold text-gray-900">-</p>
-          )}
-        </Card>
-      </div>
-
-      {/* Quote Details */}
-      {quote.description || quote.validUntil || quote.discount || quote.taxRate ? (
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Teklif Detayları</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {quote.description && (
-              <div className="md:col-span-2">
-                <p className="text-sm text-gray-600 mb-1">Açıklama</p>
-                <p className="text-gray-900 whitespace-pre-wrap">{quote.description}</p>
-              </div>
-            )}
-            {quote.validUntil && (
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Geçerlilik Tarihi</p>
-                <p className="font-medium">{new Date(quote.validUntil).toLocaleDateString('tr-TR')}</p>
-              </div>
-            )}
-            {quote.discount > 0 && (
-              <div>
-                <p className="text-sm text-gray-600 mb-1">İndirim</p>
-                <p className="font-medium">{quote.discount}%</p>
-              </div>
-            )}
-            {quote.taxRate && (
-              <div>
-                <p className="text-sm text-gray-600 mb-1">KDV Oranı</p>
-                <p className="font-medium">{quote.taxRate}%</p>
-              </div>
-            )}
-          </div>
-        </Card>
-      ) : null}
-
-      {/* Details */}
-      <div className="bg-white rounded-lg shadow-card p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Detaylar</h2>
-        <div className="space-y-4">
-          <div className="flex justify-between py-2 border-b">
-            <span className="text-gray-600">Teklif ID</span>
-            <span className="font-mono text-sm">{quote.id}</span>
-          </div>
-          <div className="flex justify-between py-2 border-b">
-            <span className="text-gray-600">Oluşturulma Tarihi</span>
-            <span>{new Date(quote.createdAt).toLocaleString('tr-TR')}</span>
-          </div>
-          {quote.updatedAt && (
-            <div className="flex justify-between py-2 border-b">
-              <span className="text-gray-600">Güncellenme Tarihi</span>
-              <span>{new Date(quote.updatedAt).toLocaleString('tr-TR')}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Ürün Listesi */}
-      {quote.quoteItems && quote.quoteItems.length > 0 && (
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold flex items-center gap-2">
-              <Package className="h-5 w-5" />
-              Ürünler ({quote.quoteItems.length})
-            </h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4 font-semibold text-gray-700">Ürün</th>
-                  <th className="text-right py-3 px-4 font-semibold text-gray-700">Miktar</th>
-                  <th className="text-right py-3 px-4 font-semibold text-gray-700">Birim Fiyat</th>
-                  <th className="text-right py-3 px-4 font-semibold text-gray-700">Toplam</th>
-                </tr>
-              </thead>
-              <tbody>
-                {quote.quoteItems.map((item: any) => (
-                  <tr key={item.id} className="border-b hover:bg-gray-50">
-                    <td className="py-3 px-4">
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {item.Product?.name || 'Ürün Bulunamadı'}
-                        </p>
-                        {item.Product?.description && (
-                          <p className="text-sm text-gray-500 mt-1">
-                            {item.Product.description}
-                          </p>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <span className="font-medium">{item.quantity || 1}</span>
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <span className="font-medium">{formatCurrency(item.unitPrice || 0)}</span>
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <span className="font-bold text-primary-600">
-                        {formatCurrency(item.total || 0)}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 border-gray-300">
-                  <td colSpan={3} className="py-3 px-4 text-right font-semibold">
-                    Ara Toplam:
-                  </td>
-                  <td className="py-3 px-4 text-right font-bold text-lg">
-                    {formatCurrency(
-                      quote.quoteItems.reduce((sum: number, item: any) => sum + (item.total || 0), 0)
-                    )}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </Card>
-      )}
-
-      {/* İlişkili Veriler */}
-      {quote.Invoice && quote.Invoice.length > 0 && (
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold flex items-center gap-2">
-              <Receipt className="h-5 w-5" />
-              Faturalar ({quote.Invoice.length})
-            </h2>
-          </div>
-          <div className="space-y-3">
-            {quote.Invoice.map((invoice: any) => (
-              <Link
-                key={invoice.id}
-                href={`/${locale}/invoices/${invoice.id}`}
-                className="block p-3 border rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-900">{invoice.title}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Badge className={statusColors[invoice.status] || 'bg-gray-100'}>
-                        {statusLabels[invoice.status] || invoice.status}
-                      </Badge>
-                      <span className="text-sm text-gray-600">
-                        {formatCurrency(invoice.total || 0)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* İlişkili Müşteri */}
-      {quote.Deal?.Customer && (
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold flex items-center gap-2">
-              <Users className="h-5 w-5 text-indigo-600" />
-              Müşteri
-            </h2>
-          </div>
-          <Link
-            href={`/${locale}/customers/${quote.Deal.Customer.id}`}
-            className="block p-3 border rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <p className="font-medium text-gray-900">{quote.Deal.Customer.name}</p>
-            {quote.Deal.Customer.email && (
-              <p className="text-sm text-gray-600 mt-1">{quote.Deal.Customer.email}</p>
-            )}
-          </Link>
-        </Card>
-      )}
-
-      {/* Activity Timeline */}
-      {quote.activities && quote.activities.length > 0 && (
-        <ActivityTimeline activities={quote.activities} />
       )}
 
       {/* Form Modal */}
@@ -360,11 +384,10 @@ export default function QuoteDetailPage() {
         open={formOpen}
         onClose={() => setFormOpen(false)}
         onSuccess={async () => {
-          setFormOpen(false)
-          await refetch()
+          // Form başarılı olduğunda sayfayı yenile
+          mutate()
         }}
       />
     </div>
   )
 }
-

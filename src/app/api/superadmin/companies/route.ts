@@ -62,8 +62,13 @@ export async function GET() {
       }
     })
 
+    // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
+    const uniqueCompanies = companiesWithPermissions.filter((company, index, self) => 
+      index === self.findIndex((c) => c.id === company.id)
+    )
+
     return NextResponse.json({
-      companies: companiesWithPermissions,
+      companies: uniqueCompanies,
       modules: modules || [],
     })
   } catch (error: any) {
@@ -132,4 +137,5 @@ export async function PUT(request: Request) {
     )
   }
 }
+
 

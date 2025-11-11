@@ -135,7 +135,7 @@ export default function StockMovementForm({
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      alert(error?.message || 'Stok hareketi kaydedilemedi')
+      toast.error('Stok hareketi kaydedilemedi', error?.message)
     } finally {
       setLoading(false)
     }
@@ -313,15 +313,15 @@ export default function StockMovementForm({
             <div className="space-y-2">
               <label className="text-sm font-medium">İlişkili Tablo</label>
               <Select
-                value={watch('relatedTo') || ''}
-                onValueChange={(value) => setValue('relatedTo', value)}
+                value={watch('relatedTo') || 'none'}
+                onValueChange={(value) => setValue('relatedTo', value === 'none' ? '' : value)}
                 disabled={loading}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Seçin (Opsiyonel)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Yok</SelectItem>
+                  <SelectItem value="none">Yok</SelectItem>
                   <SelectItem value="Invoice">Fatura</SelectItem>
                   <SelectItem value="Quote">Teklif</SelectItem>
                   <SelectItem value="Shipment">Sevkiyat</SelectItem>

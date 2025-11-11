@@ -30,6 +30,10 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // SuperAdmin tüm şirketlerin verilerini görebilir
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    const companyId = session.user.companyId
+
     // Permission check - canRead kontrolü
     const canRead = await hasPermission('customer', 'read', session.user.id)
     if (!canRead) {
@@ -45,55 +49,61 @@ export async function GET(
     const supabase = getSupabaseWithServiceRole()
 
     // Customer'ı ilişkili verilerle çek
-    const { data, error } = await supabase
+    // NOT: Invoice/Quote join'leri hata verebiliyor (totalAmount kolonu yoksa), bu yüzden sadece Customer kolonlarını çekiyoruz
+    // İlişkili veriler gerekirse ayrı query'lerle çekilebilir
+    let customerQuery = supabase
       .from('Customer')
-      .select(
-        `
-        *,
-        Deal (
-          id,
-          title,
-          stage,
-          value,
-          status,
-          createdAt
-        ),
-        Quote (
-          id,
-          title,
-          status,
-          total,
-          createdAt
-        ),
-        Invoice (
-          id,
-          title,
-          status,
-          total,
-          createdAt
-        ),
-        Shipment (
-          id,
-          tracking,
-          status,
-          createdAt
-        )
-      `
-      )
+      .select('*')
       .eq('id', id)
-      .eq('companyId', session.user.companyId)
-      .single()
+    
+    // SuperAdmin değilse companyId filtresi ekle
+    if (!isSuperAdmin) {
+      customerQuery = customerQuery.eq('companyId', companyId)
+    }
+    
+    const { data, error } = await customerQuery.single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Customer GET API error:', {
+          error: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+          customerId: id,
+        })
+      }
+      
+      // 404 hatası için özel mesaj
+      if (error.code === 'PGRST116' || error.message?.includes('No rows')) {
+        return NextResponse.json(
+          { error: 'Müşteri bulunamadı', message: 'Bu müşteri kaydı bulunamadı veya silinmiş olabilir.' },
+          { status: 404 }
+        )
+      }
+      
+      return NextResponse.json(
+        { 
+          error: 'Müşteri bilgileri alınamadı',
+          message: error.message || 'Müşteri verilerine erişirken bir hata oluştu.',
+          ...(process.env.NODE_ENV === 'development' && {
+            details: error,
+            code: error.code,
+          }),
+        },
+        { status: 500 }
+      )
     }
 
     if (!data) {
-      return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+      return NextResponse.json(
+        { error: 'Müşteri bulunamadı', message: 'Bu müşteri kaydı bulunamadı.' },
+        { status: 404 }
+      )
     }
 
     // ActivityLog'ları çek
-    const { data: activities } = await supabase
+    let activityQuery = supabase
       .from('ActivityLog')
       .select(
         `
@@ -104,9 +114,15 @@ export async function GET(
         )
       `
       )
-      .eq('companyId', session.user.companyId)
       .eq('entity', 'Customer')
       .eq('meta->>id', id)
+    
+    // SuperAdmin değilse MUTLAKA companyId filtresi uygula
+    if (!isSuperAdmin) {
+      activityQuery = activityQuery.eq('companyId', companyId)
+    }
+    
+    const { data: activities } = await activityQuery
       .order('createdAt', { ascending: false })
       .limit(20)
 
@@ -265,6 +281,97 @@ export async function DELETE(
     
     // Service role key ile RLS bypass - singleton pattern kullan
     const supabase = getSupabaseWithServiceRole()
+
+    // ÖNEMLİ: Customer silinmeden önce ilişkili Deal/Quote/Invoice kontrolü
+    // İlişkili Deal kontrolü
+    const { data: deals, error: dealsError } = await supabase
+      .from('Deal')
+      .select('id, title')
+      .eq('customerId', id)
+      .eq('companyId', session.user.companyId)
+      .limit(1)
+    
+    if (dealsError && process.env.NODE_ENV === 'development') {
+      console.error('Customer DELETE - Deal check error:', dealsError)
+    }
+    
+    if (deals && deals.length > 0) {
+      return NextResponse.json(
+        { 
+          error: 'Müşteri silinemez',
+          message: 'Bu müşteriye ait fırsatlar var. Müşteriyi silmek için önce ilgili fırsatları silmeniz gerekir.',
+          reason: 'CUSTOMER_HAS_DEALS',
+          relatedItems: {
+            deals: deals.length,
+            exampleDeal: {
+              id: deals[0]?.id,
+              title: deals[0]?.title
+            }
+          }
+        },
+        { status: 403 }
+      )
+    }
+    
+    // İlişkili Quote kontrolü
+    const { data: quotes, error: quotesError } = await supabase
+      .from('Quote')
+      .select('id, title')
+      .eq('customerId', id)
+      .eq('companyId', session.user.companyId)
+      .limit(1)
+    
+    if (quotesError && process.env.NODE_ENV === 'development') {
+      console.error('Customer DELETE - Quote check error:', quotesError)
+    }
+    
+    if (quotes && quotes.length > 0) {
+      return NextResponse.json(
+        { 
+          error: 'Müşteri silinemez',
+          message: 'Bu müşteriye ait teklifler var. Müşteriyi silmek için önce ilgili teklifleri silmeniz gerekir.',
+          reason: 'CUSTOMER_HAS_QUOTES',
+          relatedItems: {
+            quotes: quotes.length,
+            exampleQuote: {
+              id: quotes[0]?.id,
+              title: quotes[0]?.title
+            }
+          }
+        },
+        { status: 403 }
+      )
+    }
+    
+    // İlişkili Invoice kontrolü
+    const { data: invoices, error: invoicesError } = await supabase
+      .from('Invoice')
+      .select('id, title')
+      .eq('customerId', id)
+      .eq('companyId', session.user.companyId)
+      .limit(1)
+    
+    if (invoicesError && process.env.NODE_ENV === 'development') {
+      console.error('Customer DELETE - Invoice check error:', invoicesError)
+    }
+    
+    if (invoices && invoices.length > 0) {
+      return NextResponse.json(
+        { 
+          error: 'Müşteri silinemez',
+          message: 'Bu müşteriye ait faturalar var. Müşteriyi silmek için önce ilgili faturaları silmeniz gerekir.',
+          reason: 'CUSTOMER_HAS_INVOICES',
+          relatedItems: {
+            invoices: invoices.length,
+            exampleInvoice: {
+              id: invoices[0]?.id,
+              title: invoices[0]?.title
+            }
+          }
+        },
+        { status: 403 }
+      )
+    }
 
     // Önce customer'ı al (ActivityLog için)
     const { data: customer } = await supabase

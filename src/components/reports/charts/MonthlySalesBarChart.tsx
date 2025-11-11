@@ -3,7 +3,7 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 interface MonthlySalesBarChartProps {
-  data: Array<{ month: string; total: number }>
+  data: Array<{ month: string; total?: number; total_sales?: number }>
 }
 
 export default function MonthlySalesBarChart({ data }: MonthlySalesBarChartProps) {
@@ -15,9 +15,15 @@ export default function MonthlySalesBarChart({ data }: MonthlySalesBarChartProps
     )
   }
 
+  // total_sales field'ını total'e normalize et
+  const normalizedData = data.map((item) => ({
+    ...item,
+    total: item.total || item.total_sales || 0,
+  }))
+
   return (
     <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+      <BarChart data={normalizedData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" opacity={0.3} />
         <XAxis 
           dataKey="month" 

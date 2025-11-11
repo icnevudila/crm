@@ -2,21 +2,10 @@ import { NextIntlClientProvider } from 'next-intl'
 import { getMessages } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import { locales } from '@/lib/i18n'
-import dynamic from 'next/dynamic'
 import SessionProvider from '@/components/providers/SessionProvider'
 import QueryProvider from '@/components/providers/QueryProvider'
-import { ErrorBoundary } from '@/components/ErrorBoundary'
-
-// Lazy load layout components - ilk yükleme hızı için
-const Sidebar = dynamic(() => import('@/components/layout/Sidebar'), {
-  ssr: true, // SSR gerekli - layout component
-  loading: () => <div className="w-64 h-screen bg-gray-900 animate-pulse" />,
-})
-
-const Header = dynamic(() => import('@/components/layout/Header'), {
-  ssr: true, // SSR gerekli - layout component
-  loading: () => <div className="h-16 w-full bg-white border-b animate-pulse" />,
-})
+import ConditionalLayout from '@/components/layout/ConditionalLayout'
+import { Toaster } from 'sonner'
 
 interface LocaleLayoutProps {
   children: React.ReactNode
@@ -55,15 +44,35 @@ export default async function LocaleLayout({
     <NextIntlClientProvider messages={messages}>
       <SessionProvider>
         <QueryProvider>
-          <ErrorBoundary>
-            <div className="flex h-screen bg-gray-50 overflow-hidden">
-              <Sidebar />
-              <div className="flex-1 ml-64 pt-16 flex flex-col overflow-hidden">
-                <Header />
-                <main className="flex-1 overflow-y-auto">{children}</main>
-              </div>
-            </div>
-          </ErrorBoundary>
+          <ConditionalLayout>
+            {children}
+          </ConditionalLayout>
+          <Toaster 
+            position="top-right" 
+            expand={false}
+            richColors
+            closeButton
+            duration={4000}
+            toastOptions={{
+              classNames: {
+                toast: 'group toast shadow-lg border-2',
+                title: 'text-base font-semibold',
+                description: 'text-sm',
+                actionButton: 'bg-indigo-600 text-white hover:bg-indigo-700',
+                cancelButton: 'bg-gray-100 text-gray-700 hover:bg-gray-200',
+                closeButton: 'bg-white border-2 border-gray-200 hover:border-gray-300 text-gray-700',
+                error: 'border-red-300 bg-red-50 text-red-900',
+                success: 'border-emerald-300 bg-emerald-50 text-emerald-900',
+                warning: 'border-amber-300 bg-amber-50 text-amber-900',
+                info: 'border-indigo-300 bg-indigo-50 text-indigo-900',
+              },
+              style: {
+                borderRadius: '12px',
+                padding: '16px',
+                fontSize: '14px',
+              }
+            }}
+          />
         </QueryProvider>
       </SessionProvider>
     </NextIntlClientProvider>

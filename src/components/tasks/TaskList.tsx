@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { toast } from '@/lib/toast'
 import { useLocale } from 'next-intl'
+import { useSession } from 'next-auth/react'
 import { Plus, Edit, Trash2, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -22,6 +24,7 @@ import {
 } from '@/components/ui/select'
 import TaskForm from './TaskForm'
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import { AutomationInfo } from '@/components/automation/AutomationInfo'
 import Link from 'next/link'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
@@ -31,7 +34,12 @@ interface Task {
   title: string
   status: string
   assignedTo?: string
+  companyId?: string
   User?: { name: string; email: string }
+  Company?: {
+    id: string
+    name: string
+  }
   createdAt: string
 }
 
@@ -49,18 +57,36 @@ const statusLabels: Record<string, string> = {
 
 export default function TaskList() {
   const locale = useLocale()
+  const { data: session } = useSession()
+  
+  // SuperAdmin kontrolü
+  const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+  
   const [status, setStatus] = useState('')
+  const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin için firma filtresi
   const [formOpen, setFormOpen] = useState(false)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+  
+  // SuperAdmin için firmaları çek
+  const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
+    isSuperAdmin ? '/api/superadmin/companies' : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
+  // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
+  const companies = (companiesData?.companies || []).filter((company, index, self) => 
+    index === self.findIndex((c) => c.id === company.id)
+  )
 
   // SWR ile veri çekme (repo kurallarına uygun)
   const params = new URLSearchParams()
   if (status) params.append('status', status)
+  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId) // SuperAdmin için firma filtresi
   
   const apiUrl = `/api/tasks?${params.toString()}`
   const { data: tasks = [], isLoading, error, mutate: mutateTasks } = useData<Task[]>(apiUrl, {
-    dedupingInterval: 5000, // 5 saniye cache (daha kısa - güncellemeler daha hızlı)
-    revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
+    dedupingInterval: 2000, // 2 saniye cache (daha kısa - güncellemeler daha hızlı)
+    revalidateOnFocus: true, // Focus'ta yeniden fetch yap (yeni task'ları görmek için)
+    refreshInterval: 10000, // 10 saniyede bir otomatik yenile (yeni task'ları görmek için)
   })
 
   const handleDelete = useCallback(async (id: string, title: string) => {
@@ -95,7 +121,7 @@ export default function TaskList() {
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      alert(error?.message || 'Silme işlemi başarısız oldu')
+      toast.error('Silinemedi', error?.message)
     }
   }, [tasks, mutateTasks, apiUrl])
 
@@ -121,6 +147,29 @@ export default function TaskList() {
 
   return (
     <div className="space-y-6">
+      {/* Otomasyon Bilgileri */}
+      <AutomationInfo
+        title="Görevler Modülü Otomasyonları"
+        automations={[
+          {
+            action: 'Görevi "Tamamlandı" yaparsan',
+            result: 'Görev tamamlanır ve takip edilir',
+            details: [
+              '"Aktiviteler" sayfasında tamamlanma kaydı görünür',
+              'İlgili modüle (Deal, Customer, Quote) bağlıysa bilgilendirme yapılır',
+            ],
+          },
+          {
+            action: 'Görev son tarihi yaklaştığında (otomatik)',
+            result: 'Hatırlatıcı bildirimi gönderilir',
+            details: [
+              'Son tarihten 1 gün önce sistem içi kullanıcılara (Admin, Sales) bildirim gönderilir',
+              '"Aktiviteler" sayfasında hatırlatıcı kaydı görünür',
+            ],
+          },
+        ]}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -137,7 +186,22 @@ export default function TaskList() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4">
+      <div className="flex gap-4 flex-wrap">
+        {isSuperAdmin && (
+          <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Firma Seç" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tüm Firmalar</SelectItem>
+              {companies.map((company) => (
+                <SelectItem key={company.id} value={company.id}>
+                  {company.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Select value={status || 'all'} onValueChange={(v) => setStatus(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Durum" />
@@ -157,6 +221,7 @@ export default function TaskList() {
           <TableHeader>
             <TableRow>
               <TableHead>Görev</TableHead>
+              {isSuperAdmin && <TableHead>Firma</TableHead>}
               <TableHead>Durum</TableHead>
               <TableHead>Atanan</TableHead>
               <TableHead>Tarih</TableHead>
@@ -166,7 +231,7 @@ export default function TaskList() {
           <TableBody>
             {tasks.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                <TableCell colSpan={isSuperAdmin ? 6 : 5} className="text-center py-8 text-gray-500">
                   Görev bulunamadı
                 </TableCell>
               </TableRow>
@@ -174,6 +239,13 @@ export default function TaskList() {
               tasks.map((task) => (
                 <TableRow key={task.id}>
                   <TableCell className="font-medium">{task.title}</TableCell>
+                  {isSuperAdmin && (
+                    <TableCell>
+                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                        {task.Company?.name || '-'}
+                      </Badge>
+                    </TableCell>
+                  )}
                   <TableCell>
                     <Badge className={statusColors[task.status] || 'bg-gray-100'}>
                       {statusLabels[task.status] || task.status}
@@ -187,7 +259,7 @@ export default function TaskList() {
                     <div className="flex justify-end gap-2">
                       <Link href={`/${locale}/tasks/${task.id}`} prefetch={true}>
                         <Button variant="ghost" size="icon" aria-label={`${task.title} görevini görüntüle`}>
-                          <Eye className="h-4 w-4" />
+                          <Eye className="h-4 w-4 text-gray-600" />
                         </Button>
                       </Link>
                       <Button
@@ -196,7 +268,7 @@ export default function TaskList() {
                         onClick={() => handleEdit(task)}
                         aria-label={`${task.title} görevini düzenle`}
                       >
-                        <Edit className="h-4 w-4" />
+                        <Edit className="h-4 w-4 text-gray-600" />
                       </Button>
                       <Button
                         variant="ghost"
@@ -205,7 +277,7 @@ export default function TaskList() {
                         className="text-red-600 hover:text-red-700"
                         aria-label={`${task.title} görevini sil`}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4 text-red-600" />
                       </Button>
                     </div>
                   </TableCell>

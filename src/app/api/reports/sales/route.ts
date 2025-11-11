@@ -21,22 +21,42 @@ export async function GET() {
     const twelveMonthsAgo = new Date()
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12)
 
-    let invoicesQuery = supabase
-      .from('Invoice')
-      .select('total, createdAt, status')
-      .gte('createdAt', twelveMonthsAgo.toISOString())
-      .order('createdAt', { ascending: true })
-      .limit(1000)
-    
-    if (!isSuperAdmin) {
-      invoicesQuery = invoicesQuery.eq('companyId', companyId)
-    }
-    
-    const { data: invoices, error } = await invoicesQuery
+    // DÜZELTME: totalAmount kullan (050 migration ile total → totalAmount, total kolonu artık yok!)
+    // DÜZELTME: Pagination ekle - tüm invoice'ları çekmek için
+    let allInvoices: any[] = []
+    let from = 0
+    const pageSize = 1000
+    let hasMore = true
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    while (hasMore) {
+      let invoicesQuery = supabase
+        .from('Invoice')
+        .select('totalAmount, createdAt, status, companyId')
+        .gte('createdAt', twelveMonthsAgo.toISOString())
+        .order('createdAt', { ascending: true })
+        .range(from, from + pageSize - 1)
+    
+      // SuperAdmin tüm firmaları görür, normal kullanıcı sadece kendi firmasını görür
+      if (!isSuperAdmin) {
+        invoicesQuery = invoicesQuery.eq('companyId', companyId)
+      }
+      
+      const { data: invoices, error } = await invoicesQuery
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+
+      if (invoices && invoices.length > 0) {
+        allInvoices = [...allInvoices, ...invoices]
+        from += pageSize
+        hasMore = invoices.length === pageSize // Eğer tam sayfa geldiyse devam et
+      } else {
+        hasMore = false
+      }
     }
+
+    const invoices = allInvoices
 
     // Aylık trend verisi (Line Chart için)
     const monthlyTrend: Record<string, number> = {}
@@ -45,21 +65,26 @@ export async function GET() {
     // Durum dağılımı (Pie Chart için)
     const statusDistribution: Record<string, number> = {}
 
-    invoices?.forEach((invoice: { createdAt: string; total?: number; status?: string }) => {
+    // DÜZELTME: totalAmount kullan (050 migration ile total → totalAmount, total kolonu artık yok!)
+    invoices?.forEach((invoice: { createdAt: string; totalAmount?: number; status?: string }) => {
       const date = new Date(invoice.createdAt)
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-      const total = invoice.total || 0
+      const total = invoice.totalAmount || 0
+      const status = invoice.status || 'UNKNOWN'
 
-      // Aylık trend (sadece PAID invoice'lar)
-      if (invoice.status === 'PAID') {
+      // Aylık trend (sadece PAID invoice'lar - gerçek satış)
+      if (status === 'PAID') {
         monthlyTrend[monthKey] = (monthlyTrend[monthKey] || 0) + total
       }
 
-      // Aylık karşılaştırma (tüm invoice'lar)
-      monthlyComparison[monthKey] = (monthlyComparison[monthKey] || 0) + total
+      // Aylık karşılaştırma (sadece PAID invoice'lar - tutarlılık için)
+      // NOT: Tüm invoice'ları göstermek yerine sadece ödenenleri gösteriyoruz
+      // Çünkü ödenmemiş invoice'lar henüz satış değil
+      if (status === 'PAID') {
+        monthlyComparison[monthKey] = (monthlyComparison[monthKey] || 0) + total
+      }
 
-      // Durum dağılımı
-      const status = invoice.status || 'UNKNOWN'
+      // Durum dağılımı (tüm invoice'lar)
       statusDistribution[status] = (statusDistribution[status] || 0) + 1
     })
 
@@ -77,7 +102,7 @@ export async function GET() {
         .sort()
         .map((month) => ({
           month,
-          total_sales: monthlyTrend[month],
+          total: monthlyTrend[month],
         })),
       monthlyComparison: Object.keys(monthlyComparison)
         .sort()

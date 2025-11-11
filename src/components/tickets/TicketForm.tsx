@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { toast } from '@/lib/toast'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -25,11 +26,12 @@ import {
 } from '@/components/ui/select'
 
 const ticketSchema = z.object({
-  subject: z.string().min(1, 'Konu gereklidir'),
-  status: z.enum(['OPEN', 'IN_PROGRESS', 'CLOSED', 'CANCELLED']).default('OPEN'),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).default('MEDIUM'),
+  subject: z.string().min(1, 'Konu gereklidir').max(200, 'Konu en fazla 200 karakter olabilir'),
+  status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED']).default('OPEN'),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).default('MEDIUM'),
   customerId: z.string().optional(),
-  description: z.string().optional(),
+  assignedTo: z.string().optional(),
+  description: z.string().max(2000, 'Açıklama en fazla 2000 karakter olabilir').optional(),
 })
 
 type TicketFormData = z.infer<typeof ticketSchema>
@@ -48,6 +50,12 @@ async function fetchCustomers() {
   return Array.isArray(data) ? data : (data.data || data.customers || [])
 }
 
+async function fetchUsers() {
+  const res = await fetch('/api/users')
+  if (!res.ok) throw new Error('Failed to fetch users')
+  return res.json()
+}
+
 export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketFormProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
@@ -56,6 +64,12 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
   const { data: customersData } = useQuery({
     queryKey: ['customers'],
     queryFn: fetchCustomers,
+    enabled: open,
+  })
+
+  const { data: users = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: fetchUsers,
     enabled: open,
   })
 
@@ -71,11 +85,12 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
     reset,
   } = useForm<TicketFormData>({
     resolver: zodResolver(ticketSchema),
-    defaultValues: ticket || {
+      defaultValues: ticket || {
       subject: '',
       status: 'OPEN',
       priority: 'MEDIUM',
       customerId: '',
+      assignedTo: '',
       description: '',
     },
   })
@@ -83,6 +98,7 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
   const status = watch('status')
   const priority = watch('priority')
   const customerId = watch('customerId')
+  const assignedTo = watch('assignedTo')
 
   // Ticket prop değiştiğinde veya modal açıldığında form'u güncelle
   useEffect(() => {
@@ -94,6 +110,7 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
           status: ticket.status || 'OPEN',
           priority: ticket.priority || 'MEDIUM',
           customerId: ticket.customerId || '',
+          assignedTo: ticket.assignedTo || '',
           description: ticket.description || '',
         })
       } else {
@@ -103,6 +120,7 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
           status: 'OPEN',
           priority: 'MEDIUM',
           customerId: '',
+          assignedTo: '',
           description: '',
         })
       }
@@ -143,7 +161,7 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
       await mutation.mutateAsync(data)
     } catch (error: any) {
       console.error('Error:', error)
-      alert(error?.message || 'Kaydetme işlemi başarısız oldu')
+      toast.error('Kaydedilemedi', error?.message)
     } finally {
       setLoading(false)
     }
@@ -180,17 +198,40 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
             <div className="space-y-2">
               <label className="text-sm font-medium">Müşteri</label>
               <Select
-                value={customerId || ''}
-                onValueChange={(value) => setValue('customerId', value)}
+                value={customerId || 'none'}
+                onValueChange={(value) => setValue('customerId', value === 'none' ? '' : value)}
                 disabled={loading}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Müşteri seçin" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="none">Müşteri seçilmedi</SelectItem>
                   {customers.map((customer: any) => (
                     <SelectItem key={customer.id} value={customer.id}>
                       {customer.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Assigned To */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Atanan Kişi</label>
+              <Select
+                value={assignedTo || 'none'}
+                onValueChange={(value) => setValue('assignedTo', value === 'none' ? '' : value)}
+                disabled={loading}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Kullanıcı seçin" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Atanmadı</SelectItem>
+                  {users.map((user: any) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -213,6 +254,7 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
                 <SelectContent>
                   <SelectItem value="OPEN">Açık</SelectItem>
                   <SelectItem value="IN_PROGRESS">Devam Ediyor</SelectItem>
+                  <SelectItem value="RESOLVED">Çözüldü</SelectItem>
                   <SelectItem value="CLOSED">Kapatıldı</SelectItem>
                   <SelectItem value="CANCELLED">İptal Edildi</SelectItem>
                 </SelectContent>
@@ -236,6 +278,7 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
                   <SelectItem value="LOW">Düşük</SelectItem>
                   <SelectItem value="MEDIUM">Orta</SelectItem>
                   <SelectItem value="HIGH">Yüksek</SelectItem>
+                  <SelectItem value="URGENT">Acil</SelectItem>
                 </SelectContent>
               </Select>
             </div>

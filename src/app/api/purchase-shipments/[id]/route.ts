@@ -27,7 +27,7 @@ export async function GET(
           title,
           invoiceNumber,
           status,
-          total,
+          totalAmount,
           createdAt,
           Vendor (
             id,
@@ -109,8 +109,12 @@ export async function GET(
       // Hata olsa bile devam et
     }
 
+    // SuperAdmin tüm şirketlerin verilerini görebilir
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    const companyId = session.user.companyId
+
     // ActivityLog'ları çek
-    const { data: activities } = await supabase
+    let activityQuery = supabase
       .from('ActivityLog')
       .select(
         `
@@ -121,9 +125,15 @@ export async function GET(
         )
       `
       )
-      .eq('companyId', session.user.companyId)
       .eq('entity', 'PurchaseTransaction')
       .eq('meta->>id', id)
+    
+    // SuperAdmin değilse MUTLAKA companyId filtresi uygula
+    if (!isSuperAdmin) {
+      activityQuery = activityQuery.eq('companyId', companyId)
+    }
+    
+    const { data: activities } = await activityQuery
       .order('createdAt', { ascending: false })
       .limit(20)
 
@@ -182,7 +192,7 @@ export async function PUT(
       await supabase.from('ActivityLog').insert([{
         entity: 'PurchaseTransaction',
         action: 'UPDATE',
-        description: `Mal kabul güncellendi: ${body.status || 'Durum değiştirildi'}`,
+        description: `Mal kabul bilgileri güncellendi`,
         meta: { entity: 'PurchaseTransaction', action: 'update', id },
         userId: session.user.id,
         companyId: session.user.companyId,

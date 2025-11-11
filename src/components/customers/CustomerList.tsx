@@ -2,10 +2,13 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocale } from 'next-intl'
+import { useSearchParams } from 'next/navigation'
 import { Plus, Search, Edit, Trash2, Eye, Upload, Download, CheckSquare, Square, Building2 } from 'lucide-react'
+import { useSession } from 'next-auth/react'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { toast } from '@/lib/toast'
 import {
   Table,
   TableBody,
@@ -57,7 +60,12 @@ interface Customer {
   sector?: string
   status: string
   createdAt: string
+  companyId?: string
   customerCompanyId?: string
+  Company?: {
+    id: string
+    name: string
+  }
   CustomerCompany?: {
     id: string
     name: string
@@ -79,10 +87,42 @@ interface CustomersResponse {
 export default function CustomerList() {
   const locale = useLocale()
   const queryClient = useQueryClient()
+  const searchParams = useSearchParams()
+  const { data: session } = useSession()
+  
+  // SuperAdmin kontrolü
+  const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+  
+  // URL parametrelerinden filtreleri oku
+  const cityFromUrl = searchParams.get('city') || ''
+  const sectorFromUrl = searchParams.get('sector') || ''
+  
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
-  const [sector, setSector] = useState('')
+  const [sector, setSector] = useState(sectorFromUrl)
+  const [city, setCity] = useState(cityFromUrl)
   const [customerCompanyId, setCustomerCompanyId] = useState('') // Müşteri firması filtresi
+  const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin için firma filtresi
+  
+  // SuperAdmin için firmaları çek
+  const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
+    isSuperAdmin ? '/api/superadmin/companies' : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
+  // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
+  const companies = (companiesData?.companies || []).filter((company, index, self) => 
+    index === self.findIndex((c) => c.id === company.id)
+  )
+  
+  // URL'den gelen parametreleri state'e set et
+  useEffect(() => {
+    if (cityFromUrl && cityFromUrl !== city) {
+      setCity(cityFromUrl)
+    }
+    if (sectorFromUrl && sectorFromUrl !== sector) {
+      setSector(sectorFromUrl)
+    }
+  }, [cityFromUrl, sectorFromUrl])
   const [formOpen, setFormOpen] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   
@@ -115,7 +155,9 @@ export default function CustomerList() {
   if (debouncedSearch) params.append('search', debouncedSearch)
   if (status) params.append('status', status)
   if (sector) params.append('sector', sector)
+  if (city) params.append('city', city)
   if (customerCompanyId) params.append('customerCompanyId', customerCompanyId) // Müşteri firması filtresi
+  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId) // SuperAdmin için firma filtresi
   params.append('page', currentPage.toString())
   params.append('pageSize', pageSize.toString())
   
@@ -123,10 +165,7 @@ export default function CustomerList() {
   const { data: response, isLoading, error, mutate: mutateCustomers } = useData<CustomersResponse | Customer[]>(apiUrl, {
     dedupingInterval: 0, // Cache'i kapat - her zaman fresh data çek
     revalidateOnFocus: true, // Focus'ta yeniden fetch yap
-    revalidateOnMount: true, // Mount'ta yeniden fetch yap
-    revalidateOnReconnect: true, // Reconnect'te yeniden fetch yap
     refreshInterval: 0, // Otomatik refresh yok
-    keepPreviousData: false, // Önceki veriyi tutma - fresh data göster
   })
 
   // NOT: apiUrl currentPage'e bağlı olduğu için SWR otomatik refetch yapıyor
@@ -240,7 +279,7 @@ export default function CustomerList() {
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      alert(error?.message || 'Silme işlemi başarısız oldu')
+      toast.error('Silinemedi', error?.message)
     }
   }, [customers, pagination, mutateCustomers, apiUrl, queryClient])
 
@@ -362,7 +401,7 @@ export default function CustomerList() {
   // Import handlers
   const handleImport = useCallback(async () => {
     if (!importFile) {
-      alert('Lütfen bir dosya seçin')
+      toast.warning('Dosya seçmediniz')
       return
     }
 
@@ -378,11 +417,11 @@ export default function CustomerList() {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
-        throw new Error(errorData.error || 'Import işlemi başarısız oldu')
+        throw new Error(errorData.error || 'İçe aktarılamadı')
       }
 
       const result = await res.json()
-      alert(`${result.importedCount} müşteri başarıyla import edildi`)
+      toast.success('Dosya yüklendi', `${result.importedCount} müşteri başarıyla import edildi`)
 
       // Cache'i invalidate et - yeni verileri çek
       await Promise.all([
@@ -399,8 +438,8 @@ export default function CustomerList() {
       setImportFile(null)
     } catch (error: any) {
       console.error('Import error:', error)
-      alert(error?.message || 'Import işlemi başarısız oldu')
-    } finally {
+      toast.error('İçe aktarılamadı', error?.message)
+    } finally{
       setImporting(false)
     }
   }, [importFile, mutateCustomers, apiUrl, queryClient])
@@ -428,7 +467,7 @@ export default function CustomerList() {
       document.body.removeChild(a)
     } catch (error: any) {
       console.error('Export error:', error)
-      alert('Export işlemi başarısız oldu')
+      toast.error('Dışa aktarılamadı')
     }
   }, [debouncedSearch, status, sector])
 
@@ -486,8 +525,8 @@ export default function CustomerList() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4">
-        <div className="flex-1 relative">
+      <div className="flex gap-4 flex-wrap">
+        <div className="flex-1 relative min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             type="search"
@@ -497,6 +536,21 @@ export default function CustomerList() {
             className="pl-10"
           />
         </div>
+        {isSuperAdmin && (
+          <Select value={filterCompanyId || 'all'} onValueChange={(value) => setFilterCompanyId(value === 'all' ? '' : value)}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Firma Seç" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tüm Firmalar</SelectItem>
+              {companies.map((company) => (
+                <SelectItem key={company.id} value={company.id}>
+                  {company.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Select value={status || 'all'} onValueChange={(value) => setStatus(value === 'all' ? '' : value)}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Durum" />
@@ -557,6 +611,7 @@ export default function CustomerList() {
                 />
               </TableHead>
               <TableHead>İsim</TableHead>
+              {isSuperAdmin && <TableHead>Firma</TableHead>}
               <TableHead>E-posta</TableHead>
               <TableHead>Telefon</TableHead>
               <TableHead>Şehir</TableHead>
@@ -568,7 +623,7 @@ export default function CustomerList() {
           <TableBody>
             {customers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="p-0">
+                <TableCell colSpan={isSuperAdmin ? 9 : 8} className="p-0">
                   <EmptyState
                     icon={Users}
                     title="Henüz müşteri yok"
@@ -592,6 +647,13 @@ export default function CustomerList() {
                     />
                   </TableCell>
                   <TableCell className="font-medium">{customer.name}</TableCell>
+                  {isSuperAdmin && (
+                    <TableCell>
+                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                        {customer.Company?.name || '-'}
+                      </Badge>
+                    </TableCell>
+                  )}
                   <TableCell>{customer.email || '-'}</TableCell>
                   <TableCell>{customer.phone || '-'}</TableCell>
                   <TableCell>{customer.city || '-'}</TableCell>
@@ -615,7 +677,7 @@ export default function CustomerList() {
                     <div className="flex justify-end gap-2">
                       <Link href={`/${locale}/customers/${customer.id}`} prefetch={true}>
                         <Button variant="ghost" size="icon" aria-label={`${customer.name} müşterisini görüntüle`}>
-                          <Eye className="h-4 w-4" />
+                          <Eye className="h-4 w-4 text-gray-600" />
                         </Button>
                       </Link>
                       <Button
@@ -624,7 +686,7 @@ export default function CustomerList() {
                         onClick={() => handleEdit(customer)}
                         aria-label={`${customer.name} müşterisini düzenle`}
                       >
-                        <Edit className="h-4 w-4" />
+                        <Edit className="h-4 w-4 text-gray-600" />
                       </Button>
                       <Button
                         variant="ghost"
@@ -633,7 +695,7 @@ export default function CustomerList() {
                         className="text-red-600 hover:text-red-700"
                         aria-label={`${customer.name} müşterisini sil`}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4 text-red-600" />
                       </Button>
                     </div>
                   </TableCell>

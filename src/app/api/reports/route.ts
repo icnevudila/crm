@@ -26,13 +26,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // SuperAdmin tüm şirketlerin verilerini görebilir
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    const companyId = session.user.companyId
+
     const { searchParams } = new URL(request.url)
     const reportModule = searchParams.get('module') || 'all'
     const startDate = searchParams.get('startDate')
     const endDate = searchParams.get('endDate')
     const userId = searchParams.get('userId')
 
-    const companyId = session.user.companyId
     const supabase = getSupabaseWithServiceRole()
 
     let reports: any[] = []
@@ -41,9 +44,13 @@ export async function GET(request: Request) {
     let query = supabase
       .from('ActivityLog')
       .select('id, entity, action, description, createdAt, userId')
-      .eq('companyId', companyId)
       .order('createdAt', { ascending: false })
       .limit(100) // ULTRA AGRESİF limit - sadece 100 kayıt (instant load)
+    
+    // SuperAdmin değilse MUTLAKA companyId filtresi uygula
+    if (!isSuperAdmin) {
+      query = query.eq('companyId', companyId)
+    }
 
     // Tarih filtresi
     if (startDate) {

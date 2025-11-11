@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { toast } from '@/lib/toast'
 import { useLocale } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -108,7 +109,7 @@ export default function VendorList() {
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      alert(error?.message || 'Silme işlemi başarısız oldu')
+      toast.error('Silinemedi', error?.message)
     }
   }, [vendors, mutateVendors, apiUrl])
 

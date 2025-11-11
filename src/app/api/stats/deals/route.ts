@@ -18,71 +18,103 @@ export async function GET() {
     const companyId = session.user.companyId
     const supabase = getSupabaseWithServiceRole()
 
-    const [
-      { count: total },
-      { count: active },
-      { data: allDealsData }, // Tüm fırsatların değerleri
-      { data: openDealsData }, // OPEN olan fırsatların değerleri
-      { count: thisMonth },
-    ] = await Promise.all([
-      // Toplam fırsat sayısı
-      (() => {
-        let query = supabase.from('Deal').select('*', { count: 'exact', head: true })
-        if (!isSuperAdmin) query = query.eq('companyId', companyId)
-        return query
-      })(),
-      // OPEN fırsat sayısı (Deal tablosunda status: 'OPEN' kullanılıyor, 'ACTIVE' değil)
-      (() => {
-        let query = supabase.from('Deal').select('*', { count: 'exact', head: true }).eq('status', 'OPEN')
-        if (!isSuperAdmin) query = query.eq('companyId', companyId)
-        return query
-      })(),
-      // Tüm fırsatların değerleri (toplam değer için)
-      (() => {
-        let query = supabase.from('Deal').select('value')
-        if (!isSuperAdmin) query = query.eq('companyId', companyId)
-        return query
-      })(),
-      // OPEN olan fırsatların değerleri (aktif tutar için)
-      (() => {
-        let query = supabase.from('Deal').select('value').eq('status', 'OPEN')
-        if (!isSuperAdmin) query = query.eq('companyId', companyId)
-        return query
-      })(),
-      // Bu ay oluşturulan fırsatlar
-      (() => {
-        let query = supabase
-          .from('Deal')
-          .select('*', { count: 'exact', head: true })
-          .gte('createdAt', new Date(new Date().setDate(1)).toISOString())
-        if (!isSuperAdmin) query = query.eq('companyId', companyId)
-        return query
-      })(),
-    ])
-
-    // Tüm fırsatların toplam değeri
-    const totalValue = allDealsData?.reduce((sum: number, deal: any) => {
-      const dealValue = typeof deal.value === 'string' ? parseFloat(deal.value) || 0 : (deal.value || 0)
+    // Tüm deal'ları çek - limit yok (tüm verileri çek)
+    // ÖNEMLİ: Deal-kanban API'si ile AYNI kolonları seç (tutarlılık için)
+    let query = supabase
+      .from('Deal')
+      .select('id, title, stage, value, customerId, createdAt, status') // DÜZELTME: deal-kanban API'si ile AYNI kolonları seç (tutarlılık için)
+      .order('createdAt', { ascending: false })
+    
+    if (!isSuperAdmin) {
+      query = query.eq('companyId', companyId)
+    }
+    
+    const { data: deals, error } = await query
+    
+    if (error) {
+      console.error('[Stats Deals API] Deal data fetch error:', error)
+      return NextResponse.json(
+        { error: error.message || 'Failed to fetch deal stats' },
+        { status: 500 }
+      )
+    }
+    
+    // Null check - deals undefined olabilir
+    if (!deals || !Array.isArray(deals)) {
+      console.error('[Stats Deals API] Deals is not an array:', deals)
+      return NextResponse.json(
+        { error: 'Invalid deals data' },
+        { status: 500 }
+      )
+    }
+    
+    // JavaScript'te say (deal-kanban API'si ile aynı mantık - DOĞRU SONUÇ)
+    const leadCount = deals.filter((d: any) => d.stage === 'LEAD').length
+    const contactedCount = deals.filter((d: any) => d.stage === 'CONTACTED').length
+    const proposalCount = deals.filter((d: any) => d.stage === 'PROPOSAL').length
+    const negotiationCount = deals.filter((d: any) => d.stage === 'NEGOTIATION').length
+    const wonCount = deals.filter((d: any) => d.stage === 'WON').length
+    const lostCount = deals.filter((d: any) => d.stage === 'LOST').length
+    const openCount = deals.filter((d: any) => d.status === 'OPEN').length
+    const totalCount = deals.length
+    
+    // Bu ay oluşturulan deal'lar - doğru hesaplama
+    const now = new Date()
+    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+    const thisMonthCount = deals.filter((d: any) => {
+      if (!d.createdAt) return false
+      const dealDate = new Date(d.createdAt)
+      return dealDate >= new Date(firstDayOfMonth)
+    }).length
+    
+    // Debug: JavaScript'te sayılan değerleri logla - HER ZAMAN logla (sorun tespiti için)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Stats Deals API] Counted from deals array:', {
+        leadCount,
+        contactedCount,
+        proposalCount,
+        negotiationCount,
+        wonCount,
+        lostCount,
+        openCount,
+        totalCount,
+        thisMonthCount,
+        totalDealsFetched: deals?.length || 0,
+        firstDayOfMonth,
+        totalValue,
+        activeValue,
+        avgValue,
+        active,
+      })
+    }
+    
+    // Tüm deal'ların toplam değeri
+    const totalValue = deals.reduce((sum: number, deal: any) => {
+      const dealValue = deal.value || (typeof deal.value === 'string' ? parseFloat(deal.value) || 0 : 0)
       return sum + dealValue
     }, 0) || 0
 
-    // OPEN olan fırsatların toplam değeri (aktif tutar)
-    const activeValue = openDealsData?.reduce((sum: number, deal: any) => {
-      const dealValue = typeof deal.value === 'string' ? parseFloat(deal.value) || 0 : (deal.value || 0)
+    // OPEN olan deal'ların toplam değeri (aktif tutar)
+    const openDeals = deals.filter((d: any) => d.status === 'OPEN') || []
+    const activeValue = openDeals.reduce((sum: number, deal: any) => {
+      const dealValue = deal.value || (typeof deal.value === 'string' ? parseFloat(deal.value) || 0 : 0)
       return sum + dealValue
     }, 0) || 0
 
-    // Ortalama değer (tüm fırsatlar için)
-    const avgValue = total > 0 ? Math.round(totalValue / total) : 0
+    // Ortalama değer (tüm deal'lar için)
+    const avgValue = totalCount > 0 ? Math.round(totalValue / totalCount) : 0
+    
+    // Aktif deal'lar: OPEN status'ündeki deal'lar
+    const active = openCount
 
     return NextResponse.json(
       {
-        total: total || 0,
-        active: active || 0, // OPEN olan fırsat sayısı
-        totalValue, // Tüm fırsatların toplam değeri
-        activeValue, // OPEN olan fırsatların toplam değeri (aktif tutar)
+        total: totalCount, // JavaScript'te sayılan toplam (deal-kanban API'si ile aynı mantık - DOĞRU)
+        active, // OPEN olan deal sayısı (JavaScript'te sayılan)
+        totalValue, // Tüm deal'ların toplam değeri
+        activeValue, // OPEN olan deal'ların toplam değeri (aktif tutar)
         avgValue, // Ortalama değer
-        thisMonth: thisMonth || 0,
+        thisMonth: thisMonthCount, // JavaScript'te sayılan bu ay count
       },
       {
         headers: {

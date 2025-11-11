@@ -150,7 +150,7 @@ export default function ActivityList() {
               logs.map((log) => (
                 <TableRow key={log.id}>
                   <TableCell>
-                    <Badge variant="outline">
+                    <Badge variant="outline" className="text-gray-700 border-gray-300">
                       {entityLabels[log.entity] || log.entity}
                     </Badge>
                   </TableCell>

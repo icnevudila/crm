@@ -29,6 +29,18 @@ export async function GET(
       return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 })
     }
 
+    // Permission check - canRead kontrolü (meeting modülü için)
+    // Not: Meeting için özel bir modül yok, genel olarak activity veya task yetkisi kullanılabilir
+    // Şimdilik activity yetkisi ile kontrol ediyoruz
+    const { hasPermission } = await import('@/lib/permissions')
+    const canRead = await hasPermission('activity', 'read', session.user.id)
+    if (!canRead) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Toplantı görüntüleme yetkiniz yok' },
+        { status: 403 }
+      )
+    }
+
     const { id } = await params
     const supabase = getSupabaseWithServiceRole()
 
@@ -63,6 +75,19 @@ export async function GET(
       return NextResponse.json({ error: error?.message || 'Görüşme bulunamadı' }, { status: 404 })
     }
 
+    // Participant'ları da çek (çoklu kullanıcı atama) - OPTİMİZE: User bilgilerini de çek + SuperAdmin filtrele
+    // @ts-ignore - Supabase type inference issue
+    const { data: participants } = await supabase
+      .from('MeetingParticipant')
+      .select(`
+        meetingId, 
+        userId, 
+        role, 
+        status,
+        User:User!MeetingParticipant_userId_fkey(id, name, email, role, companyId)
+      `)
+      .eq('meetingId', id)
+
     // Gider bilgilerini Finance tablosundan çek (relatedTo='Meeting')
     const { data: expenses } = await supabase
       .from('Finance')
@@ -95,8 +120,17 @@ export async function GET(
       .order('createdAt', { ascending: false })
       .limit(20)
 
+    // Participant'ları filtrele - SuperAdmin'leri ve farklı companyId'ye sahip olanları çıkar
+    const filteredParticipants = (participants || []).filter((p: any) => {
+      if (!p.User) return false
+      if (p.User.role === 'SUPER_ADMIN') return false
+      if (p.User.companyId !== companyId) return false
+      return true
+    })
+
     return NextResponse.json({
       ...(data as any),
+      participants: filteredParticipants,
       expenses: expenses || [],
       activities: activities || [],
     }, {
@@ -134,6 +168,16 @@ export async function PUT(
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Permission check - canUpdate kontrolü (meeting modülü için activity yetkisi kullanıyoruz)
+    const { hasPermission } = await import('@/lib/permissions')
+    const canUpdate = await hasPermission('activity', 'update', session.user.id)
+    if (!canUpdate) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Toplantı güncelleme yetkiniz yok' },
+        { status: 403 }
+      )
     }
 
     const { id } = await params
@@ -202,8 +246,9 @@ export async function PUT(
       updatedAt: new Date().toISOString(),
     }
 
-    const { data: meeting, error } = await supabase
-      .from('Meeting')
+    // @ts-ignore - Supabase type inference issue
+    const { data: meeting, error } = await (supabase
+      .from('Meeting') as any)
       .update(updateData)
       .eq('id', id)
       .select()
@@ -217,13 +262,52 @@ export async function PUT(
       )
     }
 
+    // Participant'ları güncelle (çoklu kullanıcı atama)
+    if (body.participantIds !== undefined) {
+      try {
+        // Mevcut participant'ları sil
+        // @ts-ignore - Supabase type inference issue
+        await supabase
+          .from('MeetingParticipant')
+          .delete()
+          .eq('meetingId', id)
+          .eq('companyId', session.user.companyId)
+
+        // Yeni participant'ları ekle
+        if (Array.isArray(body.participantIds) && body.participantIds.length > 0) {
+          const participants = body.participantIds.map((userId: string) => ({
+            meetingId: id,
+            userId: userId,
+            companyId: session.user.companyId,
+            role: 'PARTICIPANT',
+            status: 'PENDING',
+          }))
+
+          // @ts-ignore - Supabase type inference issue
+          const { error: participantError } = await supabase
+            .from('MeetingParticipant')
+            .insert(participants)
+
+          if (participantError) {
+            console.error('MeetingParticipant update error:', participantError)
+            // Participant hatası ana işlemi engellemez, sadece log
+          }
+          // Trigger otomatik olarak yeni eklenen participant'lara bildirim gönderecek
+        }
+      } catch (participantError) {
+        console.error('MeetingParticipant update error:', participantError)
+        // Participant hatası ana işlemi engellemez
+      }
+    }
+
     // ActivityLog kaydı
     try {
+      // @ts-ignore - Supabase type inference issue
       await supabase.from('ActivityLog').insert([
         {
           entity: 'Meeting',
           action: 'UPDATE',
-          description: `Görüşme güncellendi: ${body.title}`,
+          description: `Görüşme bilgileri güncellendi: ${body.title}`,
           meta: { 
             entity: 'Meeting', 
             action: 'update', 
@@ -235,7 +319,7 @@ export async function PUT(
           userId: session.user.id,
           companyId: session.user.companyId,
         },
-      ])
+      ] as any)
     } catch (activityError) {
       console.error('ActivityLog error:', activityError)
     }
@@ -271,6 +355,16 @@ export async function DELETE(
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Permission check - canDelete kontrolü (meeting modülü için activity yetkisi kullanıyoruz)
+    const { hasPermission } = await import('@/lib/permissions')
+    const canDelete = await hasPermission('activity', 'delete', session.user.id)
+    if (!canDelete) {
+      return NextResponse.json(
+        { error: 'Forbidden', message: 'Toplantı silme yetkiniz yok' },
+        { status: 403 }
+      )
     }
 
     const { id } = await params
@@ -319,6 +413,7 @@ export async function DELETE(
 
     // ActivityLog kaydı
     try {
+      // @ts-ignore - Supabase type inference issue
       await supabase.from('ActivityLog').insert([
         {
           entity: 'Meeting',
@@ -334,7 +429,7 @@ export async function DELETE(
           userId: session.user.id,
           companyId: session.user.companyId,
         },
-      ])
+      ] as any)
     } catch (activityError) {
       console.error('ActivityLog error:', activityError)
     }

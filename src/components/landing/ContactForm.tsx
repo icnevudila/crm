@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { toast } from '@/lib/toast'
 
 const contactSchema = z.object({
   name: z.string().min(2, 'İsim en az 2 karakter olmalıdır'),
@@ -68,7 +69,7 @@ export default function ContactForm({ open, onClose }: ContactFormProps) {
         onClose()
       }, 3000)
     } catch (error: any) {
-      alert(error?.message || 'Bir hata oluştu. Lütfen tekrar deneyin.')
+      toast.error('Bir hata oluştu. Lütfen tekrar deneyin.', error?.message)
     } finally {
       setLoading(false)
     }

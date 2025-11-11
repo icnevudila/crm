@@ -1,108 +1,128 @@
 'use client'
 
+import { useParams, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { useParams, useRouter } from 'next/navigation'
-import { useLocale } from 'next-intl'
-import { ArrowLeft, Edit, Users, FileText, Trash2 } from 'lucide-react'
+import { ArrowLeft, Calendar, DollarSign, User, TrendingUp, Clock, FileText, AlertTriangle, Edit, Trash2 } from 'lucide-react'
 import Link from 'next/link'
+import { useLocale } from 'next-intl'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { formatCurrency } from '@/lib/utils'
-import ActivityTimeline from '@/components/ui/ActivityTimeline'
-import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
-import dynamic from 'next/dynamic'
+import { toast } from '@/lib/toast'
+import WorkflowStepper from '@/components/ui/WorkflowStepper'
+import { getDealWorkflowSteps } from '@/lib/workflowSteps'
+import StatusInfoNote from '@/components/workflow/StatusInfoNote'
+import NextStepButtons from '@/components/workflow/NextStepButtons'
+import RelatedRecordsSuggestions from '@/components/workflow/RelatedRecordsSuggestions'
+import DealForm from '@/components/deals/DealForm'
 
-// Lazy load DealForm - performans için
-const DealForm = dynamic(() => import('@/components/deals/DealForm'), {
-  ssr: false,
-  loading: () => null,
-})
-
-async function fetchDeal(id: string) {
-  const res = await fetch(`/api/deals/${id}`, {
-    cache: 'no-store',
-  })
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}))
-    throw new Error(errorData.error || 'Fırsat yüklenirken bir hata oluştu')
+interface DealHistory {
+  id: string
+  fromStage: string
+  toStage: string
+  changedAt: string
+  changedBy: string
+  notes: string
+  user: {
+    name: string
   }
-  return res.json()
 }
 
-const stageColors: Record<string, string> = {
-  LEAD: 'bg-blue-100 text-blue-800',
-  CONTACTED: 'bg-purple-100 text-purple-800',
-  PROPOSAL: 'bg-yellow-100 text-yellow-800',
-  NEGOTIATION: 'bg-orange-100 text-orange-800',
-  WON: 'bg-green-100 text-green-800',
-  LOST: 'bg-red-100 text-red-800',
+interface Deal {
+  id: string
+  title: string
+  stage: string
+  value: number
+  status: string
+  customerId?: string
+  expectedCloseDate?: string
+  winProbability?: number
+  lostReason?: string
+  leadScore?: {
+    score: number
+    temperature: string
+  }[]
+  customer?: {
+    name: string
+  }
+  Quote?: Array<{
+    id: string
+    title: string
+    status: string
+    total: number
+    createdAt: string
+  }>
+  Contract?: Array<{
+    id: string
+    title: string
+    status: string
+    createdAt: string
+  }>
+  Meeting?: Array<{
+    id: string
+    title: string
+    meetingDate: string
+    status: string
+    createdAt: string
+  }>
+  createdAt: string
+  updatedAt: string
+  history?: DealHistory[]
+}
+
+async function fetchDealDetail(id: string): Promise<Deal> {
+  const res = await fetch(`/api/deals/${id}`, { cache: 'no-store' })
+  if (!res.ok) throw new Error('Failed to fetch deal')
+  return res.json()
 }
 
 const stageLabels: Record<string, string> = {
   LEAD: 'Potansiyel',
-  CONTACTED: 'İletişimde',
+  CONTACT: 'İletişim',
+  DEMO: 'Demo',
   PROPOSAL: 'Teklif',
   NEGOTIATION: 'Pazarlık',
   WON: 'Kazanıldı',
   LOST: 'Kaybedildi',
 }
 
-const statusColors: Record<string, string> = {
-  DRAFT: 'bg-gray-100 text-gray-800',
-  SENT: 'bg-blue-100 text-blue-800',
-  ACCEPTED: 'bg-green-100 text-green-800',
-  DECLINED: 'bg-red-100 text-red-800',
-  WAITING: 'bg-yellow-100 text-yellow-800',
-}
-
-const statusLabels: Record<string, string> = {
-  DRAFT: 'Taslak',
-  SENT: 'Gönderildi',
-  ACCEPTED: 'Kabul Edildi',
-  DECLINED: 'Reddedildi',
-  WAITING: 'Beklemede',
+const stageColors: Record<string, string> = {
+  LEAD: 'bg-gray-100 text-gray-800',
+  CONTACT: 'bg-blue-100 text-blue-800',
+  DEMO: 'bg-cyan-100 text-cyan-800',
+  PROPOSAL: 'bg-purple-100 text-purple-800',
+  NEGOTIATION: 'bg-orange-100 text-orange-800',
+  WON: 'bg-green-100 text-green-800',
+  LOST: 'bg-red-100 text-red-800',
 }
 
 export default function DealDetailPage() {
   const params = useParams()
   const router = useRouter()
   const locale = useLocale()
-  const id = params.id as string
+  const dealId = params.id as string
   const [formOpen, setFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
-  const { data: deal, isLoading, error, refetch } = useQuery({
-    queryKey: ['deal', id],
-    queryFn: () => fetchDeal(id),
-    retry: 1,
-    retryDelay: 500,
+  const { data: deal, isLoading } = useQuery({
+    queryKey: ['deal-detail', dealId],
+    queryFn: () => fetchDealDetail(dealId),
   })
 
   if (isLoading) {
-    return <SkeletonDetail />
-  }
-
-  if (error || !deal) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Fırsat Bulunamadı
-          </h1>
-          {error && (
-            <p className="text-sm text-gray-600 mb-4">
-              {(error as any)?.message || 'Fırsat yüklenirken bir hata oluştu'}
-            </p>
-          )}
-          <Button onClick={() => router.push(`/${locale}/deals`)}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Geri Dön
-          </Button>
-        </div>
+      <div className="animate-pulse space-y-4">
+        <div className="h-8 bg-gray-200 rounded w-1/4"></div>
+        <div className="h-64 bg-gray-200 rounded"></div>
       </div>
     )
+  }
+
+  if (!deal) {
+    return <div>Deal bulunamadı</div>
   }
 
   return (
@@ -112,19 +132,26 @@ export default function DealDetailPage() {
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
+            size="icon"
             onClick={() => router.push(`/${locale}/deals`)}
           >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Geri Dön
+            <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">{deal.title}</h1>
-            <p className="mt-1 text-gray-600">
-              Oluşturulma: {new Date(deal.createdAt).toLocaleDateString('tr-TR')}
+            <h1 className="text-3xl font-bold">{deal.title}</h1>
+            <p className="text-gray-600">
+              #{dealId.substring(0, 8)} • {new Date(deal.createdAt).toLocaleDateString('tr-TR')}
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <Badge className={stageColors[deal.stage] || 'bg-gray-100'}>
+            {stageLabels[deal.stage] || deal.stage}
+          </Badge>
+          <Button variant="outline" onClick={() => router.push(`/${locale}/deals`)}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Geri
+          </Button>
           <Button variant="outline" onClick={() => setFormOpen(true)}>
             <Edit className="mr-2 h-4 w-4" />
             Düzenle
@@ -138,10 +165,13 @@ export default function DealDetailPage() {
               }
               setDeleteLoading(true)
               try {
-                const res = await fetch(`/api/deals/${id}`, {
+                const res = await fetch(`/api/deals/${dealId}`, {
                   method: 'DELETE',
                 })
-                if (!res.ok) throw new Error('Silme işlemi başarısız')
+                if (!res.ok) {
+                  const errorData = await res.json().catch(() => ({}))
+                  throw new Error(errorData.error || 'Silme işlemi başarısız')
+                }
                 router.push(`/${locale}/deals`)
               } catch (error: any) {
                 alert(error?.message || 'Silme işlemi başarısız oldu')
@@ -157,163 +187,176 @@ export default function DealDetailPage() {
         </div>
       </div>
 
+      {/* Workflow Stepper */}
+      <WorkflowStepper
+        steps={getDealWorkflowSteps(deal.stage)}
+        currentStep={['LEAD', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION', 'WON'].indexOf(deal.stage)}
+        title="Fırsat İş Akışı"
+      />
+
+      {/* Status Info Note */}
+      <StatusInfoNote
+        entityType="deal"
+        status={deal.stage}
+        stage={deal.stage}
+        relatedRecords={[
+          ...(deal.customer ? [{
+            type: 'customer',
+            count: 1,
+            message: `Müşteri: ${deal.customer.name}`
+          }] : []),
+        ]}
+      />
+
+      {/* LOST Durumunda Kayıp Sebebi Gösterimi */}
+      {deal.stage === 'LOST' && deal.lostReason && (
+        <Alert className="border-red-200 bg-red-50">
+          <AlertTriangle className="h-4 w-4 text-red-600" />
+          <AlertTitle className="text-red-900 font-semibold">
+            🔴 Fırsat Kaybedildi
+          </AlertTitle>
+          <AlertDescription className="text-red-800 mt-2">
+            <p className="font-semibold mb-2">Kayıp Sebebi:</p>
+            <p className="whitespace-pre-wrap">{deal.lostReason}</p>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Next Step Buttons */}
+      <NextStepButtons
+        entityType="deal"
+        currentStatus={deal.stage}
+        onAction={async (actionId) => {
+          // Stage değiştirme işlemi
+          try {
+            const res = await fetch(`/api/deals/${dealId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ stage: actionId }),
+            })
+            if (!res.ok) {
+              const error = await res.json().catch(() => ({}))
+              toast.error(
+                'Aşama değiştirilemedi',
+                error.message || 'Bir hata oluştu. Lütfen tekrar deneyin.'
+              )
+              return
+            }
+            toast.success('Aşama değiştirildi')
+            window.location.reload()
+          } catch (error: any) {
+            toast.error('Aşama değiştirilemedi', error.message || 'Bir hata oluştu.')
+          }
+        }}
+        onCreateRelated={(type) => {
+          // İlişkili kayıt oluşturma
+          if (type === 'quote') {
+            window.location.href = `/${locale}/quotes/new?dealId=${dealId}`
+          } else if (type === 'meeting') {
+            window.location.href = `/${locale}/meetings/new?dealId=${dealId}`
+          }
+        }}
+      />
+
+      {/* Related Records Suggestions */}
+      <RelatedRecordsSuggestions
+        entityType="deal"
+        entityId={dealId}
+        relatedRecords={[
+          ...(deal.Quote || []).map((q: any) => ({
+            id: q.id,
+            type: 'quote',
+            title: q.title,
+            link: `/${locale}/quotes/${q.id}`,
+          })),
+          ...(deal.Meeting || []).map((m: any) => ({
+            id: m.id,
+            type: 'meeting',
+            title: m.title,
+            link: `/${locale}/meetings/${m.id}`,
+          })),
+          ...(deal.Contract || []).map((c: any) => ({
+            id: c.id,
+            type: 'contract',
+            title: c.title,
+            link: `/${locale}/contracts/${c.id}`,
+          })),
+        ]}
+        missingRecords={[
+          ...(deal.stage === 'CONTACTED' && (!deal.Quote || deal.Quote.length === 0) ? [{
+            type: 'quote',
+            label: 'Teklif Oluştur',
+            icon: <FileText className="h-4 w-4" />,
+            onCreate: () => window.location.href = `/${locale}/quotes/new?dealId=${dealId}`,
+            description: 'Bu fırsat için teklif oluşturun',
+          }] : []),
+          ...(deal.stage === 'PROPOSAL' && (!deal.Meeting || deal.Meeting.length === 0) ? [{
+            type: 'meeting',
+            label: 'Görüşme Planla',
+            icon: <Calendar className="h-4 w-4" />,
+            onCreate: () => window.location.href = `/${locale}/meetings/new?dealId=${dealId}`,
+            description: 'Teklif sunumu için görüşme planlayın',
+          }] : []),
+        ]}
+      />
+
       {/* Info Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg shadow-card p-6">
-          <p className="text-sm text-gray-600 mb-1">Aşama</p>
-          <Badge className={stageColors[deal.stage] || 'bg-gray-100'}>
-            {stageLabels[deal.stage] || deal.stage}
-          </Badge>
-        </div>
-        <div className="bg-white rounded-lg shadow-card p-6">
-          <p className="text-sm text-gray-600 mb-1">Değer</p>
-          <p className="text-2xl font-bold text-gray-900">
-            {formatCurrency(deal.value || 0)}
-          </p>
-        </div>
-        <div className="bg-white rounded-lg shadow-card p-6">
-          <p className="text-sm text-gray-600 mb-1">Durum</p>
-          <Badge variant={deal.status === 'OPEN' ? 'default' : 'secondary'}>
-            {deal.status === 'OPEN' ? 'Açık' : 'Kapalı'}
-          </Badge>
-        </div>
-      </div>
-
-      {/* Deal Details */}
-      {(deal.description || deal.winProbability || deal.expectedCloseDate) && (
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Fırsat Detayları</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {deal.description && (
-              <div className="md:col-span-2">
-                <p className="text-sm text-gray-600 mb-1">Açıklama</p>
-                <p className="text-gray-900 whitespace-pre-wrap">{deal.description}</p>
-              </div>
-            )}
-            {deal.winProbability !== undefined && deal.winProbability !== null && (
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Kazanma Olasılığı</p>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-gray-200 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full transition-all ${
-                        deal.winProbability >= 70
-                          ? 'bg-green-600'
-                          : deal.winProbability >= 40
-                          ? 'bg-yellow-600'
-                          : 'bg-red-600'
-                      }`}
-                      style={{ width: `${deal.winProbability}%` }}
-                    />
-                  </div>
-                  <span className="font-medium">{deal.winProbability}%</span>
-                </div>
-              </div>
-            )}
-            {deal.expectedCloseDate && (
-              <div>
-                <p className="text-sm text-gray-600 mb-1">Beklenen Kapanış Tarihi</p>
-                <p className="font-medium">{new Date(deal.expectedCloseDate).toLocaleDateString('tr-TR')}</p>
-              </div>
-            )}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="p-4">
+          <div className="flex items-center gap-2 text-gray-600 mb-2">
+            <DollarSign className="h-4 w-4" />
+            <span className="text-sm">Değer</span>
           </div>
+          <p className="text-2xl font-bold">{formatCurrency(deal.value)}</p>
         </Card>
-      )}
 
-      {/* Details */}
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold mb-4">Bilgiler</h2>
-        <div className="space-y-4">
-          <div className="flex justify-between py-2 border-b">
-            <span className="text-gray-600">Fırsat ID</span>
-            <span className="font-mono text-sm">{deal.id}</span>
-          </div>
-          <div className="flex justify-between py-2 border-b">
-            <span className="text-gray-600">Müşteri</span>
-            {deal.Customer ? (
-              <Link href={`/${locale}/customers/${deal.Customer.id}`} className="text-primary-600 hover:underline">
-                {deal.Customer.name}
-              </Link>
-            ) : (
-              <span>-</span>
-            )}
-          </div>
-          <div className="flex justify-between py-2 border-b">
-            <span className="text-gray-600">Oluşturulma Tarihi</span>
-            <span>{new Date(deal.createdAt).toLocaleString('tr-TR')}</span>
-          </div>
-          {deal.updatedAt && (
-            <div className="flex justify-between py-2 border-b">
-              <span className="text-gray-600">Güncellenme Tarihi</span>
-              <span>{new Date(deal.updatedAt).toLocaleString('tr-TR')}</span>
+        {deal.leadScore && deal.leadScore.length > 0 && (
+          <Card className="p-4">
+            <div className="flex items-center gap-2 text-gray-600 mb-2">
+              <TrendingUp className="h-4 w-4" />
+              <span className="text-sm">Lead Score</span>
             </div>
-          )}
-        </div>
-      </Card>
-
-      {/* İlişkili Veriler */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Customer */}
-        {deal.Customer && (
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Müşteri
-              </h2>
-            </div>
-            {deal.Customer.id ? (
-              <Link
-                href={`/${locale}/customers/${deal.Customer.id}`}
-                className="block p-3 border rounded-lg hover:bg-gray-50 transition-colors"
+            <div className="flex items-center gap-2">
+              <p className="text-2xl font-bold">{deal.leadScore[0].score}</p>
+              <Badge
+                className={
+                  deal.leadScore[0].temperature === 'HOT'
+                    ? 'bg-red-100 text-red-800'
+                    : deal.leadScore[0].temperature === 'WARM'
+                    ? 'bg-orange-100 text-orange-800'
+                    : 'bg-blue-100 text-blue-800'
+                }
               >
-                <p className="font-medium text-gray-900">{deal.Customer.name}</p>
-                {deal.Customer.email && (
-                  <p className="text-sm text-gray-600 mt-1">{deal.Customer.email}</p>
-                )}
-              </Link>
-            ) : (
-              <p className="text-gray-500 text-center py-4">Müşteri bilgisi yok</p>
-            )}
+                {deal.leadScore[0].temperature === 'HOT'
+                  ? '🔥 Sıcak'
+                  : deal.leadScore[0].temperature === 'WARM'
+                  ? '☀️ Ilık'
+                  : '❄️ Soğuk'}
+              </Badge>
+            </div>
           </Card>
         )}
 
-        {/* Quotes */}
-        {deal.Quote && deal.Quote.length > 0 && (
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Teklifler ({deal.Quote.length})
-              </h2>
+        {deal.winProbability && (
+          <Card className="p-4">
+            <div className="flex items-center gap-2 text-gray-600 mb-2">
+              <TrendingUp className="h-4 w-4" />
+              <span className="text-sm">Kazanma İhtimali</span>
             </div>
-            <div className="space-y-3">
-              {deal.Quote.map((quote: any) => (
-                <Link
-                  key={quote.id}
-                  href={`/${locale}/quotes/${quote.id}`}
-                  className="block p-3 border rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <p className="font-medium text-gray-900">{quote.title}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge className={statusColors[quote.status] || 'bg-gray-100'}>
-                      {statusLabels[quote.status] || quote.status}
-                    </Badge>
-                    <span className="text-sm text-gray-600">
-                      {formatCurrency(quote.total || 0)}
-                    </span>
-                  </div>
-                </Link>
-              ))}
+            <p className="text-2xl font-bold">%{deal.winProbability}</p>
+          </Card>
+        )}
+
+        {deal.customer && (
+          <Card className="p-4">
+            <div className="flex items-center gap-2 text-gray-600 mb-2">
+              <User className="h-4 w-4" />
+              <span className="text-sm">Müşteri</span>
             </div>
+            <p className="text-lg font-semibold truncate">{deal.customer.name}</p>
           </Card>
         )}
       </div>
-
-      {/* Activity Timeline */}
-      {deal.activities && deal.activities.length > 0 && (
-        <ActivityTimeline activities={deal.activities} />
-      )}
 
       {/* Form Modal */}
       <DealForm
@@ -321,11 +364,55 @@ export default function DealDetailPage() {
         open={formOpen}
         onClose={() => setFormOpen(false)}
         onSuccess={async () => {
-          setFormOpen(false)
-          await refetch()
+          // Form başarılı olduğunda sayfayı yenile
+          window.location.reload()
         }}
       />
+
+      {/* Stage History Timeline */}
+      {deal.history && deal.history.length > 0 && (
+        <Card className="p-6">
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <Clock className="h-5 w-5" />
+            Aşama Geçmişi
+          </h2>
+          <div className="space-y-4">
+            {deal.history.map((item, index) => (
+              <div key={item.id} className="flex gap-4">
+                {/* Timeline Line */}
+                <div className="flex flex-col items-center">
+                  <div className="w-3 h-3 bg-primary-500 rounded-full"></div>
+                  {index !== deal.history!.length - 1 && (
+                    <div className="w-0.5 h-full bg-gray-300 mt-1"></div>
+                  )}
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 pb-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge className={stageColors[item.fromStage] || 'bg-gray-100'}>
+                      {stageLabels[item.fromStage] || item.fromStage}
+                    </Badge>
+                    <span className="text-gray-400">→</span>
+                    <Badge className={stageColors[item.toStage] || 'bg-gray-100'}>
+                      {stageLabels[item.toStage] || item.toStage}
+                    </Badge>
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    {item.user?.name || 'Sistem'} •{' '}
+                    {new Date(item.changedAt).toLocaleString('tr-TR')}
+                  </p>
+                  {item.notes && (
+                    <p className="text-sm text-gray-700 mt-2 bg-gray-50 p-2 rounded">
+                      {item.notes}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   )
 }
-

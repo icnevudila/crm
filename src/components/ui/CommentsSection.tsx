@@ -72,7 +72,7 @@ export default function CommentsSection({ entityType, entityId }: CommentsSectio
       setComment('')
     } catch (error: any) {
       console.error('Error:', error)
-      alert(error?.message || 'Yorum eklenemedi')
+      toast.error('Yorum eklenemedi', error?.message)
     } finally {
       setLoading(false)
     }

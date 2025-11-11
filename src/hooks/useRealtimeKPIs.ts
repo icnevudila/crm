@@ -11,6 +11,14 @@ interface KPIData {
   activeCompanies: number
   recentActivity: number
   totalInvoices: number
+  monthlyKPIs?: Array<{
+    month: string
+    sales: number
+    quotes: number
+    invoices: number
+    deals: number
+    acceptedQuotes: number
+  }>
 }
 
 /**

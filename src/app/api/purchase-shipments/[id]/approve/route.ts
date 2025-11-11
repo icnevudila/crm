@@ -5,6 +5,16 @@ import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
 
+// PurchaseTransaction tipi (Supabase type cache güncel olmayabilir)
+interface PurchaseTransaction {
+  id: string
+  status: string
+  invoiceId: string | null
+  companyId: string
+  createdAt?: string
+  updatedAt?: string
+}
+
 // PUT: Mal Kabul'ü onayla (stok girişi tetiklenir - trigger ile)
 export async function PUT(
   request: Request,
@@ -20,18 +30,28 @@ export async function PUT(
     const supabase = getSupabaseWithServiceRole()
 
     // Mevcut mal kabulü al
-    const { data: currentPurchase } = await supabase
+    // @ts-ignore - Supabase type inference issue (maybeSingle returns never type)
+    const { data: currentPurchaseData, error: fetchError } = await supabase
       .from('PurchaseTransaction')
       .select('status, invoiceId')
       .eq('id', id)
       .eq('companyId', session.user.companyId)
-      .single()
+      .maybeSingle()
 
-    if (!currentPurchase) {
+    if (fetchError) {
+      return NextResponse.json({ error: fetchError.message || 'Mal kabul bulunamadı' }, { status: 500 })
+    }
+
+    if (!currentPurchaseData) {
       return NextResponse.json({ error: 'Mal kabul bulunamadı' }, { status: 404 })
     }
 
-    if (currentPurchase.status === 'APPROVED') {
+    // Type assertion - Supabase type cache güncel olmayabilir
+    // currentPurchase değişkeni kaldırıldı, direkt currentPurchaseData kullanılıyor
+
+    // @ts-ignore - Supabase type inference issue (maybeSingle returns never type)
+    if ((currentPurchaseData as any).status === 'APPROVED') {
+      // @ts-ignore - Supabase type inference issue
       return NextResponse.json({ error: 'Mal kabul zaten onaylanmış' }, { status: 400 })
     }
 
@@ -53,18 +73,21 @@ export async function PUT(
     }
 
     // Mal kabul onaylandığında faturaya bildirim ekle ve fatura durumunu güncelle
-    if (currentPurchase.invoiceId) {
+    // @ts-ignore - Supabase type inference issue
+    if ((currentPurchaseData as any).invoiceId) {
       try {
         // Fatura bilgilerini al
         const { data: invoiceData } = await supabase
           .from('Invoice')
           .select('id, title, invoiceNumber, status')
-          .eq('id', currentPurchase.invoiceId)
+          // @ts-ignore - Supabase type inference issue
+          .eq('id', (currentPurchaseData as any).invoiceId)
           .eq('companyId', session.user.companyId)
           .maybeSingle()
 
         if (invoiceData) {
-          const invoiceTitle = invoiceData.title || invoiceData.invoiceNumber || `Fatura #${currentPurchase.invoiceId.substring(0, 8)}`
+          // @ts-ignore - Supabase type inference issue
+          const invoiceTitle = invoiceData.title || invoiceData.invoiceNumber || `Fatura #${(currentPurchaseData as any).invoiceId.substring(0, 8)}`
           const purchaseId = id.substring(0, 8)
 
           // Fatura durumunu güncelle (mal kabul onaylandığında fatura "Mal Kabul Edildi" olur)
@@ -78,7 +101,8 @@ export async function PUT(
           const { error: invoiceUpdateError } = await supabase
             .from('Invoice')
             .update(invoiceUpdateData)
-            .eq('id', currentPurchase.invoiceId)
+            // @ts-ignore - Supabase type inference issue
+          .eq('id', (currentPurchaseData as any).invoiceId)
             .eq('companyId', session.user.companyId)
 
           if (invoiceUpdateError) {
@@ -94,7 +118,8 @@ export async function PUT(
             meta: { 
               entity: 'Invoice', 
               action: 'purchase_approved', 
-              invoiceId: currentPurchase.invoiceId,
+              // @ts-ignore - Supabase type inference issue
+              invoiceId: (currentPurchaseData as any).invoiceId,
               purchaseTransactionId: id,
               purchaseId,
               status: 'APPROVED',
@@ -120,7 +145,8 @@ export async function PUT(
       await supabase.from('ActivityLog').insert([{
         entity: 'PurchaseTransaction',
         action: 'APPROVE',
-        description: `Mal kabul onaylandı: Fatura #${currentPurchase.invoiceId?.substring(0, 8) || id.substring(0, 8)}`,
+        // @ts-ignore - Supabase type inference issue
+        description: `Mal kabul onaylandı: Fatura #${(currentPurchaseData as any).invoiceId?.substring(0, 8) || id.substring(0, 8)}`,
         meta: { 
           entity: 'PurchaseTransaction', 
           action: 'approve', 
