@@ -8,11 +8,7 @@ export const getSupabase = () => {
   if (!client) {
     // ✅ BUILD-TIME DETECTION: Next.js build sırasında Supabase client oluşturma
     // Next.js build sırasında bu fonksiyon çağrılırsa, placeholder döndür
-    const isBuildTime = 
-      process.env.NEXT_PHASE === 'phase-production-build' ||
-      process.env.NEXT_PHASE === 'phase-export' ||
-      process.env.NEXT_PHASE === 'phase-development' ||
-      process.env.__NEXT_PRIVATE_PREBUNDLED_REACT
+    const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build'
 
     if (isBuildTime) {
       // Build-time'da placeholder döndür - hiçbir gerçek bağlantı yapma
@@ -29,7 +25,7 @@ export const getSupabase = () => {
       throw new Error('Missing Supabase environment variables: NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY must be set')
     }
 
-    client = createClient(supabaseUrl, supabaseAnonKey, {
+    const options: any = {
       auth: {
         persistSession: false, // Server-side için
         autoRefreshToken: false, // Server-side'da token refresh yok
@@ -47,7 +43,7 @@ export const getSupabase = () => {
         },
       },
       // ENTERPRISE: Query timeout ve connection pool optimizasyonu
-      fetch: (url, options = {}) => {
+      fetch: (url: string, options: RequestInit = {}) => {
         return fetch(url, {
           ...options,
           // Timeout: 15 saniye (enterprise seviye için artırıldı)
@@ -60,7 +56,9 @@ export const getSupabase = () => {
       db: {
         schema: 'public',
       },
-    })
+    }
+
+    client = createClient(supabaseUrl, supabaseAnonKey, options)
   }
 
   return client
@@ -89,11 +87,7 @@ export const createClientSupabase = () => {
 export function getSupabaseWithServiceRole() {
   if (!serviceRoleClient) {
     // ✅ BUILD-TIME DETECTION: Next.js build sırasında Supabase client oluşturma
-    const isBuildTime = 
-      process.env.NEXT_PHASE === 'phase-production-build' ||
-      process.env.NEXT_PHASE === 'phase-export' ||
-      process.env.NEXT_PHASE === 'phase-development' ||
-      process.env.__NEXT_PRIVATE_PREBUNDLED_REACT
+    const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build'
 
     if (isBuildTime) {
       // Build-time'da placeholder döndür - hiçbir gerçek bağlantı yapma
@@ -112,7 +106,7 @@ export function getSupabaseWithServiceRole() {
 
     // Service role key varsa onu kullan (RLS bypass) - singleton pattern
     if (supabaseServiceKey) {
-      serviceRoleClient = createClient(supabaseUrl, supabaseServiceKey, {
+      const options: any = {
         auth: { 
           persistSession: false,
           autoRefreshToken: false, // Server-side'da token refresh yok
@@ -131,7 +125,11 @@ export function getSupabaseWithServiceRole() {
         },
         // ✅ %100 KESİN ÇÖZÜM: Cache'i tamamen kapat - her query'de fresh data
         // ÖNEMLİ: Supabase SDK'nın kendi cache'ini kapat - her zaman fresh data çek
-        fetch: (url, options = {}) => {
+        fetch: (url: string, options: RequestInit = {}) => {
+          const headers = new Headers(options.headers || {})
+          headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+          headers.set('Pragma', 'no-cache')
+
           return fetch(url, {
             ...options,
             // ✅ ÇÖZÜM: Cache'i tamamen kapat - her query'de fresh data çek
@@ -141,18 +139,16 @@ export function getSupabaseWithServiceRole() {
             // Connection pooling için keep-alive
             keepalive: true,
             // ✅ ÇÖZÜM: Cache-Control header'ı ekle - proxy cache'ini de kapat
-            headers: {
-              ...(options.headers || {}),
-              'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-              'Pragma': 'no-cache',
-            },
+            headers,
           })
         },
         // Connection pool ayarları
         db: {
           schema: 'public',
         },
-      })
+      }
+
+      serviceRoleClient = createClient(supabaseUrl, supabaseServiceKey, options)
       return serviceRoleClient
     }
 
