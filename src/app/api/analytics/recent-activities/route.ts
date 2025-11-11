@@ -3,6 +3,8 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
+// Dynamic route - build-time'da çalışmasın
+export const dynamic = 'force-dynamic'
 // Agresif cache - 30 dakika cache (aktivite logları için yeterli)
 export const revalidate = 1800
 
