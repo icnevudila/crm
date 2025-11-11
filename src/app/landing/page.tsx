@@ -48,6 +48,7 @@ import { Textarea } from '@/components/ui/textarea'
 import LandingHeader from '@/components/landing/LandingHeader'
 import ContactForm from '@/components/landing/ContactForm'
 import GradientCard from '@/components/ui/GradientCard'
+import AnimatedCounter from '@/components/ui/AnimatedCounter'
 
 function LandingPage() {
   const [contactOpen, setContactOpen] = useState(false)
@@ -288,7 +289,7 @@ function LandingPage() {
               variants={itemVariants}
               className="text-xl md:text-2xl lg:text-3xl text-white/95 max-w-3xl mx-auto leading-relaxed font-light"
             >
-              Enterprise V3 ile müşteri ilişkilerinden stok yönetimine, teklif ve fatura süreçlerinden raporlamaya kadar tüm iş süreçlerinizi tek bir platformda birleştirin
+              Müşteri ilişkilerinizden stok yönetiminize, teklif ve fatura süreçlerinizden raporlamanıza kadar tüm iş süreçlerinizi tek bir platformda birleştirin ve zamandan tasarruf edin
             </motion.p>
 
             {/* Premium CTA Buttons */}
@@ -371,6 +372,117 @@ function LandingPage() {
         </motion.div>
       </section>
 
+      {/* İstatistikler Section - Premium Animated Counters */}
+      <section
+        id="stats"
+        className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-white via-blue-50/30 to-indigo-50/20 relative overflow-hidden"
+      >
+        {/* Animated Background */}
+        <div className="absolute inset-0 overflow-hidden">
+          <motion.div
+            className="absolute top-0 left-1/4 w-96 h-96 bg-blue-200/20 rounded-full blur-3xl"
+            animate={{
+              scale: [1, 1.2, 1],
+              opacity: [0.3, 0.5, 0.3],
+            }}
+            transition={{
+              duration: 8,
+              repeat: Infinity,
+              ease: 'easeInOut',
+            }}
+          />
+          <motion.div
+            className="absolute bottom-0 right-1/4 w-96 h-96 bg-indigo-200/20 rounded-full blur-3xl"
+            animate={{
+              scale: [1, 1.3, 1],
+              opacity: [0.3, 0.5, 0.3],
+            }}
+            transition={{
+              duration: 10,
+              repeat: Infinity,
+              ease: 'easeInOut',
+            }}
+          />
+        </div>
+
+        <div className="max-w-7xl mx-auto relative z-10">
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8 }}
+            className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8"
+          >
+            {[
+              {
+                value: 1000,
+                suffix: '+',
+                label: 'Aktif Kullanıcı',
+                icon: Users,
+                color: 'blue',
+              },
+              {
+                value: 500,
+                suffix: '+',
+                label: 'Toplam Müşteri',
+                icon: Building2,
+                color: 'indigo',
+              },
+              {
+                value: 2500,
+                suffix: '+',
+                label: 'İşlenen Teklif',
+                icon: FileText,
+                color: 'purple',
+              },
+              {
+                value: 95,
+                suffix: '%',
+                label: 'Başarı Oranı',
+                icon: TrendingUp,
+                color: 'cyan',
+              },
+            ].map((stat, index) => {
+              const Icon = stat.icon
+              return (
+                <motion.div
+                  key={stat.label}
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.6, delay: index * 0.1 }}
+                  whileHover={{ y: -8, scale: 1.05 }}
+                  className="text-center group"
+                >
+                  <GradientCard gradient="primary" className="p-8 relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/0 to-indigo-500/0 group-hover:from-blue-500/10 group-hover:to-indigo-500/10 transition-all duration-500" />
+                    <motion.div
+                      whileHover={{ rotate: 360, scale: 1.15 }}
+                      transition={{ duration: 0.6 }}
+                      className={`inline-flex p-4 rounded-2xl bg-gradient-to-br from-${stat.color}-100 to-${stat.color === 'blue' ? 'indigo' : stat.color === 'cyan' ? 'blue' : 'purple'}-100 mb-4 shadow-lg group-hover:shadow-xl transition-all duration-300`}
+                    >
+                      <Icon className={`h-8 w-8 text-${stat.color}-600`} />
+                    </motion.div>
+                    <div className="relative z-10">
+                      <div className="text-4xl md:text-5xl font-extrabold mb-2">
+                        <AnimatedCounter
+                          value={stat.value}
+                          suffix={stat.suffix}
+                          className={`bg-gradient-to-r from-${stat.color}-600 to-${stat.color === 'blue' ? 'indigo' : stat.color === 'cyan' ? 'blue' : 'purple'}-600 bg-clip-text text-transparent`}
+                        />
+                      </div>
+                      <p className="text-gray-600 font-medium text-sm md:text-base">
+                        {stat.label}
+                      </p>
+                    </div>
+                  </GradientCard>
+                </motion.div>
+              )
+            })}
+          </motion.div>
+        </div>
+      </section>
+
       {/* Hakkımızda Section - Premium Design */}
       <section
         id="about"
@@ -391,7 +503,7 @@ function LandingPage() {
               transition={{ duration: 0.6 }}
               className="text-5xl md:text-6xl font-extrabold text-gray-900 mb-6"
             >
-              Neden Enterprise V3?
+              İşiniz İçin Neler Sunuyoruz?
             </motion.h2>
                         <motion.div
               initial={{ width: 0 }}
@@ -411,7 +523,7 @@ function LandingPage() {
             <GradientCard gradient="primary" className="p-10 md:p-16 relative overflow-hidden group">
               <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
               <p className="text-xl md:text-2xl text-gray-700 leading-relaxed text-center relative z-10 font-light">
-                Enterprise V3, işletmelerin dijital dönüşüm ihtiyaçlarını karşılamak üzere geliştirilmiş, kapsamlı bir iş yönetim platformudur. Müşteri ilişkileri yönetiminden başlayarak, stok takibi, teklif ve fatura süreçleri, sevkiyat yönetimi ve detaylı raporlama gibi tüm kritik iş süreçlerinizi tek bir çatı altında toplar. Bulut tabanlı altyapımız sayesinde verilerinize her yerden güvenli bir şekilde erişebilir, ekip üyelerinizle gerçek zamanlı işbirliği yapabilirsiniz. Ölçeklenebilir yapımız sayesinde küçük işletmelerden büyük kurumsal şirketlere kadar her ölçekteki işletmeye hizmet verebiliriz.
+                İş süreçlerinizi kolaylaştıran, zamanınızı kazandıran ve satışlarınızı artıran kapsamlı bir çözüm. Müşteri ilişkilerinizi profesyonelce yönetin, stok takibinizi otomatikleştirin, teklif ve fatura süreçlerinizi hızlandırın. Tüm kritik iş süreçleriniz tek bir platformda. Verilerinize her yerden güvenli erişin, ekibinizle gerçek zamanlı çalışın. İşletmeniz büyüdükçe birlikte büyüyen, küçük işletmeden büyük kurumsal şirketlere kadar her ölçekte işletmeye uygun bir sistem.
               </p>
             </GradientCard>
           </motion.div>
@@ -438,7 +550,7 @@ function LandingPage() {
               transition={{ duration: 0.6 }}
               className="text-5xl md:text-6xl font-extrabold text-gray-900 mb-6"
             >
-              Güçlü Özellikler
+              Size Ne Kazandırıyor?
             </motion.h2>
             <motion.div
               initial={{ width: 0 }}
@@ -454,7 +566,7 @@ function LandingPage() {
               transition={{ duration: 0.6, delay: 0.4 }}
               className="text-xl text-gray-600 max-w-2xl mx-auto font-light"
             >
-              İşinizi büyütmek için ihtiyacınız olan tüm araçlar tek bir platformda
+              Zamanınızı kazandıran, satışlarınızı artıran ve işinizi kolaylaştıran araçlar
             </motion.p>
                         </motion.div>
 
@@ -468,29 +580,29 @@ function LandingPage() {
             {[
               {
                 icon: BarChart3,
-                title: 'Gelişmiş Analitik',
-                description: 'Gerçek zamanlı veri analizi ve özelleştirilebilir raporlama araçları ile iş performansınızı detaylı şekilde takip edin',
+                title: 'Daha İyi Kararlar Alın',
+                description: 'Gerçek zamanlı verilerle iş performansınızı görün, hızlı kararlar alın ve satışlarınızı artırın',
                 gradient: 'primary' as const,
                 color: 'blue',
               },
               {
                 icon: Shield,
-                title: 'Üstün Güvenlik',
-                description: 'Rol tabanlı erişim kontrolü ve endüstri standardı şifreleme ile verileriniz her zaman korunur',
+                title: 'Verileriniz Güvende',
+                description: 'Verileriniz endüstri standardı güvenlik ile korunur, siz rahatça işinize odaklanın',
                 gradient: 'info' as const,
                 color: 'indigo',
               },
               {
                 icon: RefreshCw,
-                title: 'Kolay Entegrasyon',
-                description: 'Mevcut sistemlerinizle sorunsuz entegrasyon imkanı ile veri kaybı yaşamadan geçiş yapın',
+                title: 'Kolay Geçiş',
+                description: 'Mevcut sistemlerinizle sorunsuz entegrasyon, veri kaybı olmadan hızlı geçiş yapın',
                 gradient: 'primary' as const,
                 color: 'cyan',
               },
               {
                 icon: Smartphone,
-                title: 'Her Yerden Erişim',
-                description: 'Mobil uyumlu arayüz sayesinde işinizi ofis dışından da yönetebilir, her zaman bağlı kalın',
+                title: 'Her Yerden Çalışın',
+                description: 'Ofis dışından da işlerinizi yönetin, seyahat ederken bile bağlı kalın',
                 gradient: 'info' as const,
                 color: 'blue',
               },
@@ -563,7 +675,7 @@ function LandingPage() {
               transition={{ duration: 0.6 }}
               className="text-5xl md:text-6xl font-extrabold text-gray-900 mb-6"
             >
-              Çözümlerimiz
+              İhtiyacınıza Göre Modüller
             </motion.h2>
             <motion.div
               initial={{ width: 0 }}
@@ -579,7 +691,7 @@ function LandingPage() {
               transition={{ duration: 0.6, delay: 0.4 }}
               className="text-xl text-gray-600 max-w-2xl mx-auto font-light"
             >
-              İş süreçlerinizi optimize eden modüler çözümler
+              İşinize değer katan, sadece ihtiyacınız olan modülleri seçin
             </motion.p>
                       </motion.div>
 
@@ -603,10 +715,10 @@ function LandingPage() {
                     <Users className="h-12 w-12 text-blue-600" />
                   </motion.div>
                   <h3 className="text-3xl font-bold text-gray-900 mb-3 group-hover:text-blue-600 transition-colors duration-300">
-                    CRM Modülü
+                    Müşteri Yönetimi
                   </h3>
                   <p className="text-gray-600 text-lg font-light">
-                    Müşteri ilişkilerinizi profesyonelce yönetin ve satış süreçlerinizi optimize edin
+                    Müşteri ilişkilerinizi güçlendirin, satışlarınızı artırın ve daha fazla kazanç elde edin
                   </p>
                 </div>
                 <ul className="space-y-4 relative z-10">
@@ -658,10 +770,10 @@ function LandingPage() {
                     <Settings className="h-12 w-12 text-indigo-600" />
                   </motion.div>
                   <h3 className="text-3xl font-bold text-gray-900 mb-3 group-hover:text-indigo-600 transition-colors duration-300">
-                    ERP Modülü
+                    İş Süreçleri Yönetimi
                   </h3>
                   <p className="text-gray-600 text-lg font-light">
-                    İş süreçlerinizi entegre edin ve operasyonel verimliliğinizi artırın
+                    Stok, üretim ve finans süreçlerinizi otomatikleştirin, operasyonel maliyetlerinizi düşürün
                   </p>
                 </div>
                 <ul className="space-y-4 relative z-10">
@@ -717,7 +829,7 @@ function LandingPage() {
               transition={{ duration: 0.6 }}
               className="text-5xl md:text-6xl font-extrabold text-gray-900 mb-6"
             >
-              CRM Özellikleri
+              Size Ne Sunuyoruz?
             </motion.h2>
             <motion.div
               initial={{ width: 0 }}
@@ -733,7 +845,7 @@ function LandingPage() {
               transition={{ duration: 0.6, delay: 0.4 }}
               className="text-xl text-gray-600 max-w-2xl mx-auto font-light"
             >
-              Kapsamlı müşteri yönetim sistemi ile işinizi büyütün
+              İşinizi büyütmenize yardımcı olacak özellikler
                       </motion.p>
           </motion.div>
 
@@ -862,14 +974,14 @@ function LandingPage() {
                   transition={{ duration: 0.6, delay: 0.2 }}
                   className="text-4xl font-bold text-gray-900 mb-8 group-hover:text-indigo-600 transition-colors duration-300 relative z-10"
                 >
-                  Müşteri Yönetim Sistemi
+                  Müşterilerinizi Daha İyi Tanıyın
                 </motion.h3>
                 <ul className="space-y-5 relative z-10">
                   {[
-                    'Kapsamlı müşteri profilleri ve iletişim geçmişi kayıtları',
-                    'Şirket ve kişi bazlı hiyerarşik yapı yönetimi',
-                    'Akıllı müşteri segmentasyonu ve kategorilendirme',
-                    'Esnek ve özelleştirilebilir veri alanları',
+                    'Müşterilerinizi daha iyi tanıyın - tüm iletişim geçmişi tek yerde',
+                    'Şirket yapılarını kolayca yönetin - hiyerarşik görünüm',
+                    'Müşterilerinizi akıllıca kategorize edin - daha hedefli satış',
+                    'İhtiyacınıza göre özelleştirin - esnek veri yapısı',
                   ].map((feature, idx) => (
                     <motion.li
                       key={feature}
@@ -1230,7 +1342,7 @@ function LandingPage() {
               transition={{ duration: 0.6 }}
               className="text-5xl md:text-6xl font-extrabold text-white mb-6"
             >
-              Neden Enterprise V3?
+              Size Nasıl Yardımcı Oluyoruz?
             </motion.h2>
             <motion.div
               initial={{ width: 0 }}
@@ -1246,7 +1358,7 @@ function LandingPage() {
               transition={{ duration: 0.6, delay: 0.4 }}
               className="text-xl text-white/90 max-w-2xl mx-auto font-light"
             >
-              İşletmenizi büyütmek için ihtiyacınız olan her şey tek platformda
+              İşinizi büyütmenize yardımcı olacak her şey tek platformda
             </motion.p>
           </motion.div>
 
@@ -1260,50 +1372,50 @@ function LandingPage() {
             {[
               {
                 icon: Zap,
-                title: 'Hızlı Kurulum',
-                description: '5 dakikada kurulum, hemen kullanmaya başlayın',
+                title: 'Hemen Başlayın',
+                description: '5 dakikada kurulum, bugün kullanmaya başlayın',
                 gradient: 'primary' as const,
               },
               {
                 icon: Cloud,
-                title: 'Bulut Tabanlı',
-                description: 'Her yerden erişim, verileriniz güvende',
+                title: 'Her Yerden Erişin',
+                description: 'Bulut tabanlı sistem, verileriniz her zaman yanınızda',
                 gradient: 'info' as const,
               },
               {
                 icon: Lock,
-                title: 'Güvenli Altyapı',
-                description: 'Endüstri standardı şifreleme ve yedekleme',
+                title: 'Güvenli Sistem',
+                description: 'Verileriniz endüstri standardı güvenlik ile korunur',
                 gradient: 'primary' as const,
               },
               {
                 icon: TrendingUp,
-                title: 'Ölçeklenebilir',
-                description: 'Küçük işletmeden büyük kurumsal şirketlere',
+                title: 'Birlikte Büyüyün',
+                description: 'İşletmeniz büyüdükçe sistem de birlikte büyür',
                 gradient: 'info' as const,
               },
               {
                 icon: Globe,
-                title: 'Çoklu Dil',
-                description: 'Türkçe ve İngilizce tam destek',
+                title: 'Dil Desteği',
+                description: 'Türkçe ve İngilizce tam destek, uluslararası işler için',
                 gradient: 'primary' as const,
               },
               {
                 icon: Rocket,
-                title: 'Sürekli Güncelleme',
-                description: 'Yeni özellikler ve iyileştirmeler düzenli olarak eklenir',
+                title: 'Sürekli Gelişim',
+                description: 'Yeni özellikler eklenir, sisteminiz her zaman güncel kalır',
                 gradient: 'info' as const,
               },
               {
                 icon: Users,
-                title: 'Ekip İşbirliği',
-                description: 'Gerçek zamanlı işbirliği ve paylaşım',
+                title: 'Ekip Çalışması',
+                description: 'Ekibinizle gerçek zamanlı çalışın, daha verimli olun',
                 gradient: 'primary' as const,
               },
               {
                 icon: Shield,
-                title: '7/24 Destek',
-                description: 'Profesyonel teknik destek ekibimiz yanınızda',
+                title: 'Yanınızdayız',
+                description: '7/24 destek, sorunlarınızda yanınızdayız',
                 gradient: 'info' as const,
               },
             ].map((advantage, index) => {
@@ -1336,6 +1448,344 @@ function LandingPage() {
                 </motion.div>
               )
             })}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Müşteri Yorumları Section - Premium Testimonials */}
+      <section
+        id="testimonials"
+        className="py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-indigo-50/30 via-white to-blue-50/30"
+      >
+        <div className="max-w-7xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-100px' }}
+            transition={{ duration: 0.8 }}
+            className="text-center mb-20"
+          >
+            <motion.h2
+              initial={{ opacity: 0, scale: 0.9 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+              className="text-5xl md:text-6xl font-extrabold text-gray-900 mb-6"
+            >
+              Müşterilerimiz Ne Diyor?
+            </motion.h2>
+            <motion.div
+              initial={{ width: 0 }}
+              whileInView={{ width: 120 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.8, delay: 0.2 }}
+              className="h-1.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 mx-auto rounded-full shadow-lg mb-6"
+            />
+            <motion.p
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+              className="text-xl text-gray-600 max-w-2xl mx-auto font-light"
+            >
+              Binlerce mutlu müşterimizden bazı görüşler
+            </motion.p>
+          </motion.div>
+
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            whileInView="visible"
+            viewport={{ once: true, margin: '-50px' }}
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
+          >
+            {[
+              {
+                name: 'Ahmet Yılmaz',
+                company: 'Tech Solutions A.Ş.',
+                role: 'Genel Müdür',
+                content: 'Müşteri ilişkilerimizi profesyonelce yönetiyoruz. Satış süreçlerimiz %40 daha hızlı ilerliyor, bu da bize daha fazla zaman kazandırıyor.',
+                rating: 5,
+                avatar: '👨‍💼',
+              },
+              {
+                name: 'Ayşe Demir',
+                company: 'Global Trade Ltd.',
+                role: 'Satış Müdürü',
+                content: 'Teklif ve fatura süreçlerimiz artık çok daha kolay. Tüm metrikleri tek bakışta görebiliyoruz ve bu sayede daha hızlı karar alabiliyoruz.',
+                rating: 5,
+                avatar: '👩‍💼',
+              },
+              {
+                name: 'Mehmet Kaya',
+                company: 'Innovation Corp.',
+                role: 'İş Geliştirme Uzmanı',
+                content: 'Stok yönetimi ve sevkiyat takibi özellikleri işimizi çok kolaylaştırdı. Operasyonel hatalarımız %60 azaldı, müşteri memnuniyetimiz arttı.',
+                rating: 5,
+                avatar: '👨‍🔧',
+              },
+            ].map((testimonial, index) => (
+              <motion.div
+                key={index}
+                variants={itemVariants}
+                whileHover={{ y: -10, scale: 1.02 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+              >
+                <GradientCard gradient="primary" className="h-full p-8 group relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/0 to-indigo-500/0 group-hover:from-blue-500/10 group-hover:to-indigo-500/10 transition-all duration-500" />
+                  <div className="relative z-10">
+                    <div className="flex items-center gap-1 mb-4">
+                      {[...Array(testimonial.rating)].map((_, i) => (
+                        <motion.div
+                          key={i}
+                          initial={{ opacity: 0, scale: 0 }}
+                          whileInView={{ opacity: 1, scale: 1 }}
+                          viewport={{ once: true }}
+                          transition={{ duration: 0.3, delay: index * 0.1 + i * 0.1 }}
+                        >
+                          <Star className="h-5 w-5 fill-yellow-400 text-yellow-400" />
+                        </motion.div>
+                      ))}
+                    </div>
+                    <p className="text-gray-700 mb-6 leading-relaxed font-light italic">
+                      "{testimonial.content}"
+                    </p>
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center text-2xl shadow-lg">
+                        {testimonial.avatar}
+                      </div>
+                      <div>
+                        <p className="font-bold text-gray-900">{testimonial.name}</p>
+                        <p className="text-sm text-gray-600">{testimonial.role}</p>
+                        <p className="text-xs text-gray-500">{testimonial.company}</p>
+                      </div>
+                    </div>
+                  </div>
+                </GradientCard>
+              </motion.div>
+            ))}
+          </motion.div>
+        </div>
+      </section>
+
+      {/* FAQ Section - Premium Accordion */}
+      <section
+        id="faq"
+        className="py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-white via-indigo-50/20 to-white"
+      >
+        <div className="max-w-4xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: '-100px' }}
+            transition={{ duration: 0.8 }}
+            className="text-center mb-20"
+          >
+            <motion.h2
+              initial={{ opacity: 0, scale: 0.9 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+              className="text-5xl md:text-6xl font-extrabold text-gray-900 mb-6"
+            >
+              Sık Sorulan Sorular
+            </motion.h2>
+            <motion.div
+              initial={{ width: 0 }}
+              whileInView={{ width: 120 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.8, delay: 0.2 }}
+              className="h-1.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 mx-auto rounded-full shadow-lg mb-6"
+            />
+          </motion.div>
+
+          <div className="space-y-4">
+            {[
+              {
+                question: 'Nasıl çalışır?',
+                answer: 'Bulut tabanlı bir platform. Web tarayıcınızdan erişebilir, müşteri ilişkilerinizi, satış süreçlerinizi, stok yönetiminizi ve daha fazlasını tek bir platformda yönetebilirsiniz. Kurulum gerektirmez, hemen kullanmaya başlayabilirsiniz.',
+              },
+              {
+                question: 'Verilerim güvende mi?',
+                answer: 'Evet, verileriniz endüstri standardı şifreleme ile korunur. Tüm verileriniz düzenli olarak yedeklenir ve SSL sertifikası ile güvenli bağlantı sağlanır. Ayrıca rol tabanlı erişim kontrolü ile sadece yetkili kullanıcılar verilerinize erişebilir.',
+              },
+              {
+                question: 'Mobil uygulama var mı?',
+                answer: 'Enterprise V3 tamamen responsive tasarıma sahiptir. Mobil cihazlardan, tabletlerden ve masaüstü bilgisayarlardan sorunsuz bir şekilde erişebilirsiniz. Ayrıca PWA (Progressive Web App) desteği sayesinde uygulama gibi kullanabilirsiniz.',
+              },
+              {
+                question: 'Fiyatlandırma nasıl?',
+                answer: 'Esnek fiyatlandırma seçeneklerimiz var. İhtiyacınıza göre özelleştirilmiş paketler sunuyoruz. Detaylı bilgi için bizimle iletişime geçebilirsiniz. Ayrıca ücretsiz deneme süremiz mevcuttur.',
+              },
+              {
+                question: 'Destek alabilir miyim?',
+                answer: 'Evet, 7/24 teknik destek ekibimiz yanınızda. E-posta, telefon ve canlı destek kanallarımızdan bize ulaşabilirsiniz. Ayrıca kapsamlı dokümantasyon ve video eğitimlerimiz mevcuttur.',
+              },
+            ].map((faq, index) => {
+              const [isOpen, setIsOpen] = useState(false)
+              return (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.5, delay: index * 0.1 }}
+                  whileHover={{ scale: 1.01 }}
+                >
+                  <GradientCard gradient="primary" className="overflow-hidden">
+                    <button
+                      onClick={() => setIsOpen(!isOpen)}
+                      className="w-full p-6 text-left flex items-center justify-between group"
+                    >
+                      <h3 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors duration-300">
+                        {faq.question}
+                      </h3>
+                      <motion.div
+                        animate={{ rotate: isOpen ? 180 : 0 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        <ChevronDown className="h-6 w-6 text-gray-600 group-hover:text-blue-600 transition-colors duration-300" />
+                      </motion.div>
+                    </button>
+                    <AnimatePresence>
+                      {isOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.3 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="px-6 pb-6 text-gray-600 leading-relaxed">
+                            {faq.answer}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </GradientCard>
+                </motion.div>
+              )
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Final CTA Section - Premium Design */}
+      <section
+        id="final-cta"
+        className="py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-600 relative overflow-hidden"
+      >
+        {/* Animated Background */}
+        <div className="absolute inset-0 overflow-hidden">
+          <motion.div
+            className="absolute top-0 left-0 w-96 h-96 bg-white/10 rounded-full blur-3xl"
+            animate={{
+              x: [0, 100, 0],
+              y: [0, 50, 0],
+              scale: [1, 1.2, 1],
+            }}
+            transition={{
+              duration: 20,
+              repeat: Infinity,
+              ease: 'linear',
+            }}
+          />
+          <motion.div
+            className="absolute bottom-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl"
+            animate={{
+              x: [0, -100, 0],
+              y: [0, -50, 0],
+              scale: [1, 1.3, 1],
+            }}
+            transition={{
+              duration: 25,
+              repeat: Infinity,
+              ease: 'linear',
+            }}
+          />
+        </div>
+
+        <div className="max-w-4xl mx-auto text-center relative z-10">
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.8 }}
+          >
+            <motion.h2
+              initial={{ opacity: 0, scale: 0.9 }}
+              whileInView={{ opacity: 1, scale: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+              className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-white mb-6"
+            >
+              Hemen Başlamaya Hazır mısınız?
+            </motion.h2>
+            <motion.p
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="text-xl md:text-2xl text-white/90 mb-10 font-light max-w-2xl mx-auto"
+            >
+              İşinizi büyütmek için doğru adımı atın. Hemen ücretsiz deneyin ve farkı görün.
+            </motion.p>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+              className="flex flex-col sm:flex-row items-center justify-center gap-4"
+            >
+              <motion.div
+                whileHover={{ scale: 1.05, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <Button
+                  size="lg"
+                  onClick={() => scrollToSection('#contact')}
+                  className="bg-white text-blue-600 hover:bg-blue-50 px-10 py-7 text-lg font-bold rounded-2xl shadow-2xl hover:shadow-white/50 transition-all duration-300"
+                >
+                  <span className="flex items-center gap-3">
+                    Ücretsiz Başla
+                    <ArrowRight className="h-5 w-5" />
+                  </span>
+                </Button>
+              </motion.div>
+              <motion.div
+                whileHover={{ scale: 1.05, y: -2 }}
+                whileTap={{ scale: 0.98 }}
+              >
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={() => scrollToSection('#features')}
+                  className="bg-white/10 backdrop-blur-xl border-2 border-white/40 text-white hover:bg-white/20 px-10 py-7 text-lg font-bold rounded-2xl transition-all duration-300"
+                >
+                  Daha Fazla Bilgi
+                </Button>
+              </motion.div>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: 0.6 }}
+              className="mt-12 flex items-center justify-center gap-8 text-white/80 text-sm"
+            >
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5" />
+                <span>Kredi kartı gerekmez</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5" />
+                <span>14 gün ücretsiz deneme</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5" />
+                <span>İstediğiniz zaman iptal</span>
+              </div>
+            </motion.div>
           </motion.div>
         </div>
       </section>
@@ -1546,10 +1996,10 @@ function LandingPage() {
               transition={{ duration: 0.6 }}
             >
               <h3 className="text-2xl font-bold mb-6 bg-gradient-to-r from-blue-400 via-indigo-400 to-cyan-400 bg-clip-text text-transparent">
-                Enterprise V3
+                İşinizi Büyütün
               </h3>
               <p className="text-gray-300 text-sm leading-relaxed font-light">
-                Modern ve güvenilir iş yönetim platformu ile işinizi büyütün.
+                İş süreçlerinizi kolaylaştıran, zamanınızı kazandıran ve satışlarınızı artıran modern platform.
               </p>
             </motion.div>
             <motion.div
@@ -1562,8 +2012,8 @@ function LandingPage() {
               <ul className="space-y-3 text-sm text-gray-300">
                 {[
                   { label: 'Ana Sayfa', id: 'home' },
-                  { label: 'Hakkımızda', id: 'about' },
-                  { label: 'Çözümler', id: 'products' },
+                  { label: 'Size Ne Sunuyoruz?', id: 'about' },
+                  { label: 'Modüller', id: 'products' },
                   { label: 'İletişim', id: 'contact' },
                 ].map((link) => (
                   <li key={link.id}>
@@ -1597,7 +2047,7 @@ function LandingPage() {
             className="border-t border-blue-800/50 pt-8 text-center"
           >
             <p className="text-sm text-gray-400 font-light">
-              © {new Date().getFullYear()} Enterprise V3. Tüm hakları saklıdır.
+              © {new Date().getFullYear()} Tüm hakları saklıdır.
             </p>
           </motion.div>
         </div>
