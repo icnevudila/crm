@@ -3,9 +3,13 @@ import { getSupabase } from '@/lib/supabase'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 
+// Dynamic route - build-time'da çalışmasın
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -24,7 +28,7 @@ export async function POST(
     }
 
     const supabase = getSupabase()
-    const approvalId = params.id
+    const { id: approvalId } = await params
 
     // Approval bilgisini getir
     const { data: approval, error: fetchError } = await supabase

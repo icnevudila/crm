@@ -3,6 +3,10 @@ import { getSupabase } from '@/lib/supabase'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 
+// Dynamic route - build-time'da çalışmasın
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
