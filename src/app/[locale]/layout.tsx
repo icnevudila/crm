@@ -7,6 +7,10 @@ import QueryProvider from '@/components/providers/QueryProvider'
 import ConditionalLayout from '@/components/layout/ConditionalLayout'
 import { Toaster } from 'sonner'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+export const fetchCache = 'force-no-store'
+
 interface LocaleLayoutProps {
   children: React.ReactNode
   params: Promise<{ locale: string }>

@@ -138,3 +138,4 @@ COMMENT ON CONSTRAINT fk_invoice_vendor ON "Invoice" IS 'Invoice → Vendor fore
 
 
 
+

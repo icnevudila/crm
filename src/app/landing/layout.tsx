@@ -2,6 +2,10 @@ import SessionProvider from '@/components/providers/SessionProvider'
 import QueryProvider from '@/components/providers/QueryProvider'
 import { Toaster } from 'sonner'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+export const fetchCache = 'force-no-store'
+
 // Landing sayfası için özel layout - sidebar ve navbar YOK
 export default function LandingLayout({
   children,

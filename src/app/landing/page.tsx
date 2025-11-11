@@ -49,6 +49,7 @@ import LandingHeader from '@/components/landing/LandingHeader'
 import ContactForm from '@/components/landing/ContactForm'
 import GradientCard from '@/components/ui/GradientCard'
 import AnimatedCounter from '@/components/ui/AnimatedCounter'
+import HeroShowcase from '@/components/landing/HeroShowcase'
 
 function LandingPage() {
   const [contactOpen, setContactOpen] = useState(false)
@@ -104,269 +105,193 @@ function LandingPage() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-cyan-50 overflow-hidden">
       <LandingHeader />
 
-      {/* Hero Section - Premium Video Background with Parallax */}
+      {/* Hero Section - Premium Showcase with Gradient Background */}
       <section
         id="home"
         className="relative min-h-screen flex items-center justify-center overflow-hidden"
       >
-        {/* Animated Gradient Background with Parallax */}
+        {/* Background Layer */}
         <motion.div
-          className="absolute inset-0 bg-gradient-to-br from-blue-600 via-indigo-600 to-cyan-600"
+          className="absolute inset-0 bg-gradient-to-br from-[#f3f6ff] via-[#eef3ff] to-[#f7f9ff]"
           style={{
-            x: useTransform(scrollY, [0, 1000], [0, mousePosition.x * 0.5]),
-            y: useTransform(scrollY, [0, 1000], [0, mousePosition.y * 0.5]),
+            x: useTransform(scrollY, [0, 1000], [0, mousePosition.x * 0.25]),
+            y: useTransform(scrollY, [0, 1000], [0, mousePosition.y * 0.25]),
           }}
         >
-          <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
-          {/* Enhanced Animated Blobs */}
+          <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-[0.04]" />
           <motion.div
-            className="absolute top-20 left-20 w-96 h-96 bg-blue-400/40 rounded-full blur-3xl"
+            className="absolute top-16 left-20 h-[420px] w-[420px] rounded-full bg-gradient-to-br from-indigo-300/30 via-sky-300/20 to-transparent blur-[110px]"
             animate={{
-              x: [0, 100, 0],
-              y: [0, 50, 0],
-              scale: [1, 1.3, 1],
+              x: [0, 60, 0],
+              y: [0, -35, 0],
+              scale: [1, 1.08, 1],
+              opacity: [0.18, 0.32, 0.18],
             }}
             transition={{
-              duration: 20,
-              repeat: Infinity,
-              ease: 'linear',
-            }}
-          />
-          <motion.div
-            className="absolute bottom-20 right-20 w-96 h-96 bg-cyan-400/40 rounded-full blur-3xl"
-            animate={{
-              x: [0, -100, 0],
-              y: [0, -50, 0],
-              scale: [1, 1.3, 1],
-            }}
-            transition={{
-              duration: 25,
-              repeat: Infinity,
-              ease: 'linear',
-            }}
-          />
-          <motion.div
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-indigo-400/20 rounded-full blur-3xl"
-            animate={{
-              scale: [1, 1.4, 1],
-              opacity: [0.3, 0.6, 0.3],
-              rotate: [0, 180, 360],
-            }}
-            transition={{
-              duration: 30,
+              duration: 18,
               repeat: Infinity,
               ease: 'easeInOut',
             }}
           />
-        </motion.div>
-
-        {/* Video Background */}
-        <div className="absolute inset-0 z-0">
-          <div
-            className="w-full h-full bg-gradient-to-br from-blue-600 via-indigo-600 to-cyan-600"
-            style={{
-              backgroundImage: 'url("https://images.unsplash.com/photo-1551434678-e076c223a692?w=1920&q=80")',
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
+          <motion.div
+            className="absolute bottom-16 right-[12%] h-[480px] w-[480px] rounded-full bg-gradient-to-tr from-cyan-300/25 via-indigo-200/15 to-transparent blur-[120px]"
+            animate={{
+              x: [0, -70, 0],
+              y: [0, 45, 0],
+              scale: [1, 1.12, 1],
+              opacity: [0.18, 0.3, 0.18],
+            }}
+            transition={{
+              duration: 22,
+              repeat: Infinity,
+              ease: 'easeInOut',
             }}
           />
-          <video
-            autoPlay
-            loop
-            muted
-            playsInline
-            className="absolute inset-0 w-full h-full object-cover"
-            style={{ display: 'none' }}
-            onLoadedData={(e) => {
-              const target = e.target as HTMLVideoElement
-              target.style.display = 'block'
-              const fallback = target.previousElementSibling as HTMLElement
-              if (fallback) fallback.style.display = 'none'
-            }}
-            onError={(e) => {
-              const target = e.target as HTMLVideoElement
-              target.style.display = 'none'
-              const fallback = target.previousElementSibling as HTMLElement
-              if (fallback) fallback.style.display = 'block'
-            }}
-          >
-            <source src="/videos/business-hero.mp4" type="video/mp4" />
-          </video>
-          <div className="absolute inset-0 bg-gradient-to-b from-blue-900/80 via-indigo-900/80 to-cyan-900/80 backdrop-blur-[1px]" />
-      </div>
+          <div className="absolute inset-0 bg-gradient-to-b from-white/65 via-white/55 to-white/30" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(123,144,255,0.18),transparent_60%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,rgba(79,209,220,0.16),transparent_55%)]" />
+        </motion.div>
 
         {/* Content with Premium Animations */}
         <motion.div
-          style={{ 
-            opacity: heroOpacity, 
+          style={{
+            opacity: heroOpacity,
             scale: heroScale,
             y: heroYSpring,
           }}
-          className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center"
+          className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"
         >
-          <motion.div
-            variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-            className="space-y-8"
-        >
-            {/* Premium Badge */}
+          <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
             <motion.div
-              variants={itemVariants}
-              whileHover={{ scale: 1.05, y: -2 }}
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-white/15 backdrop-blur-xl border border-white/30 shadow-2xl hover:bg-white/20 transition-all duration-300 relative overflow-hidden group"
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+              className="space-y-10 text-center lg:text-left"
             >
+              {/* Premium Badge */}
               <motion.div
-                className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                initial={false}
-              />
-              <motion.div
-                animate={{ rotate: [0, 360] }}
-                transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
-                className="relative z-10"
-              >
-                <Sparkles className="h-4 w-4 text-white" />
-              </motion.div>
-              <span className="text-sm font-bold text-white tracking-wide relative z-10">Yeni Nesil İş Yönetim Platformu</span>
-            </motion.div>
-
-            {/* Main Title with Gradient Text Animation */}
-            <motion.h1
-              variants={itemVariants}
-              className="text-5xl md:text-6xl lg:text-7xl xl:text-8xl font-extrabold text-white leading-tight"
-            >
-              <motion.span
-                className="block mb-2"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.8, delay: 0.2 }}
-              >
-                İş Süreçlerinizi
-              </motion.span>
-              <motion.span
-                className="block bg-gradient-to-r from-cyan-300 via-blue-300 via-indigo-300 to-purple-300 bg-clip-text text-transparent relative"
-                animate={{
-                  backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'],
-                  opacity: 1,
-                  scale: 1,
-                }}
-                initial={{ opacity: 0, scale: 0.9 }}
-                transition={{
-                  backgroundPosition: {
-                    duration: 5,
-                    repeat: Infinity,
-                    ease: 'linear',
-                  },
-                  opacity: { duration: 0.8, delay: 0.4 },
-                  scale: { duration: 0.8, delay: 0.4 },
-                }}
-                style={{
-                  backgroundSize: '200% 200%',
-                }}
-              >
-                <motion.span
-                  className="absolute inset-0 bg-gradient-to-r from-cyan-300 via-blue-300 via-indigo-300 to-purple-300 bg-clip-text text-transparent blur-xl opacity-50"
-                  animate={{
-                    backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'],
-                  }}
-                  transition={{
-                    duration: 5,
-                    repeat: Infinity,
-                    ease: 'linear',
-                  }}
-                  style={{
-                    backgroundSize: '200% 200%',
-                  }}
-                >
-                  Dijitalleştirin
-                </motion.span>
-                <span className="relative z-10">Dijitalleştirin</span>
-              </motion.span>
-            </motion.h1>
-
-            {/* Subtitle with Fade In */}
-            <motion.p
-              variants={itemVariants}
-              className="text-xl md:text-2xl lg:text-3xl text-white/95 max-w-3xl mx-auto leading-relaxed font-light"
-            >
-              Müşteri ilişkilerinizden stok yönetiminize, teklif ve fatura süreçlerinizden raporlamanıza kadar tüm iş süreçlerinizi tek bir platformda birleştirin ve zamandan tasarruf edin
-            </motion.p>
-
-            {/* Premium CTA Buttons */}
-            <motion.div
-              variants={itemVariants}
-              className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4"
-            >
-              <motion.div
+                variants={itemVariants}
                 whileHover={{ scale: 1.05, y: -2 }}
-                whileTap={{ scale: 0.98 }}
+                className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white shadow-2xl backdrop-blur-xl transition-all duration-300 hover:bg-white/15"
               >
+                <Sparkles className="h-4 w-4" />
+                CRM & İş Süreçleri Platformu
+              </motion.div>
+
+              {/* Main Title */}
+              <motion.h1
+                variants={itemVariants}
+                className="text-4xl font-extrabold leading-tight text-white sm:text-5xl lg:text-[3.5rem] lg:leading-[1.1]"
+              >
+                <span className="block text-white/80">Tüm müşteri ve satış süreçleriniz</span>
+                <span className="bg-gradient-to-r from-cyan-200 via-blue-200 to-indigo-200 bg-clip-text text-transparent">
+                  tek platformda birleşsin
+                </span>
+              </motion.h1>
+
+              {/* Subtitle */}
+              <motion.p
+                variants={itemVariants}
+                className="mx-auto max-w-xl text-lg leading-relaxed text-white/80 lg:mx-0 lg:text-xl"
+              >
+                Satış ekiplerinizi hızlandırın, müşteri deneyimini güçlendirin ve tüm işinizi gerçek zamanlı olarak görün. Tek bir platformla tekliften faturaya tüm yolculuğu yönetin.
+              </motion.p>
+
+              {/* CTA Buttons */}
+              <motion.div
+                variants={itemVariants}
+                className="flex flex-col items-center gap-4 pt-2 sm:flex-row sm:justify-center lg:justify-start"
+              >
+                <motion.div whileHover={{ scale: 1.05, y: -2 }} whileTap={{ scale: 0.98 }}>
                   <Button
                     size="lg"
-                  onClick={() => scrollToSection('#contact')}
-                  className="group relative bg-white text-blue-600 hover:bg-blue-50 px-10 py-7 text-lg font-bold rounded-2xl shadow-2xl hover:shadow-blue-500/50 transition-all duration-300 overflow-hidden"
+                    onClick={() => scrollToSection('#contact')}
+                    className="group relative overflow-hidden rounded-2xl bg-white px-10 py-6 text-base font-semibold text-slate-900 shadow-[0_25px_60px_-15px_rgba(15,23,42,0.35)] transition-all duration-300 hover:bg-slate-100"
                   >
-                  <motion.div
-                    className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-indigo-500/20 to-purple-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                    initial={false}
-                  />
-                  <span className="relative z-10 flex items-center gap-3">
-                    Hemen Başlayın
-                    <motion.div
-                        animate={{ x: [0, 5, 0] }}
-                        transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+                    <span className="relative z-10 flex items-center gap-3">
+                      Demoyu Gör
+                      <motion.div
+                        animate={{ x: [0, 6, 0] }}
+                        transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
                       >
                         <ArrowRight className="h-5 w-5" />
                       </motion.div>
                     </span>
-                  <motion.div
-                    className="absolute inset-0 bg-gradient-to-r from-blue-50 to-indigo-50 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                    initial={false}
-                  />
+                    <motion.div
+                      className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                      initial={false}
+                    />
                   </Button>
+                </motion.div>
+                <motion.div whileHover={{ scale: 1.05, y: -2 }} whileTap={{ scale: 0.98 }}>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    onClick={() => scrollToSection('#features')}
+                    className="rounded-2xl border-white/30 bg-white/10 px-10 py-6 text-base font-semibold text-white backdrop-blur-xl transition-all duration-300 hover:bg-white/20"
+                  >
+                    Özellikleri İncele
+                  </Button>
+                </motion.div>
               </motion.div>
+
+              {/* Supporting points */}
               <motion.div
-                whileHover={{ scale: 1.05, y: -2 }}
-                whileTap={{ scale: 0.98 }}
+                variants={itemVariants}
+                className="flex flex-wrap items-center justify-center gap-4 pt-4 text-sm text-white/70 lg:justify-start"
               >
-                <Button
-                  size="lg"
-                  variant="outline"
-                  onClick={() => scrollToSection('#features')}
-                  className="group relative bg-white/10 backdrop-blur-xl border-2 border-white/40 text-white hover:bg-white/20 px-10 py-7 text-lg font-bold rounded-2xl transition-all duration-300 shadow-xl hover:shadow-white/20 overflow-hidden"
-                >
-                  <motion.div
-                    className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                    initial={false}
-                  />
-                  <span className="relative z-10">Daha Fazla Bilgi</span>
-                </Button>
-              </motion.div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  14 gün ücretsiz deneyin
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  Kurulum gerekmez
+                </div>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                  Gerçek zamanlı raporlama
+                </div>
               </motion.div>
             </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 40 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.8, ease: [0.215, 0.61, 0.355, 1] }}
+              className="hidden lg:block"
+            >
+              <HeroShowcase />
+            </motion.div>
+          </div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6, duration: 0.8 }}
+            className="mt-12 lg:hidden"
+          >
+            <HeroShowcase />
           </motion.div>
+        </motion.div>
 
         {/* Premium Scroll Indicator */}
-          <motion.div
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 1.5, duration: 0.8 }}
-          className="absolute bottom-12 left-1/2 -translate-x-1/2 z-10"
+          className="absolute bottom-12 left-1/2 z-10 hidden -translate-x-1/2 lg:block"
         >
-                <motion.div
+          <motion.div
             animate={{ y: [0, 10, 0] }}
             transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
             whileHover={{ scale: 1.1 }}
-            className="w-8 h-14 border-2 border-white/60 rounded-full flex justify-center backdrop-blur-sm bg-white/10 group cursor-pointer relative overflow-hidden"
+            className="group flex h-14 w-8 items-center justify-center overflow-hidden rounded-full border-2 border-white/50 bg-white/10 backdrop-blur"
           >
-                    <motion.div
-              className="absolute inset-0 bg-gradient-to-b from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-              initial={false}
-            />
-                    <motion.div
+            <motion.div
               animate={{ y: [0, 16, 0] }}
               transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-              className="w-1.5 h-4 bg-white/80 rounded-full mt-3 relative z-10"
+              className="relative z-10 h-4 w-1.5 rounded-full bg-white/80"
             />
           </motion.div>
         </motion.div>

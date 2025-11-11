@@ -30,3 +30,4 @@ COMMENT ON INDEX idx_invoice_updated_at IS 'Invoice updatedAt index - Kanban sı
 COMMENT ON INDEX idx_invoice_company_status_updated IS 'Invoice composite index - Kanban query performansı için';
 
 
+

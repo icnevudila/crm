@@ -18,3 +18,4 @@ COMMENT ON COLUMN "Company"."maxModules" IS 'Kurumun maksimum modül sayısı (N
 COMMENT ON COLUMN "Company"."adminUserLimit" IS 'Admin rolündeki kullanıcıların ekleyebileceği maksimum kullanıcı sayısı (NULL = sınırsız)';
 
 
+

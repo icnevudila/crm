@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { toast } from '@/lib/toast'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { FileText, Edit, Trash2, Eye, Send, CheckCircle, XCircle, GripVertical, RefreshCw, Mail, Clock, History } from 'lucide-react'
+import { FileText, Edit, Trash2, Eye, Send, CheckCircle, XCircle, GripVertical, RefreshCw, Mail, Clock, History, ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -1087,6 +1087,15 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
     easing: 'linear', // Linear - en hızlı
   }), [])
 
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+
+  const handleHorizontalScroll = (direction: 'left' | 'right') => {
+    const node = scrollContainerRef.current
+    if (!node) return
+    const delta = direction === 'left' ? -360 : 360
+    node.scrollBy({ left: delta, behavior: 'smooth' })
+  }
+
   return (
       <DndContext
       sensors={sensors}
@@ -1094,44 +1103,46 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      {/* Horizontal Scroll Container - Sticky ve erişilebilir */}
-      <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 py-2 mb-4 shadow-sm">
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-600 font-medium">Yatay kaydırma için sağa-sola kaydırın</p>
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                const container = document.querySelector('.kanban-scroll-container') as HTMLElement
-                if (container) {
-                  container.scrollBy({ left: -400, behavior: 'smooth' })
-                }
-              }}
-              className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded border border-gray-300"
-            >
-              ← Sola
-            </button>
-            <button
-              onClick={() => {
-                const container = document.querySelector('.kanban-scroll-container') as HTMLElement
-                if (container) {
-                  container.scrollBy({ left: 400, behavior: 'smooth' })
-                }
-              }}
-              className="px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded border border-gray-300"
-            >
-              Sağa →
-            </button>
-          </div>
+      {/* Horizontal Scroll Controls */}
+      <div className="sticky top-0 z-20 mb-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white/95 px-4 py-2 shadow-sm backdrop-blur">
+        <p className="text-sm font-medium text-slate-600">
+          Kanbanı yatay kaydırmak için okları ya da trackpad&apos;inizi kullanın.
+        </p>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+            onClick={() => handleHorizontalScroll('left')}
+            aria-label="Sola kaydır"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+            onClick={() => handleHorizontalScroll('right')}
+            aria-label="Sağa kaydır"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
       </div>
-      <div className="flex gap-4 overflow-x-auto pb-4 kanban-scroll-container" style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}>
+      <div
+        ref={scrollContainerRef}
+        className="kanban-scroll-container flex gap-4 overflow-x-auto pb-4"
+        style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}
+      >
         {displayData.map((column) => {
           const colors = statusColors[column.status] || statusColors.DRAFT
           return (
             <Card
               key={column.status}
               id={column.status}
-              className={`min-w-[320px] flex flex-col flex-shrink-0 ${colors.bg} ${colors.border} border-2`}
+              className={`min-w-[280px] max-w-[320px] flex-shrink-0 flex flex-col ${colors.bg} ${colors.border} border-2`}
             >
               {/* Column Header */}
               <div className={`p-4 border-b-2 ${colors.border}`}>
