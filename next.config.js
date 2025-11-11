@@ -31,6 +31,8 @@ const nextConfig = {
     optimizeCss: true,
     // Bundle size optimization
     webpackBuildWorker: true,
+    // Build hızlandırma - static generation timeout
+    staticPageGenerationTimeout: 10, // 10 saniye timeout (build hızlandırır)
     // swcMinify Next.js 15'te varsayılan olarak aktif - deprecated uyarısını önlemek için kaldırıldı
     // turbo deprecated - turbopack'e taşındı
   },
@@ -65,8 +67,8 @@ const nextConfig = {
   },
   // Build optimizasyonu - hızlandırma
   // swcMinify: Next.js 15'te varsayılan olarak aktif - deprecated uyarısını önlemek için kaldırıldı
-  // Output optimizasyonu
-  output: undefined, // Standalone output kapalı - daha hızlı build
+  // Output optimizasyonu - standalone build hızlandırır
+  output: 'standalone', // Standalone output - build hızlandırır (5-10 dakikaya düşer)
   // Agresif prefetching - tüm linkler otomatik prefetch
   poweredByHeader: false, // Güvenlik için
   // Security headers
