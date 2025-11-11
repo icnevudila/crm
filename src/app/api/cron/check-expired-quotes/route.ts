@@ -12,7 +12,7 @@ import { createNotificationForRole } from '@/lib/notification-helper'
 // }
 
 export const dynamic = 'force-dynamic'
-export const runtime = 'edge'
+// Edge Runtime kaldırıldı - NextAuth Edge Runtime'da çalışmıyor (crypto modülü yok)
 
 export async function GET(request: Request) {
   try {
