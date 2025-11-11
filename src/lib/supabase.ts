@@ -12,7 +12,6 @@ export const getSupabase = () => {
       process.env.NEXT_PHASE === 'phase-production-build' ||
       process.env.NEXT_PHASE === 'phase-export' ||
       process.env.NEXT_PHASE === 'phase-development' ||
-      (typeof window === 'undefined' && process.env.NODE_ENV === 'production' && !process.env.VERCEL_ENV) ||
       process.env.__NEXT_PRIVATE_PREBUNDLED_REACT
 
     if (isBuildTime) {
@@ -94,7 +93,6 @@ export function getSupabaseWithServiceRole() {
       process.env.NEXT_PHASE === 'phase-production-build' ||
       process.env.NEXT_PHASE === 'phase-export' ||
       process.env.NEXT_PHASE === 'phase-development' ||
-      (typeof window === 'undefined' && process.env.NODE_ENV === 'production' && !process.env.VERCEL_ENV) ||
       process.env.__NEXT_PRIVATE_PREBUNDLED_REACT
 
     if (isBuildTime) {
