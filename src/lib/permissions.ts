@@ -1,6 +1,21 @@
+import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getSupabase } from '@/lib/supabase'
+
+export const PERMISSION_DENIED_MESSAGE =
+  'Bu işlemi gerçekleştirmek için yetkiniz bulunmuyor. Lütfen kurum yöneticinizle veya bilgi işlem ekibiyle iletişime geçin.'
+
+export function buildPermissionDeniedResponse(detail?: string) {
+  return NextResponse.json(
+    {
+      error: 'Forbidden',
+      message: PERMISSION_DENIED_MESSAGE,
+      ...(detail ? { detail } : {}),
+    },
+    { status: 403 }
+  )
+}
 
 export interface PermissionCheck {
   canRead: boolean

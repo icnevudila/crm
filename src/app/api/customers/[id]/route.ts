@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
-import { hasPermission } from '@/lib/permissions'
+import { hasPermission, buildPermissionDeniedResponse } from '@/lib/permissions'
 
 // Cache'i kapat - PUT/DELETE işlemlerinden sonra fresh data gelsin
 export const dynamic = 'force-dynamic'
@@ -13,17 +12,9 @@ export async function GET(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Customers [id] GET API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
@@ -37,10 +28,7 @@ export async function GET(
     // Permission check - canRead kontrolü
     const canRead = await hasPermission('customer', 'read', session.user.id)
     if (!canRead) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Müşteri görüntüleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const { id } = await params
@@ -151,17 +139,9 @@ export async function PUT(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Customers [id] PUT API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
@@ -171,10 +151,7 @@ export async function PUT(
     // Permission check - canUpdate kontrolü
     const canUpdate = await hasPermission('customer', 'update', session.user.id)
     if (!canUpdate) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Müşteri güncelleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const { id } = await params
@@ -251,17 +228,9 @@ export async function DELETE(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Customers [id] DELETE API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
@@ -271,10 +240,7 @@ export async function DELETE(
     // Permission check - canDelete kontrolü
     const canDelete = await hasPermission('customer', 'delete', session.user.id)
     if (!canDelete) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Müşteri silme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const { id } = await params

@@ -57,3 +57,4 @@ COMMENT ON COLUMN "EmailTemplate".category IS 'Template kategorisi (QUOTE, INVOI
 
 
 
+

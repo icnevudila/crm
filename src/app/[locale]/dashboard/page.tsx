@@ -2,7 +2,6 @@
 
 import { useSession } from 'next-auth/react'
 import { useTranslations, useLocale } from 'next-intl'
-import { useQuery } from '@tanstack/react-query'
 import { Suspense, useMemo, useEffect, useState } from 'react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
@@ -23,10 +22,8 @@ import { Eye } from 'lucide-react'
 import SkeletonDashboard from '@/components/skeletons/SkeletonDashboard'
 import { useRealtimeKPIs } from '@/hooks/useRealtimeKPIs' // Hook'lar dynamic import edilemez
 import { Card } from '@/components/ui/card' // Basit component - normal import
-import SmartReminder from '@/components/automations/SmartReminder' // Client Component - direkt import
 import GradientCard from '@/components/ui/GradientCard'
 import AnimatedCounter from '@/components/ui/AnimatedCounter'
-import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import {
   TrendingUp,
   FileText,
@@ -41,17 +38,53 @@ import {
   Sparkles,
   Zap,
 } from 'lucide-react'
+import { useData } from '@/hooks/useData'
 
-// Chart components - direkt import (geçici olarak dynamic import kaldırıldı)
-import SalesTrendChart from '@/components/charts/SalesTrendChart'
-import ProductSalesChart from '@/components/charts/ProductSalesChart'
-import CustomerSectorChart from '@/components/charts/CustomerSectorChart'
-import CompanySectorChart from '@/components/charts/CompanySectorChart'
-import CompanyPerformanceChart from '@/components/charts/CompanyPerformanceChart'
-import InvoiceStatusChart from '@/components/charts/InvoiceStatusChart'
-import DealStatusChart from '@/components/charts/DealStatusChart'
+const SmartReminder = dynamic(() => import('@/components/automations/SmartReminder'), {
+  ssr: false,
+  loading: () => <div className="h-32 rounded-3xl animate-pulse bg-slate-100/80" />,
+})
 
-// Sales Reports Charts - lazy load
+const ActivityTimeline = dynamic(() => import('@/components/ui/ActivityTimeline'), {
+  ssr: false,
+  loading: () => <div className="h-[200px] animate-pulse bg-gray-100 rounded" />,
+})
+
+const SalesTrendChart = dynamic(() => import('@/components/charts/SalesTrendChart'), {
+  ssr: false,
+  loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded-lg" />,
+})
+
+const ProductSalesChart = dynamic(() => import('@/components/charts/ProductSalesChart'), {
+  ssr: false,
+  loading: () => <div className="h-[250px] animate-pulse bg-gray-100 rounded-lg" />,
+})
+
+const CustomerSectorChart = dynamic(() => import('@/components/charts/CustomerSectorChart'), {
+  ssr: false,
+  loading: () => <div className="h-[250px] animate-pulse bg-gray-100 rounded-lg" />,
+})
+
+const CompanySectorChart = dynamic(() => import('@/components/charts/CompanySectorChart'), {
+  ssr: false,
+  loading: () => <div className="h-[250px] animate-pulse bg-gray-100 rounded-lg" />,
+})
+
+const CompanyPerformanceChart = dynamic(() => import('@/components/charts/CompanyPerformanceChart'), {
+  ssr: false,
+  loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded-lg" />,
+})
+
+const InvoiceStatusChart = dynamic(() => import('@/components/charts/InvoiceStatusChart'), {
+  ssr: false,
+  loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded-lg" />,
+})
+
+const DealStatusChart = dynamic(() => import('@/components/charts/DealStatusChart'), {
+  ssr: false,
+  loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded-lg" />,
+})
+
 const MonthlySalesBarChart = dynamic(() => import('@/components/reports/charts/MonthlySalesBarChart'), {
   ssr: false,
   loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
@@ -62,152 +95,106 @@ const CustomerGrowthLineChart = dynamic(() => import('@/components/reports/chart
   loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
 })
 
-async function fetchKPIs() {
-  try {
-    const res = await fetch('/api/analytics/kpis', {
-      cache: 'no-store',
-      credentials: 'include',
-    })
-    if (!res.ok) {
-      // DÜZELTME: Hata durumunda log ekle - sorunun ne olduğunu anla
-      if (process.env.NODE_ENV === 'development') {
-        console.error('KPIs API error - Response not OK:', {
-          status: res.status,
-          statusText: res.statusText,
-          url: res.url,
-        })
-      }
-      // Hata durumunda bile boş obje dönme - undefined dön ki TanStack Query hata olarak işlesin
-      throw new Error(`KPIs API error: ${res.status} ${res.statusText}`)
-    }
-    const data = await res.json()
-    
-    // DÜZELTME: Gelen veriyi logla - sorunun ne olduğunu anla
-    if (process.env.NODE_ENV === 'development') {
-      console.log('KPIs API response:', data)
-    }
-    
-    // DÜZELTME: Veri yoksa veya hatalıysa hata fırlat
-    if (!data || typeof data !== 'object') {
-      throw new Error('Invalid KPIs data format')
-    }
-    
-    return data
-  } catch (error: any) {
-    // DÜZELTME: Hata durumunda log ekle - sorunun ne olduğunu anla
-    if (process.env.NODE_ENV === 'development') {
-      console.error('KPIs fetch error:', error)
-    }
-    // Hata durumunda throw et - TanStack Query hata olarak işlesin
-    throw error
-  }
+interface MonthlyKPI {
+  month: string
+  sales?: number
+  quotes?: number
+  acceptedQuotes?: number
+  invoices?: number
+  deals?: number
 }
 
-async function fetchTrends() {
-  try {
-    const res = await fetch('/api/analytics/trends', {
-      cache: 'no-store', // Fresh data için cache'i kapat
-      credentials: 'include', // Session cookie'lerini gönder
-    })
-    if (!res.ok) {
-      // Hata durumunda boş trend data dön - API { trends } formatında döndürüyor
-      return { trends: [] }
-    }
-    const data = await res.json().catch(() => ({ trends: [] }))
-    return data
-  } catch (error: any) {
-    // Sadece development'ta logla - production'da sessiz
-    if (process.env.NODE_ENV === 'development') {
-      console.error('fetchTrends error:', error)
-    }
-    // Hata durumunda boş trend data dön - API { trends } formatında döndürüyor
-    return { trends: [] }
-  }
+interface KPIData {
+  totalSales: number
+  totalQuotes: number
+  successRate: number
+  activeCompanies: number
+  recentActivity: number
+  totalInvoices: number
+  totalCustomers: number
+  totalDeals: number
+  avgDealValue: number
+  pendingInvoices: number
+  pendingShipments: number
+  pendingPurchaseShipments: number
+  monthlyKPIs: MonthlyKPI[]
 }
 
-async function fetchDistribution() {
-  try {
-    const res = await fetch('/api/analytics/distribution', {
-      cache: 'no-store',
-      credentials: 'include',
-    })
-    if (!res.ok) {
-      return { customerSectors: [], productSales: [], companySectors: [] }
-    }
-    const data = await res.json().catch(() => ({ customerSectors: [], productSales: [], companySectors: [] }))
-    return data
-  } catch (error: any) {
-    return { customerSectors: [], productSales: [], companySectors: [] }
-  }
+interface TrendsResponse {
+  trends: Record<string, unknown>[]
 }
 
-async function fetchUserPerformance() {
-  try {
-    const res = await fetch('/api/analytics/user-performance', {
-      cache: 'no-store',
-      credentials: 'include',
-    })
-    if (!res.ok) {
-      return { performance: [] }
-    }
-    const data = await res.json().catch(() => ({ performance: [] }))
-    return data
-  } catch (error: any) {
-    return { performance: [] }
-  }
+interface DistributionResponse {
+  productSales: Record<string, unknown>[]
+  customerSectors: Record<string, unknown>[]
+  companySectors: Record<string, unknown>[]
 }
 
-async function fetchDealKanban() {
-  try {
-    const res = await fetch('/api/analytics/deal-kanban', {
-      cache: 'no-store',
-      credentials: 'include',
-    })
-    if (!res.ok) {
-      return { kanban: [] }
-    }
-    const data = await res.json().catch(() => ({ kanban: [] }))
-    return data
-  } catch (error: any) {
-    return { kanban: [] }
-  }
+interface PerformanceResponse {
+  performance: Record<string, unknown>[]
 }
 
-async function fetchInvoiceKanban() {
-  try {
-    const res = await fetch('/api/analytics/invoice-kanban', {
-      cache: 'no-store', // Fresh data için cache'i kapat
-      credentials: 'include', // Session cookie'lerini gönder
-    })
-    if (!res.ok) {
-      // Hata durumunda boş kanban data dön
-      return { kanban: [] }
-    }
-    const data = await res.json().catch(() => ({ kanban: [] }))
-    return data
-  } catch (error: any) {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('fetchInvoiceKanban error:', error)
-    }
-    // Hata durumunda boş kanban data dön
-    return { kanban: [] }
-  }
+interface DealKanbanItem {
+  id: string
+  title?: string
+  value?: number
+  createdAt?: string
+  customer?: { name?: string }
+  Customer?: { name?: string }
 }
 
-async function fetchRecentActivities() {
-  try {
-    const res = await fetch('/api/analytics/recent-activities', {
-      credentials: 'include',
-      next: { revalidate: 0 },
-    })
-    if (!res.ok) {
-      return { activities: [] }
-    }
-    const data = await res.json().catch(() => ({ activities: [] }))
-    return data
-  } catch (error: any) {
-    return { activities: [] }
-  }
+interface DealKanbanColumn {
+  stage: string
+  count: number
+  totalValue?: number
+  deals?: DealKanbanItem[]
+}
+
+interface DealKanbanResponse {
+  kanban: DealKanbanColumn[]
+}
+
+interface InvoiceKanbanItem {
+  id: string
+  title?: string
+  totalAmount?: number
+  total?: number
+  createdAt: string
+}
+
+interface InvoiceKanbanColumn {
+  status: string
+  count: number
+  totalValue?: number
+  invoices?: InvoiceKanbanItem[]
+}
+
+interface InvoiceKanbanResponse {
+  kanban: InvoiceKanbanColumn[]
+}
+
+interface QuoteAnalysisResponse {
+  total: number
+  accepted: number
+  pending: number
+  rejected: number
+  successRate: number
+  rejectionReasons: Record<string, unknown>[]
+  acceptedTotal: number
+  pendingTotal: number
+  rejectedTotal: number
+}
+
+interface SalesReportsResponse {
+  monthlyComparison: Record<string, unknown>[]
+}
+
+interface CustomerReportsResponse {
+  growthTrend: Record<string, unknown>[]
+}
+
+interface RecentActivitiesResponse {
+  activities: Record<string, unknown>[]
 }
 
 // Status labels ve colors - component dışında tanımla (modal'da kullanılacak)
@@ -257,313 +244,68 @@ export default function DashboardPage() {
   const [stageModalOpen, setStageModalOpen] = useState(false)
   
 
-  // Dashboard KPI'larını çek (TanStack Query ile)
-  // DÜZELTME: Cache stratejisini güncelle - her zaman fresh data çek
-  const { data: initialKPIs, isLoading, error: kpisError } = useQuery({
-    queryKey: ['kpis'],
-    queryFn: fetchKPIs,
-    staleTime: 0, // Cache yok - her zaman fresh data
-    gcTime: 0, // Garbage collection yok - cache tutma
-    refetchOnWindowFocus: true, // Focus'ta refetch yap (fresh data için)
-    refetchOnMount: true, // Mount'ta refetch yap (fresh data için)
-    retry: 3, // 3 kez dene (artırıldı)
-    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
-    // DÜZELTME: Hata durumunda varsayılan değerler kullan - UI bozulmasın
-    throwOnError: false, // Hata fırlatma - varsayılan değerler kullan
+  const {
+    data: kpisData,
+    isLoading: kpisLoading,
+    error: kpisError,
+  } = useData<KPIData>('/api/analytics/kpis', {
+    dedupingInterval: 60_000,
+    refreshInterval: 60_000,
+    revalidateOnFocus: false,
   })
 
-  // Development'ta hataları ve başarıları logla
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      if (kpisError) {
-        console.error('KPIs query error:', kpisError)
-      }
-      if (initialKPIs) {
-        console.log('KPIs loaded successfully:', initialKPIs)
-      }
-    }
-  }, [kpisError, initialKPIs])
-
-  // Chart verilerini çek - PARALEL ve AGRESİF cache
-  // Tüm chart'lar paralel çekilir - beklemez birbirini
-  const { data: trendsData, error: trendsError, isLoading: trendsLoading } = useQuery({
-    queryKey: ['trends'],
-    queryFn: fetchTrends,
-    staleTime: 0, // Cache yok - her seferinde fresh data
-    gcTime: 0, // Garbage collection yok - cache tutma
-    refetchOnWindowFocus: true, // Focus'ta refetch yap (fresh data için)
-    refetchOnMount: true, // Mount'ta refetch yap (fresh data için)
-    retry: 2,
-    retryDelay: 1000,
+  const { data: trendsData } = useData<TrendsResponse>('/api/analytics/trends', {
+    dedupingInterval: 90_000,
+    refreshInterval: 180_000,
+    revalidateOnFocus: false,
   })
 
-  // Debug: Trends verisini logla
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      if (trendsError) {
-        console.error('Trends query error:', trendsError)
-      }
-      if (trendsData) {
-        console.log('Trends data loaded:', trendsData)
-        console.log('Trends array:', trendsData?.trends)
-        console.log('Trends length:', trendsData?.trends?.length)
-        console.log('Trends data sample:', trendsData?.trends?.slice(0, 3))
-      }
-    }
-  }, [trendsData, trendsError])
-
-  const { data: distributionData, error: distributionError, isLoading: distributionLoading } = useQuery({
-    queryKey: ['distribution'],
-    queryFn: fetchDistribution,
-    staleTime: 0, // Cache yok - her seferinde fresh data
-    gcTime: 0, // Garbage collection yok - cache tutma
-    refetchOnWindowFocus: true, // Focus'ta refetch yap (fresh data için)
-    refetchOnMount: true, // Mount'ta refetch yap (fresh data için)
-    retry: 2,
-    retryDelay: 1000,
+  const { data: distributionData } = useData<DistributionResponse>('/api/analytics/distribution', {
+    dedupingInterval: 120_000,
+    refreshInterval: 240_000,
+    revalidateOnFocus: false,
   })
 
-  // Debug: Distribution verisini logla
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      if (distributionError) {
-        console.error('Distribution query error:', distributionError)
-      }
-      if (distributionData) {
-        console.log('Distribution data loaded:', distributionData)
-        console.log('Company sectors:', distributionData?.companySectors)
-        console.log('Company sectors length:', distributionData?.companySectors?.length || 0)
-        console.log('Company sectors sample:', distributionData?.companySectors?.slice(0, 3))
-        console.log('Customer sectors:', distributionData?.customerSectors)
-        console.log('Customer sectors length:', distributionData?.customerSectors?.length || 0)
-        console.log('Product sales:', distributionData?.productSales)
-        console.log('Product sales length:', distributionData?.productSales?.length || 0)
-      }
-    }
-  }, [distributionData, distributionError])
-
-  const { data: userPerformanceData, error: userPerformanceError, isLoading: userPerformanceLoading } = useQuery({
-    queryKey: ['user-performance'],
-    queryFn: fetchUserPerformance,
-    staleTime: 0, // Cache yok - her seferinde fresh data
-    gcTime: 0, // Garbage collection yok - cache tutma
-    refetchOnWindowFocus: true, // Focus'ta refetch yap (fresh data için)
-    refetchOnMount: true, // Mount'ta refetch yap (fresh data için)
-    retry: 2,
-    retryDelay: 1000,
+  const { data: userPerformanceData } = useData<PerformanceResponse>('/api/analytics/user-performance', {
+    dedupingInterval: 120_000,
+    refreshInterval: 240_000,
+    revalidateOnFocus: false,
   })
 
-  // Debug: User Performance verisini logla
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      if (userPerformanceError) {
-        console.error('User Performance query error:', userPerformanceError)
-      }
-      if (userPerformanceData) {
-        console.log('User Performance data loaded:', userPerformanceData)
-        console.log('Performance array:', userPerformanceData?.performance)
-        console.log('Performance length:', userPerformanceData?.performance?.length)
-        console.log('Performance sample:', userPerformanceData?.performance?.slice(0, 3))
-      }
-    }
-  }, [userPerformanceData, userPerformanceError])
-
-  const { data: dealKanbanData, error: dealKanbanError, isLoading: dealKanbanLoading } = useQuery({
-    queryKey: ['deal-kanban'],
-    queryFn: fetchDealKanban,
-    staleTime: 0, // Cache yok - her seferinde fresh data
-    gcTime: 0, // Garbage collection yok - cache tutma
-    refetchOnWindowFocus: true, // Focus'ta refetch yap (fresh data için)
-    refetchOnMount: true, // Mount'ta refetch yap (fresh data için)
-    retry: 2,
-    retryDelay: 1000,
+  const { data: dealKanbanData } = useData<DealKanbanResponse>('/api/analytics/deal-kanban', {
+    dedupingInterval: 120_000,
+    refreshInterval: 180_000,
+    revalidateOnFocus: false,
   })
 
-  // Debug: Deal Kanban verisini logla
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      if (dealKanbanError) {
-        console.error('Deal Kanban query error:', dealKanbanError)
-      }
-      if (dealKanbanData) {
-        console.log('Deal Kanban data loaded:', dealKanbanData)
-        console.log('Deal Kanban array:', dealKanbanData?.kanban)
-        console.log('Deal Kanban length:', dealKanbanData?.kanban?.length)
-        console.log('Deal Kanban sample:', dealKanbanData?.kanban?.slice(0, 3))
-        console.log('Deal Kanban with counts:', dealKanbanData?.kanban?.map((col: any) => ({
-          stage: col.stage,
-          count: col.count,
-          totalValue: col.totalValue,
-        })))
-      }
-    }
-  }, [dealKanbanData, dealKanbanError])
-
-  const { data: invoiceKanbanData, error: invoiceKanbanError, isLoading: invoiceKanbanLoading } = useQuery({
-    queryKey: ['invoice-kanban'],
-    queryFn: fetchInvoiceKanban,
-    staleTime: 0, // Cache yok - her seferinde fresh data
-    gcTime: 0, // Garbage collection yok - cache tutma
-    refetchOnWindowFocus: true, // Focus'ta refetch yap (fresh data için)
-    refetchOnMount: true, // Mount'ta refetch yap (fresh data için)
-    retry: 2,
-    retryDelay: 1000,
+  const { data: invoiceKanbanData } = useData<InvoiceKanbanResponse>('/api/analytics/invoice-kanban', {
+    dedupingInterval: 120_000,
+    refreshInterval: 180_000,
+    revalidateOnFocus: false,
   })
 
-  // Debug: Invoice Kanban verisini logla
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      if (invoiceKanbanError) {
-        console.error('Invoice Kanban query error:', invoiceKanbanError)
-      }
-      if (invoiceKanbanData) {
-        console.log('Invoice Kanban data loaded:', invoiceKanbanData)
-        console.log('Invoice Kanban array:', invoiceKanbanData?.kanban)
-        console.log('Invoice Kanban length:', invoiceKanbanData?.kanban?.length)
-        console.log('Invoice Kanban items:', invoiceKanbanData?.kanban?.map((col: any) => ({
-          status: col.status,
-          count: col.count,
-          totalValue: col.totalValue,
-        })))
-      }
-    }
-  }, [invoiceKanbanData, invoiceKanbanError])
-
-  // Son aktiviteler - daha sık güncellenir (1 dakika cache)
-  const { data: recentActivitiesData } = useQuery({
-    queryKey: ['recent-activities'],
-    queryFn: fetchRecentActivities,
-    staleTime: 60 * 60 * 1000, // ULTRA AGRESİF: 60 DAKİKA stale time (cache'den göster - instant navigation)
-    gcTime: 120 * 60 * 1000, // 120 dakika garbage collection time
-    refetchOnWindowFocus: false, // Focus'ta refetch yok
-    refetchOnMount: false, // ULTRA AGRESİF: Mount'ta refetch yok (cache'den göster)
-    retry: 1, // ULTRA AGRESİF: Sadece 1 kez tekrar dene (hızlı hata)
-    retryDelay: 500, // 500ms bekle (daha hızlı)
+  const { data: recentActivitiesData } = useData<RecentActivitiesResponse>('/api/analytics/recent-activities', {
+    dedupingInterval: 180_000,
+    refreshInterval: 300_000,
+    revalidateOnFocus: false,
   })
 
-  // ENTERPRISE: Teklif analizi - gerçekleşen/bekleyen, başarı oranı, red nedeni
-  async function fetchQuoteAnalysis() {
-    try {
-      const res = await fetch('/api/analytics/quote-analysis', {
-        cache: 'force-cache',
-        credentials: 'include',
-        next: { revalidate: 60 }, // 60 saniye cache
-      })
-      if (!res.ok) {
-        return {
-          total: 0,
-          accepted: 0,
-          pending: 0,
-          rejected: 0,
-          successRate: 0,
-          rejectionReasons: [],
-          acceptedTotal: 0,
-          pendingTotal: 0,
-          rejectedTotal: 0,
-        }
-      }
-      const data = await res.json().catch(() => ({
-        total: 0,
-        accepted: 0,
-        pending: 0,
-        rejected: 0,
-        successRate: 0,
-        rejectionReasons: [],
-        acceptedTotal: 0,
-        pendingTotal: 0,
-        rejectedTotal: 0,
-      }))
-      return data
-    } catch (error) {
-      return {
-        total: 0,
-        accepted: 0,
-        pending: 0,
-        rejected: 0,
-        successRate: 0,
-        rejectionReasons: [],
-        acceptedTotal: 0,
-        pendingTotal: 0,
-        rejectedTotal: 0,
-      }
-    }
-  }
-
-  const { data: quoteAnalysisData } = useQuery({
-    queryKey: ['quote-analysis'],
-    queryFn: fetchQuoteAnalysis,
-    staleTime: 60 * 1000, // 60 saniye stale time
-    gcTime: 120 * 1000, // 2 dakika garbage collection time
-    refetchOnWindowFocus: false,
-    refetchOnMount: true,
-    retry: 1,
-    retryDelay: 500,
+  const { data: quoteAnalysisData } = useData<QuoteAnalysisResponse>('/api/analytics/quote-analysis', {
+    dedupingInterval: 120_000,
+    refreshInterval: 180_000,
+    revalidateOnFocus: false,
   })
 
-  // Satış Raporları - Reports modülünden
-  async function fetchSalesReports() {
-    try {
-      const res = await fetch('/api/reports/sales', {
-        cache: 'no-store',
-        credentials: 'include',
-      })
-      if (!res.ok) {
-        return {
-          monthlyComparison: [],
-        }
-      }
-      const data = await res.json().catch(() => ({ monthlyComparison: [] }))
-      return data
-    } catch (error: any) {
-      return {
-        monthlyComparison: [],
-      }
-    }
-  }
-
-  const { data: salesReportsData } = useQuery({
-    queryKey: ['sales-reports'],
-    queryFn: fetchSalesReports,
-    staleTime: 5 * 60 * 1000, // 5 dakika cache
-    gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: true,
-    retry: 1,
-    retryDelay: 500,
-    enabled: true, // Her zaman aktif
+  const { data: salesReportsData } = useData<SalesReportsResponse>('/api/reports/sales', {
+    dedupingInterval: 300_000,
+    refreshInterval: 600_000,
+    revalidateOnFocus: false,
   })
 
-  // Müşteri Raporları - Müşteri büyüme trendi
-  async function fetchCustomerReports() {
-    try {
-      const res = await fetch('/api/reports/customers', {
-        cache: 'no-store',
-        credentials: 'include',
-      })
-      if (!res.ok) {
-        return {
-          growthTrend: [],
-        }
-      }
-      const data = await res.json().catch(() => ({ growthTrend: [] }))
-      return data
-    } catch (error: any) {
-      return {
-        growthTrend: [],
-      }
-    }
-  }
-
-  const { data: customerReportsData } = useQuery({
-    queryKey: ['customer-reports'],
-    queryFn: fetchCustomerReports,
-    staleTime: 5 * 60 * 1000, // 5 dakika cache
-    gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: true,
-    retry: 1,
-    retryDelay: 500,
-    enabled: true, // Her zaman aktif
+  const { data: customerReportsData } = useData<CustomerReportsResponse>('/api/reports/customers', {
+    dedupingInterval: 300_000,
+    refreshInterval: 600_000,
+    revalidateOnFocus: false,
   })
 
   // Realtime güncellemeler - sadece initial data ile başla
@@ -585,12 +327,12 @@ export default function DashboardPage() {
     monthlyKPIs: [],
   }
   
-  // DÜZELTME: initialKPIs varsa kullan, yoksa defaultKPIs kullan
-  // Ama kpisError varsa ve initialKPIs yoksa, hata mesajı göster
-  const kpis = useRealtimeKPIs(initialKPIs || defaultKPIs)
+  // DÜZELTME: kpisData varsa kullan, yoksa defaultKPIs kullan
+  // Ama kpisError varsa ve kpisData yoksa, hata mesajı göster
+  const kpis = useRealtimeKPIs(kpisData || defaultKPIs)
   
   // DÜZELTME: Hata durumunda log ekle - sorunun ne olduğunu anla
-  if (kpisError && !initialKPIs) {
+  if (kpisError && !kpisData) {
     if (process.env.NODE_ENV === 'development') {
       console.error('Dashboard KPIs error - No data loaded:', kpisError)
     }
@@ -599,7 +341,7 @@ export default function DashboardPage() {
   // Dashboard anında göster - skeleton sadece ilk yüklemede
   // Veriler paralel çekilirken bile sayfa görünür
   // Hata durumunda bile sayfayı göster (varsayılan değerlerle)
-  if (isLoading && !initialKPIs && !kpisError) {
+  if (kpisLoading && !kpisData && !kpisError) {
     return <SkeletonDashboard />
   }
 
@@ -608,8 +350,8 @@ export default function DashboardPage() {
     if (kpisError) {
       console.error('Dashboard KPIs error:', kpisError)
     }
-    if (initialKPIs) {
-      console.log('Dashboard KPIs data:', initialKPIs)
+    if (kpisData) {
+      console.log('Dashboard KPIs data:', kpisData)
     }
     if (session) {
       console.log('Dashboard session:', { userId: session.user?.id, companyId: session.user?.companyId })

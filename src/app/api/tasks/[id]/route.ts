@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getRecordById, updateRecord, deleteRecord } from '@/lib/crud'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { notifyTaskAssignment } from '@/lib/notifications'
@@ -11,17 +10,9 @@ export async function GET(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Tasks [id] GET API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
@@ -29,11 +20,11 @@ export async function GET(
     }
 
     // Permission check - canRead kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, PERMISSION_DENIED_MESSAGE } = await import('@/lib/permissions')
     const canRead = await hasPermission('task', 'read', session.user.id)
     if (!canRead) {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'Görev görüntüleme yetkiniz yok' },
+        { error: 'Forbidden', message: PERMISSION_DENIED_MESSAGE },
         { status: 403 }
       )
     }
@@ -116,17 +107,9 @@ export async function PUT(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Tasks [id] PUT API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
@@ -134,11 +117,11 @@ export async function PUT(
     }
 
     // Permission check - canUpdate kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, PERMISSION_DENIED_MESSAGE } = await import('@/lib/permissions')
     const canUpdate = await hasPermission('task', 'update', session.user.id)
     if (!canUpdate) {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'Görev güncelleme yetkiniz yok' },
+        { error: 'Forbidden', message: PERMISSION_DENIED_MESSAGE },
         { status: 403 }
       )
     }
@@ -330,17 +313,9 @@ export async function DELETE(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Tasks [id] DELETE API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
@@ -348,11 +323,11 @@ export async function DELETE(
     }
 
     // Permission check - canDelete kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, PERMISSION_DENIED_MESSAGE } = await import('@/lib/permissions')
     const canDelete = await hasPermission('task', 'delete', session.user.id)
     if (!canDelete) {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'Görev silme yetkiniz yok' },
+        { error: 'Forbidden', message: PERMISSION_DENIED_MESSAGE },
         { status: 403 }
       )
     }

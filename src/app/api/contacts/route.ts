@@ -1,29 +1,52 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
-import { createRecord } from '@/lib/crud'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
-import { hasPermission } from '@/lib/permissions'
+import { logAction } from '@/lib/logger'
+import { hasPermission, PERMISSION_DENIED_MESSAGE } from '@/lib/permissions'
+
+const CONTACT_SCHEMA_HINT =
+  'Supabase şemasında Contact tablosu keşfedilemedi. Lütfen tüm Supabase migrationlarını (özellikle 033_contact_lead_scoring_improvements) çalıştırın.'
+
+const schemaErrorResponse = () =>
+  NextResponse.json(
+    {
+      error: 'Contact tablosu bulunamadı',
+      message: CONTACT_SCHEMA_HINT,
+    },
+    { status: 500 }
+  )
+
+const isContactSchemaError = (message?: string) => {
+  if (!message) return false
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes('schema cache') ||
+    normalized.includes('contact') && normalized.includes('does not exist')
+  )
+}
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: Request) {
   try {
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const canRead = await hasPermission('contact', 'read', session.user.id)
+    if (!canRead) {
+      return NextResponse.json(
+        {
+          error: 'Forbidden',
+          message: PERMISSION_DENIED_MESSAGE,
+        },
+        { status: 403 }
+      )
     }
 
     const { searchParams } = new URL(request.url)
@@ -60,7 +83,17 @@ export async function GET(request: Request) {
       countQuery = countQuery.eq('customerCompanyId', customerCompanyId)
     }
 
-    const { count } = await countQuery
+    const { count, error: countError } = await countQuery
+    if (countError) {
+      const message = countError.message || 'Failed to fetch contacts'
+      if (isContactSchemaError(message)) {
+        return schemaErrorResponse()
+      }
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Contacts count query error:', countError)
+      }
+      return NextResponse.json({ error: message }, { status: 500 })
+    }
 
     // Data query
     let dataQuery = supabase
@@ -111,10 +144,14 @@ export async function GET(request: Request) {
     const { data, error } = await dataQuery
 
     if (error) {
+      const message = error.message || 'Failed to fetch contacts'
+      if (isContactSchemaError(message)) {
+        return schemaErrorResponse()
+      }
       if (process.env.NODE_ENV === 'development') {
         console.error('Contacts GET API query error:', error)
       }
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: message }, { status: 500 })
     }
 
     const totalPages = Math.ceil((count || 0) / pageSize)
@@ -151,21 +188,24 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const canCreate = await hasPermission('contact', 'create', session.user.id)
+    if (!canCreate) {
+      return NextResponse.json(
+        {
+          error: 'Forbidden',
+          message: PERMISSION_DENIED_MESSAGE,
+        },
+        { status: 403 }
+      )
     }
 
     let body
@@ -189,12 +229,11 @@ export async function POST(request: Request) {
       )
     }
 
-    const contactData: any = {
+    const contactData: Record<string, any> = {
       firstName: body.firstName.trim(),
       status: body.status || 'ACTIVE',
       role: body.role || 'OTHER',
       isPrimary: body.isPrimary || false,
-      companyId: session.user.companyId,
     }
 
     if (body.lastName) contactData.lastName = body.lastName.trim()
@@ -205,15 +244,43 @@ export async function POST(request: Request) {
     if (body.notes) contactData.notes = body.notes
     if (body.customerCompanyId) contactData.customerCompanyId = body.customerCompanyId
 
-    const created = await createRecord(
-      'Contact',
-      contactData,
-      `Yeni contact eklendi: ${body.firstName} ${body.lastName || ''}`
-    )
+    const supabase = getSupabaseWithServiceRole()
+    const { data: created, error: insertError } = await supabase
+      .from('Contact')
+      .insert({
+        ...contactData,
+        companyId: session.user.companyId,
+      })
+      .select('id')
+      .single()
+
+    if (insertError) {
+      const message = insertError.message || 'Failed to create contact'
+      if (isContactSchemaError(message)) {
+        return schemaErrorResponse()
+      }
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Contacts POST insert error:', insertError)
+      }
+      return NextResponse.json({ error: message }, { status: 500 })
+    }
+
+    const contactId = (created as any)?.id
+
+    // ActivityLog
+    if (contactId) {
+      await logAction({
+        entity: 'Contact',
+        action: 'CREATE',
+        description: `Yeni contact eklendi: ${body.firstName} ${body.lastName || ''}`,
+        meta: { entity: 'Contact', action: 'create', id: contactId, ...contactData },
+        userId: session.user.id,
+        companyId: session.user.companyId,
+      })
+    }
 
     // Get full data with relations
-    const supabase = getSupabaseWithServiceRole()
-    const { data: fullData } = await supabase
+    const { data: fullData, error: fetchError } = await supabase
       .from('Contact')
       .select(`
         id, 
@@ -236,10 +303,20 @@ export async function POST(request: Request) {
           city
         )
       `)
-      .eq('id', (created as any)?.id)
+      .eq('id', contactId)
       .single()
 
-    const responseData = fullData || created
+    if (fetchError) {
+      const message = fetchError.message || 'Failed to load created contact'
+      if (isContactSchemaError(message)) {
+        return schemaErrorResponse()
+      }
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Contacts POST fetch error:', fetchError)
+      }
+    }
+
+    const responseData = fullData || { id: contactId, ...contactData }
 
     // Notification
     if (responseData?.id) {

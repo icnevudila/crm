@@ -498,6 +498,57 @@ export default function InvoiceList() {
                 throw new Error(error.error || 'Failed to update invoice status')
               }
 
+              const statusToastMap: Record<
+                string,
+                { type: 'success' | 'warning' | 'info'; title: string; description: string }
+              > = {
+                SENT: {
+                  type: 'success',
+                  title: 'Fatura gönderildi',
+                  description: 'Sevkiyat hazırlıkları başladı ve ekipler bilgilendirildi.',
+                },
+                SHIPPED: {
+                  type: 'success',
+                  title: 'Sevkiyat onaylandı',
+                  description: 'Stoktan düşüm tamamlandı. Sevkiyat detaylarını kontrol edebilirsiniz.',
+                },
+                RECEIVED: {
+                  type: 'success',
+                  title: 'Mal kabul edildi',
+                  description: 'Stoğa giriş yapıldı. Ödeme sürecini başlatabilirsiniz.',
+                },
+                PAID: {
+                  type: 'success',
+                  title: 'Ödeme kaydedildi',
+                  description: 'Finans kayıtları otomatik olarak güncellendi.',
+                },
+                OVERDUE: {
+                  type: 'info',
+                  title: 'Fatura vadesi geçti',
+                  description: 'Müşteriye ödeme hatırlatması göndermeyi unutmayın.',
+                },
+                CANCELLED: {
+                  type: 'warning',
+                  title: 'Fatura iptal edildi',
+                  description: 'İlgili sevkiyat ve stok işlemleri geri alındı.',
+                },
+              }
+
+              const toastPayload = statusToastMap[newStatus]
+              if (toastPayload) {
+                if (toastPayload.type === 'success') {
+                  toast.success(toastPayload.title, toastPayload.description)
+                } else if (toastPayload.type === 'warning') {
+                  toast.warning(toastPayload.title, toastPayload.description)
+                } else if (typeof toast.info === 'function') {
+                  toast.info(toastPayload.title, toastPayload.description)
+                } else {
+                  toast.success(toastPayload.title, toastPayload.description)
+                }
+              } else {
+                toast.success('Fatura durumu güncellendi')
+              }
+
               // Cache'i invalidate et - fresh data çek (hem table hem kanban hem stats)
               // ÖNEMLİ: Dashboard'daki tüm ilgili query'leri invalidate et (ana sayfada güncellensin)
               await Promise.all([

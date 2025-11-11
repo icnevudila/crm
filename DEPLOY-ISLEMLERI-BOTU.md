@@ -77,3 +77,4 @@ Bu dosyalar ileride `getSafeSession`’a taşınmalı.
 - `next.config.js`’te geçersiz `staticPageGenerationTimeout` uyarısını temizlemek.
 - Session hatası verdiği bildirilen sayfalar: Firmalar (`/companies`), bazı analitik panelleri. Bireysel müşteri modülü sorunsuz; fark `getSafeSession` kullanımı.
 
+

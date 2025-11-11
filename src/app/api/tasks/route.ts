@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getRecords, createRecord } from '@/lib/crud'
 import { notifyTaskAssignment } from '@/lib/notifications'
 
@@ -10,17 +9,9 @@ export const revalidate = 3600
 export async function GET(request: Request) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Tasks GET API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
@@ -28,11 +19,11 @@ export async function GET(request: Request) {
     }
 
     // Permission check - canRead kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, PERMISSION_DENIED_MESSAGE } = await import('@/lib/permissions')
     const canRead = await hasPermission('task', 'read', session.user.id)
     if (!canRead) {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'Görev görüntüleme yetkiniz yok' },
+        { error: 'Forbidden', message: PERMISSION_DENIED_MESSAGE },
         { status: 403 }
       )
     }
@@ -121,17 +112,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Tasks POST API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
@@ -139,11 +122,11 @@ export async function POST(request: Request) {
     }
 
     // Permission check - canCreate kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, PERMISSION_DENIED_MESSAGE } = await import('@/lib/permissions')
     const canCreate = await hasPermission('task', 'create', session.user.id)
     if (!canCreate) {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'Görev oluşturma yetkiniz yok' },
+        { error: 'Forbidden', message: PERMISSION_DENIED_MESSAGE },
         { status: 403 }
       )
     }

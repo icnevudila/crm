@@ -20,11 +20,11 @@ export async function GET(request: Request) {
     }
 
     // Permission check - canRead kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, PERMISSION_DENIED_MESSAGE } = await import('@/lib/permissions')
     const canRead = await hasPermission('invoice', 'read', session.user.id)
     if (!canRead) {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'Fatura görüntüleme yetkiniz yok' },
+        { error: 'Forbidden', message: PERMISSION_DENIED_MESSAGE },
         { status: 403 }
       )
     }
@@ -107,17 +107,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Invoices POST API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
@@ -125,11 +117,11 @@ export async function POST(request: Request) {
     }
 
     // Permission check - canCreate kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, PERMISSION_DENIED_MESSAGE } = await import('@/lib/permissions')
     const canCreate = await hasPermission('invoice', 'create', session.user.id)
     if (!canCreate) {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'Fatura oluşturma yetkiniz yok' },
+        { error: 'Forbidden', message: PERMISSION_DENIED_MESSAGE },
         { status: 403 }
       )
     }

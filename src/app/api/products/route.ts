@@ -19,11 +19,11 @@ export async function GET(request: Request) {
     }
 
     // Permission check - canRead kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, PERMISSION_DENIED_MESSAGE } = await import('@/lib/permissions')
     const canRead = await hasPermission('product', 'read', session.user.id)
     if (!canRead) {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'Ürün görüntüleme yetkiniz yok' },
+        { error: 'Forbidden', message: PERMISSION_DENIED_MESSAGE },
         { status: 403 }
       )
     }
@@ -148,11 +148,11 @@ export async function POST(request: Request) {
     }
 
     // Permission check - canCreate kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, PERMISSION_DENIED_MESSAGE } = await import('@/lib/permissions')
     const canCreate = await hasPermission('product', 'create', session.user.id)
     if (!canCreate) {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'Ürün oluşturma yetkiniz yok' },
+        { error: 'Forbidden', message: PERMISSION_DENIED_MESSAGE },
         { status: 403 }
       )
     }

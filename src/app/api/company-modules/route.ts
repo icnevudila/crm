@@ -1,18 +1,27 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { PERMISSION_DENIED_MESSAGE } from '@/lib/permissions'
 
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
+    }
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Sadece SuperAdmin görebilir
     if (session.user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return NextResponse.json(
+        {
+          error: 'Forbidden',
+          message: PERMISSION_DENIED_MESSAGE,
+        },
+        { status: 403 }
+      )
     }
 
     const { searchParams } = new URL(request.url)
@@ -46,7 +55,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
+    }
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -57,7 +69,11 @@ export async function POST(request: Request) {
     
     if (!isSuperAdmin) {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'Sadece SuperAdmin modül yönetimi yapabilir' },
+        {
+          error: 'Forbidden',
+          message: PERMISSION_DENIED_MESSAGE,
+          detail: 'Sadece SuperAdmin modül yönetimi yapabilir.',
+        },
         { status: 403 }
       )
     }

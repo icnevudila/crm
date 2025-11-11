@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
-import { updateRecord, deleteRecord } from '@/lib/crud'
+import { logAction } from '@/lib/logger'
+import { hasPermission, PERMISSION_DENIED_MESSAGE } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,25 +11,39 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Contacts [id] GET API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const canRead = await hasPermission('contact', 'read', session.user.id)
+    if (!canRead) {
+      return NextResponse.json(
+        {
+          error: 'Forbidden',
+          message: PERMISSION_DENIED_MESSAGE,
+        },
+        { status: 403 }
+      )
+    }
+
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     const companyId = session.user.companyId
+    const canUpdate = await hasPermission('contact', 'update', session.user.id)
+    if (!canUpdate) {
+      return NextResponse.json(
+        {
+          error: 'Forbidden',
+          message: PERMISSION_DENIED_MESSAGE,
+        },
+        { status: 403 }
+      )
+    }
+
     const { id } = await params
     
     const supabase = getSupabaseWithServiceRole()
@@ -54,7 +68,21 @@ export async function GET(
     const { data, error } = await contactQuery.single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      const message = error.message || 'Failed to fetch contact'
+      if (message.includes('schema cache')) {
+        return NextResponse.json(
+          {
+            error: 'Contact tablosu bulunamadı',
+            message:
+              'Supabase şemasında Contact tablosu keşfedilemedi. Lütfen tüm Supabase migrationlarını (özellikle 033_contact_lead_scoring_improvements) çalıştırın.',
+          },
+          { status: 500 }
+        )
+      }
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Contacts [id] GET query error:', error)
+      }
+      return NextResponse.json({ error: message }, { status: 500 })
     }
 
     if (!data) {
@@ -106,21 +134,24 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Contacts [id] PUT API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const canDelete = await hasPermission('contact', 'delete', session.user.id)
+    if (!canDelete) {
+      return NextResponse.json(
+        {
+          error: 'Forbidden',
+          message: PERMISSION_DENIED_MESSAGE,
+        },
+        { status: 403 }
+      )
     }
 
     const { id } = await params
@@ -176,15 +207,54 @@ export async function PUT(
     if (body.status !== undefined) contactData.status = body.status
     if (body.customerCompanyId !== undefined) contactData.customerCompanyId = body.customerCompanyId
 
-    const updated = await updateRecord(
-      'Contact',
-      id,
-      contactData,
-      `Contact güncellendi: ${existingContact.firstName} ${existingContact.lastName}`
-    )
+    const { data: updatedContact, error: updateError } = await supabase
+      .from('Contact')
+      .update({
+        ...contactData,
+        updatedAt: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .eq('companyId', existingContact.companyId)
+      .select(`
+        *,
+        CustomerCompany (
+          id,
+          name,
+          sector,
+          city
+        )
+      `)
+      .single()
 
-    // Updated data with relations
-    const { data: fullData } = await supabase
+    if (updateError) {
+      const message = updateError.message || 'Failed to update contact'
+      if (message.includes('schema cache')) {
+        return NextResponse.json(
+          {
+            error: 'Contact tablosu bulunamadı',
+            message:
+              'Supabase şemasında Contact tablosu keşfedilemedi. Lütfen tüm Supabase migrationlarını (özellikle 033_contact_lead_scoring_improvements) çalıştırın.',
+          },
+          { status: 500 }
+        )
+      }
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Contacts [id] update error:', updateError)
+      }
+      return NextResponse.json({ error: message }, { status: 500 })
+    }
+
+    await logAction({
+      entity: 'Contact',
+      action: 'UPDATE',
+      description: `Contact güncellendi: ${existingContact.firstName} ${existingContact.lastName}`,
+      meta: { entity: 'Contact', action: 'update', id, ...contactData },
+      userId: session.user.id,
+      companyId: session.user.companyId,
+    })
+
+    // Updated data with relations (already selected above but ensure fallback)
+    const { data: fullData, error: fetchError } = await supabase
       .from('Contact')
       .select(`
         *,
@@ -198,7 +268,23 @@ export async function PUT(
       .eq('id', id)
       .single()
 
-    return NextResponse.json(fullData || updated, {
+    if (fetchError) {
+      if (fetchError.message?.includes('schema cache')) {
+        return NextResponse.json(
+          {
+            error: 'Contact tablosu bulunamadı',
+            message:
+              'Supabase şemasında Contact tablosu keşfedilemedi. Lütfen tüm Supabase migrationlarını (özellikle 033_contact_lead_scoring_improvements) çalıştırın.',
+          },
+          { status: 500 }
+        )
+      }
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Contacts [id] fetch error:', fetchError)
+      }
+    }
+
+    return NextResponse.json(fullData || updatedContact, {
       headers: {
         'Cache-Control': 'no-store, must-revalidate',
       },
@@ -219,17 +305,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Contacts [id] DELETE API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
@@ -260,11 +338,38 @@ export async function DELETE(
       )
     }
 
-    await deleteRecord(
-      'Contact',
-      id,
-      `Contact silindi: ${existingContact.firstName} ${existingContact.lastName}`
-    )
+    const { error: deleteError } = await supabase
+      .from('Contact')
+      .delete()
+      .eq('id', id)
+      .eq('companyId', existingContact.companyId)
+
+    if (deleteError) {
+      const message = deleteError.message || 'Failed to delete contact'
+      if (message.includes('schema cache')) {
+        return NextResponse.json(
+          {
+            error: 'Contact tablosu bulunamadı',
+            message:
+              'Supabase şemasında Contact tablosu keşfedilemedi. Lütfen tüm Supabase migrationlarını (özellikle 033_contact_lead_scoring_improvements) çalıştırın.',
+          },
+          { status: 500 }
+        )
+      }
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Contacts [id] delete error:', deleteError)
+      }
+      return NextResponse.json({ error: message }, { status: 500 })
+    }
+
+    await logAction({
+      entity: 'Contact',
+      action: 'DELETE',
+      description: `Contact silindi: ${existingContact.firstName} ${existingContact.lastName}`,
+      meta: { entity: 'Contact', action: 'delete', id },
+      userId: session.user.id,
+      companyId: session.user.companyId,
+    })
 
     return NextResponse.json(
       { message: 'Contact deleted successfully' },

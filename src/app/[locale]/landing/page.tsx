@@ -1,3 +1,7 @@
 'use client'
 
-export { default } from '@/app/landing/page'
+import LandingPage from '@/app/landing/page'
+
+export default function LocaleLandingPage() {
+  return <LandingPage />
+}

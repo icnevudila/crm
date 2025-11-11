@@ -170,17 +170,51 @@ export default function NextStepButtons({
               variant: 'default',
               priority: 'high',
             })
+            steps.push({
+              id: 'cancel',
+              label: 'İptal Et',
+              icon: <XCircle className="h-4 w-4" />,
+              onClick: () => onAction('CANCELLED'),
+              variant: 'outline',
+              priority: 'low',
+            })
             break
 
           case 'SENT':
-            steps.push({
-              id: 'paid',
-              label: 'Ödendi Olarak İşaretle',
-              icon: <CheckCircle className="h-4 w-4" />,
-              onClick: () => onAction('PAID'),
-              variant: 'default',
-              priority: 'high',
-            })
+            steps.push(
+              {
+                id: 'mark-shipped',
+                label: 'Sevkiyat Yapıldı',
+                icon: <Truck className="h-4 w-4" />,
+                onClick: () => onAction('SHIPPED'),
+                variant: 'default',
+                priority: 'high',
+              },
+              {
+                id: 'mark-received',
+                label: 'Mal Kabul Edildi',
+                icon: <Package className="h-4 w-4" />,
+                onClick: () => onAction('RECEIVED'),
+                variant: 'outline',
+                priority: 'medium',
+              },
+              {
+                id: 'mark-paid',
+                label: 'Ödendi Olarak İşaretle',
+                icon: <CheckCircle className="h-4 w-4" />,
+                onClick: () => onAction('PAID'),
+                variant: 'outline',
+                priority: 'medium',
+              },
+              {
+                id: 'cancel',
+                label: 'İptal Et',
+                icon: <XCircle className="h-4 w-4" />,
+                onClick: () => onAction('CANCELLED'),
+                variant: 'outline',
+                priority: 'low',
+              }
+            )
             if (onCreateRelated) {
               steps.push({
                 id: 'create-shipment',
@@ -191,6 +225,77 @@ export default function NextStepButtons({
                 priority: 'medium',
               })
             }
+            break
+
+          case 'SHIPPED':
+            steps.push(
+              {
+                id: 'mark-received',
+                label: 'Mal Kabul Edildi',
+                icon: <Package className="h-4 w-4" />,
+                onClick: () => onAction('RECEIVED'),
+                variant: 'default',
+                priority: 'high',
+              },
+              {
+                id: 'mark-paid',
+                label: 'Ödendi Olarak İşaretle',
+                icon: <CheckCircle className="h-4 w-4" />,
+                onClick: () => onAction('PAID'),
+                variant: 'outline',
+                priority: 'medium',
+              },
+              {
+                id: 'cancel',
+                label: 'İptal Et',
+                icon: <XCircle className="h-4 w-4" />,
+                onClick: () => onAction('CANCELLED'),
+                variant: 'outline',
+                priority: 'low',
+              }
+            )
+            break
+
+          case 'RECEIVED':
+            steps.push(
+              {
+                id: 'mark-paid',
+                label: 'Ödendi Olarak İşaretle',
+                icon: <CheckCircle className="h-4 w-4" />,
+                onClick: () => onAction('PAID'),
+                variant: 'default',
+                priority: 'high',
+              },
+              {
+                id: 'cancel',
+                label: 'İptal Et',
+                icon: <XCircle className="h-4 w-4" />,
+                onClick: () => onAction('CANCELLED'),
+                variant: 'outline',
+                priority: 'low',
+              }
+            )
+            break
+
+          case 'OVERDUE':
+            steps.push(
+              {
+                id: 'mark-paid',
+                label: 'Ödendi Olarak İşaretle',
+                icon: <CheckCircle className="h-4 w-4" />,
+                onClick: () => onAction('PAID'),
+                variant: 'default',
+                priority: 'high',
+              },
+              {
+                id: 'cancel',
+                label: 'İptal Et',
+                icon: <XCircle className="h-4 w-4" />,
+                onClick: () => onAction('CANCELLED'),
+                variant: 'outline',
+                priority: 'low',
+              }
+            )
             break
         }
         break

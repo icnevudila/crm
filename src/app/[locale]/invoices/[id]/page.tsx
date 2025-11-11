@@ -373,7 +373,56 @@ export default function InvoiceDetailPage() {
               )
               return
             }
-            toast.success('Durum değiştirildi')
+            const statusMessages: Record<
+              string,
+              { variant: 'success' | 'warning' | 'info'; title: string; description: string }
+            > = {
+              SENT: {
+                variant: 'success',
+                title: 'Fatura gönderildi',
+                description: 'Sevkiyat hazırlıkları başlatıldı. Sevkiyat detaylarını kontrol edebilirsiniz.',
+              },
+              SHIPPED: {
+                variant: 'success',
+                title: 'Sevkiyat onaylandı',
+                description: 'Stoktan düşüm tamamlandı, sevkiyat süreci başladı.',
+              },
+              RECEIVED: {
+                variant: 'success',
+                title: 'Mal kabul edildi',
+                description: 'Stoğa giriş yapıldı. Ödeme sürecini başlatabilirsiniz.',
+              },
+              PAID: {
+                variant: 'success',
+                title: 'Ödeme kaydedildi',
+                description: 'Finans kayıtları otomatik olarak güncellendi.',
+              },
+              OVERDUE: {
+                variant: 'info',
+                title: 'Fatura vadesi geçti',
+                description: 'Müşteriye ödeme hatırlatması göndermeyi unutmayın.',
+              },
+              CANCELLED: {
+                variant: 'warning',
+                title: 'Fatura iptal edildi',
+                description: 'İlgili sevkiyat ve stok işlemleri geri alındı.',
+              },
+            }
+
+            const feedback = statusMessages[actionId]
+            if (feedback) {
+              if (feedback.variant === 'success') {
+                toast.success(feedback.title, feedback.description)
+              } else if (feedback.variant === 'warning') {
+                toast.warning(feedback.title, feedback.description)
+              } else if (typeof toast.info === 'function') {
+                toast.info(feedback.title, feedback.description)
+              } else {
+                toast.success(feedback.title, feedback.description)
+              }
+            } else {
+              toast.success('Durum değiştirildi')
+            }
             refetch()
           } catch (error: any) {
             toast.error('Durum değiştirilemedi', error.message || 'Bir hata oluştu.')

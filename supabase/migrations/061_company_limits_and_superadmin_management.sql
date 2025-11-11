@@ -19,3 +19,4 @@ COMMENT ON COLUMN "Company"."adminUserLimit" IS 'Admin rolündeki kullanıcılar
 
 
 
+

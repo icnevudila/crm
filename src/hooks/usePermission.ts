@@ -39,7 +39,7 @@ export function usePermission(
   const {
     redirectOnNoAccess = false,
     redirectTo = '/dashboard',
-    checkInterval = 10000, // 10 saniyede bir kontrol et
+    checkInterval = 60000, // Varsayılan: 60 saniyede bir kontrol et
   } = options
 
   // Yetkileri çek
@@ -48,7 +48,7 @@ export function usePermission(
     {
       dedupingInterval: 5000, // 5 saniye cache
       revalidateOnFocus: true, // Focus'ta yeniden kontrol et
-      refreshInterval: checkInterval, // Polling - yetki değişikliklerini dinle
+      refreshInterval: checkInterval > 0 ? checkInterval : 0, // Polling - yetki değişikliklerini dinle
     }
   )
 
@@ -86,6 +86,7 @@ export function usePermission(
     refetch: mutate,
   }
 }
+
 
 
 

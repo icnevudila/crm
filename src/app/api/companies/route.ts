@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { buildPermissionDeniedResponse } from '@/lib/permissions'
 
 // Login sayfası için cache - 30 saniye (yeni firmalar için)
 export const revalidate = 30
@@ -176,17 +176,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Companies POST API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user) {
@@ -195,10 +187,7 @@ export async function POST(request: Request) {
 
     // Sadece SuperAdmin firma oluşturabilir
     if (session.user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Sadece SuperAdmin firma oluşturabilir' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse('Sadece SuperAdmin firma oluşturabilir.')
     }
 
     const body = await request.json()

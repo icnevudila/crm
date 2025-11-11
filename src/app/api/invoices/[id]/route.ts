@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { 
   isValidInvoiceTransition, 
@@ -10,6 +9,220 @@ import {
 } from '@/lib/stageValidation'
 import { formatCurrency } from '@/lib/utils'
 
+type ServiceSupabaseClient = ReturnType<typeof getSupabaseWithServiceRole>
+
+interface InvoiceItemAutomation {
+  id: string
+  productId: string | null
+  quantity: number
+  total?: number | null
+  unitPrice?: number | null
+}
+
+function parseNumericValue(value: unknown): number {
+  if (typeof value === 'number' && !Number.isNaN(value)) {
+    return value
+  }
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value)
+    return Number.isNaN(parsed) ? 0 : parsed
+  }
+  return 0
+}
+
+async function fetchInvoiceItemsForAutomation(
+  supabase: ServiceSupabaseClient,
+  invoiceId: string,
+  companyId: string
+): Promise<InvoiceItemAutomation[]> {
+  const { data } = await supabase
+    .from('InvoiceItem')
+    .select('id, productId, quantity, total, unitPrice')
+    .eq('invoiceId', invoiceId)
+    .eq('companyId', companyId)
+
+  return (
+    data?.map((item: any) => ({
+      id: item.id,
+      productId: item.productId,
+      quantity: parseNumericValue(item.quantity),
+      total: item.total ?? null,
+      unitPrice: item.unitPrice ?? null,
+    })) || []
+  )
+}
+
+async function updateProductQuantities(
+  supabase: ServiceSupabaseClient,
+  companyId: string,
+  productId: string,
+  deltas: { reservedDelta?: number; incomingDelta?: number; stockDelta?: number }
+) {
+  const { data: product } = await supabase
+    .from('Product')
+    .select('reservedQuantity, incomingQuantity, stock')
+    .eq('id', productId)
+    .eq('companyId', companyId)
+    .maybeSingle()
+
+  if (!product) {
+    return
+  }
+
+  const updatePayload: Record<string, number | string> = {}
+
+  if (typeof deltas.reservedDelta === 'number' && deltas.reservedDelta !== 0) {
+    const currentReserved = parseNumericValue((product as any).reservedQuantity)
+    updatePayload.reservedQuantity = Math.max(0, currentReserved + deltas.reservedDelta)
+  }
+
+  if (typeof deltas.incomingDelta === 'number' && deltas.incomingDelta !== 0) {
+    const currentIncoming = parseNumericValue((product as any).incomingQuantity)
+    updatePayload.incomingQuantity = Math.max(0, currentIncoming + deltas.incomingDelta)
+  }
+
+  if (typeof deltas.stockDelta === 'number' && deltas.stockDelta !== 0) {
+    const currentStock = parseNumericValue((product as any).stock)
+    updatePayload.stock = Math.max(0, currentStock + deltas.stockDelta)
+  }
+
+  if (Object.keys(updatePayload).length === 0) {
+    return
+  }
+
+  updatePayload.updatedAt = new Date().toISOString()
+
+  await supabase
+    .from('Product')
+    .update(updatePayload)
+    .eq('id', productId)
+    .eq('companyId', companyId)
+}
+
+async function ensureSalesShipmentForSentStatus({
+  supabase,
+  invoiceId,
+  companyId,
+  sessionUserId,
+  invoiceItems,
+}: {
+  supabase: ServiceSupabaseClient
+  invoiceId: string
+  companyId: string
+  sessionUserId: string
+  invoiceItems: InvoiceItemAutomation[]
+}) {
+  if (!invoiceItems.length) {
+    return { shipmentId: null, created: false }
+  }
+
+  for (const item of invoiceItems) {
+    if (!item.productId) {
+      continue
+    }
+    await updateProductQuantities(supabase, companyId, item.productId, {
+      reservedDelta: item.quantity,
+    })
+  }
+
+  const { data: shipment } = await supabase
+    .from('Shipment')
+    .insert([
+      {
+        invoiceId,
+        status: 'DRAFT',
+        companyId,
+      },
+    ])
+    .select()
+    .maybeSingle()
+
+  if (shipment) {
+    await supabase.from('ActivityLog').insert([
+      {
+        entity: 'Shipment',
+        action: 'CREATE',
+        description: 'Fatura gönderildi, taslak sevkiyat oluşturuldu.',
+        meta: {
+          entity: 'Shipment',
+          action: 'create_from_invoice',
+          invoiceId,
+          shipmentId: shipment.id,
+        },
+        userId: sessionUserId,
+        companyId,
+      },
+    ])
+  }
+
+  return {
+    shipmentId: shipment?.id || null,
+    created: !!shipment,
+  }
+}
+
+async function ensurePurchaseTransactionForSentStatus({
+  supabase,
+  invoiceId,
+  companyId,
+  sessionUserId,
+  invoiceItems,
+}: {
+  supabase: ServiceSupabaseClient
+  invoiceId: string
+  companyId: string
+  sessionUserId: string
+  invoiceItems: InvoiceItemAutomation[]
+}) {
+  if (!invoiceItems.length) {
+    return { purchaseShipmentId: null, created: false }
+  }
+
+  for (const item of invoiceItems) {
+    if (!item.productId) {
+      continue
+    }
+    await updateProductQuantities(supabase, companyId, item.productId, {
+      incomingDelta: item.quantity,
+    })
+  }
+
+  const { data: purchaseTransaction } = await supabase
+    .from('PurchaseTransaction')
+    .insert([
+      {
+        invoiceId,
+        status: 'DRAFT',
+        companyId,
+      },
+    ])
+    .select()
+    .maybeSingle()
+
+  if (purchaseTransaction) {
+    await supabase.from('ActivityLog').insert([
+      {
+        entity: 'PurchaseTransaction',
+        action: 'CREATE',
+        description: 'Alış faturası gönderildi, taslak mal kabul oluşturuldu.',
+        meta: {
+          entity: 'PurchaseTransaction',
+          action: 'create_from_invoice',
+          invoiceId,
+          purchaseTransactionId: purchaseTransaction.id,
+        },
+        userId: sessionUserId,
+        companyId,
+      },
+    ])
+  }
+
+  return {
+    purchaseShipmentId: purchaseTransaction?.id || null,
+    created: !!purchaseTransaction,
+  }
+}
+
 export const dynamic = 'force-dynamic'
 
 export async function GET(
@@ -18,17 +231,9 @@ export async function GET(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Invoices [id] GET API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
@@ -36,11 +241,11 @@ export async function GET(
     }
 
     // Permission check - canRead kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, PERMISSION_DENIED_MESSAGE } = await import('@/lib/permissions')
     const canRead = await hasPermission('invoice', 'read', session.user.id)
     if (!canRead) {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'Fatura görüntüleme yetkiniz yok' },
+        { error: 'Forbidden', message: PERMISSION_DENIED_MESSAGE },
         { status: 403 }
       )
     }
@@ -361,17 +566,9 @@ export async function PUT(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Invoices [id] PUT API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
@@ -379,11 +576,11 @@ export async function PUT(
     }
 
     // Permission check - canUpdate kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, PERMISSION_DENIED_MESSAGE } = await import('@/lib/permissions')
     const canUpdate = await hasPermission('invoice', 'update', session.user.id)
     if (!canUpdate) {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'Fatura güncelleme yetkiniz yok' },
+        { error: 'Forbidden', message: PERMISSION_DENIED_MESSAGE },
         { status: 403 }
       )
     }
@@ -395,7 +592,9 @@ export async function PUT(
     // Quote'tan oluşturulan faturalar ve kesinleşmiş faturalar korumalı - hiçbir şekilde değiştirilemez
     const { data: currentInvoice } = await supabase
       .from('Invoice')
-      .select('quoteId, status, title')
+      .select(
+        'quoteId, status, title, invoiceType, shipmentId, purchaseShipmentId, totalAmount, invoiceNumber, customerId'
+      )
       .eq('id', id)
       .eq('companyId', session.user.companyId)
       .maybeSingle()
@@ -463,49 +662,6 @@ export async function PUT(
       }
     }
 
-    // SHIPPED/RECEIVED kontrolü - özel kural (stok işlemi var)
-    if (currentInvoice && (currentInvoice.status === 'SHIPPED' || currentInvoice.status === 'RECEIVED')) {
-      return NextResponse.json(
-        { 
-          error: currentInvoice.status === 'SHIPPED' 
-            ? 'Sevkiyatı yapılmış faturalar değiştirilemez' 
-            : 'Mal kabul edilmiş faturalar değiştirilemez',
-          message: currentInvoice.status === 'SHIPPED'
-            ? 'Bu fatura için sevkiyat yapıldı ve stoktan düşüldü.'
-            : 'Bu fatura için mal kabul edildi ve stoğa girişi yapıldı.',
-          reason: currentInvoice.status === 'SHIPPED' 
-            ? 'SHIPPED_INVOICE_CANNOT_BE_UPDATED'
-            : 'RECEIVED_INVOICE_CANNOT_BE_UPDATED'
-        },
-        { status: 403 }
-      )
-    }
-
-    // PAID kontrolü artık immutability'de var ama eski kod uyumluluğu için bırakıyoruz
-    if (currentInvoice?.status === 'PAID') {
-      // İlgili Finance kaydını kontrol et (kullanıcıya bilgi vermek için)
-      const { data: relatedFinance } = await supabase
-        .from('Finance')
-        .select('id, amount, type')
-        .eq('relatedTo', `Invoice: ${id}`)
-        .eq('companyId', session.user.companyId)
-        .maybeSingle()
-
-      return NextResponse.json(
-        { 
-          error: 'Ödenmiş faturalar değiştirilemez',
-          message: 'Bu fatura ödendi ve finans kaydı oluşturuldu. Fatura bilgilerini değiştirmek için önce ilgili finans kaydını silmeniz gerekir.',
-          reason: 'PAID_INVOICE_CANNOT_BE_UPDATED',
-          relatedFinance: relatedFinance ? {
-            id: relatedFinance.id,
-            amount: relatedFinance.amount,
-            type: relatedFinance.type
-          } : null
-        },
-        { status: 403 }
-      )
-    }
-
     // Status değiştirme yetkisi kontrolü
     if (body.status !== undefined) {
       const { checkUserPermission } = await import('@/lib/permissions')
@@ -518,6 +674,26 @@ export async function PUT(
         )
       }
     }
+
+    const companyId = session.user.companyId
+    const previousStatus = currentInvoice?.status || null
+    const requestedStatus = body.status ?? previousStatus
+    const invoiceType =
+      body.invoiceType ||
+      (typeof (currentInvoice as any)?.invoiceType === 'string'
+        ? (currentInvoice as any).invoiceType
+        : null)
+
+    let shipmentIdForAutomation =
+      (currentInvoice as any)?.shipmentId || null
+    let purchaseTransactionIdForAutomation =
+      (currentInvoice as any)?.purchaseShipmentId || null
+
+    let shouldNotifySent = false
+    let shouldNotifyShipped = false
+    let shouldNotifyReceived = false
+    let shouldNotifyCancelled = false
+    let shouldSendSentEmail = false
 
     // ÖNEMLİ: Invoice OVERDUE durumuna geçtiğinde bildirim gönder (dueDate kontrolü)
     // Database trigger ile de yapılabilir ama burada da kontrol ediyoruz
@@ -578,14 +754,230 @@ export async function PUT(
       }
     }
 
-    // ACCEPTED olan faturalar iptal edilemez
-    if (body.status === 'CANCELLED') {
-      if (currentInvoice && currentInvoice.status === 'ACCEPTED') {
-        return NextResponse.json(
-          { error: 'Kabul edilmiş faturalar iptal edilemez' },
-          { status: 400 }
-        )
+    let invoiceItemsForAutomation: InvoiceItemAutomation[] = []
+
+    if (
+      requestedStatus &&
+      previousStatus !== requestedStatus &&
+      ['SENT', 'SHIPPED', 'RECEIVED', 'CANCELLED'].includes(requestedStatus)
+    ) {
+      invoiceItemsForAutomation = await fetchInvoiceItemsForAutomation(
+        supabase,
+        id,
+        companyId
+      )
+    }
+
+    if (
+      requestedStatus === 'SENT' &&
+      previousStatus !== 'SENT'
+    ) {
+      shouldNotifySent = true
+      shouldSendSentEmail = true
+
+      if (invoiceType === 'SALES' && !shipmentIdForAutomation) {
+        const { shipmentId, created } = await ensureSalesShipmentForSentStatus({
+          supabase,
+          invoiceId: id,
+          companyId,
+          sessionUserId: session.user.id,
+          invoiceItems: invoiceItemsForAutomation,
+        })
+
+        if (shipmentId) {
+          shipmentIdForAutomation = shipmentId
+        }
+
+        if (created) {
+          shouldNotifySent = true
+        }
       }
+
+      if (invoiceType === 'PURCHASE' && !purchaseTransactionIdForAutomation) {
+        const { purchaseShipmentId, created } =
+          await ensurePurchaseTransactionForSentStatus({
+            supabase,
+            invoiceId: id,
+            companyId,
+            sessionUserId: session.user.id,
+            invoiceItems: invoiceItemsForAutomation,
+          })
+
+        if (purchaseShipmentId) {
+          purchaseTransactionIdForAutomation = purchaseShipmentId
+        }
+
+        if (created) {
+          shouldNotifySent = true
+        }
+      }
+    }
+
+    if (
+      requestedStatus === 'SHIPPED' &&
+      previousStatus !== 'SHIPPED' &&
+      invoiceType === 'SALES'
+    ) {
+      if (!shipmentIdForAutomation) {
+        const { shipmentId } = await ensureSalesShipmentForSentStatus({
+          supabase,
+          invoiceId: id,
+          companyId,
+          sessionUserId: session.user.id,
+          invoiceItems: invoiceItemsForAutomation,
+        })
+        if (shipmentId) {
+          shipmentIdForAutomation = shipmentId
+        }
+      }
+
+      if (shipmentIdForAutomation) {
+        await supabase
+          .from('Shipment')
+          .update({
+            status: 'APPROVED',
+            updatedAt: new Date().toISOString(),
+          })
+          .eq('id', shipmentIdForAutomation)
+          .eq('companyId', companyId)
+      }
+
+      for (const item of invoiceItemsForAutomation) {
+        if (!item.productId || item.quantity === 0) {
+          continue
+        }
+        await updateProductQuantities(supabase, companyId, item.productId, {
+          reservedDelta: item.quantity * -1,
+          stockDelta: item.quantity * -1,
+        })
+      }
+
+      await supabase.from('ActivityLog').insert([
+        {
+          entity: 'Invoice',
+          action: 'UPDATE',
+          description:
+            'Fatura sevkiyatı onaylandı ve stoktan düşüldü.',
+          meta: {
+            entity: 'Invoice',
+            action: 'shipment_approved_from_invoice',
+            invoiceId: id,
+            shipmentId: shipmentIdForAutomation,
+          },
+          userId: session.user.id,
+          companyId,
+        },
+      ])
+
+      shouldNotifyShipped = true
+    }
+
+    if (
+      requestedStatus === 'RECEIVED' &&
+      previousStatus !== 'RECEIVED' &&
+      invoiceType === 'PURCHASE'
+    ) {
+      if (!purchaseTransactionIdForAutomation) {
+        const { purchaseShipmentId } =
+          await ensurePurchaseTransactionForSentStatus({
+            supabase,
+            invoiceId: id,
+            companyId,
+            sessionUserId: session.user.id,
+            invoiceItems: invoiceItemsForAutomation,
+          })
+
+        if (purchaseShipmentId) {
+          purchaseTransactionIdForAutomation = purchaseShipmentId
+        }
+      }
+
+      if (purchaseTransactionIdForAutomation) {
+        await supabase
+          .from('PurchaseTransaction')
+          .update({
+            status: 'APPROVED',
+            updatedAt: new Date().toISOString(),
+          })
+          .eq('id', purchaseTransactionIdForAutomation)
+          .eq('companyId', companyId)
+      }
+
+      for (const item of invoiceItemsForAutomation) {
+        if (!item.productId || item.quantity === 0) {
+          continue
+        }
+        await updateProductQuantities(supabase, companyId, item.productId, {
+          incomingDelta: item.quantity * -1,
+          stockDelta: item.quantity,
+        })
+      }
+
+      await supabase.from('ActivityLog').insert([
+        {
+          entity: 'Invoice',
+          action: 'UPDATE',
+          description:
+            'Mal kabul tamamlandı ve stoğa giriş yapıldı.',
+          meta: {
+            entity: 'Invoice',
+            action: 'purchase_received_from_invoice',
+            invoiceId: id,
+            purchaseTransactionId: purchaseTransactionIdForAutomation,
+          },
+          userId: session.user.id,
+          companyId,
+        },
+      ])
+
+      shouldNotifyReceived = true
+    }
+
+    if (
+      requestedStatus === 'CANCELLED' &&
+      previousStatus !== 'CANCELLED'
+    ) {
+      if (invoiceType === 'SALES' && shipmentIdForAutomation) {
+        for (const item of invoiceItemsForAutomation) {
+          if (!item.productId || item.quantity === 0) {
+            continue
+          }
+          await updateProductQuantities(supabase, companyId, item.productId, {
+            reservedDelta: item.quantity * -1,
+          })
+        }
+
+        await supabase
+          .from('Shipment')
+          .update({
+            status: 'CANCELLED',
+            updatedAt: new Date().toISOString(),
+          })
+          .eq('id', shipmentIdForAutomation)
+          .eq('companyId', companyId)
+      }
+
+      if (invoiceType === 'PURCHASE' && purchaseTransactionIdForAutomation) {
+        for (const item of invoiceItemsForAutomation) {
+          if (!item.productId || item.quantity === 0) {
+            continue
+          }
+          await updateProductQuantities(supabase, companyId, item.productId, {
+            incomingDelta: item.quantity * -1,
+          })
+        }
+
+        await supabase
+          .from('PurchaseTransaction')
+          .update({
+            status: 'CANCELLED',
+            updatedAt: new Date().toISOString(),
+          })
+          .eq('id', purchaseTransactionIdForAutomation)
+          .eq('companyId', companyId)
+      }
+
+      shouldNotifyCancelled = true
     }
 
     // Invoice verilerini güncelle - SADECE schema.sql'de olan kolonları gönder
@@ -619,6 +1011,12 @@ export async function PUT(
 
     // Sadece schema.sql'de olan alanlar
     if (body.quoteId !== undefined) updateData.quoteId = body.quoteId || null
+    if (shipmentIdForAutomation && !(currentInvoice as any)?.shipmentId) {
+      updateData.shipmentId = shipmentIdForAutomation
+    }
+    if (purchaseTransactionIdForAutomation && !(currentInvoice as any)?.purchaseShipmentId) {
+      updateData.purchaseShipmentId = purchaseTransactionIdForAutomation
+    }
     // NOT: invoiceNumber, dueDate, paymentDate, taxRate, vendorId, customerId, description, billingAddress, billingCity, billingTaxNumber, paymentMethod, paymentNotes schema-extension/schema-vendor'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
     // @ts-ignore - Supabase type inference issue with dynamic updateData
@@ -639,6 +1037,127 @@ export async function PUT(
 
     if (!data) {
       return NextResponse.json({ error: 'Invoice not found after update' }, { status: 404 })
+    }
+
+    const invoiceDisplayName =
+      data?.title ||
+      data?.invoiceNumber ||
+      `Fatura #${String(id).substring(0, 8)}`
+
+    if (shouldNotifySent && data) {
+      try {
+        const { createNotificationForRole } = await import('@/lib/notification-helper')
+        await createNotificationForRole({
+          companyId,
+          role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+          title: 'Fatura Gönderildi',
+          message: `${invoiceDisplayName} faturası gönderildi. Sevkiyat hazırlıkları tamamlandı.`,
+          type: 'info',
+          relatedTo: 'Invoice',
+          relatedId: data.id,
+        })
+      } catch (notificationError) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Invoice SENT notification error:', notificationError)
+        }
+      }
+
+      if (shouldSendSentEmail) {
+        try {
+          const { getAndRenderEmailTemplate, getTemplateVariables } = await import('@/lib/template-renderer')
+          const { sendEmail } = await import('@/lib/email-service')
+
+          const variables = await getTemplateVariables('Invoice', data, companyId)
+          let emailTemplate = null
+
+          try {
+            emailTemplate = await getAndRenderEmailTemplate('INVOICE_SENT', companyId, variables)
+          } catch (templateError) {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('INVOICE_SENT template not found, fallback to INVOICE.', templateError)
+            }
+          }
+
+          if (!emailTemplate) {
+            try {
+              emailTemplate = await getAndRenderEmailTemplate('INVOICE', companyId, variables)
+            } catch (fallbackError) {
+              if (process.env.NODE_ENV === 'development') {
+                console.error('Invoice SENT fallback template error:', fallbackError)
+              }
+            }
+          }
+
+          if (emailTemplate && variables.customerEmail) {
+            await sendEmail({
+              to: variables.customerEmail as string,
+              subject: emailTemplate.subject || 'Faturanız gönderildi',
+              html: emailTemplate.body,
+            })
+          }
+        } catch (emailError) {
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Invoice SENT email error:', emailError)
+          }
+        }
+      }
+    }
+
+    if (shouldNotifyShipped && data) {
+      try {
+        const { createNotificationForRole } = await import('@/lib/notification-helper')
+        await createNotificationForRole({
+          companyId,
+          role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+          title: 'Sevkiyat Onaylandı',
+          message: `${invoiceDisplayName} faturası için sevkiyat onaylandı ve stoktan düşüldü.`,
+          type: 'success',
+          relatedTo: 'Invoice',
+          relatedId: data.id,
+        })
+      } catch (notificationError) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Invoice SHIPPED notification error:', notificationError)
+        }
+      }
+    }
+
+    if (shouldNotifyReceived && data) {
+      try {
+        const { createNotificationForRole } = await import('@/lib/notification-helper')
+        await createNotificationForRole({
+          companyId,
+          role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+          title: 'Mal Kabul Tamamlandı',
+          message: `${invoiceDisplayName} faturası için mal kabul tamamlandı ve stoğa giriş yapıldı.`,
+          type: 'success',
+          relatedTo: 'Invoice',
+          relatedId: data.id,
+        })
+      } catch (notificationError) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Invoice RECEIVED notification error:', notificationError)
+        }
+      }
+    }
+
+    if (shouldNotifyCancelled && data) {
+      try {
+        const { createNotificationForRole } = await import('@/lib/notification-helper')
+        await createNotificationForRole({
+          companyId,
+          role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+          title: 'Fatura İptal Edildi',
+          message: `${invoiceDisplayName} faturası iptal edildi.`,
+          type: 'warning',
+          relatedTo: 'Invoice',
+          relatedId: data.id,
+        })
+      } catch (notificationError) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Invoice CANCELLED notification error:', notificationError)
+        }
+      }
     }
 
     // Invoice PAID olduğunda otomatik Finance kaydı oluştur
@@ -734,14 +1253,56 @@ export async function PUT(
       }
     }
 
+    const hasStatusChange =
+      requestedStatus && requestedStatus !== previousStatus
+
+    let activityDescription = `Fatura bilgileri güncellendi: ${body.title || data.title}`
+
+    if (hasStatusChange) {
+      switch (requestedStatus) {
+        case 'SENT':
+          activityDescription = `${invoiceDisplayName} faturası gönderildi.`
+          break
+        case 'SHIPPED':
+          activityDescription = `${invoiceDisplayName} faturası sevkiyatı onaylandı.`
+          break
+        case 'RECEIVED':
+          activityDescription = `${invoiceDisplayName} faturası için mal kabul tamamlandı.`
+          break
+        case 'PAID':
+          activityDescription = `${invoiceDisplayName} faturası ödendi olarak işaretlendi.`
+          break
+        case 'OVERDUE':
+          activityDescription = `${invoiceDisplayName} faturası vadesi geçmiş olarak işaretlendi.`
+          break
+        case 'CANCELLED':
+          activityDescription = `${invoiceDisplayName} faturası iptal edildi.`
+          break
+        default:
+          activityDescription = `${invoiceDisplayName} faturası güncellendi (durum: ${requestedStatus}).`
+      }
+    } else if (body.title && body.title !== currentInvoice?.title) {
+      activityDescription = `Fatura başlığı güncellendi: ${currentInvoice?.title || '-'} → ${body.title}`
+    }
+
+    const activityMeta: Record<string, unknown> = {
+      entity: 'Invoice',
+      action: 'update',
+      id,
+    }
+
+    if (hasStatusChange) {
+      activityMeta.status = requestedStatus
+      activityMeta.previousStatus = previousStatus
+    }
+
     // ActivityLog kaydı
-    // @ts-ignore - Supabase database type tanımları eksik, insert metodu dinamik tip bekliyor
     await supabase.from('ActivityLog').insert([
       {
         entity: 'Invoice',
         action: 'UPDATE',
-        description: `Fatura bilgileri güncellendi: ${body.title || data.title}`,
-        meta: { entity: 'Invoice', action: 'update', id },
+        description: activityDescription,
+        meta: activityMeta,
         userId: session.user.id,
         companyId: session.user.companyId,
       },
@@ -762,17 +1323,9 @@ export async function DELETE(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Invoices [id] DELETE API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {

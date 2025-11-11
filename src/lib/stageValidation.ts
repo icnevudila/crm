@@ -68,6 +68,8 @@ const undeletableQuoteStatuses: QuoteStatus[] = ['ACCEPTED', 'REJECTED']
 export const INVOICE_STATUSES = {
   DRAFT: 'DRAFT',
   SENT: 'SENT',
+  SHIPPED: 'SHIPPED',
+  RECEIVED: 'RECEIVED',
   PAID: 'PAID',
   OVERDUE: 'OVERDUE',
   CANCELLED: 'CANCELLED',
@@ -77,7 +79,9 @@ export type InvoiceStatus = keyof typeof INVOICE_STATUSES
 
 const invoiceTransitions: Record<InvoiceStatus, InvoiceStatus[]> = {
   DRAFT: ['SENT', 'CANCELLED'], // DRAFT'tan SENT veya CANCELLED'a
-  SENT: ['PAID', 'OVERDUE', 'CANCELLED'], // SENT'den PAID, OVERDUE veya CANCELLED'a
+  SENT: ['SHIPPED', 'RECEIVED', 'PAID', 'OVERDUE', 'CANCELLED'], // SENT'den SHIPPED, RECEIVED, PAID, OVERDUE veya CANCELLED'a
+  SHIPPED: ['PAID', 'CANCELLED'], // SHIPPED'den PAID veya CANCELLED'a
+  RECEIVED: ['PAID', 'CANCELLED'], // RECEIVED'den PAID veya CANCELLED'a
   PAID: [], // PAID immutable
   OVERDUE: ['PAID', 'CANCELLED'], // OVERDUE'den PAID veya CANCELLED'a
   CANCELLED: [], // CANCELLED immutable

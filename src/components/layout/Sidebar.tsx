@@ -144,7 +144,7 @@ function Sidebar() {
     {
       dedupingInterval: 5000, // 5 saniye cache
       revalidateOnFocus: true, // Focus'ta yeniden kontrol et
-      refreshInterval: 10000, // 10 saniyede bir kontrol et - yetki değişikliklerini dinle
+      refreshInterval: 60000, // 60 saniyede bir kontrol et - canlı trafikte yükü azalt
     }
   )
   
@@ -186,39 +186,82 @@ function Sidebar() {
     return [...filteredMenuItems, ...adminMenuItems]
   }, [isAdmin, isSuperAdmin, mounted, status, allPermissions])
 
-  // Sidebar mount olduğunda TÜM sayfaları prefetch et (sekme geçişlerini <100ms'e düşürmek için)
-  // SSR-safe - sadece client-side'da çalışır
-  // Veri çekimini etkilemez - sadece route prefetch
-  // NOT: allMenuItems dependency array'den çıkarıldı - her render'da yeni referans oluşturuyor ve boyutu değişebilir
-  // Bunun yerine sadece locale ve mounted değiştiğinde prefetch yap
-  // allMenuItems değişse bile prefetch zaten yapılmış olacak (Next.js duplicate kontrolü yapıyor)
-  
+  const prefetchedUrlsRef = React.useRef<Set<string>>(new Set())
+
+  // Sidebar mount olduğunda prefetch işlemlerini bağlantı hızına göre kademe kademe yap
   React.useEffect(() => {
-    if (!mounted) return // SSR'da çalıştırma
-    
-    // TÜM menü itemlerini hemen prefetch et (1 saniye sonra - ilk yükleme tamamlandıktan sonra)
-    // Next.js router.prefetch kullan - daha güvenilir ve hızlı
-    // allMenuItems'ı closure içinde kullan - dependency array'de tutmuyoruz (boyut değişebilir)
-    const prefetchAllPages = () => {
-      const prefetchedUrls: string[] = []
-      allMenuItems.forEach((item) => {
-        const href = `/${locale}${item.href}`
-        router.prefetch(href) // Next.js router.prefetch kullan
-        prefetchedUrls.push(href)
-      })
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[Sidebar] Prefetched all pages:', prefetchedUrls.length, 'pages', prefetchedUrls)
+    if (!mounted) return
+    if (typeof window === 'undefined') return
+
+    const connection = (navigator as any)?.connection
+    if (connection?.saveData) {
+      return
+    }
+
+    const allUrls = allMenuItems
+      .map((item) => `/${locale}${item.href}`)
+      .filter((url) => !prefetchedUrlsRef.current.has(url))
+
+    if (!allUrls.length) {
+      return
+    }
+
+    const slowConnection =
+      connection &&
+      ['slow-2g', '2g', '3g'].includes(connection.effectiveType ?? '')
+    const maxPrefetchPerCycle = slowConnection ? 3 : allUrls.length
+    const queue = allUrls.slice(0, maxPrefetchPerCycle)
+
+    let cancelled = false
+    let idleId: number | null = null
+    let timeoutId: number | null = null
+
+    const scheduleNext = () => {
+      if (cancelled || queue.length === 0) {
+        return
+      }
+
+      const url = queue.shift()!
+      prefetchedUrlsRef.current.add(url)
+      router.prefetch(url)
+
+      if (queue.length === 0) {
+        return
+      }
+
+      const trigger = () => {
+        if (cancelled) return
+        scheduleNext()
+      }
+
+      if ('requestIdleCallback' in window) {
+        idleId = requestIdleCallback(() => trigger(), { timeout: 1500 }) as unknown as number
+      } else {
+        timeoutId = window.setTimeout(trigger, 500)
       }
     }
-    
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      requestIdleCallback(prefetchAllPages, { timeout: 200 }) // 0.2 saniye sonra (ULTRA AGRESİF!)
-    } else {
-      // Fallback - direkt prefetch (0.2 saniye sonra)
-      setTimeout(prefetchAllPages, 200) // 0.2 saniye sonra (ULTRA AGRESİF!)
+
+    const startPrefetch = () => {
+      if (cancelled) return
+      scheduleNext()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locale, mounted, router]) // allMenuItems dependency'den çıkarıldı - boyut değişebilir, her render'da yeni referans
+
+    if ('requestIdleCallback' in window) {
+      idleId = requestIdleCallback(() => startPrefetch(), { timeout: 500 }) as unknown as number
+    } else {
+      timeoutId = window.setTimeout(startPrefetch, 200)
+    }
+
+    return () => {
+      cancelled = true
+      if (idleId !== null && 'cancelIdleCallback' in window) {
+        ;(cancelIdleCallback as (handle: number) => void)(idleId)
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
+    }
+  }, [allMenuItems, locale, mounted, router])
 
   // GPU-friendly sidebar animations
   const sidebarVariants = {

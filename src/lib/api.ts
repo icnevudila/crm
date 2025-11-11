@@ -19,17 +19,31 @@ async function fetchWithRetry(
 ): Promise<Response> {
   const { retries = 3, retryDelay = 1000, ...fetchOptions } = options
 
+  const {
+    method: rawMethod,
+    cache: rawCache,
+    next: rawNext,
+    ...restFetchOptions
+  } = fetchOptions
+
+  const method = (rawMethod ?? 'GET').toString().toUpperCase()
+  const resolvedCache =
+    rawCache ?? (method === 'GET' ? 'force-cache' : 'no-store')
+  const resolvedNext =
+    rawNext ?? (method === 'GET' ? undefined : { revalidate: 0 })
+
   let lastError: Error | null = null
 
   for (let i = 0; i <= retries; i++) {
     try {
       const response = await fetch(url, {
-        ...fetchOptions,
+        ...restFetchOptions,
+        method,
         // Session cookie'lerini gönder (credentials)
         credentials: 'include',
-        // Agresif cache - instant navigation için
-        cache: 'force-cache', // Force cache - SWR ile birlikte kullanılıyor
-        // next revalidate kaldırıldı - SWR cache kullanıyoruz
+        // HTTP cache stratejisini method bazında yönet
+        cache: resolvedCache,
+        ...(resolvedNext ? { next: resolvedNext } : {}),
       })
 
       if (!response.ok) {

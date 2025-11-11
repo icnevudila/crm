@@ -112,20 +112,20 @@ function LandingPage() {
       >
         {/* Background Layer */}
         <motion.div
-          className="absolute inset-0 bg-gradient-to-br from-[#f3f6ff] via-[#eef3ff] to-[#f7f9ff]"
+          className="absolute inset-0 bg-gradient-to-br from-[#d8defa] via-[#c6d4ff] to-[#dbe7ff]"
           style={{
-            x: useTransform(scrollY, [0, 1000], [0, mousePosition.x * 0.25]),
-            y: useTransform(scrollY, [0, 1000], [0, mousePosition.y * 0.25]),
+            x: useTransform(scrollY, [0, 1000], [0, mousePosition.x * 0.2]),
+            y: useTransform(scrollY, [0, 1000], [0, mousePosition.y * 0.2]),
           }}
         >
-          <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-[0.04]" />
+          <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-[0.05]" />
           <motion.div
-            className="absolute top-16 left-20 h-[420px] w-[420px] rounded-full bg-gradient-to-br from-indigo-300/30 via-sky-300/20 to-transparent blur-[110px]"
+            className="absolute top-16 left-16 h-[420px] w-[420px] rounded-full bg-gradient-to-br from-indigo-400/30 via-sky-400/20 to-transparent blur-[110px]"
             animate={{
-              x: [0, 60, 0],
-              y: [0, -35, 0],
+              x: [0, 55, 0],
+              y: [0, -30, 0],
               scale: [1, 1.08, 1],
-              opacity: [0.18, 0.32, 0.18],
+              opacity: [0.22, 0.32, 0.22],
             }}
             transition={{
               duration: 18,
@@ -134,11 +134,11 @@ function LandingPage() {
             }}
           />
           <motion.div
-            className="absolute bottom-16 right-[12%] h-[480px] w-[480px] rounded-full bg-gradient-to-tr from-cyan-300/25 via-indigo-200/15 to-transparent blur-[120px]"
+            className="absolute bottom-20 right-[12%] h-[480px] w-[480px] rounded-full bg-gradient-to-tr from-cyan-400/25 via-indigo-300/18 to-transparent blur-[120px]"
             animate={{
-              x: [0, -70, 0],
-              y: [0, 45, 0],
-              scale: [1, 1.12, 1],
+              x: [0, -65, 0],
+              y: [0, 40, 0],
+              scale: [1, 1.1, 1],
               opacity: [0.18, 0.3, 0.18],
             }}
             transition={{
@@ -147,9 +147,7 @@ function LandingPage() {
               ease: 'easeInOut',
             }}
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-white/65 via-white/55 to-white/30" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(123,144,255,0.18),transparent_60%)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,rgba(79,209,220,0.16),transparent_55%)]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-white/60 via-white/45 to-white/25" />
         </motion.div>
 
         {/* Content with Premium Animations */}
@@ -168,91 +166,93 @@ function LandingPage() {
               animate="visible"
               className="space-y-10 text-center lg:text-left"
             >
-              {/* Premium Badge */}
-              <motion.div
-                variants={itemVariants}
-                whileHover={{ scale: 1.05, y: -2 }}
-                className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white shadow-2xl backdrop-blur-xl transition-all duration-300 hover:bg-white/15"
-              >
-                <Sparkles className="h-4 w-4" />
-                CRM & İş Süreçleri Platformu
-              </motion.div>
+              <div className="mx-auto w-full max-w-xl rounded-[26px] border border-white/70 bg-white/65 p-8 shadow-[0_35px_65px_-35px_rgba(79,102,183,0.45)] backdrop-blur-xl lg:mx-0">
+                {/* Premium Badge */}
+                <motion.div
+                  variants={itemVariants}
+                  whileHover={{ scale: 1.05, y: -1 }}
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 px-5 py-2.5 text-sm font-semibold text-slate-600 shadow-sm transition-all duration-300"
+                >
+                  <Sparkles className="h-4 w-4 text-indigo-500" />
+                  CRM & İş Süreçleri Platformu
+                </motion.div>
 
-              {/* Main Title */}
-              <motion.h1
-                variants={itemVariants}
-                className="text-4xl font-extrabold leading-tight text-white sm:text-5xl lg:text-[3.5rem] lg:leading-[1.1]"
-              >
-                <span className="block text-white/80">Tüm müşteri ve satış süreçleriniz</span>
-                <span className="bg-gradient-to-r from-cyan-200 via-blue-200 to-indigo-200 bg-clip-text text-transparent">
-                  tek platformda birleşsin
-                </span>
-              </motion.h1>
+                {/* Main Title */}
+                <motion.h1
+                  variants={itemVariants}
+                  className="mt-6 text-4xl font-extrabold leading-tight text-slate-900 sm:text-5xl lg:text-[3.4rem] lg:leading-[1.08]"
+                >
+                  <span className="block text-slate-900/85">Tüm müşteri ve satış süreçleriniz</span>
+                  <span className="bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                    tek platformda birleşsin
+                  </span>
+                </motion.h1>
 
-              {/* Subtitle */}
-              <motion.p
-                variants={itemVariants}
-                className="mx-auto max-w-xl text-lg leading-relaxed text-white/80 lg:mx-0 lg:text-xl"
-              >
-                Satış ekiplerinizi hızlandırın, müşteri deneyimini güçlendirin ve tüm işinizi gerçek zamanlı olarak görün. Tek bir platformla tekliften faturaya tüm yolculuğu yönetin.
-              </motion.p>
+                {/* Subtitle */}
+                <motion.p
+                  variants={itemVariants}
+                  className="mt-5 text-lg leading-relaxed text-slate-600 lg:text-[1.1rem]"
+                >
+                  Satış ekiplerinizi hızlandırın, müşteri deneyimini güçlendirin ve tüm işinizi gerçek zamanlı olarak görün. Tek bir platformla tekliften faturaya tüm yolculuğu yönetin.
+                </motion.p>
 
-              {/* CTA Buttons */}
-              <motion.div
-                variants={itemVariants}
-                className="flex flex-col items-center gap-4 pt-2 sm:flex-row sm:justify-center lg:justify-start"
-              >
-                <motion.div whileHover={{ scale: 1.05, y: -2 }} whileTap={{ scale: 0.98 }}>
-                  <Button
-                    size="lg"
-                    onClick={() => scrollToSection('#contact')}
-                    className="group relative overflow-hidden rounded-2xl bg-white px-10 py-6 text-base font-semibold text-slate-900 shadow-[0_25px_60px_-15px_rgba(15,23,42,0.35)] transition-all duration-300 hover:bg-slate-100"
-                  >
-                    <span className="relative z-10 flex items-center gap-3">
-                      Demoyu Gör
+                {/* CTA Buttons */}
+                <motion.div
+                  variants={itemVariants}
+                  className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center lg:justify-start"
+                >
+                  <motion.div whileHover={{ scale: 1.04, y: -2 }} whileTap={{ scale: 0.98 }}>
+                    <Button
+                      size="lg"
+                      onClick={() => scrollToSection('#contact')}
+                      className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 px-10 py-6 text-base font-semibold text-white shadow-[0_25px_60px_-20px_rgba(95,109,225,0.55)] transition-all duration-300"
+                    >
+                      <span className="relative z-10 flex items-center gap-3">
+                        Demoyu Gör
+                        <motion.div
+                          animate={{ x: [0, 6, 0] }}
+                          transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                        >
+                          <ArrowRight className="h-5 w-5" />
+                        </motion.div>
+                      </span>
                       <motion.div
-                        animate={{ x: [0, 6, 0] }}
-                        transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-                      >
-                        <ArrowRight className="h-5 w-5" />
-                      </motion.div>
-                    </span>
-                    <motion.div
-                      className="absolute inset-0 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-                      initial={false}
-                    />
-                  </Button>
+                        className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                        initial={false}
+                      />
+                    </Button>
+                  </motion.div>
+                  <motion.div whileHover={{ scale: 1.04, y: -2 }} whileTap={{ scale: 0.98 }}>
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      onClick={() => scrollToSection('#features')}
+                      className="rounded-2xl border-slate-200/70 bg-white/75 px-10 py-6 text-base font-semibold text-slate-700 shadow-[0_18px_40px_-25px_rgba(79,102,183,0.55)] backdrop-blur-lg transition-all duration-300 hover:bg-white"
+                    >
+                      Özellikleri İncele
+                    </Button>
+                  </motion.div>
                 </motion.div>
-                <motion.div whileHover={{ scale: 1.05, y: -2 }} whileTap={{ scale: 0.98 }}>
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    onClick={() => scrollToSection('#features')}
-                    className="rounded-2xl border-white/30 bg-white/10 px-10 py-6 text-base font-semibold text-white backdrop-blur-xl transition-all duration-300 hover:bg-white/20"
-                  >
-                    Özellikleri İncele
-                  </Button>
-                </motion.div>
-              </motion.div>
 
-              {/* Supporting points */}
-              <motion.div
-                variants={itemVariants}
-                className="flex flex-wrap items-center justify-center gap-4 pt-4 text-sm text-white/70 lg:justify-start"
-              >
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                  14 gün ücretsiz deneyin
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                  Kurulum gerekmez
-                </div>
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                  Gerçek zamanlı raporlama
-                </div>
-              </motion.div>
+                {/* Supporting points */}
+                <motion.div
+                  variants={itemVariants}
+                  className="mt-6 flex flex-wrap items-center justify-center gap-4 text-sm text-slate-500 lg:justify-start"
+                >
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    14 gün ücretsiz deneyin
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    Kurulum gerekmez
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    Gerçek zamanlı raporlama
+                  </div>
+                </motion.div>
+              </div>
             </motion.div>
 
             <motion.div
