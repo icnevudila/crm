@@ -64,7 +64,7 @@ const nextConfig = {
     pagesBufferLength: 100, // 100 sayfa buffer (sekme geçişlerini hızlandırmak için - veri çekimini etkilemez)
   },
   // Build optimizasyonu - hızlandırma
-  swcMinify: true, // SWC minification (Next.js 15'te varsayılan ama açıkça belirtiyoruz)
+  // swcMinify: Next.js 15'te varsayılan olarak aktif - deprecated uyarısını önlemek için kaldırıldı
   // Output optimizasyonu
   output: undefined, // Standalone output kapalı - daha hızlı build
   // Agresif prefetching - tüm linkler otomatik prefetch
