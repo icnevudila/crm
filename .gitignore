@@ -35,6 +35,15 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Geçici troubleshooting dosyaları
+*TROUBLESHOOTING*.md
+*FIX*.md
+*COZUM*.md
+*EKSIK*.md
+*REDEPLOY*.md
+*PROJE_SECIMI*.md
+*ENV_DUZELTME*.md
+
 
 
 
