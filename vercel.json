@@ -7,30 +7,6 @@
     {
       "path": "/api/cron/check-due-soon-invoices",
       "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/create-recurring-expenses",
-      "schedule": "0 0 1 * *"
-    },
-    {
-      "path": "/api/cron/check-expired-quotes",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/check-overdue-tasks",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/check-overdue-tickets",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/check-low-stock",
-      "schedule": "0 9 * * *"
-    },
-    {
-      "path": "/api/cron/check-contract-renewals",
-      "schedule": "0 9 * * *"
     }
   ]
 }
