@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import { Plus, Edit, Trash2, Target } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -53,7 +53,7 @@ export default function SalesQuotaList() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(t('deleteConfirm'))) {
+    if (!(await confirm(t('deleteConfirm')))) {
       return
     }
 

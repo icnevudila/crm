@@ -202,6 +202,11 @@ export async function PUT(
       status: body.status || 'SCHEDULED',
       customerId: body.customerId || null,
       dealId: body.dealId || null,
+      customerCompanyId: body.customerCompanyId || null,
+      notes: body.notes || null,
+      outcomes: body.outcomes || null,
+      actionItems: body.actionItems || null,
+      attendees: body.attendees || null,
       updatedAt: new Date().toISOString(),
     }
 

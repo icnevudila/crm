@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSession } from '@/hooks/useSession'
 import { Plus, Search, Edit, Trash2, Eye, CheckCircle, MoreVertical, Calendar, FileText, Truck, BarChart3, X } from 'lucide-react'
@@ -142,7 +142,7 @@ const statusColors: Record<string, string> = {
 const statusRowColors: Record<string, string> = {
   DRAFT: 'bg-gray-50 border-l-4 border-gray-400',
   PENDING: 'bg-amber-50 border-l-4 border-amber-400',
-  APPROVED: 'bg-green-100 border-l-4 border-green-600', // OnaylandÄ±ÄŸÄ±nda belirgin yeÅŸil - her zaman gÃ¶rÃ¼nÃ¼r
+  APPROVED: 'bg-green-100 border-l-4 border-green-600', // Onaylandığında belirgin yeşil - her zaman görünür
   IN_TRANSIT: 'bg-blue-50 border-l-4 border-blue-500',
   DELIVERED: 'bg-emerald-100 border-l-4 border-emerald-600',
   CANCELLED: 'bg-red-50 border-l-4 border-red-500',
@@ -163,14 +163,14 @@ export default function ShipmentList() {
     CANCELLED: t('statusCancelled'),
   }
   
-  // SuperAdmin kontrolÃ¼
+  // SuperAdmin kontrolü
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
   
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin iÃ§in firma filtresi
+  const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin için firma filtresi
   const [formOpen, setFormOpen] = useState(false)
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
@@ -178,12 +178,12 @@ export default function ShipmentList() {
   const [reportModalOpen, setReportModalOpen] = useState(false)
   const [statusChangingId, setStatusChangingId] = useState<string | null>(null)
   
-  // SuperAdmin iÃ§in firmalarÄ± Ã§ek
+  // SuperAdmin için firmaları çek
   const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
     isSuperAdmin ? '/api/superadmin/companies' : null,
     { dedupingInterval: 60000, revalidateOnFocus: false }
   )
-  // Duplicate'leri filtrele - aynÄ± id'ye sahip kayÄ±tlarÄ± tekilleÅŸtir
+  // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
   const companies = (companiesData?.companies || []).filter((company, index, self) => 
     index === self.findIndex((c) => c.id === company.id)
   )
@@ -199,13 +199,13 @@ export default function ShipmentList() {
     return () => clearTimeout(timer)
   }, [search])
 
-  // SWR ile veri Ã§ekme
+  // SWR ile veri çekme
   const params = new URLSearchParams()
   if (debouncedSearch) params.append('search', debouncedSearch)
   if (statusFilter) params.append('status', statusFilter)
   if (dateFrom) params.append('dateFrom', dateFrom)
   if (dateTo) params.append('dateTo', dateTo)
-  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId) // SuperAdmin iÃ§in firma filtresi
+  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId) // SuperAdmin için firma filtresi
   
   const apiUrl = `/api/shipments?${params.toString()}`
   const { data: shipmentsData = [], isLoading, error, mutate: mutateShipments } = useData<Shipment[]>(apiUrl, {
@@ -238,9 +238,9 @@ export default function ShipmentList() {
     }
   }, [shipments])
 
-  // Durum deÄŸiÅŸtirme
+  // Durum değiştirme
   const handleStatusChange = useCallback(async (id: string, newStatus: string) => {
-    // OnaylÄ± sevkiyatlar iptal edilemez
+    // Onaylı sevkiyatlar iptal edilemez
     const currentShipment = shipments.find(s => s.id === id)
     if (currentShipment?.status?.toUpperCase() === 'APPROVED' && newStatus === 'CANCELLED') {
       toast.warning(
@@ -265,25 +265,25 @@ export default function ShipmentList() {
 
       const result = await res.json()
 
-      // Debug: API'den dÃ¶nen veriyi kontrol et
+      // Debug: API'den dönen veriyi kontrol et
       console.log('API Response:', result)
       console.log('Requested status:', newStatus)
       console.log('Result status:', (result as any)?.status)
 
-      // API'den dÃ¶nen gÃ¼ncel veriyi kullan (status, estimatedDelivery vb.)
-      // result objesi iÃ§inde status, updatedAt, estimatedDelivery vb. alanlar var
-      // Ã–NEMLÄ°: API'den dÃ¶nen status'Ã¼ kullan, eÄŸer yoksa newStatus kullan
+      // API'den dönen güncel veriyi kullan (status, estimatedDelivery vb.)
+      // result objesi içinde status, updatedAt, estimatedDelivery vb. alanlar var
+      // ÖNEMLİ: API'den dönen status'ü kullan, eğer yoksa newStatus kullan
       const updatedStatus = (result as any)?.status || newStatus
       
       console.log('Final updated status:', updatedStatus)
       
-      // Optimistic update - API'den dÃ¶nen veriyi kullan
-      // Ã–NEMLÄ°: result objesi iÃ§indeki tÃ¼m alanlarÄ± kullan (status, updatedAt, estimatedDelivery vb.)
+      // Optimistic update - API'den dönen veriyi kullan
+      // ÖNEMLİ: result objesi içindeki tüm alanları kullan (status, updatedAt, estimatedDelivery vb.)
       const currentShipment = shipments.find(s => s.id === id)
       const updatedShipment = {
         ...currentShipment, // Mevcut sevkiyat verilerini al
-        ...(result as any), // API'den dÃ¶nen tÃ¼m gÃ¼ncel verileri Ã¼zerine yaz
-        status: updatedStatus, // Status'Ã¼ kesinlikle gÃ¼ncelle (API'den gelen veya newStatus)
+        ...(result as any), // API'den dönen tüm güncel verileri üzerine yaz
+        status: updatedStatus, // Status'ü kesinlikle güncelle (API'den gelen veya newStatus)
       }
       
       console.log('Updated shipment:', updatedShipment)
@@ -292,8 +292,8 @@ export default function ShipmentList() {
         s.id === id ? updatedShipment : s
       )
 
-      // Cache'i gÃ¼ncelle - optimistic update ile (hemen UI'da gÃ¶rÃ¼nsÃ¼n)
-      // Ã–NEMLÄ°: Ã–nce optimistic update yap (hemen UI'da gÃ¶rÃ¼nsÃ¼n)
+      // Cache'i güncelle - optimistic update ile (hemen UI'da görünsün)
+      // ÖNEMLİ: Önce optimistic update yap (hemen UI'da görünsün)
       await mutateShipments(updatedShipments, { revalidate: false })
       await Promise.all([
         mutate('/api/shipments', updatedShipments, { revalidate: false }),
@@ -301,55 +301,55 @@ export default function ShipmentList() {
         mutate(apiUrl, updatedShipments, { revalidate: false }),
       ])
       
-      // Ã–NEMLÄ°: Sayfa yenilendiÄŸinde fresh data Ã§ekmek iÃ§in cache'i invalidate et
-      // Ama hemen deÄŸil, biraz bekleyerek (optimistic update'in gÃ¶rÃ¼nmesi iÃ§in)
-      // 500ms sonra background'da revalidate yap (sayfa yenilendiÄŸinde fresh data Ã§ekilir)
+      // ÖNEMLİ: Sayfa yenilendiğinde fresh data çekmek için cache'i invalidate et
+      // Ama hemen değil, biraz bekleyerek (optimistic update'in görünmesi için)
+      // 500ms sonra background'da revalidate yap (sayfa yenilendiğinde fresh data çekilir)
       setTimeout(async () => {
-        // TÃ¼m cache'leri invalidate et - sayfa yenilendiÄŸinde fresh data Ã§ekilir
+        // Tüm cache'leri invalidate et - sayfa yenilendiğinde fresh data çekilir
         await mutateShipments(undefined, { revalidate: true })
         await Promise.all([
           mutate('/api/shipments', undefined, { revalidate: true }),
           mutate('/api/shipments?', undefined, { revalidate: true }),
           mutate(apiUrl, undefined, { revalidate: true }),
-          // Ã–NEMLÄ°: Sevkiyat onaylandÄ±ÄŸÄ±nda fatura durumu deÄŸiÅŸtiÄŸi iÃ§in invoice cache'lerini de invalidate et
+          // ÖNEMLİ: Sevkiyat onaylandığında fatura durumu değiştiği için invoice cache'lerini de invalidate et
           mutate('/api/invoices', undefined, { revalidate: true }),
           mutate('/api/invoices?', undefined, { revalidate: true }),
           mutate('/api/analytics/invoice-kanban', undefined, { revalidate: true }),
         ])
-      }, 500) // 500ms sonra revalidate (optimistic update gÃ¶rÃ¼nÃ¼r, sonra fresh data Ã§ekilir)
+      }, 500) // 500ms sonra revalidate (optimistic update görünür, sonra fresh data çekilir)
 
-      // KullanÄ±cÄ± dostu bildirim mesajÄ±
+      // Kullanıcı dostu bildirim mesajı
       const shipmentName = updatedShipment.tracking || updatedShipment.Invoice?.title || `Sevkiyat #${id.substring(0, 8)}`
       const statusLabel = statusLabels[newStatus] || newStatus
       
       let message = ''
       if (newStatus === 'APPROVED') {
-        message = `${shipmentName} sevkiyatÄ± baÅŸarÄ±yla onaylandÄ± ve Ã¼rÃ¼nler stoktan dÃ¼ÅŸÃ¼ldÃ¼. Faturaya "Sevk Edildi" bildirimi gÃ¶nderildi.`
-        toast.success('Sevkiyat onaylandÄ±!', message)
+        message = `${shipmentName} sevkiyatı başarıyla onaylandı ve ürünler stoktan düşüldü. Faturaya "Sevk Edildi" bildirimi gönderildi.`
+        toast.success('Sevkiyat onaylandı!', message)
       } else {
-        message = `${shipmentName} sevkiyatÄ±nÄ±n durumu "${statusLabel}" olarak deÄŸiÅŸtirildi.`
-        toast.success('Durum gÃ¼ncellendi!', message)
+        message = `${shipmentName} sevkiyatının durumu "${statusLabel}" olarak değiştirildi.`
+        toast.success('Durum güncellendi!', message)
       }
     } catch (error: any) {
       console.error('Status change error:', error)
       toast.error(
-        'Durum gÃ¼ncellenemedi',
-        error?.message || 'Sevkiyat durumu deÄŸiÅŸtirilirken bir hata oluÅŸtu. LÃ¼tfen tekrar deneyin.'
+        'Durum güncellenemedi',
+        error?.message || 'Sevkiyat durumu değiştirilirken bir hata oluştu. Lütfen tekrar deneyin.'
       )
     } finally {
       setStatusChangingId(null)
     }
   }, [shipments, mutateShipments, apiUrl])
 
-  // Detay modal aÃ§
+  // Detay modal aç
   const handleViewDetail = useCallback(async (shipment: Shipment) => {
     try {
-      // Ã–NEMLÄ°: Ã–nce liste sayfasÄ±ndaki veriyi kullan (hÄ±zlÄ± aÃ§Ä±lÄ±ÅŸ)
-      // Sonra API'den detaylÄ± bilgileri Ã§ek (background'da)
-      setDetailShipment(shipment) // Hemen modal'Ä± aÃ§ (liste sayfasÄ±ndaki veri ile)
+      // ÖNEMLİ: Önce liste sayfasındaki veriyi kullan (hızlı açılış)
+      // Sonra API'den detaylı bilgileri çek (background'da)
+      setDetailShipment(shipment) // Hemen modal'ı aç (liste sayfasındaki veri ile)
       setDetailModalOpen(true)
       
-      // Background'da detaylÄ± bilgileri Ã§ek
+      // Background'da detaylı bilgileri çek
       try {
         const res = await fetch(`/api/shipments/${shipment.id}`)
         if (res.ok) {
@@ -363,7 +363,7 @@ export default function ShipmentList() {
             console.log('Invoice from list page:', shipment.Invoice)
           }
           
-          // EÄŸer API'den Invoice gelmediyse ama liste sayfasÄ±nda varsa, onu kullan
+          // Eğer API'den Invoice gelmediyse ama liste sayfasında varsa, onu kullan
           if (!detail.Invoice && shipment.Invoice) {
             detail.Invoice = shipment.Invoice
             if (process.env.NODE_ENV === 'development') {
@@ -371,7 +371,7 @@ export default function ShipmentList() {
             }
           }
           
-          // invoiceId varsa ama Invoice yoksa, liste sayfasÄ±ndaki Invoice'Ä± kullan
+          // invoiceId varsa ama Invoice yoksa, liste sayfasındaki Invoice'ı kullan
           if (detail.invoiceId && !detail.Invoice && shipment.Invoice) {
             detail.Invoice = shipment.Invoice
             if (process.env.NODE_ENV === 'development') {
@@ -379,33 +379,33 @@ export default function ShipmentList() {
             }
           }
           
-          // DetaylÄ± veriyi gÃ¼ncelle (modal zaten aÃ§Ä±k, veri gÃ¼ncellenir)
+          // Detaylı veriyi güncelle (modal zaten açık, veri güncellenir)
           setDetailShipment(detail)
         } else {
-          // API hatasÄ± - liste sayfasÄ±ndaki veri ile devam et
+          // API hatası - liste sayfasındaki veri ile devam et
           const errorData = await res.json().catch(() => ({}))
           if (process.env.NODE_ENV === 'development') {
-            console.warn('Shipment detail API error:', errorData.error || 'Sevkiyat detaylarÄ± yÃ¼klenemedi')
+            console.warn('Shipment detail API error:', errorData.error || 'Sevkiyat detayları yüklenemedi')
             console.warn('Using list page data instead')
           }
-          // Liste sayfasÄ±ndaki veri ile devam et (zaten setDetailShipment(shipment) yapÄ±ldÄ±)
+          // Liste sayfasındaki veri ile devam et (zaten setDetailShipment(shipment) yapıldı)
         }
       } catch (fetchError: any) {
-        // API hatasÄ± - liste sayfasÄ±ndaki veri ile devam et
+        // API hatası - liste sayfasındaki veri ile devam et
         if (process.env.NODE_ENV === 'development') {
           console.warn('Shipment detail fetch error:', fetchError)
           console.warn('Using list page data instead')
         }
-        // Liste sayfasÄ±ndaki veri ile devam et (zaten setDetailShipment(shipment) yapÄ±ldÄ±)
+        // Liste sayfasındaki veri ile devam et (zaten setDetailShipment(shipment) yapıldı)
       }
     } catch (error: any) {
       console.error('Detail modal error:', error)
-      // Hata olsa bile modal'Ä± kapatma (liste sayfasÄ±ndaki veri ile aÃ§Ä±ldÄ±)
+      // Hata olsa bile modal'ı kapatma (liste sayfasındaki veri ile açıldı)
     }
   }, [])
 
   const handleDelete = useCallback(async (id: string, tracking: string, status?: string) => {
-    // OnaylÄ± sevkiyatlar silinemez
+    // Onaylı sevkiyatlar silinemez
     if (status?.toUpperCase() === 'APPROVED') {
       toast.warning(
         t('cannotDeleteApproved'),
@@ -414,7 +414,7 @@ export default function ShipmentList() {
       return
     }
 
-    if (!confirm(t('deleteConfirm', { tracking: tracking || t('thisShipment') }))) {
+    if (!(await confirm(t('deleteConfirm', { tracking: tracking || t('thisShipment') })))) {
       return
     }
 
@@ -428,20 +428,20 @@ export default function ShipmentList() {
         throw new Error(errorData.error || 'Failed to delete shipment')
       }
       
-      // Optimistic update - silinen kaydÄ± listeden kaldÄ±r
+      // Optimistic update - silinen kaydı listeden kaldır
       const updatedShipments = shipments.filter((s) => s.id !== id)
       
-      // Cache'i gÃ¼ncelle - yeni listeyi hemen gÃ¶ster
+      // Cache'i güncelle - yeni listeyi hemen göster
       await mutateShipments(updatedShipments, { revalidate: false })
       
-      // TÃ¼m diÄŸer shipment URL'lerini de gÃ¼ncelle
+      // Tüm diğer shipment URL'lerini de güncelle
       await Promise.all([
         mutate('/api/shipments', updatedShipments, { revalidate: false }),
         mutate('/api/shipments?', updatedShipments, { revalidate: false }),
         mutate(apiUrl, updatedShipments, { revalidate: false }),
       ])
       
-      // Ã–NEMLÄ°: Background'da cache'i invalidate et (sayfa yenilendiÄŸinde fresh data Ã§ekilir)
+      // ÖNEMLİ: Background'da cache'i invalidate et (sayfa yenilendiğinde fresh data çekilir)
       setTimeout(async () => {
         await mutateShipments(undefined, { revalidate: true })
         await Promise.all([
@@ -465,7 +465,7 @@ export default function ShipmentList() {
   }, [])
 
   const handleEdit = useCallback((shipment: Shipment) => {
-    // OnaylÄ± sevkiyatlar dÃ¼zenlenemez
+    // Onaylı sevkiyatlar düzenlenemez
     if (shipment.status?.toUpperCase() === 'APPROVED') {
       toast.warning(
         t('cannotEditApproved'),
@@ -482,7 +482,7 @@ export default function ShipmentList() {
     setSelectedShipment(null)
   }, [])
 
-  // MÃ¼ÅŸteri adÄ±nÄ± al (Invoice'dan)
+  // Müşteri adını al (Invoice'dan)
   const getCustomerName = useCallback((shipment: Shipment) => {
     if (shipment.Invoice?.Customer?.name) {
       return shipment.Invoice.Customer.name
@@ -738,13 +738,13 @@ export default function ShipmentList() {
               </TableRow>
             ) : (
               shipments.map((shipment, index) => {
-                // Sevkiyat ismini faturaya gÃ¶re oluÅŸtur
+                // Sevkiyat ismini faturaya göre oluştur
                 const shipmentName = shipment.Invoice?.title 
-                  ? `${shipment.Invoice.title} faturasÄ±na ait Sevkiyat`
+                  ? `${shipment.Invoice.title} faturasına ait Sevkiyat`
                   : shipment.Invoice?.invoiceNumber
-                  ? `Fatura #${shipment.Invoice.invoiceNumber} sevkiyatÄ±`
+                  ? `Fatura #${shipment.Invoice.invoiceNumber} sevkiyatı`
                   : shipment.invoiceId
-                  ? `Fatura #${shipment.invoiceId.substring(0, 8)} sevkiyatÄ±`
+                  ? `Fatura #${shipment.invoiceId.substring(0, 8)} sevkiyatı`
                   : `Sevkiyat #${shipment.tracking || shipment.id.substring(0, 8)}`
                 
                 return (
@@ -778,14 +778,14 @@ export default function ShipmentList() {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       {/* 2ï¸âƒ£ Inline Durum Dropdown - APPROVED durumunda disabled */}
-                      {/* Status'Ã¼ uppercase yaparak kontrol et (gÃ¼venlik iÃ§in) */}
+                      {/* Status'ü uppercase yaparak kontrol et (güvenlik için) */}
                       {shipment.status?.toUpperCase() === 'APPROVED' ? (
-                        // OnaylandÄ±ktan sonra sadece badge gÃ¶ster (deÄŸiÅŸtirilemez)
+                        // Onaylandıktan sonra sadece badge göster (değiştirilemez)
                         <Badge className={statusColors[shipment.status] || 'bg-green-100'}>
                       {statusLabels[shipment.status] || shipment.status}
                     </Badge>
                       ) : (
-                        // OnaylanmamÄ±ÅŸ sevkiyatlar iÃ§in dropdown
+                        // Onaylanmamış sevkiyatlar için dropdown
                         <>
                           <Select
                             value={shipment.status}
@@ -839,8 +839,8 @@ export default function ShipmentList() {
                             <TooltipContent className="bg-gray-900 text-white p-3">
                               <div className="space-y-1 text-sm">
                                 <p><strong>Fatura No:</strong> {shipment.Invoice.invoiceNumber || shipment.invoiceId.substring(0, 8)}</p>
-                                <p><strong>BaÅŸlÄ±k:</strong> {shipment.Invoice.title || '-'}</p>
-                                <p><strong>MÃ¼ÅŸteri:</strong> {getCustomerName(shipment)}</p>
+                                <p><strong>Başlık:</strong> {shipment.Invoice.title || '-'}</p>
+                                <p><strong>Müşteri:</strong> {getCustomerName(shipment)}</p>
                                 <p><strong>Toplam:</strong> {formatCurrency(shipment.Invoice.totalAmount || 0)}</p>
                                 <p><strong>Tarih:</strong> {new Date(shipment.Invoice.createdAt).toLocaleDateString('tr-TR')}</p>
                               </div>

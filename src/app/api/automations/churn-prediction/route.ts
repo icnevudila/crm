@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
-
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -10,7 +9,7 @@ export const dynamic = 'force-dynamic'
  * Basit skorlama: (inaktif_günler * 0.5) + (reddedilen_teklifler * 1.5)
  * Skor > 10 ise müşteri "Riskli" olarak işaretlenir
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { session, error: sessionError } = await getSafeSession(request)
     if (sessionError) {
@@ -63,13 +62,19 @@ export async function GET() {
         (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24)
       )
 
-      // Reddedilen teklif sayısını bul
+      // Reddedilen teklif sayısını bul (Deal üzerinden Customer'a bağlı)
       const { data: rejectedQuotes, error: quotesError } = await supabase
         .from('Quote')
-        .select('id', { count: 'exact', head: true })
+        .select(`
+          id,
+          Deal!inner(
+            id,
+            customerId
+          )
+        `)
         .eq('companyId', session.user.companyId)
-        .eq('status', 'DECLINED')
-        .eq('customerId', customerData.id)
+        .eq('status', 'REJECTED')
+        .eq('Deal.customerId', customerData.id)
 
       const rejectedCount = rejectedQuotes?.length || 0
 
@@ -116,6 +121,9 @@ export async function GET() {
     )
   }
 }
+
+
+
 
 
 

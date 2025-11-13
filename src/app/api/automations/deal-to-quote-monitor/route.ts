@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
  * Deal-to-Quote Time Monitor
  * Fırsat oluşturulduktan sonra 48 saat içinde teklif hazırlanmamışsa uyarı çıkar
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { session, error: sessionError } = await getSafeSession(request)
     if (sessionError) {

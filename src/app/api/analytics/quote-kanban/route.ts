@@ -46,8 +46,10 @@ export async function GET(request: Request) {
     // Tüm quote'ları çek - limit yok (tüm verileri çek)
     let query = supabase
       .from('Quote')
-        .select('id, title, status, totalAmount, dealId, createdAt, updatedAt, notes') // ✅ ÇÖZÜM: notes kolonu migration ile eklendi (057_add_quote_notes.sql)
-      .order('updatedAt', { ascending: false }) // ✅ ÇÖZÜM: updatedAt'e göre sırala - en son güncellenen en üstte
+        .select('id, title, status, totalAmount, dealId, createdAt, updatedAt, notes, displayOrder') // ✅ ÇÖZÜM: notes kolonu migration ile eklendi (057_add_quote_notes.sql), displayOrder Kanban sıralama için
+      .order('displayOrder', { ascending: true }) // ✅ displayOrder'a göre sırala (Kanban sıralama için)
+      .order('updatedAt', { ascending: false }) // Aynı displayOrder için updatedAt'e göre
+      .order('createdAt', { ascending: false }) // Aynı updatedAt için createdAt'e göre
     
     // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
@@ -91,8 +93,15 @@ export async function GET(request: Request) {
     const statuses = ['DRAFT', 'SENT', 'WAITING', 'ACCEPTED', 'REJECTED']
     const kanban = statuses.map((status) => {
       const statusQuotes = normalizedQuotes.filter((quote: any) => quote.status === status)
-      // ✅ ÇÖZÜM: Her status kolonu içinde updatedAt'e göre sırala - en son güncellenen en üstte
+      // ✅ ÇÖZÜM: Her status kolonu içinde displayOrder'a göre sırala - Kanban sıralama için
       statusQuotes.sort((a: any, b: any) => {
+        // Önce displayOrder'a göre sırala (0 ise en alta)
+        const aOrder = a.displayOrder || 999999
+        const bOrder = b.displayOrder || 999999
+        if (aOrder !== bOrder) {
+          return aOrder - bOrder // Küçükten büyüğe (1, 2, 3...)
+        }
+        // Aynı displayOrder için updatedAt'e göre sırala
         const aUpdated = new Date(a.updatedAt || a.createdAt).getTime()
         const bUpdated = new Date(b.updatedAt || b.createdAt).getTime()
         return bUpdated - aUpdated // En son güncellenen en üstte

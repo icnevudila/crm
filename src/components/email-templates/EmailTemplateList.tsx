@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -80,7 +80,7 @@ export default function EmailTemplateList() {
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(t('deleteConfirm', { name }))) {
+    if (!(await confirm(t('deleteConfirm', { name })))) {
       return
     }
 

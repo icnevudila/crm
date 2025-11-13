@@ -112,7 +112,7 @@ const stageInfoMessages: Record<string, string> = {
   LOST: '❌ Fırsat kaybedildi. Kayıp nedeni kaydedildi. Yeni bir fırsat oluşturmak için Fırsatlar sayfasından "Yeni Fırsat" butonunu kullanın. Bu aşamadaki fırsatlar değiştirilemez.',
 }
 
-// Droppable Column Component - Boş kolonlara da drop yapılabilmesi için
+// ✅ PREMIUM: Droppable Column Component - Smooth hover effects
 function DroppableColumn({ stage, children }: { stage: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({
     id: stage,
@@ -121,7 +121,11 @@ function DroppableColumn({ stage, children }: { stage: string; children: React.R
   return (
     <div
       ref={setNodeRef}
-      className={`flex-1 transition-colors ${isOver ? 'bg-primary-50 border-2 border-primary-300 border-dashed rounded-lg' : ''}`}
+      className={`flex-1 transition-all duration-300 ease-out ${
+        isOver 
+          ? 'bg-gradient-to-br from-primary-50 to-primary-100/50 border-2 border-primary-400 border-dashed rounded-xl shadow-lg scale-[1.02]' 
+          : ''
+      }`}
     >
       {children}
     </div>
@@ -155,26 +159,27 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
     isDragging,
   } = useSortable({ id: deal.id, disabled: !dragMode || isLocked })
 
-  // ULTRA-AGGRESSIVE optimization - NO useMemo, direct inline calculation
+  // ✅ PREMIUM: Smooth drag animations with proper transitions
   const x = transform?.x ?? 0
   const y = transform?.y ?? 0
   const style: React.CSSProperties = transform 
     ? {
         transform: `translate3d(${x}px,${y}px,0)`,
         WebkitTransform: `translate3d(${x}px,${y}px,0)`,
-        transition: 'none',
+        transition: isDragging ? 'none' : 'transform 200ms cubic-bezier(0.4, 0, 0.2, 1)', // ✅ Smooth transition when not dragging
         willChange: 'transform',
-        opacity: isDragging ? 0.4 : 1,
+        opacity: isDragging ? 0.6 : 1, // ✅ Daha görünür opacity
         cursor: dragMode && !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'default',
         transformOrigin: 'center center',
         backfaceVisibility: 'hidden',
         perspective: 1000,
         isolation: 'isolate',
+        zIndex: isDragging ? 50 : 1, // ✅ Drag sırasında üstte
       }
     : {
-        transition: 'none',
+        transition: 'transform 200ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease-out', // ✅ Smooth transitions
         willChange: dragMode && !isLocked ? 'transform' : 'auto',
-        opacity: isDragging ? 0.4 : 1,
+        opacity: isDragging ? 0.6 : 1,
         cursor: dragMode && !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'default',
       }
 
@@ -200,13 +205,15 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
         contain: 'layout style paint',
         isolation: 'isolate', // Force GPU layer
       }}
-      className={`bg-white border-2 ${
+      className={`bg-white border-2 transition-all duration-200 ${
         isLocked 
           ? stage === 'WON'
             ? 'border-green-300 bg-green-50/30 hover:border-green-400'
             : 'border-red-300 bg-red-50/30 hover:border-red-400'
-          : 'hover:border-primary-400'
-      } hover:shadow-lg relative ${dragMode && !isLocked ? 'ring-2 ring-primary-400' : ''} ${isDragging ? 'transition-none' : ''}`}
+          : 'hover:border-primary-400 hover:shadow-lg'
+      } relative ${dragMode && !isLocked ? 'ring-2 ring-primary-400 ring-opacity-50' : ''} ${
+        isDragging ? 'shadow-2xl scale-105 rotate-1' : 'hover:scale-[1.02]'
+      }`}
     >
       {/* Kilitli Durum Badge - Kilitli kartlarda göster */}
       {isLocked && (
@@ -752,17 +759,17 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange 
     })
   }, [data]) // localData'yı dependency'den çıkar - sadece data prop'unu izle
 
-  // Ultra-fast sensors - instant activation
+  // ✅ PREMIUM: Smooth activation with slight delay for better UX
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 0, // 0px - HEMEN başla, hiç bekleme
+        distance: 8, // ✅ 8px - Kullanıcı gerçekten sürüklemek istiyor mu kontrol et
       },
     }),
     useSensor(TouchSensor, {
       activationConstraint: {
-        distance: 0, // 0px - HEMEN başla
-        delay: 0, // 0ms - HİÇ bekleme
+        distance: 8, // ✅ 8px - Touch için de aynı
+        delay: 100, // ✅ 100ms - Yanlışlıkla drag'i önle
       },
     }),
     useSensor(KeyboardSensor, {
@@ -802,14 +809,15 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange 
       const deal = activeStage.deals.find((d) => d.id === activeId)
       if (!deal) return
 
-      // ✅ FRONTEND VALIDATION - Geçersiz geçişleri engelle
+      // ✅ PREMIUM: FRONTEND VALIDATION - Geçersiz geçişleri engelle (kartı taşıma!)
       const currentStage = activeStage.stage
       const targetStage = overStage.stage
 
       // Immutable kontrol
       if (isDealImmutable(currentStage)) {
         const message = getStageMessage(currentStage, 'deal', 'immutable')
-        toast.warning(message.title, message.description)
+        toast.error(message.title, message.description) // ✅ Toast zaten 4 saniye gösteriyor
+        // ✅ Kartı taşıma - sadece hata göster
         return
       }
 
@@ -826,7 +834,8 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange 
           allowed.length > 0 
             ? `Bu fırsatı şu aşamalara taşıyabilirsiniz: ${allowedNames}` 
             : getStageMessage(currentStage, 'deal', 'transition').description
-        )
+        ) // ✅ Toast zaten 4 saniye gösteriyor
+        // ✅ Kartı taşıma - sadece hata göster
         return
       }
 
@@ -893,6 +902,33 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange 
           col.stage === activeStage.stage ? { ...col, deals: newDeals } : col
         )
         setLocalData(newData)
+
+        // ✅ Sıralamayı API'ye kaydet - batch order update
+        try {
+          const orders = newDeals.map((deal, index) => ({
+            id: deal.id,
+            displayOrder: index + 1, // 1-based index
+          }))
+
+          const res = await fetch('/api/deals/batch-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orders }),
+          })
+
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}))
+            console.error('Batch order update error:', errorData)
+            // Hata durumunda eski haline geri dön
+            setLocalData(localData)
+            toast.error('Sıralama kaydedilemedi', errorData.error || 'Bir hata oluştu.')
+          }
+        } catch (error: any) {
+          console.error('Batch order update error:', error)
+          // Hata durumunda eski haline geri dön
+          setLocalData(localData)
+          toast.error('Sıralama kaydedilemedi', error?.message || 'Bir hata oluştu.')
+        }
       }
     }
   }
@@ -1061,22 +1097,27 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange 
 
       <DragOverlay dropAnimation={useMemo(() => ({
         sideEffects: defaultDropAnimationSideEffects({
-          styles: { active: { opacity: '0.4' } },
+          styles: { 
+            active: { 
+              opacity: '0.8',
+              scale: '1.05',
+            } 
+          },
         }),
-        duration: 0, // 0ms - ANINDA drop, hiç animasyon yok
-        easing: 'linear', // Linear - en hızlı
+        duration: 200, // ✅ 200ms - Smooth drop animation
+        easing: 'cubic-bezier(0.4, 0, 0.2, 1)', // ✅ Premium easing
       }), [])}>
         {activeDeal ? (
           <Card 
-            className="bg-white border-2 border-primary-400 shadow-xl min-w-[300px] rotate-2 transition-none"
+            className="bg-white border-2 border-primary-500 shadow-2xl min-w-[300px] rotate-2 transition-all duration-200"
             style={{
               willChange: 'transform, opacity',
-              transform: 'translate3d(0, 0, 0)',
+              transform: 'translate3d(0, 0, 0) scale(1.05)',
               backfaceVisibility: 'hidden',
               WebkitTransform: 'translateZ(0)',
               perspective: 1000,
-              transition: 'none', // Drag sırasında hiç transition yok
-              pointerEvents: 'none', // Drag sırasında pointer events yok
+              pointerEvents: 'none',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
             }}
           >
             <div className="p-3">

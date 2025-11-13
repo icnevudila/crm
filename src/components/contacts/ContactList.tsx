@@ -26,7 +26,7 @@ import SkeletonList from '@/components/skeletons/SkeletonList'
 import EmptyState from '@/components/ui/EmptyState'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import dynamic from 'next/dynamic'
 
 // Lazy load ContactForm
@@ -121,7 +121,7 @@ export default function ContactList() {
   }, [response])
 
   const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!confirm(t('deleteConfirm', { name }))) {
+    if (!(await confirm(t('deleteConfirm', { name })))) {
       return
     }
 

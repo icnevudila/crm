@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { toast, confirm } from '@/lib/toast'
 import { Upload, File, X, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -69,7 +70,7 @@ export default function FileUpload({
   }
 
   const handleDelete = async (filePath: string) => {
-    if (!confirm('Dosyayı silmek istediğinize emin misiniz?')) {
+    if (!(await confirm('Dosyayı silmek istediğinize emin misiniz?'))) {
       return
     }
 

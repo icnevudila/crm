@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
+import { confirm } from '@/lib/toast'
 import {
   Tooltip,
   TooltipContent,
@@ -648,9 +649,9 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange }: Inv
                               const Icon = action.icon
                               
                               // İptal Et butonu için özel handler - onay sorusu sor
-                              const handleClick = () => {
+                              const handleClick = async () => {
                                 if (action.targetStatus === 'CANCELLED') {
-                                  if (!confirm(`"${invoice.title}" faturasını iptal etmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz ve ilgili sevkiyat/stok işlemleri geri alınacaktır.`)) {
+                                  if (!(await confirm(`"${invoice.title}" faturasını iptal etmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz ve ilgili sevkiyat/stok işlemleri geri alınacaktır.`))) {
                                     return
                                   }
                                 }

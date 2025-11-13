@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic'
  * AutoGoalTracker API
  * Kullanıcının aylık hedefini ve ilerlemesini yönetir
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { session, error: sessionError } = await getSafeSession(request)
     if (sessionError) {

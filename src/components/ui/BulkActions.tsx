@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { toast, confirm } from '@/lib/toast'
 import { Trash2, Edit, CheckSquare, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -23,7 +24,7 @@ export default function BulkActions({
   const [loading, setLoading] = useState(false)
 
   const handleBulkDelete = async () => {
-    if (!confirm(`${selectedIds.length} ${itemName} silmek istediğinize emin misiniz?`)) {
+    if (!(await confirm(`${selectedIds.length} ${itemName} silmek istediğinize emin misiniz?`))) {
       return
     }
 

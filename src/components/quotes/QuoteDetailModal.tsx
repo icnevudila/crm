@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import WorkflowStepper from '@/components/ui/WorkflowStepper'
 import { getQuoteWorkflowSteps } from '@/lib/workflowSteps'
 import StatusInfoNote from '@/components/workflow/StatusInfoNote'
@@ -102,7 +102,7 @@ export default function QuoteDetailModal({
   }
 
   const handleCreateRevision = async () => {
-    if (!confirm('Bu teklifin yeni bir revizyonunu oluşturmak istiyor musunuz?')) {
+    if (!(await confirm('Bu teklifin yeni bir revizyonunu oluşturmak istiyor musunuz?'))) {
       return
     }
 

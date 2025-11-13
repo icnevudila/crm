@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
+import { toast, confirm } from '@/lib/toast'
 import { Plus, Search, Edit, Trash2, Eye, CheckCircle, MoreVertical, Calendar, FileText, PackageCheck, BarChart3, X } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -252,7 +253,7 @@ export default function PurchaseShipmentList() {
   }, [])
 
   const handleDelete = useCallback(async (id: string) => {
-    if (!confirm(t('deleteConfirm'))) {
+    if (!(await confirm(t('deleteConfirm')))) {
       return
     }
 

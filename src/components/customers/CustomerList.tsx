@@ -129,7 +129,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
   const searchParams = useSearchParams()
   const { data: session } = useSession()
   
-  // SuperAdmin kontrolÃ¼
+  // SuperAdmin kontrolü
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
   
   // URL parametrelerinden filtreleri oku
@@ -188,12 +188,12 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
-    }, 300) // 300ms debounce - her harfte arama yapÄ±lmaz
+    }, 300) // 300ms debounce - her harfte arama yapılmaz
     
     return () => clearTimeout(timer)
   }, [search])
 
-  // SWR ile veri Ã§ekme (repo kurallarÄ±na uygun) - debounced search kullanÄ±yoruz
+  // SWR ile veri çekme (repo kurallarına uygun) - debounced search kullanıyoruz
   const apiUrl = useMemo(() => {
     if (!isOpen) return null
 

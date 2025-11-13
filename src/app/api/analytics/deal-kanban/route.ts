@@ -50,7 +50,7 @@ export async function GET(request: Request) {
     // Tüm deal'ları çek - limit yok (tüm verileri çek)
     // Customer join'i ekle (performans için sadece gerekli alanlar)
     // NOT: lostReason kolonu migration 033'te eklenmiş olmalı, yoksa hata verir
-    // PERFORMANS: Sadece gerekli kolonları çek, updatedAt index'i kullan
+    // PERFORMANS: Sadece gerekli kolonları çek, displayOrder index'i kullan
     let query = supabase
       .from('Deal')
       .select(`
@@ -62,12 +62,14 @@ export async function GET(request: Request) {
         createdAt, 
         updatedAt,
         status,
+        displayOrder,
         Customer:customerId (
           id,
           name
         )
       `)
-      .order('updatedAt', { ascending: false }) // En son güncellenen en üstte (idx_deal_updated_at index'i kullanılır)
+      .order('displayOrder', { ascending: true }) // ✅ displayOrder'a göre sırala (Kanban sıralama için)
+      .order('updatedAt', { ascending: false }) // Aynı displayOrder için updatedAt'e göre
       .order('createdAt', { ascending: false }) // Aynı updatedAt için createdAt'e göre
     
     // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
@@ -131,8 +133,15 @@ export async function GET(request: Request) {
     const kanban = stages.map((stage) => {
       const stageDeals = (deals || []).filter((deal: any) => deal.stage === stage)
       
-      // ✅ ÇÖZÜM: Her stage kolonu içinde updatedAt'e göre sırala - en son güncellenen en üstte
+      // ✅ ÇÖZÜM: Her stage kolonu içinde displayOrder'a göre sırala - Kanban sıralama için
       stageDeals.sort((a: any, b: any) => {
+        // Önce displayOrder'a göre sırala (0 ise en alta)
+        const aOrder = a.displayOrder || 999999
+        const bOrder = b.displayOrder || 999999
+        if (aOrder !== bOrder) {
+          return aOrder - bOrder // Küçükten büyüğe (1, 2, 3...)
+        }
+        // Aynı displayOrder için updatedAt'e göre sırala
         const aUpdated = new Date(a.updatedAt || a.createdAt).getTime()
         const bUpdated = new Date(b.updatedAt || b.createdAt).getTime()
         return bUpdated - aUpdated // En son güncellenen en üstte

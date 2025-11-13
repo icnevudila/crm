@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic'
  * 30 günden uzun süredir "SENT" olan teklifler otomatik EXPIRED yapılır
  * Cron job veya scheduled task ile çalıştırılabilir
  */
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const { session, error: sessionError } = await getSafeSession(request)
     if (sessionError) {
@@ -97,6 +97,7 @@ export async function POST() {
     )
   }
 }
+
 
 
 

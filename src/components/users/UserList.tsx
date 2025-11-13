@@ -58,25 +58,25 @@ export default function UserList() {
 
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
 
-  // Debounced search - performans iÃ§in (kullanÄ±cÄ± yazmayÄ± bitirdikten 300ms sonra arama)
+  // Debounced search - performans için (kullanıcı yazmayı bitirdikten 300ms sonra arama)
   const [debouncedSearch, setDebouncedSearch] = useState(search)
   
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
-    }, 300) // 300ms debounce - her harfte arama yapÄ±lmaz
+    }, 300) // 300ms debounce - her harfte arama yapılmaz
     
     return () => clearTimeout(timer)
   }, [search])
 
-  // SWR ile veri Ã§ekme (repo kurallarÄ±na uygun) - debounced search kullanÄ±yoruz
+  // SWR ile veri çekme (repo kurallarına uygun) - debounced search kullanıyoruz
   const params = new URLSearchParams()
   if (debouncedSearch) params.append('search', debouncedSearch)
   if (role) params.append('role', role)
   
   const apiUrl = `/api/users?${params.toString()}`
   const { data: users = [], isLoading, error, mutate: mutateUsers } = useData<User[]>(apiUrl, {
-    dedupingInterval: 5000, // 5 saniye cache (daha kÄ±sa - gÃ¼ncellemeler daha hÄ±zlÄ±)
+    dedupingInterval: 5000, // 5 saniye cache (daha kısa - güncellemeler daha hızlı)
     revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
   })
 
@@ -95,20 +95,20 @@ export default function UserList() {
         throw new Error(errorData.error || 'Failed to delete user')
       }
       
-      // Optimistic update - silinen kaydÄ± listeden kaldÄ±r
+      // Optimistic update - silinen kaydı listeden kaldır
       const updatedUsers = users.filter((u) => u.id !== id)
       
-      // Cache'i gÃ¼ncelle - yeni listeyi hemen gÃ¶ster
+      // Cache'i güncelle - yeni listeyi hemen göster
       await mutateUsers(updatedUsers, { revalidate: false })
       
-      // TÃ¼m diÄŸer user URL'lerini de gÃ¼ncelle
+      // Tüm diğer user URL'lerini de güncelle
       await Promise.all([
         mutate('/api/users', updatedUsers, { revalidate: false }),
         mutate('/api/users?', updatedUsers, { revalidate: false }),
         mutate(apiUrl, updatedUsers, { revalidate: false }),
       ])
     } catch (error: any) {
-      // Production'da console.error kaldÄ±rÄ±ldÄ±
+      // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
@@ -129,7 +129,7 @@ export default function UserList() {
   const handleFormClose = useCallback(() => {
     setFormOpen(false)
     setSelectedUser(null)
-    // Form kapanÄ±rken cache'i gÃ¼ncelleme yapÄ±lmaz - onSuccess callback'te zaten yapÄ±lÄ±yor
+    // Form kapanırken cache'i güncelleme yapılmaz - onSuccess callback'te zaten yapılıyor
   }, [])
 
   const roleLabels: Record<string, string> = {
@@ -280,26 +280,26 @@ export default function UserList() {
           open={formOpen}
           onClose={handleFormClose}
           onSuccess={async (savedUser: User) => {
-            // Optimistic update - yeni/ gÃ¼ncellenmiÅŸ kaydÄ± hemen cache'e ekle ve UI'da gÃ¶ster
-            // BÃ¶ylece form kapanmadan Ã¶nce kullanÄ±cÄ± listede gÃ¶rÃ¼nÃ¼r
+            // Optimistic update - yeni/ güncellenmiş kaydı hemen cache'e ekle ve UI'da göster
+            // Böylece form kapanmadan önce kullanıcı listede görünür
             
             let updatedUsers: User[]
             
             if (selectedUser) {
-              // UPDATE: Mevcut kaydÄ± gÃ¼ncelle
+              // UPDATE: Mevcut kaydı güncelle
               updatedUsers = users.map((u) =>
                 u.id === savedUser.id ? savedUser : u
               )
             } else {
-              // CREATE: Yeni kaydÄ± listenin baÅŸÄ±na ekle
+              // CREATE: Yeni kaydı listenin başına ekle
               updatedUsers = [savedUser, ...users]
             }
             
-            // Cache'i gÃ¼ncelle - optimistic update'i hemen uygula ve koru
+            // Cache'i güncelle - optimistic update'i hemen uygula ve koru
             // revalidate: false = background refetch yapmaz, optimistic update korunur
             await mutateUsers(updatedUsers, { revalidate: false })
             
-            // TÃ¼m diÄŸer user URL'lerini de gÃ¼ncelle (optimistic update)
+            // Tüm diğer user URL'lerini de güncelle (optimistic update)
             await Promise.all([
               mutate('/api/users', updatedUsers, { revalidate: false }),
               mutate('/api/users?', updatedUsers, { revalidate: false }),

@@ -131,7 +131,7 @@ const statusBadgeColors: Record<string, string> = {
   WAITING: 'bg-yellow-500 text-white',
 }
 
-// Droppable Column Component
+// ✅ PREMIUM: Droppable Column Component - Smooth hover effects
 function DroppableColumn({ status, children }: { status: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({
     id: status,
@@ -140,7 +140,11 @@ function DroppableColumn({ status, children }: { status: string; children: React
   return (
     <div
       ref={setNodeRef}
-      className={`flex-1 transition-colors ${isOver ? 'bg-primary-50 border-2 border-primary-300 border-dashed rounded-lg' : ''}`}
+      className={`flex-1 transition-all duration-300 ease-out ${
+        isOver 
+          ? 'bg-gradient-to-br from-primary-50 to-primary-100/50 border-2 border-primary-400 border-dashed rounded-xl shadow-lg scale-[1.02]' 
+          : ''
+      }`}
     >
       {children}
     </div>
@@ -170,31 +174,27 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange }: 
     isDragging,
   } = useSortable({ id: quote.id, disabled: !dragMode || isLocked })
 
-  // ULTRA-AGGRESSIVE optimization - NO useMemo, direct inline calculation
-  // Transform hesaplamasını direkt inline yap - useMemo bile gereksiz overhead
+  // ✅ PREMIUM: Smooth drag animations with proper transitions
   const x = transform?.x ?? 0
   const y = transform?.y ?? 0
   const style: React.CSSProperties = transform 
     ? {
-        // Direct transform3d - NO string interpolation overhead
         transform: `translate3d(${x}px,${y}px,0)`,
         WebkitTransform: `translate3d(${x}px,${y}px,0)`,
-        // NO transition EVER - maksimum performans
-        transition: 'none',
-        // GPU acceleration - maksimum
+        transition: isDragging ? 'none' : 'transform 200ms cubic-bezier(0.4, 0, 0.2, 1)', // ✅ Smooth transition when not dragging
         willChange: 'transform',
-        opacity: isDragging ? 0.4 : 1,
+        opacity: isDragging ? 0.6 : 1, // ✅ Daha görünür opacity
         cursor: dragMode && !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'default',
         transformOrigin: 'center center',
         backfaceVisibility: 'hidden',
         perspective: 1000,
-        // Force GPU layer
         isolation: 'isolate',
+        zIndex: isDragging ? 50 : 1, // ✅ Drag sırasında üstte
       }
     : {
-        transition: 'none',
+        transition: 'transform 200ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease-out', // ✅ Smooth transitions
         willChange: dragMode && !isLocked ? 'transform' : 'auto',
-        opacity: isDragging ? 0.4 : 1,
+        opacity: isDragging ? 0.6 : 1,
         cursor: dragMode && !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'default',
       }
 
@@ -222,13 +222,15 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange }: 
             contain: 'layout style paint', // CSS containment for performance
             isolation: 'isolate', // Force GPU layer
           }}
-          className={`bg-white border-2 ${
+          className={`bg-white border-2 transition-all duration-200 ${
             isLocked 
               ? status === 'ACCEPTED'
                 ? 'border-green-300 bg-green-50/30 hover:border-green-400'
                 : 'border-red-300 bg-red-50/30 hover:border-red-400'
-              : `${colors.border} hover:border-primary-400`
-          } hover:shadow-lg relative ${dragMode && !isLocked ? 'ring-2 ring-primary-400' : ''} ${isDragging ? 'transition-none' : ''}`}
+              : `${colors.border} hover:border-primary-400 hover:shadow-lg`
+          } relative ${dragMode && !isLocked ? 'ring-2 ring-primary-400 ring-opacity-50' : ''} ${
+            isDragging ? 'shadow-2xl scale-105 rotate-1' : 'hover:scale-[1.02]'
+          }`}
         >
           {/* Kilitli Durum Badge - Kilitli kartlarda göster */}
           {isLocked && (
@@ -981,17 +983,17 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
   // ✅ ÇÖZÜM: dragLocalData null ise localData'yı kullan - optimistic update için
   const displayData = dragLocalData || localData
 
-  // Ultra-fast sensors - instant activation
+  // ✅ PREMIUM: Smooth activation with slight delay for better UX
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 0, // 0px - HEMEN başla, hiç bekleme
+        distance: 8, // ✅ 8px - Kullanıcı gerçekten sürüklemek istiyor mu kontrol et
       },
     }),
     useSensor(TouchSensor, {
       activationConstraint: {
-        distance: 0, // 0px - HEMEN başla
-        delay: 0, // 0ms - HİÇ bekleme
+        distance: 8, // ✅ 8px - Touch için de aynı
+        delay: 100, // ✅ 100ms - Yanlışlıkla drag'i önle
       },
     }),
     useSensor(KeyboardSensor, {
@@ -1031,14 +1033,15 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
       const quote = activeStatus.quotes.find((q) => q.id === activeId)
       if (!quote) return
 
-      // ✅ FRONTEND VALIDATION - Geçersiz geçişleri engelle
+      // ✅ PREMIUM: FRONTEND VALIDATION - Geçersiz geçişleri engelle (kartı taşıma!)
       const currentStatus = activeStatus.status
       const targetStatus = overStatus.status
 
       // Immutable kontrol
       if (isQuoteImmutable(currentStatus)) {
         const message = getStageMessage(currentStatus, 'quote', 'immutable')
-        toast.warning(message.title, message.description)
+        toast.error(message.title, message.description) // ✅ Toast zaten 4 saniye gösteriyor
+        // ✅ Kartı taşıma - sadece hata göster
         return
       }
 
@@ -1055,7 +1058,8 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
           allowed.length > 0 
             ? `Bu teklifi şu durumlara taşıyabilirsiniz: ${allowedNames}` 
             : getStageMessage(currentStatus, 'quote', 'transition').description
-        )
+        ) // ✅ Toast zaten 4 saniye gösteriyor
+        // ✅ Kartı taşıma - sadece hata göster
         return
       }
 
@@ -1143,6 +1147,36 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
         )
         // Drag & drop için local state'i güncelle
         setDragLocalData(newData)
+
+        // ✅ Sıralamayı API'ye kaydet - batch order update
+        try {
+          const orders = newQuotes.map((quote, index) => ({
+            id: quote.id,
+            displayOrder: index + 1, // 1-based index
+          }))
+
+          const res = await fetch('/api/quotes/batch-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orders }),
+          })
+
+          if (!res.ok) {
+            const errorData = await res.json().catch(() => ({}))
+            console.error('Batch order update error:', errorData)
+            // Hata durumunda eski haline geri dön
+            setDragLocalData(null) // Drag local state'i temizle - computed data kullanılacak
+            toast.error('Sıralama kaydedilemedi', errorData.error || 'Bir hata oluştu.')
+          } else {
+            // Başarılı olduğunda drag local state'i temizle - computed data kullanılacak
+            setDragLocalData(null)
+          }
+        } catch (error: any) {
+          console.error('Batch order update error:', error)
+          // Hata durumunda eski haline geri dön
+          setDragLocalData(null) // Drag local state'i temizle - computed data kullanılacak
+          toast.error('Sıralama kaydedilemedi', error?.message || 'Bir hata oluştu.')
+        }
       }
     }
   }
@@ -1151,17 +1185,18 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
     .flatMap((col) => col.quotes)
     .find((quote) => quote.id === activeId)
 
-  // Memoize drop animation - faster
+  // ✅ PREMIUM: Smooth drop animation
   const dropAnimation: DropAnimation = useMemo(() => ({
     sideEffects: defaultDropAnimationSideEffects({
       styles: {
         active: {
-          opacity: '0.4',
+          opacity: '0.8',
+          scale: '1.05',
         },
       },
     }),
-    duration: 0, // 0ms - ANINDA drop, hiç animasyon yok
-    easing: 'linear', // Linear - en hızlı
+    duration: 200, // ✅ 200ms - Smooth drop animation
+    easing: 'cubic-bezier(0.4, 0, 0.2, 1)', // ✅ Premium easing
   }), [])
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
@@ -1310,15 +1345,15 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
       <DragOverlay dropAnimation={dropAnimation}>
         {activeQuote ? (
           <Card 
-            className="bg-white border-2 border-primary-400 shadow-xl min-w-[300px] rotate-2 transition-none"
+            className="bg-white border-2 border-primary-500 shadow-2xl min-w-[300px] rotate-2 transition-all duration-200"
             style={{
               willChange: 'transform, opacity',
-              transform: 'translate3d(0, 0, 0)',
+              transform: 'translate3d(0, 0, 0) scale(1.05)',
               backfaceVisibility: 'hidden',
               WebkitTransform: 'translateZ(0)',
               perspective: 1000,
-              transition: 'none', // Drag sırasında hiç transition yok
-              pointerEvents: 'none', // Drag sırasında pointer events yok
+              pointerEvents: 'none',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
             }}
           >
             <div className="p-3">

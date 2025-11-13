@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic'
  * Smart Re-Engagement Flow
  * Müşteri 60 gün boyunca etkileşimsizse (hiç görüşme, teklif, fatura yoksa) uyarı ver
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { session, error: sessionError } = await getSafeSession(request)
     if (sessionError) {

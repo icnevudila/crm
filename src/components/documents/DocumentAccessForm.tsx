@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -117,7 +117,7 @@ export default function DocumentAccessForm({
   }
 
   const handleDeleteAccess = async (accessId: string) => {
-    if (!confirm('Bu erişimi kaldırmak istediğinize emin misiniz?')) {
+    if (!(await confirm('Bu erişimi kaldırmak istediğinize emin misiniz?'))) {
       return
     }
 

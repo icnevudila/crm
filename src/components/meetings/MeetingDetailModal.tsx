@@ -169,20 +169,90 @@ export default function MeetingDetailModal({
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Main Content */}
             <div className="lg:col-span-2 space-y-6">
-              {/* GÃ¶rÃ¼ÅŸme Notu */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileText className="h-5 w-5" />
-                    Görüşme Notu
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-gray-700 whitespace-pre-wrap">
-                    {displayMeeting?.description || 'Not eklenmemiş'}
-                  </p>
-                </CardContent>
-              </Card>
+              {/* Görüşme Açıklaması */}
+              {displayMeeting?.description && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Açıklama
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-gray-700 whitespace-pre-wrap">
+                      {displayMeeting.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Toplantı Notları */}
+              {displayMeeting?.notes && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Toplantı Notları
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-gray-700 whitespace-pre-wrap">
+                      {displayMeeting.notes}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Çıktılar/Sonuçlar */}
+              {displayMeeting?.outcomes && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Çıktılar / Sonuçlar
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-gray-700 whitespace-pre-wrap">
+                      {displayMeeting.outcomes}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Aksiyon Maddeleri */}
+              {displayMeeting?.actionItems && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Aksiyon Maddeleri
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-gray-700 whitespace-pre-wrap">
+                      {displayMeeting.actionItems}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Katılımcılar (Metin) */}
+              {displayMeeting?.attendees && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <User className="h-5 w-5" />
+                      Katılımcılar
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-gray-700 whitespace-pre-wrap">
+                      {displayMeeting.attendees}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Ä°lgili Bilgiler */}
               <Card>
