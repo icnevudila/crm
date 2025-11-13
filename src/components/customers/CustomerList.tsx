@@ -8,7 +8,7 @@ import { useSession } from '@/hooks/useSession'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import {
   Table,
   TableBody,
@@ -277,7 +277,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
   })
 
   const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!confirm(t('deleteConfirm', { name }))) {
+    if (!(await confirm(t('deleteConfirm', { name })))) {
       return
     }
 

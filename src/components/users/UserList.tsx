@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import { useSession } from '@/hooks/useSession'
 import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye, User as UserIcon } from 'lucide-react'
@@ -81,7 +81,7 @@ export default function UserList() {
   })
 
   const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!confirm(t('deleteConfirm', { name }))) {
+    if (!(await confirm(t('deleteConfirm', { name })))) {
       return
     }
 

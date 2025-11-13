@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
 import { useSession } from '@/hooks/useSession'
@@ -178,7 +178,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
   }, [])
 
   const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!confirm(t('deleteConfirm', { name }))) {
+    if (!(await confirm(t('deleteConfirm', { name })))) {
       return
     }
 

@@ -11,7 +11,7 @@ export async function GET(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    const session = await getServerSession()
+    const session = await getServerSession(request)
     if (!session) {
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Oturum bilgisi alınamadı' },
@@ -93,7 +93,7 @@ export async function PUT(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    const session = await getServerSession()
+    const session = await getServerSession(request)
     if (!session) {
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Oturum bilgisi alınamadı' },
@@ -195,7 +195,7 @@ export async function DELETE(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    const session = await getServerSession()
+    const session = await getServerSession(request)
     if (!session) {
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Oturum bilgisi alınamadı' },

@@ -10,7 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import DetailModal from '@/components/ui/DetailModal'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import { formatCurrency } from '@/lib/utils'
@@ -65,7 +65,7 @@ export default function MeetingDetailModal({
   }
 
   const handleDelete = async () => {
-    if (!window.confirm(`${displayMeeting?.title} görüşmesini silmek istediğinize emin misiniz?`)) {
+    if (!(await confirm(`${displayMeeting?.title} görüşmesini silmek istediğinize emin misiniz?`))) {
       return
     }
 
@@ -393,4 +393,6 @@ export default function MeetingDetailModal({
     </>
   )
 }
+
+
 

@@ -109,21 +109,38 @@ export async function loginWithCredentials(email: string, password: string) {
 }
 
 // Session al (server-side) - Cookie'lerden oku
-export async function getServerSession() {
+// Request parametresi alabilir (Edge Runtime uyumluluğu için)
+export async function getServerSession(request?: Request) {
   try {
-    const cookieStore = await cookies()
-    const sessionCookie = cookieStore.get('crm_session')
+    let sessionCookieValue: string | undefined
 
-    if (!sessionCookie) {
+    if (request) {
+      // Edge Runtime uyumluluğu için request headers'dan cookie oku
+      const cookieHeader = request.headers.get('cookie') || ''
+      const match = cookieHeader.match(/crm_session=([^;]+)/)
+      sessionCookieValue = match ? decodeURIComponent(match[1]) : undefined
+    } else {
+      // Node.js Runtime için cookies() kullan
+      try {
+        const cookieStore = await cookies()
+        const sessionCookie = cookieStore.get('crm_session')
+        sessionCookieValue = sessionCookie?.value
+      } catch (cookieError) {
+        // cookies() çağrısı başarısız olursa (Edge Runtime'da olabilir)
+        console.error('cookies() error:', cookieError)
+        return null
+      }
+    }
+
+    if (!sessionCookieValue) {
       return null
     }
 
     try {
-      const sessionData = JSON.parse(sessionCookie.value)
+      const sessionData = JSON.parse(sessionCookieValue)
 
       // Session'ın geçerli olup olmadığını kontrol et
       if (new Date(sessionData.expires) < new Date()) {
-        cookieStore.delete('crm_session')
         return null
       }
 
@@ -136,7 +153,6 @@ export async function getServerSession() {
         .maybeSingle()
 
       if (!user) {
-        cookieStore.delete('crm_session')
         return null
       }
 
@@ -161,8 +177,8 @@ export async function getServerSession() {
           companyName,
         },
       }
-    } catch {
-      cookieStore.delete('crm_session')
+    } catch (parseError) {
+      console.error('Session parse error:', parseError)
       return null
     }
   } catch (error) {

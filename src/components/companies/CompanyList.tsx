@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye, Download, FileSpreadsheet, FileText, Users, Briefcase, FileText as FileTextIcon, Receipt, Calendar, Building2, Sparkles } from 'lucide-react'
 import { motion } from 'framer-motion'
@@ -152,7 +152,7 @@ export default function CompanyList() {
   }, [companies])
 
   const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!window.confirm(`${name} firmasını silmek istediğinize emin misiniz?`)) {
+    if (!(await confirm(`${name} firmasını silmek istediğinize emin misiniz?`))) {
       return
     }
 

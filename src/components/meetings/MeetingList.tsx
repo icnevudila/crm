@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye, Calendar, Building2, User, FileText, Download, FileSpreadsheet, FileText as FileTextIcon, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -177,7 +177,7 @@ export default function MeetingList() {
   }
 
   const handleDelete = async (id: string, title: string) => {
-    if (!window.confirm(`${title} görüşmesini silmek istediğinize emin misiniz?`)) {
+    if (!(await confirm(`${title} görüşmesini silmek istediğinize emin misiniz?`))) {
       return
     }
 

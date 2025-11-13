@@ -73,11 +73,19 @@ export async function getSafeSession(request?: Request): Promise<SafeSessionResu
     return { session: cachedSession }
   }
   
-  // Cache miss - getServerSession çağır
+  // Cache miss - getServerSession çağır (request parametresi ile)
   try {
-    const session = await getServerSession()
+    const session = await getServerSession(request || undefined)
     
-    // Cache'e kaydet (30 dakika)
+    // Session null ise (unauthorized)
+    if (!session) {
+      return {
+        session: null,
+        error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+      }
+    }
+
+    // Cache'e kaydet (30 dakika) - sadece geçerli session'ları cache'le
     sessionCache.set(cacheKey, {
       session,
       expires: Date.now() + SESSION_CACHE_TTL,

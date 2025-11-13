@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import Link from 'next/link'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import { Plus, Search, Edit, Trash2, Users, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -70,7 +70,7 @@ export default function SegmentList({ isOpen = true }: SegmentListProps) {
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(t('deleteConfirm', { name }))) return
+    if (!(await confirm(t('deleteConfirm', { name })))) return
 
     try {
       const res = await fetch(`/api/segments/${id}`, { method: 'DELETE' })

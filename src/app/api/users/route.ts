@@ -10,7 +10,7 @@ export const revalidate = 3600
 export async function GET(request: Request) {
   try {
     // Session kontrolü - hata yakalama ile
-    const session = await getServerSession()
+    const session = await getServerSession(request)
     if (!session) {
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Oturum bilgisi alınamadı' },
@@ -82,7 +82,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     // Session kontrolü - hata yakalama ile
-    const session = await getServerSession()
+    const session = await getServerSession(request)
     if (!session) {
       return NextResponse.json(
         { error: 'Unauthorized', message: 'Oturum bilgisi alınamadı' },

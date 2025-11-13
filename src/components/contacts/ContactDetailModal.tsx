@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import DetailModal from '@/components/ui/DetailModal'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import dynamic from 'next/dynamic'
@@ -77,7 +77,7 @@ export default function ContactDetailModal({
   }
 
   const handleDelete = async () => {
-    if (!window.confirm(`${displayContact?.firstName} ${displayContact?.lastName || ''} kişisini silmek istediğinize emin misiniz?`)) {
+    if (!(await confirm(`${displayContact?.firstName} ${displayContact?.lastName || ''} kişisini silmek istediğinize emin misiniz?`))) {
       return
     }
 

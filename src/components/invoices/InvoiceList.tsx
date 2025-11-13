@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import {
   Table,
   TableBody,
@@ -245,7 +245,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
       return
     }
 
-    if (!confirm(t('deleteConfirm', { title }))) {
+    if (!(await confirm(t('deleteConfirm', { title })))) {
       return
     }
 

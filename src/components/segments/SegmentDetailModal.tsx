@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import DetailModal from '@/components/ui/DetailModal'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import SegmentForm from './SegmentForm'
@@ -43,7 +43,7 @@ export default function SegmentDetailModal({
   const displaySegment = segment || initialData
 
   const handleDelete = async () => {
-    if (!window.confirm(`${displaySegment?.name} segmentini silmek istediğinize emin misiniz?`)) {
+    if (!(await confirm(`${displaySegment?.name} segmentini silmek istediğinize emin misiniz?`))) {
       return
     }
 
@@ -70,7 +70,7 @@ export default function SegmentDetailModal({
   }
 
   const handleRemoveMember = async (memberId: string, customerName: string) => {
-    if (!window.confirm(`${customerName} müşteriyi bu segmentten çıkarmak istediğinize emin misiniz?`)) {
+    if (!(await confirm(`${customerName} müşteriyi bu segmentten çıkarmak istediğinize emin misiniz?`))) {
       return
     }
 
@@ -315,4 +315,6 @@ export default function SegmentDetailModal({
     </>
   )
 }
+
+
 

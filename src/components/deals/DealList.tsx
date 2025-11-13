@@ -9,7 +9,7 @@ import { Plus, Search, Edit, Trash2, Eye, LayoutGrid, Table as TableIcon, Filter
 import { useData } from '@/hooks/useData'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import {
   Table,
   TableBody,
@@ -343,7 +343,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
   }, [])
 
   const handleDelete = async (id: string, title: string) => {
-    if (!confirm(t('deleteConfirm', { title }))) {
+    if (!(await confirm(t('deleteConfirm', { title })))) {
       return
     }
 

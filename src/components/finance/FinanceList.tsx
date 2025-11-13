@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSession } from '@/hooks/useSession'
 import Link from 'next/link'
@@ -442,7 +442,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
   }, [type, category, customerCompanyId, startDate, endDate, debouncedSearch])
 
   const handleDelete = useCallback(async (id: string) => {
-    if (!window.confirm('Bu finans kaydını silmek istediğinize emin misiniz?')) {
+    if (!(await confirm('Bu finans kaydını silmek istediğinize emin misiniz?'))) {
       return
     }
 
