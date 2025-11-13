@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { getCacheScope, getReportCache, setReportCache } from '@/lib/cache/report-cache'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.companyId) {
@@ -15,6 +16,22 @@ export async function GET() {
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     const companyId = session.user.companyId
     const supabase = getSupabaseWithServiceRole()
+    const scope = getCacheScope(isSuperAdmin, companyId)
+    const forceRefresh = new URL(request.url).searchParams.get('refresh') === '1'
+
+    const cached = await getReportCache({
+      supabase,
+      reportType: 'performance',
+      scope,
+      ttlMinutes: 30,
+      forceRefresh,
+    })
+
+    if (cached) {
+      return NextResponse.json(cached.payload, {
+        headers: { 'Cache-Control': 'no-store, must-revalidate', 'x-cache-hit': 'report-cache' },
+      })
+    }
 
     // Kullanıcıları çek (monthlyGoal ile)
     let usersQuery = supabase
@@ -158,38 +175,44 @@ export async function GET() {
         rank: index + 1,
       }))
 
-    return NextResponse.json(
-      {
-        userPerformance: userPerformance.map((up) => ({
-          name: up.userName,
-          totalSales: up.totalSales,
-          goalAchievement: Math.round(up.goalAchievement * 100) / 100,
-          averageOrderValue: Math.round(up.averageOrderValue * 100) / 100,
-          winRate: Math.round(up.winRate * 100) / 100,
-          dealCount: up.dealCount,
-          invoiceCount: up.invoiceCount,
+    const payload = {
+      userPerformance: userPerformance.map((up) => ({
+        name: up.userName,
+        totalSales: up.totalSales,
+        goalAchievement: Math.round(up.goalAchievement * 100) / 100,
+        averageOrderValue: Math.round(up.averageOrderValue * 100) / 100,
+        winRate: Math.round(up.winRate * 100) / 100,
+        dealCount: up.dealCount,
+        invoiceCount: up.invoiceCount,
+      })),
+      monthlyGoalTrend: Object.keys(monthlyGoalTrend)
+        .sort()
+        .map((month) => ({
+          month,
+          goal: monthlyGoalTrend[month].goal,
+          actual: monthlyGoalTrend[month].actual,
         })),
-        monthlyGoalTrend: Object.keys(monthlyGoalTrend)
-          .sort()
-          .map((month) => ({
-            month,
-            goal: monthlyGoalTrend[month].goal,
-            actual: monthlyGoalTrend[month].actual,
-          })),
-        topPerformers,
-        teamPerformance: {
-          totalSales: userPerformance.reduce((sum, up) => sum + up.totalSales, 0),
-          averageGoalAchievement:
-            userPerformance.length > 0
-              ? userPerformance.reduce((sum, up) => sum + up.goalAchievement, 0) / userPerformance.length
-              : 0,
-          totalUsers: userPerformance.length,
-        },
+      topPerformers,
+      teamPerformance: {
+        totalSales: userPerformance.reduce((sum, up) => sum + up.totalSales, 0),
+        averageGoalAchievement:
+          userPerformance.length > 0
+            ? userPerformance.reduce((sum, up) => sum + up.goalAchievement, 0) / userPerformance.length
+            : 0,
+        totalUsers: userPerformance.length,
       },
-      {
-        headers: { 'Cache-Control': 'no-store, must-revalidate' },
-      }
-    )
+    }
+
+    await setReportCache({
+      supabase,
+      reportType: 'performance',
+      scope,
+      payload,
+    })
+
+    return NextResponse.json(payload, {
+      headers: { 'Cache-Control': 'no-store, must-revalidate', 'x-cache-hit': 'miss' },
+    })
   } catch (error: any) {
     console.error('Error fetching performance reports:', error)
     return NextResponse.json(

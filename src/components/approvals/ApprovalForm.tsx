@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { toast } from '@/lib/toast'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -38,6 +38,9 @@ export default function ApprovalForm({
   const [loading, setLoading] = useState(false)
   const [users, setUsers] = useState<Array<{ id: string; name: string }>>([])
   const [selectedApprovers, setSelectedApprovers] = useState<string[]>([])
+  const [recordOptions, setRecordOptions] = useState<Array<{ id: string; label: string }>>([])
+  const [recordsLoading, setRecordsLoading] = useState(false)
+  const [recordError, setRecordError] = useState<string | null>(null)
 
   const {
     register,
@@ -58,6 +61,34 @@ export default function ApprovalForm({
     },
   })
 
+  const loadRecords = useCallback(async (module: string, searchTerm = '') => {
+    try {
+      setRecordsLoading(true)
+      setRecordError(null)
+      const params = new URLSearchParams({ type: module })
+      if (searchTerm) {
+        params.set('search', searchTerm)
+      }
+      const res = await fetch(`/api/approvals/records?${params.toString()}`)
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        throw new Error(error?.error || 'Kayıtlar yüklenemedi')
+      }
+      const data = await res.json()
+      if (Array.isArray(data)) {
+        setRecordOptions(data)
+      } else {
+        setRecordOptions([])
+      }
+    } catch (error: any) {
+      console.error('Record fetch error:', error)
+      setRecordOptions([])
+      setRecordError(error?.message || 'Kayıtlar yüklenemedi')
+    } finally {
+      setRecordsLoading(false)
+    }
+  }, [])
+
   // Load users when form opens
   useEffect(() => {
     if (open) {
@@ -65,8 +96,13 @@ export default function ApprovalForm({
         .then((res) => res.json())
         .then((data) => setUsers(Array.isArray(data) ? data : []))
         .catch((err) => console.error('Failed to load users:', err))
+      // Modül seçimine bağlı kayıtları sıfırla
+      const currentRelatedTo = watch('relatedTo')
+      if (currentRelatedTo) {
+        void loadRecords(currentRelatedTo)
+      }
     }
-  }, [open])
+  }, [open, watch, loadRecords])
 
   // Update form when approvers change
   useEffect(() => {
@@ -115,6 +151,19 @@ export default function ApprovalForm({
     setSelectedApprovers([])
     onClose()
   }
+
+  const relatedTo = watch('relatedTo')
+  useEffect(() => {
+    if (!relatedTo) {
+      setRecordOptions([])
+      setValue('relatedId', '')
+      return
+    }
+    setValue('relatedId', '')
+    void loadRecords(relatedTo)
+  }, [relatedTo, loadRecords, setValue])
+
+  const relatedIdValue = watch('relatedId')
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -177,16 +226,62 @@ export default function ApprovalForm({
           {/* Record ID */}
           <div className="space-y-2">
             <Label htmlFor="relatedId">Kayıt ID *</Label>
-            <Input
-              id="relatedId"
-              {...register('relatedId')}
-              placeholder="UUID formatında kayıt ID"
-            />
+            {relatedTo ? (
+              <>
+                <Select
+                  value={relatedIdValue || ''}
+                  onValueChange={(value) => setValue('relatedId', value)}
+                  disabled={recordsLoading || recordOptions.length === 0}
+                >
+                  <SelectTrigger>
+                    <SelectValue
+                      placeholder={
+                        recordsLoading
+                          ? 'Kayıtlar yükleniyor...'
+                          : recordOptions.length > 0
+                            ? 'Kayıt seçin'
+                            : 'Kayıt bulunamadı'
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {recordOptions.map((option) => (
+                      <SelectItem key={option.id} value={option.id}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                    {!recordsLoading && recordOptions.length === 0 && (
+                      <SelectItem value="__empty" disabled>
+                        Kayıt bulunamadı
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+                <Input
+                  id="relatedId"
+                  {...register('relatedId')}
+                  placeholder="Ya da ID girin (UUID formatında)"
+                  className="mt-2"
+                />
+                {recordError && (
+                  <p className="text-xs text-red-500">{recordError}</p>
+                )}
+              </>
+            ) : (
+              <>
+                <Input
+                  id="relatedId"
+                  {...register('relatedId')}
+                  placeholder="Önce ilgili modülü seçin"
+                  disabled
+                />
+              </>
+            )}
             {errors.relatedId && (
               <p className="text-sm text-red-600">{errors.relatedId.message}</p>
             )}
             <p className="text-xs text-gray-500">
-              Onaylanacak kaydın ID&apos;sini girin
+              Kayıt listesinde bulamazsanız ID&apos;yi manuel olarak girebilirsiniz.
             </p>
           </div>
 

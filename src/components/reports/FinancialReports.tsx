@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card'
 import { DollarSign, TrendingUp, PieChart } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import { ReportSectionProps } from './types'
 
 const FinancialIncomeExpenseComposedChart = dynamic(() => import('@/components/reports/charts/FinancialIncomeExpenseComposedChart'), {
   ssr: false,
@@ -25,14 +26,16 @@ async function fetchFinancialReports() {
   return res.json()
 }
 
-export default function FinancialReports() {
+export default function FinancialReports({ isActive }: ReportSectionProps) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['financial-reports'],
     queryFn: fetchFinancialReports,
     staleTime: 5 * 60 * 1000,
     refetchOnMount: true,
+    enabled: isActive,
   })
 
+  if (!isActive) return null
   if (isLoading) return <SkeletonList />
   if (error) return <div className="text-red-600">Rapor yüklenirken hata oluştu</div>
 
@@ -44,8 +47,7 @@ export default function FinancialReports() {
           <div>
             <h3 className="font-semibold text-gray-900 mb-1">Finansal Raporlar</h3>
             <p className="text-sm text-gray-600">
-              Finansal detaylı analizler. Gelir-gider karşılaştırması, kategori bazlı dağılım ve 
-              karlılık analizlerini görüntüleyin. Tüm veriler anlık olarak güncellenir.
+              Finansal analizler. Gelir-gider karşılaştırması, kategori bazlı dağılım ve karlılık analizi.
             </p>
           </div>
         </div>
@@ -61,10 +63,6 @@ export default function FinancialReports() {
             <TrendingUp className="h-5 w-5 text-primary-600" />
           </div>
           <FinancialIncomeExpenseComposedChart data={data?.incomeExpense || []} />
-          <div className="mt-4 p-3 bg-gray-50 rounded text-xs text-gray-600">
-            <strong>Açıklama:</strong> Aylık bazda gelir ve gider karşılaştırması. 
-            Gelir giderden yüksekse karlılık, düşükse zarar var demektir.
-          </div>
         </Card>
 
         <Card className="p-6">
@@ -76,10 +74,6 @@ export default function FinancialReports() {
             <PieChart className="h-5 w-5 text-primary-600" />
           </div>
           <FinancialCategoryPieChart data={data?.categoryDistribution || []} />
-          <div className="mt-4 p-3 bg-gray-50 rounded text-xs text-gray-600">
-            <strong>Açıklama:</strong> Finansal işlemlerin kategori bazlı dağılımı. 
-            Hangi kategorilerde daha fazla gelir/gider olduğunu görüntüleyin.
-          </div>
         </Card>
       </div>
     </div>

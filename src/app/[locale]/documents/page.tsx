@@ -1,16 +1,29 @@
 'use client'
 
+/* eslint-disable react/no-unescaped-entities */
+
 import { useState } from 'react'
 import { useLocale } from 'next-intl'
 import Link from 'next/link'
-import { Plus, Search, Download, Trash2, FileText, Image as ImageIcon, File, Eye } from 'lucide-react'
+import { Plus, Search, Download, Trash2, FileText, Image as ImageIcon, File, Eye, Edit, Shield } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import Pagination from '@/components/ui/Pagination'
 import { useData } from '@/hooks/useData'
 import DocumentUploadForm from '@/components/documents/DocumentUploadForm'
+import DocumentForm from '@/components/documents/DocumentForm'
+import DocumentAccessForm from '@/components/documents/DocumentAccessForm'
+import { mutate } from 'swr'
+import { toast, confirm } from '@/lib/toast'
+import dynamic from 'next/dynamic'
+
+const DocumentDetailModal = dynamic(() => import('@/components/documents/DocumentDetailModal'), {
+  ssr: false,
+  loading: () => null,
+})
 
 interface Document {
   id: string
@@ -25,13 +38,72 @@ interface Document {
   uploadedBy: { name: string; email: string } | null
 }
 
+interface DocumentsResponse {
+  data: Document[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    pages: number
+  }
+}
+
 export default function DocumentsPage() {
   const locale = useLocale()
   const [search, setSearch] = useState('')
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [formOpen, setFormOpen] = useState(false)
+  const [accessOpen, setAccessOpen] = useState(false)
+  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(null)
+  const [selectedDocumentData, setSelectedDocumentData] = useState<Document | null>(null)
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
 
-  const apiUrl = `/api/documents${search ? `?search=${search}` : ''}`
-  const { data: documents = [], isLoading, mutate, error } = useData<Document[]>(apiUrl)
+  const params = new URLSearchParams()
+  if (search) params.append('search', search)
+  params.append('page', page.toString())
+  params.append('limit', pageSize.toString())
+  
+  const apiUrl = `/api/documents?${params.toString()}`
+  const { data, isLoading, mutate: mutateDocuments, error } = useData<DocumentsResponse>(apiUrl)
+  
+  const documents = data?.data || []
+  const pagination = data?.pagination || { page: 1, limit: 20, total: 0, pages: 1 }
+
+  const handleEdit = (doc: Document) => {
+    setSelectedDocument(doc)
+    setFormOpen(true)
+  }
+
+  const handleManageAccess = (doc: Document) => {
+    setSelectedDocument(doc)
+    setAccessOpen(true)
+  }
+
+  const handleDelete = async (id: string, title: string) => {
+    const confirmed = await confirm(`${title} dökümanını silmek istediğinize emin misiniz?`)
+    if (!confirmed) return
+
+    const toastId = toast.loading('Siliniyor...')
+    try {
+      const res = await fetch(`/api/documents/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Silme işlemi başarısız')
+      }
+
+      await mutateDocuments()
+      await mutate(apiUrl)
+      toast.dismiss(toastId)
+      toast.success('Silindi', 'Döküman başarıyla silindi.')
+    } catch (error: any) {
+      console.error('Delete error:', error)
+      toast.dismiss(toastId)
+      toast.error('Silme başarısız', error?.message || 'Silme işlemi sırasında bir hata oluştu.')
+    }
+  }
 
   const getFileIcon = (fileType: string | null) => {
     if (!fileType) return <File className="h-5 w-5 text-gray-500" />
@@ -139,17 +211,43 @@ export default function DocumentsPage() {
                   <TableCell>{doc.uploadedBy?.name || '-'}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Link href={`/${locale}/documents/${doc.id}`} prefetch={true}>
-                        <Button variant="ghost" size="icon">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setSelectedDocumentId(doc.id)
+                          setSelectedDocumentData(doc)
+                          setDetailModalOpen(true)
+                        }}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
                       <a href={doc.fileUrl} target="_blank" rel="noopener noreferrer">
                         <Button variant="ghost" size="icon">
                           <Download className="h-4 w-4" />
                         </Button>
                       </a>
-                      <Button variant="ghost" size="icon" className="text-red-600">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleManageAccess(doc)}
+                        title="Erişim Yönetimi"
+                      >
+                        <Shield className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(doc)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(doc.id, doc.title)}
+                        className="text-red-600 hover:text-red-700"
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -159,17 +257,80 @@ export default function DocumentsPage() {
             )}
           </TableBody>
         </Table>
+        
+        {pagination.pages > 1 && (
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.pages}
+            pageSize={pagination.limit}
+            totalItems={pagination.total}
+            onPageChange={(newPage) => {
+              setPage(newPage)
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize)
+              setPage(1)
+            }}
+          />
+        )}
       </div>
 
       {/* Upload Modal */}
       <DocumentUploadForm
         open={uploadOpen}
         onClose={() => setUploadOpen(false)}
-        onSuccess={(doc) => {
-          mutate()
+        onSuccess={async (doc) => {
+          // Optimistic update - yeni dokümanı cache'e ekle
+          await mutateDocuments()
+          await mutate(apiUrl)
           setUploadOpen(false)
         }}
       />
+
+      {/* Edit Modal */}
+      <DocumentForm
+        document={selectedDocument || undefined}
+        open={formOpen}
+        onClose={() => {
+          setFormOpen(false)
+          setSelectedDocument(null)
+        }}
+        onSuccess={async (savedDocument) => {
+          await mutateDocuments()
+          await mutate(apiUrl)
+          setFormOpen(false)
+          setSelectedDocument(null)
+        }}
+      />
+
+      {/* Detail Modal */}
+      <DocumentDetailModal
+        documentId={selectedDocumentId}
+        open={detailModalOpen}
+        onClose={() => {
+          setDetailModalOpen(false)
+          setSelectedDocumentId(null)
+          setSelectedDocumentData(null)
+        }}
+        initialData={selectedDocumentData || undefined}
+      />
+
+      {/* Access Management Modal */}
+      {selectedDocument && (
+        <DocumentAccessForm
+          documentId={selectedDocument.id}
+          open={accessOpen}
+          onClose={() => {
+            setAccessOpen(false)
+            setSelectedDocument(null)
+          }}
+          onSuccess={async () => {
+            await mutateDocuments()
+            await mutate(apiUrl)
+          }}
+        />
+      )}
     </div>
   )
 }

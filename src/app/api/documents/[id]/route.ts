@@ -1,16 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { hasPermission, buildPermissionDeniedResponse } from '@/lib/permissions'
+import { documentUpdateSchema } from '@/lib/validations/documents'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -18,14 +15,30 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Permission check
+    const canRead = await hasPermission('documents', 'read', session.user.id)
+    if (!canRead) {
+      return buildPermissionDeniedResponse()
+    }
+
+    const supabase = getSupabaseWithServiceRole()
+    const { id: documentId } = await params
     const { data, error } = await supabase
       .from('Document')
       .select(`
         *,
         uploadedBy:User!Document_uploadedBy_fkey(id, name, email),
-        access:DocumentAccess(id, userId, accessLevel, expiresAt)
+        access:DocumentAccess(
+          id,
+          userId,
+          customerId,
+          accessLevel,
+          expiresAt,
+          User:User!DocumentAccess_userId_fkey(id, name, email),
+          Customer:Customer!DocumentAccess_customerId_fkey(id, name)
+        )
       `)
-      .eq('id', params.id)
+      .eq('id', documentId)
       .eq('companyId', session.user.companyId)
       .single()
 
@@ -46,7 +59,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -54,20 +67,38 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Permission check
+    const canUpdate = await hasPermission('documents', 'update', session.user.id)
+    if (!canUpdate) {
+      return buildPermissionDeniedResponse()
+    }
+
+    const supabase = getSupabaseWithServiceRole()
+    const { id: documentId } = await params
     const body = await request.json()
+
+    // Zod validation
+    const validationResult = documentUpdateSchema.safeParse(body)
+    if (!validationResult.success) {
+      return NextResponse.json(
+        { 
+          error: 'Validation error',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        },
+        { status: 400 }
+      )
+    }
+
+    const validatedData = validationResult.data
 
     // Update document
     const { data, error } = await supabase
       .from('Document')
       .update({
-        title: body.title,
-        description: body.description,
-        folder: body.folder,
-        relatedTo: body.relatedTo || null,
-        relatedId: body.relatedId || null,
+        ...validatedData,
         updatedAt: new Date().toISOString(),
       })
-      .eq('id', params.id)
+      .eq('id', documentId)
       .eq('companyId', session.user.companyId)
       .select()
       .single()
@@ -78,7 +109,7 @@ export async function PUT(
     await supabase.from('ActivityLog').insert({
       action: 'UPDATE',
       entityType: 'Document',
-      entityId: params.id,
+      entityId: documentId,
       userId: session.user.id,
       companyId: session.user.companyId,
       description: `Updated document: ${data.title}`,
@@ -97,7 +128,7 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -105,10 +136,18 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // Permission check
+    const canDelete = await hasPermission('documents', 'delete', session.user.id)
+    if (!canDelete) {
+      return buildPermissionDeniedResponse()
+    }
+
+    const supabase = getSupabaseWithServiceRole()
+    const { id: documentId } = await params
     const { error } = await supabase
       .from('Document')
       .delete()
-      .eq('id', params.id)
+      .eq('id', documentId)
       .eq('companyId', session.user.companyId)
 
     if (error) throw error
@@ -117,11 +156,11 @@ export async function DELETE(
     await supabase.from('ActivityLog').insert({
       action: 'DELETE',
       entityType: 'Document',
-      entityId: params.id,
+      entityId: documentId,
       userId: session.user.id,
       companyId: session.user.companyId,
       description: `Deleted document`,
-      meta: { documentId: params.id },
+      meta: { documentId },
     })
 
     return NextResponse.json({ success: true })

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabase } from '@/lib/supabase'
 import { createRecord } from '@/lib/crud'
+import { buildPermissionDeniedResponse } from '@/lib/permissions'
 
 export async function GET(request: Request) {
   try {
@@ -17,7 +18,7 @@ export async function GET(request: Request) {
 
     // Sadece SuperAdmin görebilir
     if (session.user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Sadece SuperAdmin şirket izinlerini görüntüleyebilir.')
     }
 
     const { searchParams } = new URL(request.url)
@@ -45,7 +46,7 @@ export async function GET(request: Request) {
     return NextResponse.json(permissions || [])
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch company permissions' },
+      { error: error.message || 'Kurum yetkileri getirilemedi' },
       { status: 500 }
     )
   }
@@ -65,7 +66,7 @@ export async function POST(request: Request) {
 
     // Sadece SuperAdmin oluşturabilir
     if (session.user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Sadece SuperAdmin şirket izinlerini yönetebilir.')
     }
 
     const body = await request.json()
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
     return NextResponse.json(permission)
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to create company permission' },
+      { error: error.message || 'Kurum yetkisi oluşturulamadı' },
       { status: 500 }
     )
   }

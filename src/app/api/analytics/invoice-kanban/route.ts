@@ -41,9 +41,10 @@ export async function GET(request: Request) {
 
     // Tüm invoice'ları çek - limit yok (tüm verileri çek)
     // ÖNEMLİ: totalAmount kolonunu çek (050 migration ile total → totalAmount olarak değiştirildi)
+    // serviceDescription kolonu migration 065 ile eklendi
     let query = supabase
       .from('Invoice')
-      .select('id, title, status, totalAmount, quoteId, createdAt, invoiceType')
+      .select('id, title, status, totalAmount, quoteId, createdAt, invoiceType, serviceDescription')
       .order('createdAt', { ascending: false })
     
     if (!isSuperAdmin) {
@@ -109,9 +110,12 @@ export async function GET(request: Request) {
         invoices: statusInvoices.map((invoice: any) => ({
           id: invoice.id,
           title: invoice.title,
+          status: invoice.status || status, // Status eklendi (invoice.status varsa onu kullan, yoksa column status'ünü kullan)
           totalAmount: invoice.totalAmount || 0,
           quoteId: invoice.quoteId,
           createdAt: invoice.createdAt,
+          invoiceType: invoice.invoiceType, // Fatura tipi eklendi
+          serviceDescription: invoice.serviceDescription, // Hizmet açıklaması eklendi
         })),
       }
     })

@@ -2,8 +2,12 @@ import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
-// Dynamic route - cache'i kapat (POST sonrası fresh data için)
-export const dynamic = 'force-dynamic'
+const DUPLICATE_TAX_MESSAGE =
+  'Bu vergi dairesi ve vergi numarası kombinasyonu zaten kayıtlı. Lütfen mevcut kaydı güncelleyin.'
+
+// PERFORMANCE FIX: force-dynamic cache'i tamamen kapatıyor - kaldırıldı
+// export const dynamic = 'force-dynamic' // KALDIRILDI - cache performansı için
+export const revalidate = 60 // 60 saniye revalidate (performans için)
 
 export async function GET(request: Request) {
   // CRITICAL: Her zaman log ekle - 403 hatasını debug etmek için
@@ -79,7 +83,7 @@ export async function GET(request: Request) {
       })
       return NextResponse.json(
         {
-          error: error.message || 'Failed to fetch customer companies',
+          error: error.message || 'Müşteri firmaları getirilemedi',
           ...(process.env.NODE_ENV === 'development' && { 
             details: error,
             code: error.code,
@@ -155,11 +159,12 @@ export async function GET(request: Request) {
       companyId: session.user.companyId,
     })
 
-    // Cache headers - POST sonrası fresh data için cache'i kapat
-    // NOT: dynamic = 'force-dynamic' ile cache zaten kapalı
+    // PERFORMANCE FIX: Cache headers eklendi - 60 saniye revalidate
     return NextResponse.json(companies, {
       headers: {
-        'Cache-Control': 'no-store, must-revalidate', // POST sonrası fresh data için cache'i kapat
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120, max-age=30', // PERFORMANCE FIX: Cache headers eklendi
+        'CDN-Cache-Control': 'public, s-maxage=60',
+        'Vercel-CDN-Cache-Control': 'public, s-maxage=60',
         'X-Total-Count': String(count || companies.length),
       },
     })
@@ -167,8 +172,8 @@ export async function GET(request: Request) {
     console.error('CustomerCompanies GET exception:', error)
     return NextResponse.json(
       {
-        error: 'Failed to fetch customer companies',
-        message: error?.message || 'Unknown error',
+        error: 'Müşteri firmaları getirilemedi',
+        message: error?.message || 'Bilinmeyen bir hata oluştu',
         ...(process.env.NODE_ENV === 'development' && {
           stack: error?.stack,
         }),
@@ -200,40 +205,40 @@ export async function POST(request: Request) {
       if (process.env.NODE_ENV === 'development') {
         console.error('CustomerCompanies POST API JSON parse error:', parseError)
       }
-      return NextResponse.json(
-        { error: 'Invalid JSON', message: parseError?.message || 'Failed to parse request body' },
-        { status: 400 }
-      )
+    return NextResponse.json(
+      { error: 'Geçersiz JSON', message: parseError?.message || 'İstek gövdesi çözümlenemedi' },
+      { status: 400 }
+    )
     }
     
     // Body validation - zorunlu alanlar: name, contactPerson, phone, taxOffice, taxNumber
     if (!body.name || typeof body.name !== 'string' || body.name.trim().length === 0) {
       return NextResponse.json(
-        { error: 'Validation error', message: 'Firma adı gereklidir' },
+        { error: 'Doğrulama hatası', message: 'Firma adı gereklidir' },
         { status: 400 }
       )
     }
     if (!body.contactPerson || typeof body.contactPerson !== 'string' || body.contactPerson.trim().length === 0) {
       return NextResponse.json(
-        { error: 'Validation error', message: 'Kontak kişi gereklidir' },
+        { error: 'Doğrulama hatası', message: 'Kontak kişi gereklidir' },
         { status: 400 }
       )
     }
     if (!body.phone || typeof body.phone !== 'string' || body.phone.trim().length === 0) {
       return NextResponse.json(
-        { error: 'Validation error', message: 'Telefon gereklidir' },
+        { error: 'Doğrulama hatası', message: 'Telefon gereklidir' },
         { status: 400 }
       )
     }
     if (!body.taxOffice || typeof body.taxOffice !== 'string' || body.taxOffice.trim().length === 0) {
       return NextResponse.json(
-        { error: 'Validation error', message: 'Vergi dairesi gereklidir' },
+        { error: 'Doğrulama hatası', message: 'Vergi dairesi gereklidir' },
         { status: 400 }
       )
     }
     if (!body.taxNumber || typeof body.taxNumber !== 'string' || body.taxNumber.trim().length === 0) {
       return NextResponse.json(
-        { error: 'Validation error', message: 'Vergi numarası gereklidir' },
+        { error: 'Doğrulama hatası', message: 'Vergi numarası gereklidir' },
         { status: 400 }
       )
     }
@@ -269,10 +274,17 @@ export async function POST(request: Request) {
       .single()
 
     if (error) {
+      if (error.code === '23505') {
+        return NextResponse.json(
+          { error: DUPLICATE_TAX_MESSAGE },
+          { status: 409 }
+        )
+      }
+
       console.error('Supabase insert error:', error)
       return NextResponse.json(
         { 
-          error: error.message || 'Failed to create customer company',
+          error: error.message || 'Müşteri firması oluşturulamadı',
           ...(process.env.NODE_ENV === 'development' && { details: error }),
         },
         { status: 500 }
@@ -289,18 +301,8 @@ export async function POST(request: Request) {
       })
     }
 
-    // ActivityLog kaydı
-    // @ts-ignore - Supabase type inference issue with dynamic table names
-    await (supabase.from('ActivityLog') as any).insert([
-      {
-        entity: 'CustomerCompany',
-        action: 'CREATE',
-        description: `Yeni müşteri firması oluşturuldu: ${body.name}`,
-        meta: { entity: 'CustomerCompany', action: 'create', id: company.id, ...(body as any) },
-        userId: session.user.id,
-        companyId: session.user.companyId,
-      },
-    ])
+    // ActivityLog KALDIRILDI - Sadece kritik işlemler için ActivityLog tutulacak
+    // (Performans optimizasyonu: Gereksiz log'lar veritabanını yavaşlatıyor)
 
     // NOT: revalidateTag API route'larda çalışmaz - dynamic = 'force-dynamic' yeterli
     // Cache zaten kapalı, fresh data dönecek
@@ -310,8 +312,8 @@ export async function POST(request: Request) {
     console.error('CustomerCompanies POST exception:', error)
     return NextResponse.json(
       { 
-        error: 'Failed to create customer company',
-        message: error?.message || 'Unknown error',
+        error: 'Müşteri firması oluşturulamadı',
+        message: error?.message || 'Bilinmeyen bir hata oluştu',
         ...(process.env.NODE_ENV === 'development' && {
           stack: error?.stack,
         }),

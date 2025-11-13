@@ -19,13 +19,10 @@ export async function GET(request: Request) {
     }
 
     // Permission check - canRead kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canRead = await hasPermission('shipment', 'read', session.user.id)
     if (!canRead) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Sevkiyat görüntüleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
@@ -60,7 +57,7 @@ export async function GET(request: Request) {
       .from('Shipment')
       .select(selectColumns)
       .order('createdAt', { ascending: false })
-      .limit(100) // ULTRA AGRESİF limit - sadece 100 kayıt (instant load)
+      .limit(50) // Agresif limit - sadece 50 kayıt (performans için)
     
     // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
@@ -189,7 +186,7 @@ export async function GET(request: Request) {
     })
   } catch (error) {
     return NextResponse.json(
-      { error: 'Failed to fetch shipments' },
+      { error: 'Sevkiyatlar getirilemedi' },
       { status: 500 }
     )
   }
@@ -206,7 +203,7 @@ export async function POST(request: Request) {
         console.error('Shipments POST API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -216,13 +213,10 @@ export async function POST(request: Request) {
     }
 
     // Permission check - canCreate kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canCreate = await hasPermission('shipment', 'create', session.user.id)
     if (!canCreate) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Sevkiyat oluşturma yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     // Body parse - hata yakalama ile
@@ -234,7 +228,7 @@ export async function POST(request: Request) {
         console.error('Shipments POST API JSON parse error:', jsonError)
       }
       return NextResponse.json(
-        { error: 'Invalid JSON body', message: jsonError?.message || 'Failed to parse request body' },
+        { error: 'Geçersiz JSON', message: jsonError?.message || 'İstek gövdesi çözümlenemedi' },
         { status: 400 }
       )
     }
@@ -295,7 +289,7 @@ export async function POST(request: Request) {
         console.error('Shipments POST API insert error:', error)
       }
       return NextResponse.json(
-        { error: error.message || 'Failed to create shipment' },
+        { error: error.message || 'Sevkiyat oluşturulamadı' },
         { status: 500 }
       )
     }
@@ -402,7 +396,7 @@ export async function POST(request: Request) {
       console.error('Shipments POST API error:', error)
     }
     return NextResponse.json(
-      { error: error?.message || 'Failed to create shipment' },
+      { error: error?.message || 'Sevkiyat oluşturulamadı' },
       { status: 500 }
     )
   }

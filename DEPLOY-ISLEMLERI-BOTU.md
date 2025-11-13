@@ -78,3 +78,7 @@ Bu dosyalar ileride `getSafeSession`’a taşınmalı.
 - Session hatası verdiği bildirilen sayfalar: Firmalar (`/companies`), bazı analitik panelleri. Bireysel müşteri modülü sorunsuz; fark `getSafeSession` kullanımı.
 
 
+
+
+
+

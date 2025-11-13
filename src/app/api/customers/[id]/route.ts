@@ -3,8 +3,8 @@ import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { hasPermission, buildPermissionDeniedResponse } from '@/lib/permissions'
 
-// Cache'i kapat - PUT/DELETE işlemlerinden sonra fresh data gelsin
-export const dynamic = 'force-dynamic'
+// Dengeli cache - 60 saniye revalidate (performans + veri güncelliği dengesi)
+export const revalidate = 60
 
 export async function GET(
   request: Request,
@@ -36,12 +36,12 @@ export async function GET(
     // Service role key ile RLS bypass - singleton pattern kullan
     const supabase = getSupabaseWithServiceRole()
 
-    // Customer'ı ilişkili verilerle çek
+    // Customer'ı sadece gerekli kolonlarla çek (performans için)
     // NOT: Invoice/Quote join'leri hata verebiliyor (totalAmount kolonu yoksa), bu yüzden sadece Customer kolonlarını çekiyoruz
     // İlişkili veriler gerekirse ayrı query'lerle çekilebilir
     let customerQuery = supabase
       .from('Customer')
-      .select('*')
+      .select('id, name, email, phone, city, status, customerCompanyId, companyId, logoUrl, createdAt, updatedAt')
       .eq('id', id)
     
     // SuperAdmin değilse companyId filtresi ekle
@@ -90,38 +90,19 @@ export async function GET(
       )
     }
 
-    // ActivityLog'ları çek
-    let activityQuery = supabase
-      .from('ActivityLog')
-      .select(
-        `
-        *,
-        User (
-          name,
-          email
-        )
-      `
-      )
-      .eq('entity', 'Customer')
-      .eq('meta->>id', id)
+    // ActivityLog'lar KALDIRILDI - Lazy load için ayrı endpoint kullanılacak (/api/activity?entity=Customer&id=...)
+    // (Performans optimizasyonu: Detay sayfası daha hızlı açılır, ActivityLog'lar gerektiğinde yüklenir)
     
-    // SuperAdmin değilse MUTLAKA companyId filtresi uygula
-    if (!isSuperAdmin) {
-      activityQuery = activityQuery.eq('companyId', companyId)
-    }
-    
-    const { data: activities } = await activityQuery
-      .order('createdAt', { ascending: false })
-      .limit(20)
-
     return NextResponse.json(
       {
         ...(data as any),
-        activities: activities || [],
+        activities: [], // Boş array - lazy load için ayrı endpoint kullanılacak
       },
       {
         headers: {
-          'Cache-Control': 'no-store, must-revalidate',
+          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120, max-age=30',
+          'CDN-Cache-Control': 'public, s-maxage=60',
+          'Vercel-CDN-Cache-Control': 'public, s-maxage=60',
         },
       }
     )
@@ -179,6 +160,13 @@ export async function PUT(
       // Boş string veya null ise NULL yap (ilişkiyi kaldır)
       customerData.customerCompanyId = null
     }
+    // logoUrl - müşteri logosu (migration 070'te eklendi)
+    if (body.logoUrl !== undefined && body.logoUrl !== null && body.logoUrl !== '') {
+      customerData.logoUrl = body.logoUrl
+    } else if (body.logoUrl === null || body.logoUrl === '') {
+      // Boş string veya null ise NULL yap
+      customerData.logoUrl = null
+    }
     // NOT: address, sector, website, taxNumber, fax, notes schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
     // @ts-ignore - Supabase database type tanımları eksik, update metodu dinamik tip bekliyor
@@ -195,18 +183,8 @@ export async function PUT(
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // ActivityLog kaydı ekle
-    // @ts-ignore - Supabase database type tanımları eksik, insert metodu dinamik tip bekliyor
-    await supabase.from('ActivityLog').insert([
-      {
-        entity: 'Customer',
-        action: 'UPDATE',
-        description: `Müşteri güncellendi: ${body.name}`,
-        meta: { entity: 'Customer', action: 'update', id },
-        userId: session.user.id,
-        companyId: session.user.companyId,
-      },
-    ])
+    // ActivityLog KALDIRILDI - Sadece kritik işlemler için ActivityLog tutulacak
+    // (Performans optimizasyonu: Gereksiz log'lar veritabanını yavaşlatıyor)
 
     // Cache'i kapat - PUT işleminden sonra fresh data gelsin
     return NextResponse.json(data, {
@@ -359,20 +337,8 @@ export async function DELETE(
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // ActivityLog kaydı ekle
-    if (customer) {
-      // @ts-ignore - Supabase type inference issue with dynamic table names
-      await (supabase.from('ActivityLog') as any).insert([
-        {
-          entity: 'Customer',
-          action: 'DELETE',
-          description: `Müşteri silindi: ${(customer as any).name}`,
-          meta: { entity: 'Customer', action: 'delete', id },
-          userId: session.user.id,
-          companyId: session.user.companyId,
-        },
-      ])
-    }
+    // ActivityLog KALDIRILDI - Sadece kritik işlemler için ActivityLog tutulacak
+    // (Performans optimizasyonu: Gereksiz log'lar veritabanını yavaşlatıyor)
 
     // Cache'i kapat - DELETE işleminden sonra fresh data gelsin
     return NextResponse.json(

@@ -112,52 +112,75 @@ async function ensureSalesShipmentForSentStatus({
   sessionUserId: string
   invoiceItems: InvoiceItemAutomation[]
 }) {
-  if (!invoiceItems.length) {
-    return { shipmentId: null, created: false }
-  }
-
-  for (const item of invoiceItems) {
-    if (!item.productId) {
-      continue
+  try {
+    // Ürün varsa rezerve et
+    if (invoiceItems.length > 0) {
+      for (const item of invoiceItems) {
+        if (!item.productId) {
+          continue
+        }
+        try {
+          await updateProductQuantities(supabase, companyId, item.productId, {
+            reservedDelta: item.quantity,
+          })
+        } catch (productError) {
+          console.error('Product quantity update error:', productError)
+          // Ürün güncelleme hatası sevkiyat oluşturmayı engellemez
+        }
+      }
     }
-    await updateProductQuantities(supabase, companyId, item.productId, {
-      reservedDelta: item.quantity,
-    })
-  }
 
-  const { data: shipment } = await supabase
-    .from('Shipment')
-    .insert([
-      {
-        invoiceId,
-        status: 'DRAFT',
-        companyId,
-      },
-    ])
-    .select()
-    .maybeSingle()
-
-  if (shipment) {
-    await supabase.from('ActivityLog').insert([
-      {
-        entity: 'Shipment',
-        action: 'CREATE',
-        description: 'Fatura gönderildi, taslak sevkiyat oluşturuldu.',
-        meta: {
-          entity: 'Shipment',
-          action: 'create_from_invoice',
+    // Sevkiyat kaydı oluştur (ürün olsun ya da olmasın)
+    const { data: shipment, error: shipmentError } = await supabase
+      .from('Shipment')
+      .insert([
+        {
           invoiceId,
-          shipmentId: shipment.id,
+          status: 'DRAFT',
+          companyId,
         },
-        userId: sessionUserId,
-        companyId,
-      },
-    ])
-  }
+      ])
+      .select()
+      .maybeSingle()
 
-  return {
-    shipmentId: shipment?.id || null,
-    created: !!shipment,
+    if (shipmentError) {
+      console.error('Shipment creation error:', shipmentError)
+      return { shipmentId: null, created: false, error: shipmentError.message }
+    }
+
+    if (shipment) {
+      // ActivityLog kaydı
+      try {
+        await supabase.from('ActivityLog').insert([
+          {
+            entity: 'Shipment',
+            action: 'CREATE',
+            description: 'Fatura gönderildi, taslak sevkiyat oluşturuldu.',
+            meta: {
+              entity: 'Shipment',
+              action: 'create_from_invoice',
+              invoiceId,
+              shipmentId: shipment.id,
+            },
+            userId: sessionUserId,
+            companyId,
+          },
+        ])
+      } catch (activityError) {
+        console.error('ActivityLog creation error:', activityError)
+        // ActivityLog hatası sevkiyat oluşturmayı engellemez
+      }
+
+      return {
+        shipmentId: shipment.id,
+        created: true,
+      }
+    }
+
+    return { shipmentId: null, created: false, error: 'Shipment creation returned null' }
+  } catch (error: any) {
+    console.error('ensureSalesShipmentForSentStatus error:', error)
+    return { shipmentId: null, created: false, error: error?.message || 'Unknown error' }
   }
 }
 
@@ -174,52 +197,75 @@ async function ensurePurchaseTransactionForSentStatus({
   sessionUserId: string
   invoiceItems: InvoiceItemAutomation[]
 }) {
-  if (!invoiceItems.length) {
-    return { purchaseShipmentId: null, created: false }
-  }
-
-  for (const item of invoiceItems) {
-    if (!item.productId) {
-      continue
+  try {
+    // Ürün varsa bekleyen stok olarak işaretle
+    if (invoiceItems.length > 0) {
+      for (const item of invoiceItems) {
+        if (!item.productId) {
+          continue
+        }
+        try {
+          await updateProductQuantities(supabase, companyId, item.productId, {
+            incomingDelta: item.quantity,
+          })
+        } catch (productError) {
+          console.error('Product quantity update error:', productError)
+          // Ürün güncelleme hatası mal kabul oluşturmayı engellemez
+        }
+      }
     }
-    await updateProductQuantities(supabase, companyId, item.productId, {
-      incomingDelta: item.quantity,
-    })
-  }
 
-  const { data: purchaseTransaction } = await supabase
-    .from('PurchaseTransaction')
-    .insert([
-      {
-        invoiceId,
-        status: 'DRAFT',
-        companyId,
-      },
-    ])
-    .select()
-    .maybeSingle()
-
-  if (purchaseTransaction) {
-    await supabase.from('ActivityLog').insert([
-      {
-        entity: 'PurchaseTransaction',
-        action: 'CREATE',
-        description: 'Alış faturası gönderildi, taslak mal kabul oluşturuldu.',
-        meta: {
-          entity: 'PurchaseTransaction',
-          action: 'create_from_invoice',
+    // Mal kabul kaydı oluştur (ürün olsun ya da olmasın)
+    const { data: purchaseTransaction, error: purchaseError } = await supabase
+      .from('PurchaseTransaction')
+      .insert([
+        {
           invoiceId,
-          purchaseTransactionId: purchaseTransaction.id,
+          status: 'DRAFT',
+          companyId,
         },
-        userId: sessionUserId,
-        companyId,
-      },
-    ])
-  }
+      ])
+      .select()
+      .maybeSingle()
 
-  return {
-    purchaseShipmentId: purchaseTransaction?.id || null,
-    created: !!purchaseTransaction,
+    if (purchaseError) {
+      console.error('PurchaseTransaction creation error:', purchaseError)
+      return { purchaseShipmentId: null, created: false, error: purchaseError.message }
+    }
+
+    if (purchaseTransaction) {
+      // ActivityLog kaydı
+      try {
+        await supabase.from('ActivityLog').insert([
+          {
+            entity: 'PurchaseTransaction',
+            action: 'CREATE',
+            description: 'Alış faturası gönderildi, taslak mal kabul oluşturuldu.',
+            meta: {
+              entity: 'PurchaseTransaction',
+              action: 'create_from_invoice',
+              invoiceId,
+              purchaseTransactionId: purchaseTransaction.id,
+            },
+            userId: sessionUserId,
+            companyId,
+          },
+        ])
+      } catch (activityError) {
+        console.error('ActivityLog creation error:', activityError)
+        // ActivityLog hatası mal kabul oluşturmayı engellemez
+      }
+
+      return {
+        purchaseShipmentId: purchaseTransaction.id,
+        created: true,
+      }
+    }
+
+    return { purchaseShipmentId: null, created: false, error: 'PurchaseTransaction creation returned null' }
+  } catch (error: any) {
+    console.error('ensurePurchaseTransactionForSentStatus error:', error)
+    return { purchaseShipmentId: null, created: false, error: error?.message || 'Unknown error' }
   }
 }
 
@@ -267,11 +313,12 @@ export async function GET(
     }
 
     // Önce invoice'ın var olup olmadığını kontrol et (companyId olmadan)
-    // Retry mekanizması - yeni oluşturulan invoice için (commit gecikmesi olabilir)
+    // OPTİMİZE: Retry mekanizması azaltıldı - sadece 2 deneme, 100ms bekleme (performans için)
+    // Normal kullanımda invoice hemen bulunur, retry'ye gerek yok
     let invoiceCheck = null
     let checkError = null
-    const maxRetries = 10 // Daha fazla deneme
-    const retryDelay = 300 // 300ms - daha uzun bekleme
+    const maxRetries = 2 // Sadece 2 deneme (performans için)
+    const retryDelay = 100 // 100ms - çok kısa bekleme (performans için)
     
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const { data, error } = await supabase
@@ -283,22 +330,7 @@ export async function GET(
       invoiceCheck = data
       checkError = error
       
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`Invoice GET - retry attempt ${attempt + 1}/${maxRetries}:`, {
-          invoiceId: id,
-          invoiceFound: !!invoiceCheck,
-          error: checkError?.message,
-        })
-      }
-      
       if (invoiceCheck) {
-        if (process.env.NODE_ENV === 'development') {
-          console.log('Invoice GET - invoice found after retry:', {
-            attempt: attempt + 1,
-            invoiceId: invoiceCheck.id,
-            invoiceCompanyId: invoiceCheck.companyId,
-          })
-        }
         break // Invoice bulundu, retry'ye gerek yok
       }
       
@@ -338,10 +370,11 @@ export async function GET(
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
-    // Invoice'u önce sadece temel verilerle çek (ilişkiler olmadan)
+    // Invoice'u sadece gerekli kolonlarla çek (performans için)
+    // NOT: Tüm kolonlar gerekli olabilir, bu yüzden temel kolonları + migration kolonlarını ekliyoruz
     let query = supabase
       .from('Invoice')
-      .select('*')
+      .select('id, title, status, totalAmount, quoteId, customerId, shipmentId, invoiceType, companyId, createdAt, updatedAt, invoiceNumber, dueDate, paymentDate, taxRate, vendorId, serviceDescription')
       .eq('id', id)
 
     if (!isSuperAdmin) {
@@ -524,33 +557,12 @@ export async function GET(
       })
     }
 
-    // ActivityLog'ları çek
-    let activityQuery = supabase
-      .from('ActivityLog')
-      .select(
-        `
-        *,
-        User (
-          name,
-          email
-        )
-      `
-      )
-      .eq('entity', 'Invoice')
-      .eq('meta->>id', id)
-      .order('createdAt', { ascending: false })
-      .limit(20)
+    // ActivityLog'lar KALDIRILDI - Lazy load için ayrı endpoint kullanılacak (/api/activity?entity=Invoice&id=...)
+    // (Performans optimizasyonu: Detay sayfası daha hızlı açılır, ActivityLog'lar gerektiğinde yüklenir)
     
-    // SuperAdmin değilse MUTLAKA companyId filtresi uygula
-    if (!isSuperAdmin) {
-      activityQuery = activityQuery.eq('companyId', companyId)
-    }
-    
-    const { data: activities } = await activityQuery
-
     return NextResponse.json({
       ...(data as any),
-      activities: activities || [],
+      activities: [], // Boş array - lazy load için ayrı endpoint kullanılacak
     })
   } catch (error) {
     return NextResponse.json(
@@ -590,28 +602,156 @@ export async function PUT(
     const supabase = getSupabaseWithServiceRole()
 
     // Quote'tan oluşturulan faturalar ve kesinleşmiş faturalar korumalı - hiçbir şekilde değiştirilemez
-    const { data: currentInvoice } = await supabase
-      .from('Invoice')
-      .select(
-        'quoteId, status, title, invoiceType, shipmentId, purchaseShipmentId, totalAmount, invoiceNumber, customerId'
-      )
-      .eq('id', id)
-      .eq('companyId', session.user.companyId)
-      .maybeSingle()
+    // Retry mekanizması - yeni oluşturulan invoice için (commit gecikmesi olabilir)
+    let currentInvoice = null
+    const maxRetries = 10
+    const retryDelay = 300
+    let lastError = null
+    
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      // Sadece kesinlikle var olan kolonları çek (schema.sql'deki temel kolonlar)
+      // customerId trigger'lar için gerekli, eklemeye çalışalım
+      // invoiceType sevkiyat/mal kabul oluşturmak için gerekli
+      // Diğer kolonlar migration'larla eklenmiş olabilir, eksikse hata vermez
+      let { data, error } = await supabase
+        .from('Invoice')
+        .select('id, quoteId, status, title, companyId')
+        .eq('id', id)
+        .eq('companyId', session.user.companyId)
+        .maybeSingle()
+      
+      // customerId kolonunu da çekmeyi dene (trigger'lar için gerekli)
+      if (!error && data) {
+        try {
+          const { data: customerData, error: customerError } = await supabase
+            .from('Invoice')
+            .select('customerId')
+            .eq('id', id)
+            .maybeSingle()
+          if (!customerError && customerData !== null) {
+            // customerData null değilse (kolon varsa) değeri al
+            (data as any).customerId = customerData.customerId || null
+          } else {
+            // Kolon yoksa veya hata varsa null set et
+            (data as any).customerId = null
+          }
+        } catch (e) {
+          // customerId kolonu yoksa null set et
+          (data as any).customerId = null
+        }
+        
+        // invoiceType kolonunu da çekmeyi dene (sevkiyat/mal kabul için gerekli)
+        try {
+          const { data: invoiceTypeData, error: invoiceTypeError } = await supabase
+            .from('Invoice')
+            .select('invoiceType')
+            .eq('id', id)
+            .maybeSingle()
+          if (!invoiceTypeError && invoiceTypeData !== null) {
+            // invoiceTypeData null değilse (kolon varsa) değeri al
+            (data as any).invoiceType = invoiceTypeData.invoiceType || null
+          } else {
+            // Kolon yoksa veya hata varsa null set et
+            (data as any).invoiceType = null
+          }
+        } catch (e) {
+          // invoiceType kolonu yoksa null set et
+          (data as any).invoiceType = null
+        }
+      }
+      
+      if (error) {
+        lastError = error
+        // Kolon hatası varsa direkt hata döndür
+        if (error.code === '42703' || error.message?.includes('does not exist')) {
+          console.error('Database schema error:', {
+            code: error.code,
+            message: error.message,
+            hint: error.hint,
+            details: error.details
+          })
+          return NextResponse.json(
+            { 
+              error: 'Database schema error',
+              message: 'Veritabanı şeması güncel değil. Lütfen migration\'ları çalıştırın.',
+              details: error.message,
+              code: error.code,
+              hint: error.hint || 'Temel kolonlar eksik. Migration dosyalarını kontrol edin.'
+            },
+            { status: 500 }
+          )
+        }
+      }
+      
+      currentInvoice = data
+      
+      if (currentInvoice) {
+        break // Invoice bulundu, retry'ye gerek yok
+      }
+      
+      // Son deneme değilse bekle ve tekrar dene
+      if (attempt < maxRetries - 1) {
+        await new Promise(resolve => setTimeout(resolve, retryDelay))
+      }
+    }
 
-    if (currentInvoice && currentInvoice.quoteId) {
+    // Invoice bulunamazsa hata döndür
+    if (!currentInvoice) {
+      // Önce companyId kontrolü yap - belki fatura başka bir şirkete ait
+      const { data: checkInvoice } = await supabase
+        .from('Invoice')
+        .select('id, companyId')
+        .eq('id', id)
+        .maybeSingle()
+      
+      if (checkInvoice && checkInvoice.companyId !== session.user.companyId) {
+        return NextResponse.json(
+          { 
+            error: 'Forbidden',
+            message: 'Bu faturaya erişim yetkiniz yok.',
+            invoiceId: id,
+            invoiceCompanyId: checkInvoice.companyId,
+            userCompanyId: session.user.companyId
+          },
+          { status: 403 }
+        )
+      }
+      
       return NextResponse.json(
         { 
-          error: 'Tekliften oluşturulan faturalar değiştirilemez',
-          message: 'Bu fatura tekliften otomatik olarak oluşturuldu. Fatura bilgilerini değiştirmek için önce teklifi reddetmeniz gerekir.',
-          reason: 'QUOTE_INVOICE_CANNOT_BE_UPDATED',
-          relatedQuote: {
-            id: currentInvoice.quoteId,
-            link: `/quotes/${currentInvoice.quoteId}`
-          }
+          error: 'Invoice not found',
+          message: 'Fatura bulunamadı. Lütfen sayfayı yenileyip tekrar deneyin.',
+          invoiceId: id,
+          companyId: session.user.companyId,
+          lastError: lastError?.message || null
         },
-        { status: 403 }
+        { status: 404 }
       )
+    }
+
+    // Tekliften gelen faturalar için: Sadece içerik güncellemeleri engellenmeli, status güncellemeleri yapılabilmeli
+    if (currentInvoice && currentInvoice.quoteId) {
+      // Sadece status güncelleniyorsa izin ver (DRAFT → SENT → SHIPPED → PAID gibi)
+      const bodyKeys = Object.keys(body || {})
+      const isOnlyStatusUpdate = 
+        body.status !== undefined && 
+        bodyKeys.length === 1 // Sadece 'status' var
+      
+      // Status dışında başka bir şey güncelleniyorsa engelle
+      if (!isOnlyStatusUpdate) {
+        return NextResponse.json(
+          { 
+            error: 'Tekliften oluşturulan faturalar değiştirilemez',
+            message: 'Bu fatura tekliften otomatik olarak oluşturuldu. Fatura bilgilerini (başlık, tutar, kalemler vb.) değiştirmek için önce teklifi reddetmeniz gerekir. Ancak fatura durumunu (Gönderildi, Sevkiyat Yapıldı, Ödendi vb.) güncelleyebilirsiniz.',
+            reason: 'QUOTE_INVOICE_CANNOT_BE_UPDATED',
+            relatedQuote: {
+              id: currentInvoice.quoteId,
+              link: `/quotes/${currentInvoice.quoteId}`
+            }
+          },
+          { status: 403 }
+        )
+      }
     }
 
     // ÖNEMLİ: Immutability kontrol (PAID, CANCELLED)
@@ -645,15 +785,29 @@ export async function PUT(
 
     // ÖNEMLİ: Status transition validation
     if (body.status !== undefined && body.status !== currentStatus) {
-      const validation = isValidInvoiceTransition(currentStatus, body.status)
+      // currentStatus null/undefined ise DRAFT olarak kabul et (yeni oluşturulan faturalar için)
+      const statusForValidation = currentStatus || 'DRAFT'
+      
+      // invoiceType'ı belirle (body'den veya mevcut invoice'dan)
+      const invoiceTypeForValidation =
+        body.invoiceType ||
+        (typeof (currentInvoice as any)?.invoiceType === 'string'
+          ? (currentInvoice as any).invoiceType
+          : null)
+      
+      const validation = isValidInvoiceTransition(
+        statusForValidation,
+        body.status,
+        invoiceTypeForValidation as 'SALES' | 'PURCHASE' | 'SERVICE_SALES' | 'SERVICE_PURCHASE' | undefined
+      )
       
       if (!validation.valid) {
         return NextResponse.json(
           { 
             error: 'Geçersiz status geçişi',
-            message: validation.error || getTransitionErrorMessage('invoice', currentStatus, body.status),
+            message: validation.error || getTransitionErrorMessage('invoice', statusForValidation, body.status),
             reason: 'INVALID_STATUS_TRANSITION',
-            currentStatus,
+            currentStatus: statusForValidation,
             attemptedStatus: body.status,
             allowedTransitions: validation.allowed || []
           },
@@ -678,7 +832,8 @@ export async function PUT(
     const companyId = session.user.companyId
     const previousStatus = currentInvoice?.status || null
     const requestedStatus = body.status ?? previousStatus
-    const invoiceType =
+    // invoiceType'ı belirle (body'den veya mevcut invoice'dan)
+    let invoiceType =
       body.invoiceType ||
       (typeof (currentInvoice as any)?.invoiceType === 'string'
         ? (currentInvoice as any).invoiceType
@@ -688,6 +843,10 @@ export async function PUT(
       (currentInvoice as any)?.shipmentId || null
     let purchaseTransactionIdForAutomation =
       (currentInvoice as any)?.purchaseShipmentId || null
+    
+    // Otomasyon flag'lerini sakla (response'a eklemek için)
+    let shipmentCreated = false
+    let purchaseTransactionCreated = false
 
     let shouldNotifySent = false
     let shouldNotifyShipped = false
@@ -768,6 +927,18 @@ export async function PUT(
       )
     }
 
+    // invoiceType yoksa ve invoice items varsa varsayılan olarak SALES kabul et
+    // (Çoğu durumda satış faturası olur)
+    if (!invoiceType && invoiceItemsForAutomation.length > 0) {
+      invoiceType = 'SALES'
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('invoiceType missing, defaulting to SALES based on invoice items:', {
+          invoiceId: id,
+          invoiceItemsCount: invoiceItemsForAutomation.length,
+        })
+      }
+    }
+
     if (
       requestedStatus === 'SENT' &&
       previousStatus !== 'SENT'
@@ -775,27 +946,40 @@ export async function PUT(
       shouldNotifySent = true
       shouldSendSentEmail = true
 
-      if (invoiceType === 'SALES' && !shipmentIdForAutomation) {
-        const { shipmentId, created } = await ensureSalesShipmentForSentStatus({
-          supabase,
+      if (process.env.NODE_ENV === 'development') {
+        console.log('SENT status transition:', {
           invoiceId: id,
-          companyId,
-          sessionUserId: session.user.id,
-          invoiceItems: invoiceItemsForAutomation,
+          invoiceType,
+          previousStatus,
+          requestedStatus,
+          shipmentIdForAutomation,
+          purchaseTransactionIdForAutomation,
+          invoiceItemsCount: invoiceItemsForAutomation.length,
         })
-
-        if (shipmentId) {
-          shipmentIdForAutomation = shipmentId
-        }
-
-        if (created) {
-          shouldNotifySent = true
-        }
       }
 
-      if (invoiceType === 'PURCHASE' && !purchaseTransactionIdForAutomation) {
-        const { purchaseShipmentId, created } =
-          await ensurePurchaseTransactionForSentStatus({
+      // invoiceType kontrolü
+      if (!invoiceType || (invoiceType !== 'SALES' && invoiceType !== 'PURCHASE' && invoiceType !== 'SERVICE_SALES' && invoiceType !== 'SERVICE_PURCHASE')) {
+        console.warn('Invalid or missing invoiceType:', {
+          invoiceId: id,
+          invoiceType,
+          bodyInvoiceType: body.invoiceType,
+          currentInvoiceType: (currentInvoice as any)?.invoiceType,
+        })
+      }
+
+      // Hizmet faturaları için sevkiyat/mal kabul oluşturulmaz (ürün yok)
+      if (invoiceType === 'SALES' && !shipmentIdForAutomation) {
+        try {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Creating shipment for SENT status:', {
+              invoiceId: id,
+              invoiceType,
+              invoiceItemsCount: invoiceItemsForAutomation.length,
+            })
+          }
+
+          const { shipmentId, created, error } = await ensureSalesShipmentForSentStatus({
             supabase,
             invoiceId: id,
             companyId,
@@ -803,13 +987,83 @@ export async function PUT(
             invoiceItems: invoiceItemsForAutomation,
           })
 
-        if (purchaseShipmentId) {
-          purchaseTransactionIdForAutomation = purchaseShipmentId
-        }
+          if (error) {
+            console.error('Shipment creation failed:', error)
+            // Hata olsa bile devam et, kullanıcıya bilgi ver
+          }
 
-        if (created) {
-          shouldNotifySent = true
+          if (shipmentId) {
+            shipmentIdForAutomation = shipmentId
+            if (process.env.NODE_ENV === 'development') {
+              console.log('Shipment created successfully:', {
+                shipmentId,
+                created,
+              })
+            }
+          }
+
+          if (created) {
+            shipmentCreated = true
+            shouldNotifySent = true
+          } else if (!shipmentId) {
+            console.warn('Shipment creation returned no ID:', {
+              invoiceId: id,
+              invoiceType,
+              invoiceItemsCount: invoiceItemsForAutomation.length,
+            })
+          }
+        } catch (error: any) {
+          console.error('Error in shipment creation:', error)
+          // Hata olsa bile devam et, kullanıcıya bilgi ver
         }
+      }
+
+      if (invoiceType === 'PURCHASE' && !purchaseTransactionIdForAutomation) {
+        try {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Creating purchase transaction for SENT status:', {
+              invoiceId: id,
+              invoiceType,
+              invoiceItemsCount: invoiceItemsForAutomation.length,
+            })
+          }
+
+          const { purchaseShipmentId, created, error } =
+            await ensurePurchaseTransactionForSentStatus({
+              supabase,
+              invoiceId: id,
+              companyId,
+              sessionUserId: session.user.id,
+              invoiceItems: invoiceItemsForAutomation,
+            })
+
+          if (error) {
+            console.error('Purchase transaction creation failed:', error)
+          }
+
+          if (purchaseShipmentId) {
+            purchaseTransactionIdForAutomation = purchaseShipmentId
+            if (process.env.NODE_ENV === 'development') {
+              console.log('Purchase transaction created successfully:', {
+                purchaseShipmentId,
+                created,
+              })
+            }
+          }
+
+          if (created) {
+            purchaseTransactionCreated = true
+            shouldNotifySent = true
+          }
+        } catch (error: any) {
+          console.error('Error in purchase transaction creation:', error)
+        }
+      }
+
+      // Hizmet faturaları için sadece bildirim gönder (sevkiyat/mal kabul yok)
+      if (invoiceType === 'SERVICE_SALES' || invoiceType === 'SERVICE_PURCHASE') {
+        // Hizmet faturaları için sevkiyat/mal kabul oluşturulmaz
+        // Sadece bildirim ve email gönderilir
       }
     }
 
@@ -818,21 +1072,37 @@ export async function PUT(
       previousStatus !== 'SHIPPED' &&
       invoiceType === 'SALES'
     ) {
+      // Sevkiyat kaydı yoksa önce SENT durumuna geçilmesi gerektiğini belirt
       if (!shipmentIdForAutomation) {
-        const { shipmentId } = await ensureSalesShipmentForSentStatus({
-          supabase,
-          invoiceId: id,
-          companyId,
-          sessionUserId: session.user.id,
-          invoiceItems: invoiceItemsForAutomation,
-        })
-        if (shipmentId) {
-          shipmentIdForAutomation = shipmentId
+        // Invoice'da shipmentId var mı kontrol et
+        const { data: invoiceShipment } = await supabase
+          .from('Invoice')
+          .select('shipmentId')
+          .eq('id', id)
+          .eq('companyId', companyId)
+          .maybeSingle()
+        
+        if (invoiceShipment?.shipmentId) {
+          shipmentIdForAutomation = invoiceShipment.shipmentId
+        } else {
+          // Sevkiyat kaydı yok - önce SENT durumuna geçilmeli
+          // İş akışı: DRAFT → SENT (sevkiyat kaydı oluştur) → SHIPPED (sevkiyat kaydı onayla)
+          return NextResponse.json(
+            { 
+              error: 'Sevkiyat kaydı bulunamadı',
+              message: 'Sevkiyat yapıldı durumuna geçmek için önce faturayı "Gönderildi" durumuna taşımanız gerekiyor. Bu işlem sevkiyat kaydını otomatik olarak oluşturur.',
+              reason: 'SHIPMENT_NOT_FOUND',
+              requiredStep: 'SENT',
+              workflow: 'DRAFT → SENT (sevkiyat kaydı oluştur) → SHIPPED (sevkiyat kaydı onayla)'
+            },
+            { status: 400 }
+          )
         }
       }
 
+      // Sevkiyat kaydını onayla (APPROVED yap)
       if (shipmentIdForAutomation) {
-        await supabase
+        const { error: updateError } = await supabase
           .from('Shipment')
           .update({
             status: 'APPROVED',
@@ -840,6 +1110,18 @@ export async function PUT(
           })
           .eq('id', shipmentIdForAutomation)
           .eq('companyId', companyId)
+        
+        if (updateError) {
+          console.error('Shipment update error:', updateError)
+          return NextResponse.json(
+            { 
+              error: 'Sevkiyat kaydı onaylanamadı',
+              message: 'Sevkiyat kaydı güncellenirken bir hata oluştu. Lütfen tekrar deneyin.',
+              details: updateError.message
+            },
+            { status: 500 }
+          )
+        }
       }
 
       for (const item of invoiceItemsForAutomation) {
@@ -877,23 +1159,37 @@ export async function PUT(
       previousStatus !== 'RECEIVED' &&
       invoiceType === 'PURCHASE'
     ) {
+      // Mal kabul kaydı yoksa önce SENT durumuna geçilmesi gerektiğini belirt
       if (!purchaseTransactionIdForAutomation) {
-        const { purchaseShipmentId } =
-          await ensurePurchaseTransactionForSentStatus({
-            supabase,
-            invoiceId: id,
-            companyId,
-            sessionUserId: session.user.id,
-            invoiceItems: invoiceItemsForAutomation,
-          })
-
-        if (purchaseShipmentId) {
-          purchaseTransactionIdForAutomation = purchaseShipmentId
+        // Invoice'da purchaseShipmentId var mı kontrol et
+        const { data: invoicePurchase } = await supabase
+          .from('Invoice')
+          .select('purchaseShipmentId')
+          .eq('id', id)
+          .eq('companyId', companyId)
+          .maybeSingle()
+        
+        if (invoicePurchase?.purchaseShipmentId) {
+          purchaseTransactionIdForAutomation = invoicePurchase.purchaseShipmentId
+        } else {
+          // Mal kabul kaydı yok - önce SENT durumuna geçilmeli
+          // İş akışı: DRAFT → SENT (mal kabul kaydı oluştur) → RECEIVED (mal kabul kaydı onayla)
+          return NextResponse.json(
+            { 
+              error: 'Mal kabul kaydı bulunamadı',
+              message: 'Mal kabul edildi durumuna geçmek için önce faturayı "Gönderildi" durumuna taşımanız gerekiyor. Bu işlem mal kabul kaydını otomatik olarak oluşturur.',
+              reason: 'PURCHASE_TRANSACTION_NOT_FOUND',
+              requiredStep: 'SENT',
+              workflow: 'DRAFT → SENT (mal kabul kaydı oluştur) → RECEIVED (mal kabul kaydı onayla)'
+            },
+            { status: 400 }
+          )
         }
       }
 
+      // Mal kabul kaydını onayla (APPROVED yap)
       if (purchaseTransactionIdForAutomation) {
-        await supabase
+        const { error: updateError } = await supabase
           .from('PurchaseTransaction')
           .update({
             status: 'APPROVED',
@@ -901,6 +1197,18 @@ export async function PUT(
           })
           .eq('id', purchaseTransactionIdForAutomation)
           .eq('companyId', companyId)
+        
+        if (updateError) {
+          console.error('PurchaseTransaction update error:', updateError)
+          return NextResponse.json(
+            { 
+              error: 'Mal kabul kaydı onaylanamadı',
+              message: 'Mal kabul kaydı güncellenirken bir hata oluştu. Lütfen tekrar deneyin.',
+              details: updateError.message
+            },
+            { status: 500 }
+          )
+        }
       }
 
       for (const item of invoiceItemsForAutomation) {
@@ -985,15 +1293,67 @@ export async function PUT(
     // schema-extension.sql: invoiceNumber, dueDate, paymentDate, taxRate (migration çalıştırılmamış olabilir - GÖNDERME!)
     // schema-vendor.sql: vendorId (migration çalıştırılmamış olabilir - GÖNDERME!)
     // migration 007: invoiceType (migration çalıştırılmamış olabilir - GÖNDERME!)
+    // migration 065: serviceDescription (migration çalıştırılmamış olabilir - GÖNDERME!)
+    
     const updateData: any = {
-      title: body.title,
-      status: body.status,
-      totalAmount: body.totalAmount !== undefined ? parseFloat(body.totalAmount) : (body.total !== undefined ? parseFloat(body.total) : undefined),
       updatedAt: new Date().toISOString(),
+    }
+    
+    // ÖNEMLİ: customerId kolonunu kontrol et - eğer yoksa UPDATE sorgusuna ekleme
+    // Trigger'lar NEW.customerId'ye erişmeye çalışıyor ama kolon yoksa hata verir
+    let customerIdColumnExists = false
+    try {
+      const { error: checkError } = await supabase
+        .from('Invoice')
+        .select('customerId')
+        .limit(0)
+      customerIdColumnExists = !checkError
+    } catch (e) {
+      customerIdColumnExists = false
+    }
+    
+    // customerId kolonu varsa ekle
+    if (customerIdColumnExists) {
+      const currentCustomerId = (currentInvoice as any)?.customerId
+      if (body.customerId !== undefined) {
+        // Body'de customerId varsa onu kullan
+        updateData.customerId = body.customerId || null
+      } else {
+        // Mevcut customerId'yi koru (null bile olsa, trigger'lar için gerekli)
+        updateData.customerId = currentCustomerId !== undefined ? currentCustomerId : null
+      }
+    }
+    
+    // Sadece gönderilen alanları ekle
+    if (body.title !== undefined) updateData.title = body.title
+    if (body.status !== undefined) updateData.status = body.status
+    if (body.totalAmount !== undefined) {
+      updateData.totalAmount = parseFloat(body.totalAmount)
+    } else if (body.total !== undefined) {
+      updateData.totalAmount = parseFloat(body.total)
+    }
+    
+    // Migration 065: serviceDescription ekle (eğer migration çalıştırıldıysa)
+    if (body.serviceDescription !== undefined) {
+      try {
+        // serviceDescription kolonunun varlığını kontrol et
+        const { error: checkError } = await supabase
+          .from('Invoice')
+          .select('serviceDescription')
+          .limit(0)
+        
+        if (!checkError) {
+          updateData.serviceDescription = body.serviceDescription || null
+        }
+      } catch (e) {
+        // Kolon yoksa atla (migration çalıştırılmamış)
+        console.warn('serviceDescription kolonu bulunamadı, migration 065 çalıştırılmamış olabilir')
+      }
     }
 
     // Migration 007: invoiceType ekle (eğer migration çalıştırıldıysa)
-    if (body.invoiceType) {
+    // invoiceType body'den gelmişse veya varsayılan olarak belirlenmişse ekle
+    if (body.invoiceType || invoiceType) {
       try {
         // invoiceType kolonunun varlığını kontrol et
         const { error: checkError } = await supabase
@@ -1002,7 +1362,8 @@ export async function PUT(
           .limit(0)
         
         if (!checkError) {
-          updateData.invoiceType = body.invoiceType
+          // Body'den gelen invoiceType varsa onu kullan, yoksa varsayılan olarak belirlenen invoiceType'ı kullan
+          updateData.invoiceType = body.invoiceType || invoiceType
         }
       } catch (e) {
         // Kolon yoksa atla (migration çalıştırılmamış)
@@ -1019,15 +1380,35 @@ export async function PUT(
     }
     // NOT: invoiceNumber, dueDate, paymentDate, taxRate, vendorId, customerId, description, billingAddress, billingCity, billingTaxNumber, paymentMethod, paymentNotes schema-extension/schema-vendor'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
+    // undefined değerleri temizle - Supabase trigger'ları için
+    const cleanUpdateData: any = {}
+    for (const [key, value] of Object.entries(updateData)) {
+      if (value !== undefined) {
+        cleanUpdateData[key] = value
+      }
+    }
+    
     // @ts-ignore - Supabase type inference issue with dynamic updateData
     const { data: updateResult, error } = await (supabase.from('Invoice') as any)
-      .update(updateData)
+      .update(cleanUpdateData)
       .eq('id', id)
       .eq('companyId', session.user.companyId)
       .select()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error('Invoice UPDATE error:', {
+        error: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        updateData: cleanUpdateData
+      })
+      return NextResponse.json({ 
+        error: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      }, { status: 500 })
     }
 
     // .single() yerine array kontrolü yap - "Cannot coerce the result to a single JSON object" hatasını önle
@@ -1308,7 +1689,57 @@ export async function PUT(
       },
     ])
 
-    return NextResponse.json(data)
+    // Otomasyon bilgilerini response'a ekle
+    const automationInfo: any = {}
+    
+    if (shipmentIdForAutomation) {
+      automationInfo.shipmentId = shipmentIdForAutomation
+      automationInfo.shipmentCreated = shipmentCreated
+    }
+    
+    if (purchaseTransactionIdForAutomation) {
+      automationInfo.purchaseTransactionId = purchaseTransactionIdForAutomation
+      automationInfo.purchaseTransactionCreated = purchaseTransactionCreated
+    }
+    
+    // Finance kaydı oluşturuldu mu kontrol et
+    if (body.status === 'PAID' || data?.status === 'PAID') {
+      const { data: financeRecord } = await supabase
+        .from('Finance')
+        .select('id')
+        .eq('relatedTo', `Invoice: ${data.id}`)
+        .eq('companyId', session.user.companyId)
+        .maybeSingle()
+      
+      if (financeRecord) {
+        automationInfo.financeId = financeRecord.id
+        automationInfo.financeCreated = true
+      }
+    }
+    
+    // CANCELLED durumunda iptal edilen kayıtları kontrol et
+    if (body.status === 'CANCELLED' || data?.status === 'CANCELLED') {
+      if ((currentInvoice as any)?.shipmentId) {
+        automationInfo.shipmentCancelled = true
+        automationInfo.shipmentId = (currentInvoice as any).shipmentId
+      }
+      if ((currentInvoice as any)?.purchaseShipmentId) {
+        automationInfo.purchaseTransactionCancelled = true
+        automationInfo.purchaseTransactionId = (currentInvoice as any).purchaseShipmentId
+      }
+    }
+    
+    // Hizmet faturaları için bildirim gönderildiğini belirt
+    if ((invoiceType === 'SERVICE_SALES' || invoiceType === 'SERVICE_PURCHASE') && shouldNotifySent) {
+      automationInfo.notificationSent = true
+      automationInfo.emailSent = shouldSendSentEmail
+    }
+
+    return NextResponse.json({
+      ...data,
+      automation: automationInfo,
+      invoiceType: invoiceType || data?.invoiceType || null, // invoiceType'ı response'a ekle
+    })
   } catch (error) {
     return NextResponse.json(
       { error: 'Failed to update invoice' },

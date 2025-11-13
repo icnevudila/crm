@@ -2,11 +2,11 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { Card } from '@/components/ui/card'
-import { Calendar, Clock, TrendingUp, BarChart3 } from 'lucide-react'
+import { Calendar, BarChart3 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import { ReportSectionProps } from './types'
 
-// Lazy load grafik componentleri
 const DailyTrendLineChart = dynamic(() => import('@/components/reports/charts/DailyTrendLineChart'), {
   ssr: false,
   loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
@@ -17,17 +17,12 @@ const WeeklyComparisonBarChart = dynamic(() => import('@/components/reports/char
   loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
 })
 
-const MonthlyGrowthAreaChart = dynamic(() => import('@/components/reports/charts/MonthlyGrowthAreaChart'), {
-  ssr: false,
-  loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
-})
-
 const YearlySummaryComposedChart = dynamic(() => import('@/components/reports/charts/YearlySummaryComposedChart'), {
   ssr: false,
   loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
 })
 
-async function fetchTimeBasedReports() {
+async function fetchTimeReports() {
   const res = await fetch('/api/reports/time', {
     cache: 'no-store',
     credentials: 'include',
@@ -36,92 +31,65 @@ async function fetchTimeBasedReports() {
   return res.json()
 }
 
-export default function TimeBasedReports() {
+export default function TimeBasedReports({ isActive }: ReportSectionProps) {
   const { data, isLoading, error } = useQuery({
-    queryKey: ['time-based-reports'],
-    queryFn: fetchTimeBasedReports,
+    queryKey: ['time-reports'],
+    queryFn: fetchTimeReports,
     staleTime: 5 * 60 * 1000,
     refetchOnMount: true,
+    enabled: isActive,
   })
 
+  if (!isActive) return null
   if (isLoading) return <SkeletonList />
   if (error) return <div className="text-red-600">Rapor yüklenirken hata oluştu</div>
 
   return (
     <div className="space-y-6">
-      <Card className="p-4 bg-teal-50 border-teal-200">
+      <Card className="p-4 bg-blue-50 border-blue-200">
         <div className="flex items-start gap-3">
-          <Calendar className="h-5 w-5 text-teal-600 mt-0.5" />
+          <Calendar className="h-5 w-5 text-blue-600 mt-0.5" />
           <div>
             <h3 className="font-semibold text-gray-900 mb-1">Zaman Bazlı Raporlar</h3>
             <p className="text-sm text-gray-600">
-              Belirli zaman dilimlerindeki trendler ve analizler. Günlük, haftalık, aylık ve yıllık 
-              performans raporlarını görüntüleyin. Tüm veriler anlık olarak güncellenir.
+              Günlük, haftalık ve yıllık trendleri izleyin; dönemsel performansınızı değerlendirin.
             </p>
           </div>
         </div>
       </Card>
 
-      {/* Grafikler */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 1. Günlük Trend */}
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Günlük Trend</h3>
-              <p className="text-sm text-gray-500 mt-1">Son 30 günün satış, müşteri ve fırsat trendi</p>
+              <p className="text-sm text-gray-500 mt-1">Günlük aktiviteler ve satış trendi</p>
             </div>
-            <Clock className="h-5 w-5 text-primary-600" />
+            <BarChart3 className="h-5 w-5 text-primary-600" />
           </div>
           <DailyTrendLineChart data={data?.dailyTrend || []} />
-          <div className="mt-4 p-3 bg-gray-50 rounded text-xs text-gray-600">
-            <strong>Açıklama:</strong> Bu grafik son 30 günün günlük satış, müşteri ve fırsat trendini gösterir.
-          </div>
         </Card>
 
-        {/* 2. Haftalık Karşılaştırma */}
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Haftalık Karşılaştırma</h3>
-              <p className="text-sm text-gray-500 mt-1">Son 12 haftanın performans karşılaştırması</p>
+              <p className="text-sm text-gray-500 mt-1">Haftalık performans karşılaştırması</p>
             </div>
             <BarChart3 className="h-5 w-5 text-primary-600" />
           </div>
           <WeeklyComparisonBarChart data={data?.weeklyComparison || []} />
-          <div className="mt-4 p-3 bg-gray-50 rounded text-xs text-gray-600">
-            <strong>Açıklama:</strong> Bu grafik son 12 haftanın satış, müşteri ve fırsat performansını karşılaştırır.
-          </div>
         </Card>
 
-        {/* 3. Aylık Büyüme */}
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">Aylık Büyüme</h3>
-              <p className="text-sm text-gray-500 mt-1">Son 12 ayın büyüme trendi</p>
-            </div>
-            <TrendingUp className="h-5 w-5 text-primary-600" />
-          </div>
-          <MonthlyGrowthAreaChart data={data?.monthlyGrowth || []} />
-          <div className="mt-4 p-3 bg-gray-50 rounded text-xs text-gray-600">
-            <strong>Açıklama:</strong> Bu grafik son 12 ayın satış ve müşteri büyüme trendini gösterir.
-          </div>
-        </Card>
-
-        {/* 4. Yıllık Özet */}
-        <Card className="p-6">
+        <Card className="p-6 lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-lg font-semibold text-gray-900">Yıllık Özet</h3>
-              <p className="text-sm text-gray-500 mt-1">Son 3 yılın performans özeti</p>
+              <p className="text-sm text-gray-500 mt-1">Yıllık performans özeti</p>
             </div>
-            <Calendar className="h-5 w-5 text-primary-600" />
+            <BarChart3 className="h-5 w-5 text-primary-600" />
           </div>
           <YearlySummaryComposedChart data={data?.yearlySummary || []} />
-          <div className="mt-4 p-3 bg-gray-50 rounded text-xs text-gray-600">
-            <strong>Açıklama:</strong> Bu grafik son 3 yılın satış, müşteri, fırsat ve fatura özetini gösterir.
-          </div>
         </Card>
       </div>
     </div>

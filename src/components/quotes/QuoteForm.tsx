@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
+import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -26,33 +27,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-const quoteSchema = z.object({
-  title: z.string().min(1, 'Başlık gereklidir').max(200, 'Başlık en fazla 200 karakter olabilir'),
-  status: z.enum(['DRAFT', 'SENT', 'ACCEPTED', 'DECLINED', 'WAITING']).default('DRAFT'),
-  total: z.number().min(0.01, 'Alt Toplam 0\'dan büyük olmalı').max(999999999, 'Tutar çok büyük'),
-  dealId: z.string().min(1, 'Fırsat seçimi zorunludur'),
-  vendorId: z.string().optional(),
-  description: z.string().max(2000, 'Açıklama en fazla 2000 karakter olabilir').optional(),
-  validUntil: z.string().min(1, 'Geçerlilik tarihi zorunludur'),
-  discount: z.number().min(0, 'İndirim oranı 0-100 arası olmalı').max(100, 'İndirim oranı 0-100 arası olmalı').optional(),
-  taxRate: z.number().min(0, 'KDV oranı 0-100 arası olmalı').max(100, 'KDV oranı 0-100 arası olmalı').optional(),
-  customerCompanyId: z.string().optional(), // Firma bazlı ilişki
-}).refine((data) => {
-  // validUntil geçmiş tarih olamaz
-  if (data.validUntil) {
-    const validUntil = new Date(data.validUntil)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    return validUntil >= today
-  }
-  return true
-}, {
-  message: 'Geçerlilik tarihi geçmiş bir tarih olamaz',
-  path: ['validUntil'],
-})
-
-type QuoteFormData = z.infer<typeof quoteSchema>
-
 interface QuoteFormProps {
   quote?: any
   open: boolean
@@ -60,10 +34,17 @@ interface QuoteFormProps {
   onSuccess?: (savedQuote: any) => void // Cache güncelleme için callback
   dealId?: string // Prop olarak dealId geçilebilir (modal içinde kullanım için)
   customerId?: string // Prop olarak customerId geçilebilir (modal içinde kullanım için)
+  customerCompanyId?: string
+  customerCompanyName?: string
 }
 
-async function fetchDeals() {
-  const res = await fetch('/api/deals?pageSize=1000')
+async function fetchDeals(customerCompanyId?: string) {
+  const params = new URLSearchParams()
+  params.append('pageSize', '1000')
+  if (customerCompanyId) {
+    params.append('customerCompanyId', customerCompanyId)
+  }
+  const res = await fetch(`/api/deals?${params.toString()}`)
   if (!res.ok) throw new Error('Failed to fetch deals')
   const data = await res.json()
   return Array.isArray(data) ? data : (data.data || data.deals || [])
@@ -76,11 +57,24 @@ async function fetchVendors() {
   return Array.isArray(data) ? data : (data.data || data.vendors || [])
 }
 
-export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dealIdProp, customerId: customerIdProp }: QuoteFormProps) {
+export default function QuoteForm({
+  quote,
+  open,
+  onClose,
+  onSuccess,
+  dealId: dealIdProp,
+  customerId: customerIdProp,
+  customerCompanyId: customerCompanyIdProp,
+  customerCompanyName,
+}: QuoteFormProps) {
+  const t = useTranslations('quotes.form')
+  const tCommon = useTranslations('common.form')
+  const tQuotes = useTranslations('quotes')
   const router = useRouter()
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
-  const customerCompanyId = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
+  const customerCompanyIdFromUrl = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
+  const customerCompanyId = customerCompanyIdProp || customerCompanyIdFromUrl
   const dealIdFromUrl = searchParams.get('dealId') || undefined // URL'den dealId al
   
   // Prop öncelikli - prop varsa prop'u kullan, yoksa URL'den al
@@ -88,9 +82,37 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
   const customerId = customerIdProp
   const [loading, setLoading] = useState(false)
 
+  // Schema'yı component içinde oluştur - locale desteği için
+  const quoteSchema = z.object({
+    title: z.string().min(1, tCommon('titleRequired')).max(200, tCommon('titleMaxLength', { max: 200 })),
+    status: z.enum(['DRAFT', 'SENT', 'ACCEPTED', 'DECLINED', 'WAITING']).default('DRAFT'),
+    total: z.number().min(0.01, t('amountMin')).max(999999999, tCommon('amountMax')),
+    dealId: z.string().min(1, t('dealRequired')),
+    vendorId: z.string().optional(),
+    description: z.string().max(2000, t('descriptionMaxLength')).optional(),
+    validUntil: z.string().min(1, t('validUntilRequired')),
+    discount: z.number().min(0, t('discountRange')).max(100, t('discountRange')).optional(),
+    taxRate: z.number().min(0, t('taxRateRange')).max(100, t('taxRateRange')).optional(),
+    customerCompanyId: z.string().optional(), // Firma bazlı ilişki
+  }).refine((data) => {
+    // validUntil geçmiş tarih olamaz
+    if (data.validUntil) {
+      const validUntil = new Date(data.validUntil)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      return validUntil >= today
+    }
+    return true
+  }, {
+    message: t('validUntilPastDate'),
+    path: ['validUntil'],
+  })
+
+  type QuoteFormData = z.infer<typeof quoteSchema>
+
   const { data: dealsData } = useQuery({
-    queryKey: ['deals'],
-    queryFn: fetchDeals,
+    queryKey: ['deals', customerCompanyId],
+    queryFn: () => fetchDeals(customerCompanyId || undefined),
     enabled: open,
   })
 
@@ -102,6 +124,9 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
 
   // Güvenlik kontrolü - her zaman array olmalı
   const deals = Array.isArray(dealsData) ? dealsData : []
+  const filteredDeals = customerCompanyId
+    ? deals.filter((deal: any) => deal.customerCompanyId === customerCompanyId)
+    : deals
   const vendors = Array.isArray(vendorsData) ? vendorsData : []
 
   const {
@@ -123,6 +148,7 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
       validUntil: '',
       discount: 0,
       taxRate: 18,
+      customerCompanyId: customerCompanyId || '',
     },
   })
 
@@ -179,6 +205,7 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
           validUntil: formattedValidUntil,
           discount: quote.discount || 0,
           taxRate: quote.taxRate || 18,
+          customerCompanyId: quote.customerCompanyId || customerCompanyId || '',
         })
       } else if (dealId && dealData) {
         // Yeni kayıt modu - dealId varsa ve deal bilgileri yüklendiyse forma yansıt
@@ -196,6 +223,7 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
           validUntil: validUntilDate.toISOString().split('T')[0],
           discount: 0,
           taxRate: 18,
+          customerCompanyId: deal.customerCompanyId || customerCompanyId || '',
         })
       } else {
         // Yeni kayıt modu - form'u temizle
@@ -209,10 +237,17 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
           validUntil: '',
           discount: 0,
           taxRate: 18,
+          customerCompanyId: customerCompanyId || '',
         })
       }
     }
-  }, [quote, open, reset, dealId, dealData])
+  }, [quote, open, reset, dealId, dealData, customerCompanyId]) // onClose dependency'den çıkarıldı - stable değil
+
+  useEffect(() => {
+    if (open && !quote && filteredDeals.length === 1 && !selectedDealId) {
+      setValue('dealId', filteredDeals[0].id)
+    }
+  }, [open, quote, filteredDeals, selectedDealId, setValue])
 
   // Toplam hesaplama (indirim ve KDV ile)
   const subtotal = total || 0
@@ -226,11 +261,10 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
       const url = quote ? `/api/quotes/${quote.id}` : '/api/quotes'
       const method = quote ? 'PUT' : 'POST'
 
-      // Payload oluştur - customerCompanyId kolonu Quote tablosunda yok, göndermiyoruz
       const payload = {
         ...data,
         total: finalTotal,
-        // NOT: customerCompanyId kolonu Quote tablosunda yok - GÖNDERME!
+        customerCompanyId: customerCompanyId || data.customerCompanyId || null,
       }
 
       const res = await fetch(url, {
@@ -247,6 +281,16 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
       return res.json()
     },
     onSuccess: async (savedQuote) => {
+      // Toast mesajı göster
+      if (quote) {
+        toast.success('Teklif güncellendi', `"${savedQuote.title}" teklifi başarıyla güncellendi.`)
+      } else {
+        const message = customerCompanyName 
+          ? `${customerCompanyName} firması için "${savedQuote.title}" teklifi oluşturuldu.`
+          : `"${savedQuote.title}" teklifi oluşturuldu.`
+        toast.success('Teklif oluşturuldu', message)
+      }
+      
       // Query cache'ini invalidate et - fresh data çek
       // ÖNEMLİ: Dashboard'daki tüm ilgili query'leri invalidate et (ana sayfada güncellensin)
       await Promise.all([
@@ -286,6 +330,9 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
           ? data.description 
           : undefined,
         vendorId: data.vendorId && data.vendorId !== '' ? data.vendorId : undefined,
+        customerCompanyId: data.customerCompanyId && data.customerCompanyId !== ''
+          ? data.customerCompanyId
+          : customerCompanyId || undefined,
       }
       await mutation.mutateAsync(cleanData)
     } catch (error: any) {
@@ -304,23 +351,36 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {quote ? 'Teklif Düzenle' : 'Yeni Teklif'}
+            {quote ? t('editTitle') : t('newTitle')}
           </DialogTitle>
           <DialogDescription>
-            {quote ? 'Teklif bilgilerini güncelleyin' : 'Yeni teklif oluşturun'}
+            {quote ? t('editDescription') : t('newDescription')}
             <br />
             <span className="text-xs text-red-600 mt-2 inline-block">
-              * İşaretli alanlar zorunludur
+              {t('requiredFields')}
             </span>
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {customerCompanyId && (
+            <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3 text-sm text-indigo-700">
+              <p className="font-semibold">
+                {t('companyLabel')}: {customerCompanyName || t('selectedCompany')}
+              </p>
+              <p>
+                {filteredDeals.length > 0
+                  ? t('activeDealsCount', { count: filteredDeals.length })
+                  : t('noDealsFound')}
+              </p>
+            </div>
+          )}
+          <input type="hidden" {...register('customerCompanyId')} />
           {/* ÖNEMLİ: Durum bazlı koruma bilgilendirmeleri */}
           {quote && quote.status === 'ACCEPTED' && (
             <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-4">
               <p className="text-sm text-blue-800 font-semibold">
-                🔒 Bu teklif kabul edildi ve fatura oluşturuldu. Teklif bilgileri değiştirilemez veya silinemez.
+                {t('acceptedWarning')}
               </p>
             </div>
           )}
@@ -329,7 +389,7 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
           {isProtected && (
             <div className="bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
               <p className="text-xs text-gray-600">
-                ⚠️ Bu teklif korumalı durumda olduğu için form alanları düzenlenemez.
+                {t('protectedWarning')}
               </p>
             </div>
           )}
@@ -338,11 +398,11 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
             {/* Title */}
             <div className="space-y-2 md:col-span-2">
               <label className="text-sm font-bold text-gray-900">
-                Başlık <span className="text-red-600">*</span>
+                {t('titleLabel')} <span className="text-red-600">*</span>
               </label>
               <Input
                 {...register('title')}
-                placeholder="Teklif başlığı"
+                placeholder={t('titlePlaceholder')}
                 disabled={loading || isProtected}
                 className={errors.title ? 'border-red-500' : ''}
               />
@@ -354,49 +414,57 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
             {/* Deal */}
             <div className="space-y-2">
               <label className="text-sm font-bold text-gray-900">
-                Fırsat <span className="text-red-600">*</span>
+                {t('dealLabel')} <span className="text-red-600">*</span>
               </label>
               <Select
-                value={selectedDealId || ''}
-                onValueChange={(value) => setValue('dealId', value)}
-                disabled={loading || isProtected}
+                value={selectedDealId || 'none'}
+                onValueChange={(value) =>
+                  setValue('dealId', value === 'none' ? '' : value)
+                }
+                disabled={loading || isProtected || filteredDeals.length === 0}
               >
                 <SelectTrigger className={errors.dealId ? 'border-red-500' : ''}>
-                  <SelectValue placeholder="Fırsat seçin (Zorunlu)" />
+                  <SelectValue placeholder={t('dealPlaceholderRequired')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {deals.map((deal: any) => (
-                    <SelectItem key={deal.id} value={deal.id}>
-                      {deal.title} {deal.Customer && `- ${deal.Customer.name}`}
+                  {filteredDeals.length === 0 ? (
+                    <SelectItem value="none" disabled>
+                      {t('noDealsForCompany')}
                     </SelectItem>
-                  ))}
+                  ) : (
+                    filteredDeals.map((deal: any) => (
+                      <SelectItem key={deal.id} value={deal.id}>
+                        {deal.title} {deal.Customer && `- ${deal.Customer.name || ''}`}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
               {errors.dealId && (
                 <p className="text-sm text-red-600 font-medium">{errors.dealId.message}</p>
               )}
               <p className="text-xs text-gray-500">
-                💡 Fırsat seçimi zorunludur. Müşteri bilgisi otomatik olarak fırsattan alınır.
+                {t('dealRequiredHint')}
               </p>
             </div>
 
             {/* Vendor */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Tedarikçi</label>
+              <label className="text-sm font-medium">{t('vendorLabel')}</label>
               <Select
                 value={watch('vendorId') || 'none'}
                 onValueChange={(value) => setValue('vendorId', value === 'none' ? undefined : value)}
                 disabled={loading || isProtected}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Tedarikçi seçin (Opsiyonel)" />
+                  <SelectValue placeholder={t('vendorPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
                   {vendors.length === 0 ? (
-                    <SelectItem value="none" disabled>Tedarikçi bulunamadı</SelectItem>
+                    <SelectItem value="none" disabled>{t('vendorNotFound')}</SelectItem>
                   ) : (
                     <>
-                      <SelectItem value="none">Tedarikçi seçilmedi</SelectItem>
+                      <SelectItem value="none">{t('vendorNotSelected')}</SelectItem>
                       {vendors.map((vendor: any) => (
                         <SelectItem key={vendor.id} value={vendor.id}>
                           {vendor.name}
@@ -410,7 +478,7 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
 
             {/* Status */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Durum</label>
+              <label className="text-sm font-medium">{t('statusLabel')}</label>
               <Select
                 value={status}
                 onValueChange={(value) =>
@@ -422,21 +490,21 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="DRAFT">Taslak</SelectItem>
-                  <SelectItem value="SENT">Gönderildi</SelectItem>
-                  <SelectItem value="ACCEPTED">Kabul Edildi</SelectItem>
-                  <SelectItem value="DECLINED">Reddedildi</SelectItem>
-                  <SelectItem value="WAITING">Beklemede</SelectItem>
+                  <SelectItem value="DRAFT">{tQuotes('statusDraft')}</SelectItem>
+                  <SelectItem value="SENT">{tQuotes('statusSent')}</SelectItem>
+                  <SelectItem value="ACCEPTED">{tQuotes('statusAccepted')}</SelectItem>
+                  <SelectItem value="DECLINED">{tQuotes('statusDeclined')}</SelectItem>
+                  <SelectItem value="WAITING">{tQuotes('statusWaiting')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {/* Description */}
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">Açıklama</label>
+              <label className="text-sm font-medium">{t('descriptionLabel')}</label>
               <Textarea
                 {...register('description')}
-                placeholder="Teklif açıklaması ve detaylar"
+                placeholder={t('descriptionPlaceholder')}
                 rows={3}
                 disabled={loading || isProtected}
               />
@@ -445,7 +513,7 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
             {/* Valid Until */}
             <div className="space-y-2">
               <label className="text-sm font-bold text-gray-900">
-                Geçerlilik Tarihi <span className="text-red-600">*</span>
+                {t('validUntilLabel')} <span className="text-red-600">*</span>
               </label>
               <Input
                 type="date"
@@ -458,21 +526,21 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
                 <p className="text-sm text-red-600 font-medium">{errors.validUntil.message}</p>
               )}
               <p className="text-xs text-gray-500">
-                💡 Teklifin geçerlilik süresini belirtin.
+                {t('validUntilHint')}
               </p>
             </div>
 
             {/* Subtotal */}
             <div className="space-y-2">
               <label className="text-sm font-bold text-gray-900">
-                Alt Toplam (₺) <span className="text-red-600">*</span>
+                {t('subtotalLabel')} (₺) <span className="text-red-600">*</span>
               </label>
               <Input
                 type="number"
                 step="0.01"
                 min="0.01"
                 {...register('total', { valueAsNumber: true })}
-                placeholder="0.00"
+                placeholder={t('totalPlaceholder')}
                 disabled={loading || isProtected}
                 className={errors.total ? 'border-red-500' : ''}
               />
@@ -480,39 +548,39 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
                 <p className="text-sm text-red-600 font-medium">{errors.total.message}</p>
               )}
               <p className="text-xs text-gray-500">
-                💡 İndirim ve KDV öncesi toplam tutarı girin.
+                {t('subtotalHint')}
               </p>
             </div>
 
             {/* Discount */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">İndirim (%)</label>
+              <label className="text-sm font-medium">{t('discountLabel')}</label>
               <Input
                 type="number"
                 step="0.01"
                 min="0"
                 max="100"
                 {...register('discount', { valueAsNumber: true })}
-                placeholder="0"
+                placeholder={t('discountPlaceholder')}
                 disabled={loading || isProtected}
               />
               {discount > 0 && (
                 <p className="text-xs text-gray-500">
-                  İndirim: {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(discountAmount)}
+                  {t('discountAmountLabel')}: {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(discountAmount)}
                 </p>
               )}
             </div>
 
             {/* Tax Rate */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">KDV Oranı (%)</label>
+              <label className="text-sm font-medium">{t('taxRateLabel')}</label>
               <Input
                 type="number"
                 step="0.01"
                 min="0"
                 max="100"
                 {...register('taxRate', { valueAsNumber: true })}
-                placeholder="18"
+                placeholder={t('taxRatePlaceholder')}
                 disabled={loading || isProtected}
               />
             </div>
@@ -520,20 +588,20 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
             {/* Final Total Display */}
             <div className="space-y-2 md:col-span-2 p-4 bg-gray-50 rounded-lg">
               <div className="flex justify-between items-center">
-                <span className="font-semibold">Toplam:</span>
+                <span className="font-semibold">{t('totalDisplayLabel')}</span>
                 <span className="text-2xl font-bold text-primary-600">
                   {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(finalTotal)}
                 </span>
               </div>
               {discount > 0 && (
                 <div className="flex justify-between text-sm text-gray-600 mt-2">
-                  <span>Alt Toplam:</span>
+                  <span>{t('subtotalDisplayLabel')}</span>
                   <span>{new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(subtotal)}</span>
                 </div>
               )}
               {taxRate > 0 && (
                 <div className="flex justify-between text-sm text-gray-600">
-                  <span>KDV ({taxRate}%):</span>
+                  <span>{t('taxDisplayLabel', { rate: taxRate })}</span>
                   <span>{new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(taxAmount)}</span>
                 </div>
               )}
@@ -548,14 +616,14 @@ export default function QuoteForm({ quote, open, onClose, onSuccess, dealId: dea
               onClick={onClose}
               disabled={loading || isProtected}
             >
-              İptal
+              {t('cancel')}
             </Button>
             <Button
               type="submit"
               className="bg-gradient-primary text-white"
               disabled={loading || isProtected}
             >
-              {loading ? 'Kaydediliyor...' : quote ? (isProtected ? 'Değiştirilemez' : 'Güncelle') : 'Kaydet'}
+              {loading ? t('saving') : quote ? (isProtected ? t('cannotEdit') : t('update')) : t('save')}
             </Button>
           </div>
         </form>

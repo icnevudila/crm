@@ -156,11 +156,30 @@ export function getQuoteWorkflowSteps(currentStatus: string) {
 }
 
 // Invoice Workflow Steps
-export function getInvoiceWorkflowSteps(currentStatus: string) {
-  const statuses = ['DRAFT', 'SENT', 'PAID', 'OVERDUE', 'CANCELLED']
+export function getInvoiceWorkflowSteps(
+  currentStatus: string,
+  invoiceType?: 'SALES' | 'PURCHASE' | 'SERVICE_SALES' | 'SERVICE_PURCHASE'
+) {
+  // Fatura tipine göre status sırası belirle
+  let statuses: string[]
+  if (invoiceType === 'SALES') {
+    statuses = ['DRAFT', 'SENT', 'SHIPPED', 'PAID', 'OVERDUE', 'CANCELLED']
+  } else if (invoiceType === 'PURCHASE') {
+    statuses = ['DRAFT', 'SENT', 'RECEIVED', 'PAID', 'OVERDUE', 'CANCELLED']
+  } else {
+    // Hizmet faturaları veya tip belirtilmemişse SHIPPED/RECEIVED yok
+    statuses = ['DRAFT', 'SENT', 'PAID', 'OVERDUE', 'CANCELLED']
+  }
+
   const currentIndex = statuses.indexOf(currentStatus)
 
-  return [
+  const steps: Array<{
+    id: string
+    label: string
+    description: string
+    status: 'current' | 'completed' | 'upcoming' | 'locked'
+    requirements?: string[]
+  }> = [
     {
       id: 'draft',
       label: 'Taslak',
@@ -174,8 +193,10 @@ export function getInvoiceWorkflowSteps(currentStatus: string) {
       requirements:
         currentStatus === 'DRAFT'
           ? [
-              'Müşteri seçin',
-              'En az 1 ürün ekleyin',
+              'Müşteri/Tedarikçi seçin',
+              invoiceType === 'SERVICE_SALES' || invoiceType === 'SERVICE_PURCHASE'
+                ? 'Hizmet açıklaması girin'
+                : 'En az 1 ürün ekleyin',
               'Fatura numarası girin',
               'Vade tarihi belirleyin',
               'Toplam tutarı hesaplayın',
@@ -185,7 +206,7 @@ export function getInvoiceWorkflowSteps(currentStatus: string) {
     {
       id: 'sent',
       label: 'Gönderildi',
-      description: 'Müşteriye iletildi',
+      description: 'Müşteriye/Tedarikçiye iletildi',
       status:
         currentStatus === 'SENT'
           ? 'current'
@@ -196,33 +217,101 @@ export function getInvoiceWorkflowSteps(currentStatus: string) {
           : 'upcoming',
       requirements:
         currentStatus === 'SENT'
-          ? [
-              'Ödeme yapılmasını bekleyin',
-              'Vade tarihini takip edin',
-              'Gerekirse hatırlatma gönderin',
-            ]
-          : undefined,
-    },
-    {
-      id: 'paid',
-      label: 'Ödendi',
-      description: 'Tahsilat yapıldı',
-      status:
-        currentStatus === 'PAID'
-          ? 'current'
-          : currentStatus === 'CANCELLED'
-          ? 'locked'
-          : 'upcoming',
-      requirements:
-        currentStatus === 'SENT' || currentStatus === 'OVERDUE'
-          ? [
-              'Ödeme tarihi girin',
-              'Otomatik: Finance kaydı oluşturulacak',
-              'Makbuz/dekont ekleyin',
-            ]
+          ? invoiceType === 'SALES'
+            ? [
+                'Sevkiyat yapılmasını bekleyin',
+                'Sevkiyat tamamlandığında "Sevkiyat Yapıldı" statüsüne geçin',
+                'Vade tarihini takip edin',
+              ]
+            : invoiceType === 'PURCHASE'
+            ? [
+                'Mal kabul edilmesini bekleyin',
+                'Mal kabul tamamlandığında "Mal Kabul Edildi" statüsüne geçin',
+                'Vade tarihini takip edin',
+              ]
+            : [
+                'Ödeme yapılmasını bekleyin',
+                'Vade tarihini takip edin',
+                'Gerekirse hatırlatma gönderin',
+              ]
           : undefined,
     },
   ]
+
+  // Satış faturaları için SHIPPED adımı ekle
+  if (invoiceType === 'SALES') {
+    steps.push({
+      id: 'shipped',
+      label: 'Sevkiyat Yapıldı',
+      description: 'Ürünler sevk edildi',
+      status:
+        currentStatus === 'SHIPPED'
+          ? 'current'
+          : currentIndex > statuses.indexOf('SHIPPED')
+          ? 'completed'
+          : currentIndex < statuses.indexOf('SHIPPED')
+          ? 'locked'
+          : 'upcoming',
+      requirements:
+        currentStatus === 'SHIPPED'
+          ? [
+              'Sevkiyat onaylandı',
+              'Stoktan düşüldü',
+              'Müşteriye teslim edilmesini bekleyin',
+            ]
+          : undefined,
+    })
+  }
+
+  // Alış faturaları için RECEIVED adımı ekle
+  if (invoiceType === 'PURCHASE') {
+    steps.push({
+      id: 'received',
+      label: 'Mal Kabul Edildi',
+      description: 'Ürünler teslim alındı',
+      status:
+        currentStatus === 'RECEIVED'
+          ? 'current'
+          : currentIndex > statuses.indexOf('RECEIVED')
+          ? 'completed'
+          : currentIndex < statuses.indexOf('RECEIVED')
+          ? 'locked'
+          : 'upcoming',
+      requirements:
+        currentStatus === 'RECEIVED'
+          ? [
+              'Mal kabul onaylandı',
+              'Stoğa giriş yapıldı',
+              'Ödeme yapılmasını bekleyin',
+            ]
+          : undefined,
+    })
+  }
+
+  steps.push({
+    id: 'paid',
+    label: 'Ödendi',
+    description: 'Tahsilat yapıldı',
+    status:
+      currentStatus === 'PAID'
+        ? 'current'
+        : currentStatus === 'CANCELLED'
+        ? 'locked'
+        : 'upcoming',
+    requirements:
+      currentStatus === 'SENT' ||
+      currentStatus === 'SHIPPED' ||
+      currentStatus === 'RECEIVED' ||
+      currentStatus === 'OVERDUE'
+        ? [
+            'Ödeme tarihi girin',
+            'Otomatik: Finance kaydı oluşturulacak',
+            'Makbuz/dekont ekleyin',
+          ]
+        : undefined,
+  })
+
+  return steps
 }
 
 // Contract Workflow Steps

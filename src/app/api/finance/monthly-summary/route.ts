@@ -55,7 +55,7 @@ export async function GET(request: Request) {
 
     if (financeError) {
       return NextResponse.json(
-        { error: financeError.message || 'Failed to fetch finance records' },
+        { error: financeError.message || 'Finans kayıtları getirilemedi' },
         { status: 500 }
       )
     }
@@ -98,7 +98,7 @@ export async function GET(request: Request) {
     })
 
     return NextResponse.json({
-      message: 'Monthly summary generated',
+      message: 'Aylık finans özeti oluşturuldu',
       period: {
         startDate: startDate.toISOString().split('T')[0],
         endDate: endDate.toISOString().split('T')[0],
@@ -121,7 +121,7 @@ export async function GET(request: Request) {
     })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to generate monthly summary' },
+      { error: error.message || 'Aylık finans özeti oluşturulamadı' },
       { status: 500 }
     )
   }

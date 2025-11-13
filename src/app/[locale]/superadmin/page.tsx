@@ -1,5 +1,7 @@
 'use client'
 
+/* eslint-disable react/no-unescaped-entities */
+
 import { useState, useEffect } from 'react'
 import { useLocale } from 'next-intl'
 import { Crown, Building2, Users, Lock, Edit, Trash2, Plus, Loader2, Check, X } from 'lucide-react'
@@ -121,6 +123,14 @@ export default function SuperAdminPage() {
   const [userRoleId, setUserRoleId] = useState<string>('')
   const [userCompanyId, setUserCompanyId] = useState<string>('')
   const [savingUser, setSavingUser] = useState(false)
+  const [userFormOpen, setUserFormOpen] = useState(false)
+  const [newUserData, setNewUserData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    roleId: '',
+    companyId: '',
+  })
 
   // Data fetching
   const { data: companiesData, isLoading: companiesLoading, mutate: mutateCompanies } = useData<{
@@ -371,6 +381,101 @@ export default function SuperAdminPage() {
     } catch (error: any) {
       console.error('Error saving user:', error)
       alert(error?.message || 'Kullanıcı güncellenemedi')
+    } finally {
+      setSavingUser(false)
+    }
+  }
+
+  const handleCreateUser = async () => {
+    if (!newUserData.name?.trim() || !newUserData.email?.trim()) {
+      alert('Ad ve e-posta gereklidir')
+      return
+    }
+
+    if (!newUserData.companyId) {
+      alert('Kurum seçimi zorunludur')
+      return
+    }
+
+    setSavingUser(true)
+    try {
+      // Role tablosundan role code'unu al
+      let roleCode = 'USER'
+      if (newUserData.roleId) {
+        const selectedRole = userRoles.find(r => r.id === newUserData.roleId)
+        if (selectedRole) {
+          roleCode = selectedRole.code
+        }
+      }
+
+      // Şifre boşsa rastgele şifre oluştur
+      let password = newUserData.password
+      if (!password || password.trim() === '') {
+        // Rastgele 12 karakterlik şifre oluştur
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+        password = Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('')
+      }
+
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newUserData.name.trim(),
+          email: newUserData.email.trim(),
+          password: password,
+          role: roleCode,
+          companyId: newUserData.companyId,
+        }),
+      })
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to create user')
+      }
+
+      const savedUser = await res.json()
+
+      // Eğer roleId seçildiyse, kullanıcı oluşturulduktan sonra roleId'yi güncelle
+      if (newUserData.roleId && savedUser.id) {
+        const roleUpdateRes = await fetch('/api/superadmin/users', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: savedUser.id,
+            roleId: newUserData.roleId,
+            companyId: newUserData.companyId,
+          }),
+        })
+
+        if (!roleUpdateRes.ok) {
+          console.warn('Kullanıcı oluşturuldu ancak rol ataması yapılamadı')
+        }
+      }
+
+      await mutateUsers()
+      await mutate('/api/superadmin/users')
+      
+      setUserFormOpen(false)
+      
+      // Şifre otomatik oluşturulduysa kullanıcıya göster
+      const generatedPassword = !newUserData.password || newUserData.password.trim() === '' ? password : null
+      
+      setNewUserData({
+        name: '',
+        email: '',
+        password: '',
+        roleId: '',
+        companyId: '',
+      })
+      
+      if (generatedPassword) {
+        alert(`Kullanıcı başarıyla oluşturuldu!\n\nGeçici şifre: ${generatedPassword}\n\nLütfen bu şifreyi kullanıcıyla paylaşın.`)
+      } else {
+        alert('Kullanıcı başarıyla oluşturuldu!')
+      }
+    } catch (error: any) {
+      console.error('Error creating user:', error)
+      alert(error?.message || 'Kullanıcı oluşturulamadı')
     } finally {
       setSavingUser(false)
     }
@@ -685,10 +790,18 @@ export default function SuperAdminPage() {
         <TabsContent value="users" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Kullanıcılar</CardTitle>
-              <CardDescription>
-                Kullanıcıların rol ve kurum atamalarını yönetin
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Kullanıcılar</CardTitle>
+                  <CardDescription>
+                    Kullanıcıların rol ve kurum atamalarını yönetin
+                  </CardDescription>
+                </div>
+                <Button onClick={() => setUserFormOpen(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Yeni Kullanıcı
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -796,7 +909,7 @@ export default function SuperAdminPage() {
 
       {/* Kurum Form Dialog */}
       <Dialog open={companyFormOpen} onOpenChange={setCompanyFormOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {companyFormData.id ? 'Kurum Düzenle' : 'Yeni Kurum'}
@@ -991,6 +1104,125 @@ export default function SuperAdminPage() {
                   </>
                 ) : (
                   'Kaydet'
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Yeni Kullanıcı Form Dialog */}
+      <Dialog open={userFormOpen} onOpenChange={setUserFormOpen}>
+        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Yeni Kullanıcı</DialogTitle>
+            <DialogDescription>
+              Yeni kullanıcı ekleyin ve kurum/rol ataması yapın
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Ad Soyad *</label>
+              <Input
+                value={newUserData.name}
+                onChange={(e) => setNewUserData({ ...newUserData, name: e.target.value })}
+                placeholder="Ad Soyad"
+                disabled={savingUser}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">E-posta *</label>
+              <Input
+                type="email"
+                value={newUserData.email}
+                onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
+                placeholder="kullanici@example.com"
+                disabled={savingUser}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Şifre</label>
+              <Input
+                type="password"
+                value={newUserData.password}
+                onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
+                placeholder="Boş bırakılırsa otomatik oluşturulur"
+                disabled={savingUser}
+              />
+              <p className="text-xs text-gray-500">Boş bırakılırsa rastgele şifre oluşturulur</p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Kurum *</label>
+              <Select
+                value={newUserData.companyId}
+                onValueChange={(value) => setNewUserData({ ...newUserData, companyId: value })}
+                disabled={savingUser}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Kurum seçin" />
+                </SelectTrigger>
+                <SelectContent>
+                  {userCompanies.map((company) => (
+                    <SelectItem key={company.id} value={company.id}>
+                      {company.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Rol</label>
+              <Select
+                value={newUserData.roleId}
+                onValueChange={(value) => setNewUserData({ ...newUserData, roleId: value })}
+                disabled={savingUser}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Rol seçin (opsiyonel)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {userRoles.map((role) => (
+                    <SelectItem key={role.id} value={role.id}>
+                      {role.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500">Boş bırakılırsa varsayılan USER rolü atanır</p>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setUserFormOpen(false)
+                  setNewUserData({
+                    name: '',
+                    email: '',
+                    password: '',
+                    roleId: '',
+                    companyId: '',
+                  })
+                }}
+                disabled={savingUser}
+              >
+                İptal
+              </Button>
+              <Button onClick={handleCreateUser} disabled={savingUser}>
+                {savingUser ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Oluşturuluyor...
+                  </>
+                ) : (
+                  'Oluştur'
                 )}
               </Button>
             </div>

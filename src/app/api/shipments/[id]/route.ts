@@ -17,7 +17,7 @@ export async function GET(
         console.error('Shipments [id] GET API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -27,13 +27,10 @@ export async function GET(
     }
 
     // Permission check - canRead kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canRead = await hasPermission('shipment', 'read', session.user.id)
     if (!canRead) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Sevkiyat görüntüleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const { id } = await params
@@ -226,40 +223,19 @@ export async function GET(
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     const companyId = session.user.companyId
 
-    // ActivityLog'ları çek
-    let activityQuery = supabase
-      .from('ActivityLog')
-      .select(
-        `
-        *,
-        User (
-          name,
-          email
-        )
-      `
-      )
-      .eq('entity', 'Shipment')
-      .eq('meta->>id', id)
+    // ActivityLog'lar KALDIRILDI - Lazy load için ayrı endpoint kullanılacak (/api/activity?entity=Shipment&id=...)
+    // (Performans optimizasyonu: Detay sayfası daha hızlı açılır, ActivityLog'lar gerektiğinde yüklenir)
     
-    // SuperAdmin değilse MUTLAKA companyId filtresi uygula
-    if (!isSuperAdmin) {
-      activityQuery = activityQuery.eq('companyId', companyId)
-    }
-    
-    const { data: activities } = await activityQuery
-      .order('createdAt', { ascending: false })
-      .limit(20)
-
     return NextResponse.json({
       ...(shipmentData as any),
       Invoice: invoiceData,
-      activities: activities || [],
+      activities: [], // Boş array - lazy load için ayrı endpoint kullanılacak
       invoiceItems: invoiceItems || [],
       stockMovements: stockMovements || [],
     })
   } catch (error) {
     return NextResponse.json(
-      { error: 'Failed to fetch shipment' },
+      { error: 'Sevkiyat getirilemedi' },
       { status: 500 }
     )
   }
@@ -279,7 +255,7 @@ export async function PUT(
         console.error('Shipments [id] PUT API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -289,13 +265,10 @@ export async function PUT(
     }
 
     // Permission check - canUpdate kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canUpdate = await hasPermission('shipment', 'update', session.user.id)
     if (!canUpdate) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Sevkiyat güncelleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const { id } = await params
@@ -378,7 +351,7 @@ export async function PUT(
     const data = Array.isArray(updateResult) && updateResult.length > 0 ? updateResult[0] : updateResult
 
     if (!data) {
-      return NextResponse.json({ error: 'Shipment not found or update failed' }, { status: 404 })
+      return NextResponse.json({ error: 'Sevkiyat bulunamadı veya güncellenemedi' }, { status: 404 })
     }
 
     // Shipment DELIVERED olduğunda ActivityLog kaydı (hata olsa bile devam et)
@@ -419,7 +392,7 @@ export async function PUT(
     return NextResponse.json(data)
   } catch (error) {
     return NextResponse.json(
-      { error: 'Failed to update shipment' },
+      { error: 'Sevkiyat güncellenemedi' },
       { status: 500 }
     )
   }
@@ -439,7 +412,7 @@ export async function DELETE(
         console.error('Shipments [id] DELETE API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -449,13 +422,10 @@ export async function DELETE(
     }
 
     // Permission check - canDelete kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canDelete = await hasPermission('shipment', 'delete', session.user.id)
     if (!canDelete) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Sevkiyat silme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const { id } = await params
@@ -568,7 +538,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error) {
     return NextResponse.json(
-      { error: 'Failed to delete shipment' },
+      { error: 'Sevkiyat silinemedi' },
       { status: 500 }
     )
   }

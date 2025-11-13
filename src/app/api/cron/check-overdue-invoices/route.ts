@@ -36,14 +36,14 @@ export async function GET(request: Request) {
     if (findError) {
       console.error('Check Overdue Invoices - Find Error:', findError)
       return NextResponse.json(
-        { error: 'Failed to find overdue invoices', details: findError.message },
+        { error: 'Geciken faturalar alınamadı', details: findError.message },
         { status: 500 }
       )
     }
 
     if (!overdueInvoices || overdueInvoices.length === 0) {
       return NextResponse.json({
-        message: 'No overdue invoices found',
+        message: 'Geciken fatura bulunamadı',
         count: 0,
         date: today,
       })
@@ -99,7 +99,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      message: 'Overdue invoices checked',
+      message: 'Geciken faturalar kontrol edildi',
       totalInvoices: overdueInvoices.length,
       notificationsSent: notificationCount,
       date: today,
@@ -107,7 +107,7 @@ export async function GET(request: Request) {
   } catch (error: any) {
     console.error('Check Overdue Invoices - Error:', error)
     return NextResponse.json(
-      { error: error?.message || 'Failed to check overdue invoices' },
+      { error: error?.message || 'Geciken faturalar kontrol edilemedi' },
       { status: 500 }
     )
   }

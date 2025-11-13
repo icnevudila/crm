@@ -62,33 +62,12 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // ActivityLog'ları çek
-    let activityQuery = supabase
-      .from('ActivityLog')
-      .select(
-        `
-        *,
-        User (
-          name,
-          email
-        )
-      `
-      )
-      .eq('entity', 'Task')
-      .eq('meta->>id', id)
+    // ActivityLog'lar KALDIRILDI - Lazy load için ayrı endpoint kullanılacak (/api/activity?entity=Task&id=...)
+    // (Performans optimizasyonu: Detay sayfası daha hızlı açılır, ActivityLog'lar gerektiğinde yüklenir)
     
-    // SuperAdmin değilse MUTLAKA companyId filtresi uygula
-    if (!isSuperAdmin) {
-      activityQuery = activityQuery.eq('companyId', companyId)
-    }
-    
-    const { data: activities } = await activityQuery
-      .order('createdAt', { ascending: false })
-      .limit(20)
-
     return NextResponse.json({
       ...(task as any),
-      activities: activities || [],
+      activities: [], // Boş array - lazy load için ayrı endpoint kullanılacak
     })
   } catch (error: any) {
     if (error.message.includes('not found') || error.message.includes('No rows')) {

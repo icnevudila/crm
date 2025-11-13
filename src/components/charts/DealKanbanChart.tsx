@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { toast } from '@/lib/toast'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -11,7 +11,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { Briefcase, Edit, Trash2, Eye, GripVertical, Info, History } from 'lucide-react'
+import { Briefcase, Edit, Trash2, Eye, GripVertical, Info, History, ChevronLeft, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
 import {
@@ -129,7 +129,7 @@ function DroppableColumn({ stage, children }: { stage: string; children: React.R
 }
 
 // Sortable Deal Card Component
-function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpenMeetingDialog, onOpenQuoteDialog, onOpenWonDialog }: {
+function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpenMeetingDialog, onOpenQuoteDialog, onOpenWonDialog, onOpenLostDialog }: {
   deal: any
   stage: string
   onEdit?: (deal: any) => void
@@ -138,6 +138,7 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
   onOpenMeetingDialog?: (deal: any) => void
   onOpenQuoteDialog?: (deal: any) => void
   onOpenWonDialog?: (deal: any) => void
+  onOpenLostDialog?: (deal: any) => void
 }) {
   const locale = useLocale()
   const [dragMode, setDragMode] = useState(false)
@@ -533,8 +534,7 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
                           e.stopPropagation()
                           if (dragMode || isDragging) return
                           // Dialog aç
-                          setLosingDealId(deal.id)
-                          setLostDialogOpen(true)
+                          onOpenLostDialog?.(deal)
                         }}
                       >
                         Kaybedildi
@@ -662,7 +662,7 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
 export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange }: DealKanbanChartProps) {
   const locale = useLocale()
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [localData, setLocalData] = useState(data)
+  const [localData, setLocalData] = useState<any[]>(Array.isArray(data) ? data : [])
   const [lostDialogOpen, setLostDialogOpen] = useState(false)
   const [losingDealId, setLosingDealId] = useState<string | null>(null)
   const [lostReason, setLostReason] = useState('')
@@ -717,38 +717,40 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange 
     // ÖNEMLİ: Eğer localData boşsa veya data prop'u değiştiyse güncelle
     // Ama optimistic update'i korumak için, sadece data prop'u gerçekten farklıysa güncelle
     // (localData.length === 0 ise ilk yükleme, güncelle)
-    if (localData.length === 0) {
-      setLocalData(dataWithTotalValue)
-      return
-    }
-    
-    // Data prop'u ile localData'yı karşılaştır
-    // Eğer deal'ler aynıysa güncelleme yapma (optimistic update korunur)
-    const dataChanged = dataWithTotalValue.some((dataCol: any, index: number) => {
-      const localCol = localData[index]
-      if (!localCol) return true // Yeni kolon eklendi
+    setLocalData((prevLocalData) => {
+      if (prevLocalData.length === 0) {
+        return dataWithTotalValue
+      }
       
-      // Deal ID'lerini karşılaştır
-      const localDealIds = (localCol.deals || []).map((d: any) => d.id).sort()
-      const dataDealIds = (dataCol.deals || []).map((d: any) => d.id).sort()
+      // Data prop'u ile localData'yı karşılaştır
+      // Eğer deal'ler aynıysa güncelleme yapma (optimistic update korunur)
+      const dataChanged = dataWithTotalValue.some((dataCol: any, index: number) => {
+        const localCol = prevLocalData[index]
+        if (!localCol) return true // Yeni kolon eklendi
+        
+        // Deal ID'lerini karşılaştır
+        const localDealIds = (localCol.deals || []).map((d: any) => d.id).sort()
+        const dataDealIds = (dataCol.deals || []).map((d: any) => d.id).sort()
+        
+        if (localDealIds.length !== dataDealIds.length) return true
+        
+        // Her deal ID'sini kontrol et
+        return localDealIds.some((id: string, i: number) => id !== dataDealIds[i])
+      })
       
-      if (localDealIds.length !== dataDealIds.length) return true
-      
-      // Her deal ID'sini kontrol et
-      return localDealIds.some((id: string, i: number) => id !== dataDealIds[i])
+      if (dataChanged) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('DealKanbanChart: Data changed, updating localData')
+        }
+        return dataWithTotalValue
+      } else {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('DealKanbanChart: Data unchanged, keeping localData (optimistic update preserved)')
+        }
+        return prevLocalData
+      }
     })
-    
-    if (dataChanged) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('DealKanbanChart: Data changed, updating localData')
-      }
-      setLocalData(dataWithTotalValue)
-    } else {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('DealKanbanChart: Data unchanged, keeping localData (optimistic update preserved)')
-      }
-    }
-  }, [data])
+  }, [data]) // localData'yı dependency'den çıkar - sadece data prop'unu izle
 
   // Ultra-fast sensors - instant activation
   const sensors = useSensors(
@@ -869,32 +871,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange 
       if (onStageChange) {
         try {
           await onStageChange(activeId, overStage.stage)
-          
-          // Stage'e göre toast mesajı göster
-          const currentStageName = translateStage(currentStage, 'deal')
-          const targetStageName = translateStage(targetStage, 'deal')
-          const dealTitle = activeStage.deals.find((d) => d.id === activeId)?.title || 'Fırsat'
-          
-          if (overStage.stage === 'WON') {
-            toast.success(
-              'Fırsat kazanıldı!',
-              'Fırsat kazanıldı. Sözleşme otomatik olarak oluşturuldu. Sözleşmeler sayfasından kontrol edebilirsiniz.',
-              {
-                label: 'Sözleşmeler Sayfasına Git',
-                onClick: () => window.location.href = `/${locale}/contracts`,
-              }
-            )
-          } else if (overStage.stage === 'LOST') {
-            toast.warning(
-              'Fırsat kaybedildi',
-              `Fırsat "${dealTitle}" "Kaybedildi" aşamasına taşındı. Analiz görevi oluşturuldu.`
-            )
-          } else {
-            toast.success(
-              'Fırsat aşaması güncellendi',
-              `Fırsat "${dealTitle}" başarıyla "${currentStageName}" → "${targetStageName}" aşamasına taşındı.`
-            )
-          }
+          // Toast mesajları DealList.tsx'teki handler'da gösteriliyor
       } catch (error: any) {
           // Hata durumunda eski haline geri dön
           setLocalData(data)
@@ -920,9 +897,21 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange 
     }
   }
 
-  const activeDeal = localData
-    .flatMap((col) => col.deals)
-    .find((deal) => deal.id === activeId)
+  const activeDeal = Array.isArray(localData)
+    ? localData
+        .filter((col): col is typeof localData[number] & { deals: any[] } => Array.isArray(col.deals))
+        .flatMap((col) => col.deals)
+        .find((deal) => deal.id === activeId)
+    : undefined
+
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+
+  const handleHorizontalScroll = useCallback((direction: 'left' | 'right') => {
+    const node = scrollContainerRef.current
+    if (!node) return
+    const delta = direction === 'left' ? -360 : 360
+    node.scrollBy({ left: delta, behavior: 'smooth' })
+  }, [])
 
   return (
     <DndContext
@@ -931,7 +920,38 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange 
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="sticky top-0 z-20 mb-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white/95 px-4 py-2 shadow-sm backdrop-blur">
+        <p className="text-sm font-medium text-slate-600">
+          Kanbanı yatay kaydırmak için okları ya da trackpad&apos;inizi kullanın.
+        </p>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+            onClick={() => handleHorizontalScroll('left')}
+            aria-label="Sola kaydır"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+            onClick={() => handleHorizontalScroll('right')}
+            aria-label="Sağa kaydır"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      <div
+        ref={scrollContainerRef}
+        className="kanban-scroll-container flex gap-4 overflow-x-auto pb-4"
+        style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}
+      >
         {localData.map((column) => (
           <Card 
             key={column.stage} 
@@ -1025,6 +1045,10 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange 
                           setWinningDealId(deal.id)
                           setWonDialogOpen(true)
                         }}
+                    onOpenLostDialog={(deal) => {
+                      setLosingDealId(deal.id)
+                      setLostDialogOpen(true)
+                    }}
                       />
                     ))
                   )}

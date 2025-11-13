@@ -41,14 +41,14 @@ export async function GET(request: Request) {
     if (findError) {
       console.error('Check Contract Renewals - Find Error:', findError)
       return NextResponse.json(
-        { error: 'Failed to find renewing contracts', details: findError.message },
+        { error: 'Yenilenme aşamasındaki sözleşmeler alınamadı', details: findError.message },
         { status: 500 }
       )
     }
 
     if (!renewingContracts || renewingContracts.length === 0) {
       return NextResponse.json({
-        message: 'No renewing contracts found',
+        message: 'Yakında yenilenecek sözleşme bulunamadı',
         count: 0,
         date: todayStr,
       })
@@ -108,7 +108,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      message: 'Contract renewals checked',
+      message: 'Sözleşme yenilemeleri kontrol edildi',
       totalContracts: renewingContracts.length,
       notificationsSent: notificationCount,
       date: todayStr,
@@ -116,7 +116,7 @@ export async function GET(request: Request) {
   } catch (error: any) {
     console.error('Check Contract Renewals - Error:', error)
     return NextResponse.json(
-      { error: error?.message || 'Failed to check contract renewals' },
+      { error: error?.message || 'Sözleşme yenilemeleri kontrol edilemedi' },
       { status: 500 }
     )
   }

@@ -22,20 +22,38 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = getSupabaseWithServiceRole()
-    const { data, error } = await supabase
+    
+    // Segment'leri çek
+    const { data: segments, error } = await supabase
       .from('CustomerSegment')
       .select(`
-        id, name, description, criteria, autoAssign, color, memberCount, createdAt
+        id, name, description, criteria, autoAssign, color, createdAt
       `)
       .eq('companyId', session.user.companyId)
       .order('name')
 
     if (error) throw error
-    return NextResponse.json(data)
+
+    // Her segment için üye sayısını hesapla
+    const segmentsWithMemberCount = await Promise.all(
+      (segments || []).map(async (segment) => {
+        const { count } = await supabase
+          .from('SegmentMember')
+          .select('*', { count: 'exact', head: true })
+          .eq('segmentId', segment.id)
+
+        return {
+          ...segment,
+          memberCount: count || 0,
+        }
+      })
+    )
+
+    return NextResponse.json(segmentsWithMemberCount)
   } catch (error: any) {
     console.error('Segments fetch error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch segments' },
+      { error: error.message || 'Segmentler getirilemedi' },
       { status: 500 }
     )
   }
@@ -59,7 +77,7 @@ export async function POST(request: NextRequest) {
 
     if (!body.name) {
       return NextResponse.json(
-        { error: 'Name is required' },
+        { error: 'İsim alanı zorunludur' },
         { status: 400 }
       )
     }
@@ -95,7 +113,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Segment create error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to create segment' },
+      { error: error.message || 'Segment oluşturulamadı' },
       { status: 500 }
     )
   }

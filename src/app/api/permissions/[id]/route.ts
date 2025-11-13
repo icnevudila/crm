@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getSupabase } from '@/lib/supabase'
 import { updateRecord } from '@/lib/crud'
+import { buildPermissionDeniedResponse } from '@/lib/permissions'
 
 export async function GET(
   request: Request,
@@ -20,7 +21,7 @@ export async function GET(
     // Admin veya SuperAdmin kontrolü
     const isAdmin = session.user.role === 'ADMIN' || session.user.role === 'SUPER_ADMIN'
     if (!isAdmin) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Bu endpoint sadece şirket yöneticileri tarafından kullanılabilir.')
     }
 
     const { data: permission, error } = await supabase
@@ -37,7 +38,7 @@ export async function GET(
     return NextResponse.json(permission)
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch permission' },
+      { error: error.message || 'Yetki bilgisi getirilemedi' },
       { status: 500 }
     )
   }
@@ -56,7 +57,7 @@ export async function PUT(
     // Admin veya SuperAdmin kontrolü
     const isAdmin = session.user.role === 'ADMIN' || session.user.role === 'SUPER_ADMIN'
     if (!isAdmin) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Bu endpoint sadece şirket yöneticileri tarafından kullanılabilir.')
     }
 
     const { id } = await params
@@ -104,7 +105,7 @@ export async function PUT(
     return NextResponse.json(permission)
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to update permission' },
+      { error: error.message || 'Yetki güncellenemedi' },
       { status: 500 }
     )
   }
@@ -123,7 +124,7 @@ export async function DELETE(
     // Admin veya SuperAdmin kontrolü
     const isAdmin = session.user.role === 'ADMIN' || session.user.role === 'SUPER_ADMIN'
     if (!isAdmin) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Bu endpoint sadece şirket yöneticileri tarafından kullanılabilir.')
     }
 
     const { id } = await params
@@ -165,7 +166,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to delete permission' },
+      { error: error.message || 'Yetki silinemedi' },
       { status: 500 }
     )
   }

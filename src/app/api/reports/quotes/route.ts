@@ -2,10 +2,12 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { computeQuoteReport } from '@/lib/reports/compute'
+import { getCacheScope, getReportCache, setReportCache } from '@/lib/cache/report-cache'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.companyId) {
@@ -15,60 +17,43 @@ export async function GET() {
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     const companyId = session.user.companyId
     const supabase = getSupabaseWithServiceRole()
+    const scope = getCacheScope(isSuperAdmin, companyId)
+    const forceRefresh = new URL(request.url).searchParams.get('refresh') === '1'
 
-    const twelveMonthsAgo = new Date()
-    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12)
-
-    let quotesQuery = supabase
-      .from('Quote')
-      .select('id, status, createdAt')
-      .gte('createdAt', twelveMonthsAgo.toISOString())
-      .order('createdAt', { ascending: true })
-      .limit(1000)
-    
-    if (!isSuperAdmin) {
-      quotesQuery = quotesQuery.eq('companyId', companyId)
-    }
-    
-    const { data: quotes, error } = await quotesQuery
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    const statusDistribution: Record<string, number> = {}
-    const trend: Record<string, number> = {}
-
-    quotes?.forEach((quote: { status?: string; createdAt: string }) => {
-      const date = new Date(quote.createdAt)
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-      
-      const status = quote.status || 'UNKNOWN'
-      statusDistribution[status] = (statusDistribution[status] || 0) + 1
-      trend[monthKey] = (trend[monthKey] || 0) + 1
+    const cached = await getReportCache({
+      supabase,
+      reportType: 'quotes',
+      scope,
+      ttlMinutes: 60,
+      forceRefresh,
     })
 
-    const now = new Date()
-    for (let i = 11; i >= 0; i--) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
-      const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-      if (!trend[monthKey]) trend[monthKey] = 0
+    if (cached) {
+      return NextResponse.json(cached.payload, {
+        headers: {
+          'Cache-Control': 'no-store, must-revalidate',
+          'x-cache-hit': 'report-cache',
+        },
+      })
     }
 
-    return NextResponse.json({
-      statusDistribution: Object.keys(statusDistribution).map((status) => ({
-        name: status,
-        value: statusDistribution[status],
-      })),
-      trend: Object.keys(trend)
-        .sort()
-        .map((month) => ({
-          month,
-          count: trend[month],
-        })),
-    }, {
+    const payload = await computeQuoteReport({
+      supabase,
+      isSuperAdmin,
+      companyId,
+    })
+
+    await setReportCache({
+      supabase,
+      reportType: 'quotes',
+      scope,
+      payload,
+    })
+
+    return NextResponse.json(payload, {
       headers: {
         'Cache-Control': 'no-store, must-revalidate',
+        'x-cache-hit': 'miss',
       },
     })
   } catch (error: any) {

@@ -122,18 +122,48 @@ export default function DocumentUploadForm({
     }
   }
 
-  const uploadToSupabaseStorage = async (file: File): Promise<string> => {
-    // TODO: Gerçek Supabase Storage upload
-    // Şimdilik fake URL döndürüyoruz
-    
-    // Simulated upload progress
-    for (let i = 0; i <= 100; i += 10) {
-      setUploadProgress(i)
-      await new Promise(resolve => setTimeout(resolve, 100))
+  const uploadToSupabaseStorage = async (file: File): Promise<{ url: string; path: string }> => {
+    try {
+      // Supabase Storage'a yükleme için API endpoint kullan
+      const formData = new FormData()
+      formData.append('file', file)
+      
+      // İlişkili entity bilgilerini ekle (eğer varsa - opsiyonel)
+      const relatedToValue = watch('relatedTo')
+      const relatedIdValue = watch('relatedId')
+      if (relatedToValue && relatedIdValue && relatedToValue !== 'NONE') {
+        formData.append('entityType', relatedToValue)
+        formData.append('entityId', relatedIdValue)
+      }
+
+      setUploadProgress(10)
+
+      const res = await fetch('/api/files/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      setUploadProgress(50)
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        throw new Error(error.error || 'Dosya yüklenemedi')
+      }
+
+      setUploadProgress(90)
+
+      const result = await res.json()
+      
+      setUploadProgress(100)
+
+      return {
+        url: result.file.url,
+        path: result.file.path,
+      }
+    } catch (error: any) {
+      console.error('Storage upload error:', error)
+      throw error
     }
-    
-    // Mock URL - Gerçekte Supabase Storage URL olacak
-    return `https://example.com/uploads/${file.name}`
   }
 
   const onSubmit = async (data: DocumentFormData) => {
@@ -145,7 +175,7 @@ export default function DocumentUploadForm({
     setLoading(true)
     try {
       // 1. Upload file to Supabase Storage
-      const fileUrl = await uploadToSupabaseStorage(file)
+      const { url: fileUrl, path: filePath } = await uploadToSupabaseStorage(file)
 
       // 2. Create document record
       const res = await fetch('/api/documents', {
@@ -157,6 +187,7 @@ export default function DocumentUploadForm({
           fileName: file.name,
           fileSize: file.size,
           fileType: file.type,
+          // filePath'i meta olarak saklayabiliriz (gelecekte storage'dan silme için)
         }),
       })
 
@@ -166,6 +197,8 @@ export default function DocumentUploadForm({
       }
 
       const savedDocument = await res.json()
+
+      toast.success('Dosya başarıyla yüklendi')
 
       if (onSuccess) {
         onSuccess(savedDocument)

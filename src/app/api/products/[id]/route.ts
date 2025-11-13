@@ -205,32 +205,11 @@ export async function GET(
       .eq('productId', id)
       .eq('companyId', session.user.companyId)
       .order('createdAt', { ascending: false })
-      .limit(100)
+      .limit(50) // Agresif limit - sadece 50 kayıt (performans için)
 
-    // ActivityLog'ları çek
-    let activityQuery = supabase
-      .from('ActivityLog')
-      .select(
-        `
-        *,
-        User (
-          name,
-          email
-        )
-      `
-      )
-      .eq('entity', 'Product')
-      .eq('meta->>id', id)
+    // ActivityLog'lar KALDIRILDI - Lazy load için ayrı endpoint kullanılacak (/api/activity?entity=Product&id=...)
+    // (Performans optimizasyonu: Detay sayfası daha hızlı açılır, ActivityLog'lar gerektiğinde yüklenir)
     
-    // SuperAdmin değilse MUTLAKA companyId filtresi uygula
-    if (!isSuperAdmin) {
-      activityQuery = activityQuery.eq('companyId', companyId)
-    }
-    
-    const { data: activities } = await activityQuery
-      .order('createdAt', { ascending: false })
-      .limit(20)
-
     return NextResponse.json({
       ...(data as any),
       salesHistory: {
@@ -238,7 +217,7 @@ export async function GET(
         invoices: invoiceItems || [],
       },
       stockMovements: stockMovements || [],
-      activities: activities || [],
+      activities: [], // Boş array - lazy load için ayrı endpoint kullanılacak
     })
   } catch (error) {
     return NextResponse.json(

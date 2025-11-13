@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { toast } from '@/lib/toast'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Search, Edit, Trash2, TrendingUp, TrendingDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,6 +27,8 @@ interface Competitor {
 
 export default function CompetitorList() {
   const locale = useLocale()
+  const t = useTranslations('competitors')
+  const tCommon = useTranslations('common')
   const [search, setSearch] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [selectedCompetitor, setSelectedCompetitor] = useState<Competitor | null>(null)
@@ -53,7 +55,7 @@ export default function CompetitorList() {
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`${name} rakibini silmek istediğinize emin misiniz?`)) {
+    if (!confirm(t('deleteConfirm', { name }))) {
       return
     }
 
@@ -75,7 +77,7 @@ export default function CompetitorList() {
       ])
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error('Silinemedi', error?.message)
+      toast.error(t('deleteFailed'), error?.message)
     }
   }
 
@@ -86,12 +88,12 @@ export default function CompetitorList() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Rakip Analizi</h1>
-          <p className="text-gray-500 mt-1">Rakip firmalar ve pazar analizi</p>
+          <h1 className="text-3xl font-bold">{t('title')}</h1>
+          <p className="text-gray-500 mt-1">{t('description')}</p>
         </div>
         <Button onClick={handleNew} className="flex items-center gap-2">
           <Plus className="h-4 w-4" />
-          Yeni Rakip
+          {t('newCompetitor')}
         </Button>
       </div>
 
@@ -100,7 +102,7 @@ export default function CompetitorList() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
-            placeholder="Rakip ara..."
+            placeholder={t('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -111,11 +113,11 @@ export default function CompetitorList() {
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white p-4 rounded-lg border">
-          <div className="text-sm text-gray-500">Toplam Rakip</div>
+          <div className="text-sm text-gray-500">{t('stats.totalCompetitors')}</div>
           <div className="text-2xl font-bold mt-1">{competitors.length}</div>
         </div>
         <div className="bg-white p-4 rounded-lg border">
-          <div className="text-sm text-gray-500">Ort. Pazar Payı</div>
+          <div className="text-sm text-gray-500">{t('stats.avgMarketShare')}</div>
           <div className="text-2xl font-bold mt-1">
             {competitors.length > 0
               ? (competitors.reduce((sum, c) => sum + (c.marketShare || 0), 0) / competitors.length).toFixed(1)
@@ -123,7 +125,7 @@ export default function CompetitorList() {
           </div>
         </div>
         <div className="bg-white p-4 rounded-lg border">
-          <div className="text-sm text-gray-500">Ort. Fiyat</div>
+          <div className="text-sm text-gray-500">{t('stats.avgPrice')}</div>
           <div className="text-2xl font-bold mt-1">
             {competitors.length > 0
               ? new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(
@@ -139,19 +141,19 @@ export default function CompetitorList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Firma Adı</TableHead>
-              <TableHead>Güçlü Yönler</TableHead>
-              <TableHead>Zayıf Yönler</TableHead>
-              <TableHead>Ort. Fiyat</TableHead>
-              <TableHead>Pazar Payı</TableHead>
-              <TableHead className="text-right">İşlemler</TableHead>
+              <TableHead>{t('tableHeaders.name')}</TableHead>
+              <TableHead>{t('tableHeaders.strengths')}</TableHead>
+              <TableHead>{t('tableHeaders.weaknesses')}</TableHead>
+              <TableHead>{t('tableHeaders.avgPrice')}</TableHead>
+              <TableHead>{t('tableHeaders.marketShare')}</TableHead>
+              <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {competitors.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-gray-500 py-8">
-                  Henüz rakip eklenmemiş
+                  {t('noCompetitorsFound')}
                 </TableCell>
               </TableRow>
             ) : (

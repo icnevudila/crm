@@ -26,9 +26,11 @@ export async function GET(
 
     const { id } = await params
     const supabase = getSupabaseWithServiceRole()
+    
+    // Segment'i çek
     const { data, error } = await supabase
       .from('CustomerSegment')
-      .select('*, members:SegmentMember(count)')
+      .select('*')
       .eq('id', id)
       .eq('companyId', session.user.companyId)
       .single()
@@ -38,7 +40,47 @@ export async function GET(
       return NextResponse.json({ error: 'Segment not found' }, { status: 404 })
     }
 
-    return NextResponse.json(data)
+    // Üye sayısını ve üyeleri çek
+    const { count } = await supabase
+      .from('SegmentMember')
+      .select('*', { count: 'exact', head: true })
+      .eq('segmentId', id)
+
+    const { data: membersData } = await supabase
+      .from('SegmentMember')
+      .select(`
+        id,
+        customerId,
+        addedAt,
+        Customer (
+          id,
+          name,
+          email,
+          phone,
+          status
+        )
+      `)
+      .eq('segmentId', id)
+      .order('addedAt', { ascending: false })
+
+    // members array'ini formatla (detay sayfası için)
+    const members = (membersData || []).map((member: any) => ({
+      id: member.id,
+      customerId: member.customerId,
+      joinedAt: member.addedAt,
+      customer: member.Customer ? {
+        name: member.Customer.name,
+        email: member.Customer.email,
+        phone: member.Customer.phone,
+        status: member.Customer.status,
+      } : null,
+    }))
+
+    return NextResponse.json({
+      ...data,
+      memberCount: count || 0,
+      members: members || [],
+    })
   } catch (error: any) {
     console.error('Segment fetch error:', error)
     return NextResponse.json(

@@ -30,14 +30,14 @@ export async function GET() {
     if (customersError) {
       console.error('Churn Prediction error:', customersError)
       return NextResponse.json(
-        { error: 'Failed to fetch customers' },
+        { error: 'Müşteri listesi getirilemedi' },
         { status: 500 }
       )
     }
 
     if (!customers || customers.length === 0) {
       return NextResponse.json({
-        message: 'No customers found',
+        message: 'Aktif müşteri bulunamadı',
         riskyCustomers: [],
       })
     }
@@ -101,18 +101,23 @@ export async function GET() {
     })
 
     return NextResponse.json({
-      message: riskyCustomers.length > 0 ? 'Risky customers found' : 'No risky customers',
+      message: riskyCustomers.length > 0 ? 'Riskli müşteriler bulundu' : 'Riskli müşteri yok',
       riskyCustomers,
       count: riskyCustomers.length,
     })
   } catch (error: any) {
     console.error('Churn Prediction error:', error)
     return NextResponse.json(
-      { error: error?.message || 'Failed to predict churn' },
+      { error: error?.message || 'Churn analizi yapılamadı' },
       { status: 500 }
     )
   }
 }
+
+
+
+
+
 
 
 

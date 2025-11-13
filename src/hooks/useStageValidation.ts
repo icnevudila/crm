@@ -23,10 +23,7 @@ export interface ValidationResult {
   suggestion?: string
 }
 
-/**
- * Deal stage değişimini kontrol eder
- */
-export function useValidateDealStage(currentStage: string, targetStage: string): ValidationResult {
+function validateDealStage(currentStage: string, targetStage: string): ValidationResult {
   // Aynı stage'e sürükleme - izin ver
   if (currentStage === targetStage) {
     return { canDrop: true }
@@ -59,9 +56,16 @@ export function useValidateDealStage(currentStage: string, targetStage: string):
 }
 
 /**
+ * Deal stage değişimini kontrol eder
+ */
+export function useValidateDealStage(currentStage: string, targetStage: string): ValidationResult {
+  return validateDealStage(currentStage, targetStage)
+}
+
+/**
  * Quote status değişimini kontrol eder
  */
-export function useValidateQuoteStatus(currentStatus: string, targetStatus: string): ValidationResult {
+function validateQuoteStatus(currentStatus: string, targetStatus: string): ValidationResult {
   if (currentStatus === targetStatus) {
     return { canDrop: true }
   }
@@ -90,10 +94,14 @@ export function useValidateQuoteStatus(currentStatus: string, targetStatus: stri
   return { canDrop: true }
 }
 
+export function useValidateQuoteStatus(currentStatus: string, targetStatus: string): ValidationResult {
+  return validateQuoteStatus(currentStatus, targetStatus)
+}
+
 /**
  * Invoice status değişimini kontrol eder
  */
-export function useValidateInvoiceStatus(currentStatus: string, targetStatus: string): ValidationResult {
+function validateInvoiceStatus(currentStatus: string, targetStatus: string): ValidationResult {
   if (currentStatus === targetStatus) {
     return { canDrop: true }
   }
@@ -122,10 +130,14 @@ export function useValidateInvoiceStatus(currentStatus: string, targetStatus: st
   return { canDrop: true }
 }
 
+export function useValidateInvoiceStatus(currentStatus: string, targetStatus: string): ValidationResult {
+  return validateInvoiceStatus(currentStatus, targetStatus)
+}
+
 /**
  * Contract status değişimini kontrol eder
  */
-export function useValidateContractStatus(currentStatus: string, targetStatus: string): ValidationResult {
+function validateContractStatus(currentStatus: string, targetStatus: string): ValidationResult {
   if (currentStatus === targetStatus) {
     return { canDrop: true }
   }
@@ -154,6 +166,10 @@ export function useValidateContractStatus(currentStatus: string, targetStatus: s
   return { canDrop: true }
 }
 
+export function useValidateContractStatus(currentStatus: string, targetStatus: string): ValidationResult {
+  return validateContractStatus(currentStatus, targetStatus)
+}
+
 /**
  * Generic stage validation - tüm modüller için
  * NOT: Bu fonksiyon hook değil, normal fonksiyon. Hook'lar conditional çağrılamaz.
@@ -165,13 +181,13 @@ export function validateStage(
 ): ValidationResult {
   switch (module) {
     case 'deal':
-      return useValidateDealStage(currentStage, targetStage)
+      return validateDealStage(currentStage, targetStage)
     case 'quote':
-      return useValidateQuoteStatus(currentStage, targetStage)
+      return validateQuoteStatus(currentStage, targetStage)
     case 'invoice':
-      return useValidateInvoiceStatus(currentStage, targetStage)
+      return validateInvoiceStatus(currentStage, targetStage)
     case 'contract':
-      return useValidateContractStatus(currentStage, targetStage)
+      return validateContractStatus(currentStage, targetStage)
     default:
       return { canDrop: false, error: 'Bilinmeyen modül' }
   }

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { logAction } from '@/lib/logger'
-import { hasPermission, PERMISSION_DENIED_MESSAGE } from '@/lib/permissions'
+import { hasPermission, buildPermissionDeniedResponse } from '@/lib/permissions'
 
 const CONTACT_SCHEMA_HINT =
   'Supabase şemasında Contact tablosu keşfedilemedi. Lütfen tüm Supabase migrationlarını (özellikle 033_contact_lead_scoring_improvements) çalıştırın.'
@@ -40,13 +40,7 @@ export async function GET(request: Request) {
 
     const canRead = await hasPermission('contact', 'read', session.user.id)
     if (!canRead) {
-      return NextResponse.json(
-        {
-          error: 'Forbidden',
-          message: PERMISSION_DENIED_MESSAGE,
-        },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const { searchParams } = new URL(request.url)
@@ -85,7 +79,7 @@ export async function GET(request: Request) {
 
     const { count, error: countError } = await countQuery
     if (countError) {
-      const message = countError.message || 'Failed to fetch contacts'
+      const message = countError.message || 'Kişiler getirilemedi'
       if (isContactSchemaError(message)) {
         return schemaErrorResponse()
       }
@@ -144,7 +138,7 @@ export async function GET(request: Request) {
     const { data, error } = await dataQuery
 
     if (error) {
-      const message = error.message || 'Failed to fetch contacts'
+      const message = error.message || 'Kişiler getirilemedi'
       if (isContactSchemaError(message)) {
         return schemaErrorResponse()
       }
@@ -178,7 +172,7 @@ export async function GET(request: Request) {
     }
     return NextResponse.json(
       { 
-        error: error?.message || 'Failed to fetch contacts',
+        error: error?.message || 'Kişiler getirilemedi',
         ...(process.env.NODE_ENV === 'development' && { stack: error?.stack }),
       },
       { status: 500 }
@@ -199,13 +193,7 @@ export async function POST(request: Request) {
 
     const canCreate = await hasPermission('contact', 'create', session.user.id)
     if (!canCreate) {
-      return NextResponse.json(
-        {
-          error: 'Forbidden',
-          message: PERMISSION_DENIED_MESSAGE,
-        },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     let body
@@ -216,7 +204,7 @@ export async function POST(request: Request) {
         console.error('Contacts POST API JSON parse error:', jsonError)
       }
       return NextResponse.json(
-        { error: 'Invalid JSON body', message: jsonError?.message || 'Failed to parse request body' },
+        { error: 'Geçersiz JSON', message: jsonError?.message || 'İstek gövdesi çözümlenemedi' },
         { status: 400 }
       )
     }
@@ -255,7 +243,7 @@ export async function POST(request: Request) {
       .single()
 
     if (insertError) {
-      const message = insertError.message || 'Failed to create contact'
+      const message = insertError.message || 'İletişim kaydı oluşturulamadı'
       if (isContactSchemaError(message)) {
         return schemaErrorResponse()
       }
@@ -307,7 +295,7 @@ export async function POST(request: Request) {
       .single()
 
     if (fetchError) {
-      const message = fetchError.message || 'Failed to load created contact'
+      const message = fetchError.message || 'Oluşturulan iletişim kaydı yüklenemedi'
       if (isContactSchemaError(message)) {
         return schemaErrorResponse()
       }
@@ -347,7 +335,7 @@ export async function POST(request: Request) {
       console.error('Contacts POST API error:', error)
     }
     return NextResponse.json(
-      { error: error?.message || 'Failed to create contact' },
+      { error: error?.message || 'İletişim kaydı oluşturulamadı' },
       { status: 500 }
     )
   }

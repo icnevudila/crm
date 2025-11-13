@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { Plus, Search, Edit, Trash2, Eye, FileText, LayoutGrid, Table as TableIcon } from 'lucide-react'
@@ -33,7 +33,6 @@ import {
   TabsTrigger,
   TabsContent,
 } from '@/components/ui/tabs'
-import InvoiceForm from './InvoiceForm'
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import ModuleStats from '@/components/stats/ModuleStats'
 import { AutomationInfo } from '@/components/automation/AutomationInfo'
@@ -42,10 +41,24 @@ import { formatCurrency } from '@/lib/utils'
 import dynamic from 'next/dynamic'
 
 // Lazy load büyük componentler - performans için
+const InvoiceForm = dynamic(() => import('./InvoiceForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
 const InvoiceKanbanChart = dynamic(() => import('@/components/charts/InvoiceKanbanChart'), {
   ssr: false,
   loading: () => <div className="h-[400px] animate-pulse bg-gray-100 rounded" />,
 })
+
+const InvoiceDetailModal = dynamic(() => import('./InvoiceDetailModal'), {
+  ssr: false,
+  loading: () => null,
+})
+
+interface InvoiceListProps {
+  isOpen?: boolean
+}
 
 interface Invoice {
   id: string
@@ -77,16 +90,6 @@ const statusColors: Record<string, string> = {
   CANCELLED: 'bg-yellow-100 text-yellow-800',
 }
 
-const statusLabels: Record<string, string> = {
-  DRAFT: 'Taslak',
-  SENT: 'Gönderildi',
-  SHIPPED: 'Sevkiyatı Yapıldı',
-  RECEIVED: 'Mal Kabul Edildi',
-  PAID: 'Ödendi',
-  OVERDUE: 'Vadesi Geçmiş',
-  CANCELLED: 'İptal',
-}
-
 async function fetchKanbanInvoices(search: string, quoteId: string, invoiceType: string) {
   const params = new URLSearchParams()
   if (search) params.append('search', search)
@@ -99,10 +102,23 @@ async function fetchKanbanInvoices(search: string, quoteId: string, invoiceType:
   return data.kanban || []
 }
 
-export default function InvoiceList() {
+export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
   const locale = useLocale()
+  const t = useTranslations('invoices')
+  const tStatus = useTranslations('status')
+  const tCommon = useTranslations('common')
   const searchParams = useSearchParams()
   const { data: session } = useSession()
+  
+  const statusLabels: Record<string, string> = {
+    DRAFT: tStatus('draft'),
+    SENT: tStatus('sent'),
+    SHIPPED: t('statusLabels.shipped'),
+    RECEIVED: t('statusLabels.received'),
+    PAID: tStatus('paid'),
+    OVERDUE: tStatus('overdue'),
+    CANCELLED: tStatus('cancelled'),
+  }
   
   // SuperAdmin kontrolü
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
@@ -121,10 +137,13 @@ export default function InvoiceList() {
     if (statusFromUrl && statusFromUrl !== status) {
       setStatus(statusFromUrl)
     }
-  }, [statusFromUrl])
+  }, [statusFromUrl, status])
   const [quoteId, setQuoteId] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null)
+  const [selectedInvoiceData, setSelectedInvoiceData] = useState<Invoice | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // Debounced search - performans için
@@ -140,7 +159,7 @@ export default function InvoiceList() {
 
   // SuperAdmin için firmaları çek
   const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
-    isSuperAdmin ? '/api/superadmin/companies' : null,
+    isOpen && isSuperAdmin ? '/api/superadmin/companies' : null,
     { dedupingInterval: 60000, revalidateOnFocus: false }
   )
   // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
@@ -149,21 +168,40 @@ export default function InvoiceList() {
   )
   
   // SWR ile veri çekme (CustomerList pattern'i) - Table view için
-  const params = new URLSearchParams()
-  if (debouncedSearch) params.append('search', debouncedSearch)
-  if (status) params.append('status', status) // Status boş string ise tüm status'ler
-  if (invoiceType && invoiceType !== 'ALL') params.append('invoiceType', invoiceType) // invoiceType filtresi
-  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId) // SuperAdmin için firma filtresi
-  
-  const apiUrl = `/api/invoices?${params.toString()}`
-  const { data: invoices = [], isLoading, mutate: mutateInvoices } = useData<Invoice[]>(
-    viewMode === 'table' ? apiUrl : null, // Sadece table view'da çalış
+  const apiUrl = useMemo(() => {
+    if (!isOpen) return null
+
+    const params = new URLSearchParams()
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    if (status) params.append('status', status)
+    if (invoiceType && invoiceType !== 'ALL') params.append('invoiceType', invoiceType)
+    if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+    return `/api/invoices?${params.toString()}`
+  }, [
+    isOpen,
+    debouncedSearch,
+    status,
+    invoiceType,
+    isSuperAdmin,
+    filterCompanyId,
+  ])
+
+  const { data: invoicesResponse, isLoading, mutate: mutateInvoices } = useData<any>(
+    isOpen && viewMode === 'table' && apiUrl ? apiUrl : null,
     {
-      dedupingInterval: 0, // Cache'i kapat - her zaman fresh data
-      revalidateOnFocus: true, // Focus'ta refetch yap
-      refreshInterval: 0, // Auto refresh YOK
+      dedupingInterval: 60000, // 60 saniye cache (performans için)
+      revalidateOnFocus: false, // Focus'ta revalidate yapma (instant navigation)
+      refreshInterval: 0,
     }
   )
+
+  // Pagination format desteği: { data: [...], pagination: {...} } veya direkt array
+  const invoices = useMemo(() => {
+    if (!invoicesResponse) return []
+    if (Array.isArray(invoicesResponse)) return invoicesResponse
+    if (invoicesResponse?.data && Array.isArray(invoicesResponse.data)) return invoicesResponse.data
+    return []
+  }, [invoicesResponse])
 
   // Kanban view için TanStack Query kullanıyoruz (kanban özel endpoint)
   // ÖNEMLİ: Her zaman çalıştır (viewMode ne olursa olsun) - silme/güncelleme için gerekli
@@ -178,6 +216,7 @@ export default function InvoiceList() {
     refetchOnReconnect: false, // Reconnect'te refetch YAPMA - optimistic update'i koru
     placeholderData: (previousData) => previousData, // Optimistic update
     // enabled kaldırıldı - her zaman çalış (silme/güncelleme için gerekli)
+    enabled: isOpen,
   })
 
   // Kanban data'yı status filtresine göre filtrele
@@ -192,13 +231,13 @@ export default function InvoiceList() {
   const handleEdit = useCallback((invoice: Invoice) => {
     // ÖNEMLİ: SHIPPED (Sevkiyatı Yapıldı) durumundaki faturalar düzenlenemez
     if (invoice.status === 'SHIPPED') {
-      toast.warning('Bu fatura gönderildiği için düzenleyemezsiniz', 'Sevkiyat onaylandıktan sonra fatura değiştirilemez.')
+      toast.warning(t('cannotEditShipped'), t('cannotEditShippedMessage'))
       return
     }
     
     setSelectedInvoice(invoice)
     setFormOpen(true)
-  }, [])
+  }, [t])
 
   const handleDelete = useCallback(async (id: string, title: string) => {
     // Çift tıklamayı önle
@@ -206,7 +245,7 @@ export default function InvoiceList() {
       return
     }
 
-    if (!confirm(`${title} faturasını silmek istediğinize emin misiniz?`)) {
+    if (!confirm(t('deleteConfirm', { title }))) {
       return
     }
 
@@ -218,9 +257,8 @@ export default function InvoiceList() {
       if (invoices.length > 0) {
         const updatedInvoices = invoices.filter((i) => i.id !== id)
         mutateInvoices(updatedInvoices, { revalidate: false })
-        mutate('/api/invoices', updatedInvoices, { revalidate: false })
-        mutate('/api/invoices?', updatedInvoices, { revalidate: false })
         mutate(apiUrl, updatedInvoices, { revalidate: false })
+        mutate('/api/invoices?', updatedInvoices, { revalidate: false })
       }
       
       // Kanban view için optimistic update - silinen kaydı kanban data'dan kaldır
@@ -265,8 +303,8 @@ export default function InvoiceList() {
       
       // Başarı bildirimi
       toast.success(
-        'Fatura silindi!',
-        `${title} başarıyla silindi.`
+        t('invoiceDeleted'),
+        t('invoiceDeletedMessage', { title })
       )
       
       // Başarılı silme sonrası - SADECE invalidate yap, refetch YAPMA (optimistic update zaten yapıldı)
@@ -292,11 +330,11 @@ export default function InvoiceList() {
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error('Silinemedi', error?.message)
+      toast.error(tCommon('error'), error?.message)
     } finally {
       setDeletingId(null)
     }
-  }, [invoices, mutateInvoices, apiUrl, kanbanData, debouncedSearch, quoteId, queryClient, deletingId])
+  }, [invoices, mutateInvoices, apiUrl, kanbanData, debouncedSearch, quoteId, queryClient, deletingId, t, tCommon])
 
   const handleAdd = useCallback(() => {
     setSelectedInvoice(null)
@@ -309,12 +347,19 @@ export default function InvoiceList() {
   }, [])
 
   // Stats verisini çek - toplam sayı için
-  const { data: stats } = useData<any>('/api/stats/invoices', {
-    dedupingInterval: 5000,
-    revalidateOnFocus: false,
-  })
+  const { data: stats } = useData<any>(
+    isOpen ? `/api/stats/invoices?invoiceType=${invoiceType}` : null,
+    {
+      dedupingInterval: 5000,
+      revalidateOnFocus: false,
+    }
+  )
 
-  if ((isLoading && viewMode === 'table') || (isLoadingKanban && viewMode === 'kanban')) {
+  if (!isOpen) {
+    return null
+  }
+
+  if (viewMode === 'table' && isLoading) {
     return <SkeletonList />
   }
 
@@ -355,27 +400,24 @@ export default function InvoiceList() {
 
       {/* Otomasyon Bilgileri */}
       <AutomationInfo
-        title="Faturalar Modülü Otomasyonları"
+        title={t('automationTitle')}
         automations={[
           {
-            action: 'Faturayı "Gönderildi" yaparsan',
-            result: 'Otomatik olarak "Sevkiyatlar" sayfasında yeni bir sevkiyat kaydı açılır',
+            action: t('automationShipped'),
+            result: t('automationShippedResult'),
             details: [
-              'Sevkiyat durumu "Beklemede" olarak ayarlanır',
-              'Otomatik olarak müşteriye bildirim gönderilir (e-posta)',
-              '"Aktiviteler" sayfasında gönderim kaydı görünür',
+              t('automationShippedDetails1'),
+              t('automationShippedDetails2'),
             ],
           },
           {
-            action: 'Faturayı "Ödendi" yaparsan',
-            result: 'Otomatik olarak "Finans" sayfasında yeni bir gelir kaydı açılır',
+            action: t('automationPaid'),
+            result: t('automationPaidResult'),
             details: [
-              'Finans kaydı tutarı fatura tutarı ile aynı olur',
-              'Finans kaydı tarihi bugün olarak ayarlanır',
-              '"Ürünler" sayfasındaki ilgili ürünlerin stokları otomatik olarak düşer',
-              'Rezerve edilmiş stoklar otomatik olarak serbest bırakılır',
-              '"Aktiviteler" sayfasında ödeme kaydı görünür',
-              'Bildirim gönderilir (müşteriye ve ekibe)',
+              t('automationPaidDetails1'),
+              t('automationPaidDetails2'),
+              t('automationPaidDetails3'),
+              t('automationPaidDetails4'),
             ],
           },
         ]}
@@ -485,7 +527,66 @@ export default function InvoiceList() {
           onEdit={handleEdit}
           onDelete={handleDelete}
           onStatusChange={async (invoiceId: string, newStatus: string) => {
-            // Invoice'ın status'unu güncelle
+            // ÖNCE optimistic update yap - Kanban'da hemen görünsün
+            if (Array.isArray(kanbanData) && kanbanData.length > 0) {
+              // İptal edilen invoice'u bul
+              let invoiceToMove: any = null
+              let sourceColumnIndex = -1
+              
+              kanbanData.forEach((col: any, colIndex: number) => {
+                const invoiceIndex = (col.invoices || []).findIndex((i: any) => i.id === invoiceId)
+                if (invoiceIndex !== -1) {
+                  invoiceToMove = col.invoices[invoiceIndex]
+                  sourceColumnIndex = colIndex
+                }
+              })
+              
+              if (invoiceToMove && sourceColumnIndex !== -1) {
+                // Optimistic update - hemen UI'da göster
+                const updatedKanbanData = kanbanData.map((col: any, colIndex: number) => {
+                  if (colIndex === sourceColumnIndex) {
+                    // Eski kolondan kaldır
+                    const updatedInvoices = (col.invoices || []).filter((i: any) => i.id !== invoiceId)
+                    const updatedTotalValue = updatedInvoices.reduce((sum: number, i: any) => {
+                      const value = i?.totalAmount
+                      const invoiceValue = typeof value === 'string' ? parseFloat(value) || 0 : (value || 0)
+                      return sum + invoiceValue
+                    }, 0)
+                    return {
+                      ...col,
+                      invoices: updatedInvoices,
+                      count: Math.max(0, (col.count || 0) - 1),
+                      totalValue: updatedTotalValue,
+                    }
+                  }
+                  if (col.status === newStatus) {
+                    // Yeni kolona ekle
+                    const updatedInvoice = { ...invoiceToMove, status: newStatus }
+                    const updatedInvoices = [updatedInvoice, ...(col.invoices || [])]
+                    const updatedTotalValue = updatedInvoices.reduce((sum: number, i: any) => {
+                      const value = i?.totalAmount
+                      const invoiceValue = typeof value === 'string' ? parseFloat(value) || 0 : (value || 0)
+                      return sum + invoiceValue
+                    }, 0)
+                    return {
+                      ...col,
+                      invoices: updatedInvoices,
+                      count: (col.count || 0) + 1,
+                      totalValue: updatedTotalValue,
+                    }
+                  }
+                  return col
+                })
+                
+                // Cache'i güncelle - optimistic update
+                queryClient.setQueryData(
+                  ['kanban-invoices', debouncedSearch, quoteId, invoiceType],
+                  updatedKanbanData
+                )
+              }
+            }
+            
+            // SONRA API'ye status güncelleme isteği gönder
             try {
               const res = await fetch(`/api/invoices/${invoiceId}`, {
                 method: 'PUT',
@@ -494,59 +595,120 @@ export default function InvoiceList() {
               })
               
               if (!res.ok) {
-                const error = await res.json().catch(() => ({}))
-                throw new Error(error.error || 'Failed to update invoice status')
+                // Hata durumunda optimistic update'i geri al
+                queryClient.invalidateQueries({ queryKey: ['kanban-invoices'] })
+                queryClient.refetchQueries({ queryKey: ['kanban-invoices'] })
+                
+                const errorData = await res.json().catch(() => ({}))
+                const errorMessage = errorData.message || errorData.error || 'Fatura durumu güncellenemedi'
+                throw new Error(errorMessage)
               }
 
-              const statusToastMap: Record<
-                string,
-                { type: 'success' | 'warning' | 'info'; title: string; description: string }
-              > = {
-                SENT: {
-                  type: 'success',
-                  title: 'Fatura gönderildi',
-                  description: 'Sevkiyat hazırlıkları başladı ve ekipler bilgilendirildi.',
-                },
-                SHIPPED: {
-                  type: 'success',
-                  title: 'Sevkiyat onaylandı',
-                  description: 'Stoktan düşüm tamamlandı. Sevkiyat detaylarını kontrol edebilirsiniz.',
-                },
-                RECEIVED: {
-                  type: 'success',
-                  title: 'Mal kabul edildi',
-                  description: 'Stoğa giriş yapıldı. Ödeme sürecini başlatabilirsiniz.',
-                },
-                PAID: {
-                  type: 'success',
-                  title: 'Ödeme kaydedildi',
-                  description: 'Finans kayıtları otomatik olarak güncellendi.',
-                },
-                OVERDUE: {
-                  type: 'info',
-                  title: 'Fatura vadesi geçti',
-                  description: 'Müşteriye ödeme hatırlatması göndermeyi unutmayın.',
-                },
-                CANCELLED: {
-                  type: 'warning',
-                  title: 'Fatura iptal edildi',
-                  description: 'İlgili sevkiyat ve stok işlemleri geri alındı.',
-                },
+              const responseData = await res.json()
+              const automation = responseData?.automation || {}
+              
+              // Fatura başlığını al
+              const invoiceTitle = responseData?.title || 'Fatura'
+              
+              // Detaylı toast mesajları oluştur
+              let toastTitle = ''
+              let toastDescription = ''
+              let toastType: 'success' | 'warning' | 'info' = 'success'
+              
+              switch (newStatus) {
+                case 'SENT':
+                  toastTitle = `Fatura gönderildi: "${invoiceTitle}"`
+                  toastDescription = `Fatura "Gönderildi" durumuna taşındı.`
+                  
+                  // Hizmet faturaları için özel mesaj
+                  if (responseData?.invoiceType === 'SERVICE_SALES' || responseData?.invoiceType === 'SERVICE_PURCHASE') {
+                    toastDescription += `\n\nHizmet faturası işlemleri:\n• Bildirim gönderildi`
+                    if (automation.emailSent) {
+                      toastDescription += `\n• E-posta gönderildi`
+                    }
+                    if (automation.notificationSent) {
+                      toastDescription += `\n• İlgili ekipler bilgilendirildi`
+                    }
+                  } else if (automation.shipmentCreated && automation.shipmentId) {
+                    toastDescription += `\n\nOtomatik işlemler:\n• Sevkiyat kaydı oluşturuldu (ID: ${automation.shipmentId.substring(0, 8)}...)\n• Ürünler rezerve edildi\n• Sevkiyat ekibi bilgilendirildi`
+                  } else if (automation.purchaseTransactionCreated && automation.purchaseTransactionId) {
+                    toastDescription += `\n\nOtomatik işlemler:\n• Mal kabul kaydı oluşturuldu (ID: ${automation.purchaseTransactionId.substring(0, 8)}...)\n• Ürünler bekleyen stok olarak işaretlendi\n• Satın alma ekibi bilgilendirildi`
+                  }
+                  break
+                  
+                case 'SHIPPED':
+                  toastTitle = `Sevkiyat onaylandı: "${invoiceTitle}"`
+                  toastDescription = `Fatura "Sevkiyat Yapıldı" durumuna taşındı.`
+                  
+                  if (automation.shipmentId) {
+                    toastDescription += `\n\nOtomatik işlemler:\n• Sevkiyat kaydı onaylandı (ID: ${automation.shipmentId.substring(0, 8)}...)\n• Stoktan düşüm yapıldı\n• Ürünler sevk edildi olarak işaretlendi`
+                  }
+                  break
+                  
+                case 'RECEIVED':
+                  toastTitle = `Mal kabul edildi: "${invoiceTitle}"`
+                  toastDescription = `Fatura "Mal Kabul Edildi" durumuna taşındı.`
+                  
+                  if (automation.purchaseTransactionId) {
+                    toastDescription += `\n\nOtomatik işlemler:\n• Mal kabul kaydı onaylandı (ID: ${automation.purchaseTransactionId.substring(0, 8)}...)\n• Stoğa giriş yapıldı\n• Ürünler stokta olarak işaretlendi`
+                  }
+                  break
+                  
+                case 'PAID':
+                  toastTitle = `Ödeme kaydedildi: "${invoiceTitle}"`
+                  toastDescription = `Fatura "Ödendi" durumuna taşındı.`
+                  
+                  if (automation.financeCreated && automation.financeId) {
+                    toastDescription += `\n\nOtomatik işlemler:\n• Finance kaydı oluşturuldu (ID: ${automation.financeId.substring(0, 8)}...)\n• Gelir kaydı eklendi\n• Finans raporları güncellendi`
+                  }
+                  break
+                  
+                case 'OVERDUE':
+                  toastTitle = `Fatura vadesi geçti: "${invoiceTitle}"`
+                  toastDescription = `Fatura "Vadesi Geçti" durumuna taşındı.\n\nÖnemli:\n• Müşteriye ödeme hatırlatması gönderildi\n• Takip görevi oluşturuldu`
+                  toastType = 'info'
+                  break
+                  
+                case 'CANCELLED':
+                  toastTitle = `Fatura iptal edildi: "${invoiceTitle}"`
+                  toastDescription = `Fatura "İptal Edildi" durumuna taşındı.`
+                  
+                  const cancelledItems: string[] = []
+                  if (automation.shipmentCancelled && automation.shipmentId) {
+                    cancelledItems.push(`• Sevkiyat iptal edildi (ID: ${automation.shipmentId.substring(0, 8)}...)`)
+                    cancelledItems.push(`• Rezerve edilen ürünler geri alındı`)
+                  }
+                  if (automation.purchaseTransactionCancelled && automation.purchaseTransactionId) {
+                    cancelledItems.push(`• Mal kabul iptal edildi (ID: ${automation.purchaseTransactionId.substring(0, 8)}...)`)
+                    cancelledItems.push(`• Bekleyen stok işlemleri geri alındı`)
+                  }
+                  
+                  if (cancelledItems.length > 0) {
+                    toastDescription += `\n\nGeri alınan işlemler:\n${cancelledItems.join('\n')}`
+                  } else {
+                    toastDescription += `\n\nBu fatura için sevkiyat/mal kabul kaydı bulunmuyordu.`
+                  }
+                  
+                  toastType = 'warning'
+                  break
+                  
+                default:
+                  toastTitle = `Fatura durumu güncellendi: "${invoiceTitle}"`
+                  toastDescription = `Fatura durumu "${newStatus}" olarak güncellendi.`
               }
 
-              const toastPayload = statusToastMap[newStatus]
-              if (toastPayload) {
-                if (toastPayload.type === 'success') {
-                  toast.success(toastPayload.title, toastPayload.description)
-                } else if (toastPayload.type === 'warning') {
-                  toast.warning(toastPayload.title, toastPayload.description)
-                } else if (typeof toast.info === 'function') {
-                  toast.info(toastPayload.title, toastPayload.description)
+              if (toastType === 'success') {
+                toast.success(toastTitle, toastDescription)
+              } else if (toastType === 'warning') {
+                toast.warning(toastTitle, toastDescription)
+              } else if (toastType === 'info') {
+                if (typeof toast.info === 'function') {
+                  toast.info(toastTitle, toastDescription)
                 } else {
-                  toast.success(toastPayload.title, toastPayload.description)
+                  toast.success(toastTitle, toastDescription)
                 }
               } else {
-                toast.success('Fatura durumu güncellendi')
+                toast.success(toastTitle, toastDescription)
               }
 
               // Cache'i invalidate et - fresh data çek (hem table hem kanban hem stats)
@@ -569,7 +731,10 @@ export default function InvoiceList() {
               ])
             } catch (error: any) {
               console.error('Status update error:', error)
-              toast.error('Fatura durumu güncellenirken hata oluştu', error?.message)
+              toast.error(
+                'Fatura durumu güncellenemedi',
+                error?.message || 'Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.'
+              )
               throw error
             }
           }}
@@ -579,20 +744,20 @@ export default function InvoiceList() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Başlık</TableHead>
-                {isSuperAdmin && <TableHead>Firma</TableHead>}
-                <TableHead>Durum</TableHead>
-                <TableHead>Toplam</TableHead>
-                <TableHead>Teklif</TableHead>
-                <TableHead>Tarih</TableHead>
-                <TableHead className="text-right">İşlemler</TableHead>
+                <TableHead>{t('tableHeaders.title')}</TableHead>
+                {isSuperAdmin && <TableHead>{t('tableHeaders.company')}</TableHead>}
+                <TableHead>{t('tableHeaders.status')}</TableHead>
+                <TableHead>{t('tableHeaders.total')}</TableHead>
+                <TableHead>{t('tableHeaders.quote')}</TableHead>
+                <TableHead>{t('tableHeaders.date')}</TableHead>
+                <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {invoices.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={isSuperAdmin ? 7 : 6} className="text-center py-8 text-gray-500">
-                    Fatura bulunamadı
+                    {t('noInvoicesFound')}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -620,10 +785,10 @@ export default function InvoiceList() {
                         {isLocked && (
                           <span className="ml-2 text-xs font-semibold">
                             {isFromQuote 
-                              ? '(Tekliften)' 
+                              ? t('fromQuote')
                               : isShipped
-                              ? '(Sevkiyat Yapıldı)'
-                              : '(Mal Kabul Edildi)'}
+                              ? `(${statusLabels.SHIPPED})`
+                              : `(${statusLabels.RECEIVED})`}
                           </span>
                         )}
                       </TableCell>
@@ -657,7 +822,7 @@ export default function InvoiceList() {
                           className="text-primary-600 hover:underline"
                           prefetch={true}
                         >
-                          Teklif #{invoice.quoteId.substring(0, 8)}
+                          {t('tableHeaders.quote')} #{invoice.quoteId.substring(0, 8)}
                         </Link>
                       ) : (
                         '-'
@@ -668,11 +833,18 @@ export default function InvoiceList() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        <Link href={`/${locale}/invoices/${invoice.id}`} prefetch={true}>
-                          <Button variant="ghost" size="icon" aria-label={`${invoice.title} faturasını görüntüle`}>
-                            <Eye className="h-4 w-4 text-gray-600" />
-                          </Button>
-                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setSelectedInvoiceId(invoice.id)
+                            setSelectedInvoiceData(invoice)
+                            setDetailModalOpen(true)
+                          }}
+                          aria-label={t('viewInvoice', { title: invoice.title })}
+                        >
+                          <Eye className="h-4 w-4 text-gray-600" />
+                        </Button>
                         {/* Quote'tan oluşturulan, PAID, SHIPPED ve RECEIVED durumundaki faturalar için düzenle butonu gösterilmez */}
                         {!isFromQuote && !isShipped && !isReceived && invoice.status !== 'PAID' && (
                           <Button
@@ -680,14 +852,14 @@ export default function InvoiceList() {
                             size="icon"
                             onClick={() => {
                               if (invoice.status === 'PAID') {
-                                toast.warning('Bu fatura ödendiği için değiştirilemez', 'Bu fatura ödendi ve finans kaydı oluşturuldu.')
+                                toast.warning(t('cannotEditPaid'), t('cannotDeletePaidMessage'))
                                 return
                               }
                               handleEdit(invoice)
                             }}
                             disabled={invoice.status === 'PAID'}
-                            aria-label={`${invoice.title} faturasını düzenle`}
-                            title={invoice.status === 'PAID' ? 'Bu fatura ödendiği için değiştirilemez' : 'Düzenle'}
+                            aria-label={t('editInvoice', { title: invoice.title })}
+                            title={invoice.status === 'PAID' ? t('cannotEditPaid') : tCommon('edit')}
                           >
                             <Edit className="h-4 w-4 text-gray-600" />
                           </Button>
@@ -699,27 +871,27 @@ export default function InvoiceList() {
                             size="icon"
                             onClick={() => {
                               if (invoice.status === 'PAID') {
-                                toast.warning('Bu fatura ödendiği için silemezsiniz', 'Bu fatura ödendi ve finans kaydı oluşturuldu. Faturayı silmek için önce ilgili finans kaydını silmeniz gerekir.')
+                                toast.warning(t('cannotDeletePaid'), t('cannotDeletePaidMessage'))
                                 return
                               }
                               if (invoice.status === 'SHIPPED') {
-                                toast.warning('Bu fatura gönderildiği için silemezsiniz', 'Bu fatura için sevkiyat yapıldı ve stoktan düşüldü. Faturayı silmek için önce sevkiyatı iptal etmeniz ve stok işlemini geri almanız gerekir.')
+                                toast.warning(t('cannotDeleteShipped'), t('cannotDeleteShippedMessage'))
                                 return
                               }
                               if (invoice.status === 'RECEIVED') {
-                                toast.warning('Bu fatura teslim alındığı için silemezsiniz', 'Bu fatura için mal kabul edildi ve stoğa girişi yapıldı. Faturayı silmek için önce mal kabul işlemini iptal etmeniz ve stok işlemini geri almanız gerekir.')
+                                toast.warning(t('cannotDeleteReceived'), t('cannotDeleteReceivedMessage'))
                                 return
                               }
                               handleDelete(invoice.id, invoice.title)
                             }}
                             disabled={invoice.status === 'PAID' || invoice.status === 'SHIPPED' || invoice.status === 'RECEIVED'}
                             className="text-red-600 hover:text-red-700 disabled:opacity-50"
-                            aria-label={`${invoice.title} faturasını sil`}
+                            aria-label={t('deleteInvoice', { title: invoice.title })}
                             title={
-                              invoice.status === 'PAID' ? 'Bu fatura ödendiği için silemezsiniz' :
-                              invoice.status === 'SHIPPED' ? 'Bu fatura gönderildiği için silemezsiniz' :
-                              invoice.status === 'RECEIVED' ? 'Bu fatura teslim alındığı için silemezsiniz' :
-                              'Sil'
+                              invoice.status === 'PAID' ? t('cannotDeletePaid') :
+                              invoice.status === 'SHIPPED' ? t('cannotDeleteShipped') :
+                              invoice.status === 'RECEIVED' ? t('cannotDeleteReceived') :
+                              tCommon('delete')
                             }
                           >
                             <Trash2 className="h-4 w-4 text-red-600" />
@@ -736,6 +908,18 @@ export default function InvoiceList() {
         </div>
       )}
 
+      {/* Detail Modal */}
+      <InvoiceDetailModal
+        invoiceId={selectedInvoiceId}
+        open={detailModalOpen}
+        onClose={() => {
+          setDetailModalOpen(false)
+          setSelectedInvoiceId(null)
+          setSelectedInvoiceData(null)
+        }}
+        initialData={selectedInvoiceData || undefined}
+      />
+
       {/* Form Modal */}
       <InvoiceForm
         invoice={selectedInvoice || undefined}
@@ -744,10 +928,10 @@ export default function InvoiceList() {
         onSuccess={async (savedInvoice: Invoice) => {
           // Başarı bildirimi
           toast.success(
-            selectedInvoice ? 'Fatura güncellendi!' : 'Fatura oluşturuldu!',
+            selectedInvoice ? t('statusUpdated') : t('invoiceCreated'),
             selectedInvoice 
-              ? `${savedInvoice.title || savedInvoice.invoiceNumber} başarıyla güncellendi.`
-              : `${savedInvoice.title || savedInvoice.invoiceNumber} başarıyla oluşturuldu.`
+              ? t('invoiceUpdatedMessage', { title: savedInvoice.title })
+              : t('invoiceCreatedMessage', { title: savedInvoice.title })
           )
           
           // Optimistic update - yeni/güncellenmiş kaydı hemen cache'e ekle
@@ -763,9 +947,8 @@ export default function InvoiceList() {
             if (viewMode === 'table') {
               await mutateInvoices(updatedInvoices, { revalidate: false })
               await Promise.all([
-                mutate('/api/invoices', updatedInvoices, { revalidate: false }),
-                mutate('/api/invoices?', updatedInvoices, { revalidate: false }),
                 mutate(apiUrl, updatedInvoices, { revalidate: false }),
+                mutate('/api/invoices?', updatedInvoices, { revalidate: false }),
               ])
             }
           } else {
@@ -776,9 +959,8 @@ export default function InvoiceList() {
             // ÖNEMLİ: Her zaman table view cache'ini güncelle (viewMode ne olursa olsun)
             await mutateInvoices(updatedInvoices, { revalidate: false })
             await Promise.all([
-              mutate('/api/invoices', updatedInvoices, { revalidate: false }),
-              mutate('/api/invoices?', updatedInvoices, { revalidate: false }),
               mutate(apiUrl, updatedInvoices, { revalidate: false }),
+              mutate('/api/invoices?', updatedInvoices, { revalidate: false }),
             ])
           }
           

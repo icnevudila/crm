@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { useLocale } from 'next-intl'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { Plus, Search, Edit, Trash2, Eye, FileText, LayoutGrid, Table as TableIcon } from 'lucide-react'
@@ -42,6 +42,7 @@ import ModuleStats from '@/components/stats/ModuleStats'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
 import dynamic from 'next/dynamic'
+import { AutomationInfo } from '@/components/automation/AutomationInfo'
 
 // Lazy load büyük componentler - performans için
 const QuoteForm = dynamic(() => import('./QuoteForm'), {
@@ -53,6 +54,15 @@ const QuoteKanbanChart = dynamic(() => import('@/components/charts/QuoteKanbanCh
   ssr: false,
   loading: () => <div className="h-[400px] animate-pulse bg-gray-100 rounded" />,
 })
+
+const QuoteDetailModal = dynamic(() => import('./QuoteDetailModal'), {
+  ssr: false,
+  loading: () => null,
+})
+
+interface QuoteListProps {
+  isOpen?: boolean
+}
 
 interface Quote {
   id: string
@@ -95,19 +105,22 @@ const statusColors: Record<string, string> = {
   WAITING: 'bg-yellow-100 text-yellow-800',
 }
 
-const statusLabels: Record<string, string> = {
-  DRAFT: 'Taslak',
-  SENT: 'Gönderildi',
-  ACCEPTED: 'Kabul Edildi',
-  REJECTED: 'Reddedildi',
-  DECLINED: 'Reddedildi',
-  WAITING: 'Beklemede',
-}
-
-export default function QuoteList() {
+export default function QuoteList({ isOpen = true }: QuoteListProps) {
   const locale = useLocale()
+  const t = useTranslations('quotes')
+  const tStatus = useTranslations('status')
+  const tCommon = useTranslations('common')
   const searchParams = useSearchParams()
   const { data: session } = useSession()
+  
+  const statusLabels: Record<string, string> = {
+    DRAFT: tStatus('draft'),
+    SENT: tStatus('sent'),
+    ACCEPTED: tStatus('accepted'),
+    REJECTED: t('statusRejected'),
+    DECLINED: tStatus('declined'),
+    WAITING: t('statusWaiting'),
+  }
   
   // SuperAdmin kontrolü
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
@@ -128,10 +141,13 @@ export default function QuoteList() {
     if (statusFromUrl && statusFromUrl !== status) {
       setStatus(statusFromUrl)
     }
-  }, [statusFromUrl])
+  }, [statusFromUrl, status])
   const [dealId, setDealId] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null)
+  const [selectedQuoteData, setSelectedQuoteData] = useState<Quote | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // Debounced search - performans için
@@ -147,7 +163,7 @@ export default function QuoteList() {
 
   // SuperAdmin için firmaları çek
   const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
-    isSuperAdmin ? '/api/superadmin/companies' : null,
+    isOpen && isSuperAdmin ? '/api/superadmin/companies' : null,
     { dedupingInterval: 60000, revalidateOnFocus: false }
   )
   // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
@@ -157,20 +173,32 @@ export default function QuoteList() {
   
   // SWR ile veri çekme (CustomerList pattern'i) - Table view için
   // DÜZELTME: Status filtresi yoksa tüm status'ler gösterilmeli (kanban ile aynı)
-  const params = new URLSearchParams()
-  if (debouncedSearch) params.append('search', debouncedSearch)
-  if (status) params.append('status', status) // Status boş string ise tüm status'ler
-  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId) // SuperAdmin için firma filtresi
-  
-  const apiUrl = `/api/quotes?${params.toString()}`
-  const { data: quotes = [], isLoading, mutate: mutateQuotes } = useData<Quote[]>(
-    viewMode === 'table' ? apiUrl : null, // Sadece table view'da çalış
+  const apiUrl = useMemo(() => {
+    if (!isOpen) return null
+
+    const params = new URLSearchParams()
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    if (status) params.append('status', status)
+    if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+    return `/api/quotes?${params.toString()}`
+  }, [isOpen, debouncedSearch, status, isSuperAdmin, filterCompanyId])
+
+  const { data: quotesResponse, isLoading, mutate: mutateQuotes } = useData<any>(
+    isOpen && viewMode === 'table' && apiUrl ? apiUrl : null,
     {
-      dedupingInterval: 0, // Cache'i kapat - her zaman fresh data
-      revalidateOnFocus: true, // Focus'ta refetch yap
-      refreshInterval: 0, // Auto refresh YOK
+      dedupingInterval: 60000, // 60 saniye cache (performans için)
+      revalidateOnFocus: false, // Focus'ta revalidate yapma (instant navigation)
+      refreshInterval: 0,
     }
   )
+
+  // Pagination format desteği: { data: [...], pagination: {...} } veya direkt array (all=true için)
+  const quotes = useMemo(() => {
+    if (!quotesResponse) return []
+    if (Array.isArray(quotesResponse)) return quotesResponse // all=true durumu
+    if (quotesResponse?.data && Array.isArray(quotesResponse.data)) return quotesResponse.data // pagination durumu
+    return []
+  }, [quotesResponse])
 
   // Kanban view için TanStack Query kullanıyoruz (kanban özel endpoint)
   // ÖNEMLİ: Her zaman çalıştır (viewMode ne olursa olsun) - silme/güncelleme için gerekli
@@ -188,6 +216,7 @@ export default function QuoteList() {
     notifyOnChangeProps: 'all', // ✅ ÇÖZÜM: Tüm değişiklikleri notify et - setQueryData değişikliklerini algıla
     // ÖNEMLİ: setQueryData ile cache güncellenince otomatik olarak güncellenir
     // enabled kaldırıldı - her zaman çalış (silme/güncelleme için gerekli)
+    enabled: isOpen,
   })
 
   // ✅ ÇÖZÜM: useQuery'den gelen data'yı state'e kopyala - optimistic update için
@@ -199,12 +228,16 @@ export default function QuoteList() {
   // ÖNEMLİ: Bu useEffect sadece initial load'da çalışır - optimistic update'ler bu useEffect'i bypass eder
   // ÖNEMLİ: Refresh sonrası API'den eski data gelirse state'i override etmemek için initial load kontrolü var
   useEffect(() => {
-    if (isInitialLoad && kanbanDataFromQuery && kanbanDataFromQuery.length > 0) {
-      // Sadece initial load'da state'i güncelle
-      setKanbanData(kanbanDataFromQuery)
-      setIsInitialLoad(false) // Initial load tamamlandı
+    if (!isOpen) return
+    if (!isInitialLoad && kanbanDataFromQuery.length === 0) {
+      return
     }
-  }, [kanbanDataFromQuery, isInitialLoad]) // ✅ Sadece initial load'da çalışır
+
+    if (kanbanDataFromQuery.length > 0) {
+      setKanbanData(kanbanDataFromQuery)
+      setIsInitialLoad(false)
+    }
+  }, [kanbanDataFromQuery, isInitialLoad, isOpen])
 
   const handleEdit = useCallback((quote: Quote) => {
     setSelectedQuote(quote)
@@ -218,8 +251,8 @@ export default function QuoteList() {
     }
 
     const confirmed = await confirm(
-      `${title} teklifini silmek istediğinize emin misiniz?`,
-      'Bu işlem geri alınamaz.'
+      t('deleteConfirm', { title }),
+      t('deleteConfirmMessage')
     )
     if (!confirmed) {
       return
@@ -279,8 +312,8 @@ export default function QuoteList() {
       
       // Başarı bildirimi
       toast.success(
-        'Teklif silindi!',
-        `${title} başarıyla silindi.`
+        t('quoteDeleted'),
+        t('quoteDeletedMessage', { title })
       )
       
       // ✅ ÇÖZÜM: Sadece dashboard'daki diğer query'leri invalidate et (background'da, refetch olmadan)
@@ -301,7 +334,7 @@ export default function QuoteList() {
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error('Silinemedi', error?.message)
+      toast.error(tCommon('error'), error?.message)
     } finally {
       setDeletingId(null)
     }
@@ -318,12 +351,16 @@ export default function QuoteList() {
   }, [])
 
   // Stats verisini çek - toplam sayı için
-  const { data: stats } = useData<any>('/api/stats/quotes', {
+  const { data: stats } = useData<any>(isOpen ? '/api/stats/quotes' : null, {
     dedupingInterval: 5000,
     revalidateOnFocus: false,
   })
 
-  if ((isLoading && viewMode === 'table') || (isLoadingKanban && viewMode === 'kanban')) {
+  if (!isOpen) {
+    return null
+  }
+
+  if (viewMode === 'table' && isLoading) {
     return <SkeletonList />
   }
 
@@ -337,11 +374,39 @@ export default function QuoteList() {
       {/* İstatistikler */}
       <ModuleStats module="quotes" statsUrl="/api/stats/quotes" />
 
+      <AutomationInfo
+        title={t('automationTitle')}
+        automations={[
+          {
+            action: t('automationAccepted'),
+            result: t('automationAcceptedResult'),
+            details: [
+              t('automationAcceptedDetails'),
+              t('automationAcceptedDetails2'),
+            ],
+          },
+          {
+            action: t('automationRejected'),
+            result: t('automationRejectedResult'),
+            details: [
+              t('automationRejectedDetails'),
+            ],
+          },
+          {
+            action: t('automationWaiting'),
+            result: t('automationWaitingResult'),
+            details: [
+              t('automationWaitingDetails'),
+            ],
+          },
+        ]}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Teklifler</h1>
-          <p className="mt-2 text-gray-600">Toplam {totalQuotes} teklif</p>
+          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
+          <p className="mt-2 text-gray-600">{t('totalQuotes', { count: totalQuotes })}</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -366,7 +431,7 @@ export default function QuoteList() {
             className="bg-gradient-primary text-white"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Yeni Teklif
+            {t('newQuote')}
           </Button>
         </div>
       </div>
@@ -377,7 +442,7 @@ export default function QuoteList() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             type="search"
-            placeholder="Ara..."
+            placeholder={t('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -386,10 +451,10 @@ export default function QuoteList() {
         {isSuperAdmin && (
           <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Firma Seç" />
+              <SelectValue placeholder={tCommon('select')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Tüm Firmalar</SelectItem>
+              <SelectItem value="all">{tCommon('filters.all')}</SelectItem>
               {companies.map((company) => (
                 <SelectItem key={company.id} value={company.id}>
                   {company.name}
@@ -401,15 +466,15 @@ export default function QuoteList() {
         {viewMode === 'table' && (
           <Select value={status || 'all'} onValueChange={(v) => setStatus(v === 'all' ? '' : v)}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Durum" />
+              <SelectValue placeholder={tStatus('status')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Tümü</SelectItem>
-              <SelectItem value="DRAFT">Taslak</SelectItem>
-              <SelectItem value="SENT">Gönderildi</SelectItem>
-              <SelectItem value="ACCEPTED">Kabul Edildi</SelectItem>
-              <SelectItem value="DECLINED">Reddedildi</SelectItem>
-              <SelectItem value="WAITING">Beklemede</SelectItem>
+              <SelectItem value="all">{t('allStatuses')}</SelectItem>
+              <SelectItem value="DRAFT">{statusLabels.DRAFT}</SelectItem>
+              <SelectItem value="SENT">{statusLabels.SENT}</SelectItem>
+              <SelectItem value="ACCEPTED">{statusLabels.ACCEPTED}</SelectItem>
+              <SelectItem value="DECLINED">{statusLabels.DECLINED}</SelectItem>
+              <SelectItem value="WAITING">{statusLabels.WAITING}</SelectItem>
             </SelectContent>
           </Select>
         )}
@@ -435,11 +500,11 @@ export default function QuoteList() {
             const quote = kanbanData
               .flatMap((c: any) => c.quotes || [])
               .find((q: any) => q.id === quoteId)
-            const quoteTitle = quote?.title || 'Teklif'
+            const quoteTitle = quote?.title || t('defaultQuoteTitle')
             
             const confirmed = await confirm(
-              `${quoteTitle} teklifini "${statusLabel}" durumuna taşımak istediğinize emin misiniz?`,
-              'Durum değişikliği yapılacak.'
+              t('rejectDialog.statusChangeConfirm', { quoteTitle, statusLabel }),
+              t('rejectDialog.statusChangeMessage')
             )
             if (!confirmed) {
               return // Kullanıcı iptal etti, işlemi durdur
@@ -528,6 +593,58 @@ export default function QuoteList() {
               // ✅ %100 KESİN ÇÖZÜM: API'den dönen güncellenmiş quote'u al
               // ÖNEMLİ: Backend'den dönen gerçek data'yı kullan - updatedAt ve diğer alanlar güncel olacak
               const updatedQuote = await res.json()
+              const automation = updatedQuote?.automation || {}
+              
+              // Teklif başlığını al
+              const quoteTitle = updatedQuote?.title || 'Teklif'
+              
+              // Detaylı toast mesajları oluştur
+              let toastTitle = ''
+              let toastDescription = ''
+              let toastType: 'success' | 'warning' | 'info' = 'success'
+              
+              switch (newStatus) {
+                case 'ACCEPTED':
+                  toastTitle = `Teklif kabul edildi: "${quoteTitle}"`
+                  toastDescription = `Teklif "Kabul Edildi" durumuna taşındı.`
+                  
+                  if (automation.invoiceCreated && automation.invoiceId) {
+                    toastDescription += `\n\nOtomatik işlemler:\n• Fatura oluşturuldu (ID: ${automation.invoiceId.substring(0, 8)}...)\n• Fatura başlığı: ${automation.invoiceTitle || 'Otomatik oluşturuldu'}\n• E-posta gönderildi\n• Bildirim gönderildi`
+                  }
+                  break
+                  
+                case 'REJECTED':
+                case 'DECLINED':
+                  toastTitle = `Teklif reddedildi: "${quoteTitle}"`
+                  toastDescription = `Teklif "${newStatus === 'REJECTED' ? 'Reddedildi' : 'İptal Edildi'}" durumuna taşındı.`
+                  
+                  if (automation.taskCreated && automation.taskId) {
+                    toastDescription += `\n\nOtomatik işlemler:\n• Revizyon görevi oluşturuldu (ID: ${automation.taskId.substring(0, 8)}...)\n• Bildirim gönderildi`
+                  } else {
+                    toastDescription += `\n\nBildirim gönderildi`
+                  }
+                  
+                  toastType = 'warning'
+                  break
+                  
+                case 'SENT':
+                  toastTitle = `Teklif gönderildi: "${quoteTitle}"`
+                  toastDescription = `Teklif "Gönderildi" durumuna taşındı.\n\nOtomatik işlemler:\n• E-posta gönderildi\n• Bildirim gönderildi`
+                  break
+                  
+                default:
+                  const statusName = statusLabels[newStatus] || newStatus
+                  toastTitle = `Teklif durumu güncellendi: "${quoteTitle}"`
+                  toastDescription = `Teklif "${statusName}" durumuna taşındı.`
+              }
+
+              if (toastType === 'success') {
+                toast.success(toastTitle, toastDescription)
+              } else if (toastType === 'warning') {
+                toast.warning(toastTitle, toastDescription)
+              } else {
+                toast.success(toastTitle, toastDescription)
+              }
               
               // ✅ %100 KESİN ÇÖZÜM: Backend'den dönen güncellenmiş quote ile kanban data'yı güncelle
               // ÖNEMLİ: Backend'den dönen gerçek data'yı kullan - updatedAt güncel olacak
@@ -627,7 +744,7 @@ export default function QuoteList() {
               // Optimistic update zaten yapıldı, invalidate yeterli - query'ler kendi staleTime'larına göre refetch olur
             } catch (error: any) {
               console.error('Status update error:', error)
-              toast.error('Teklif durumu güncellenirken hata oluştu', error?.message)
+              toast.error(t('rejectDialog.statusUpdateError'), error?.message)
               throw error
             }
           }}
@@ -637,20 +754,20 @@ export default function QuoteList() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Başlık</TableHead>
-                {isSuperAdmin && <TableHead>Firma</TableHead>}
-                <TableHead>Durum</TableHead>
-                <TableHead>Toplam</TableHead>
-                <TableHead>Fırsat</TableHead>
-                <TableHead>Tarih</TableHead>
-                <TableHead className="text-right">İşlemler</TableHead>
+                <TableHead>{t('tableHeaders.title')}</TableHead>
+                {isSuperAdmin && <TableHead>{t('tableHeaders.company')}</TableHead>}
+                <TableHead>{t('tableHeaders.status')}</TableHead>
+                <TableHead>{t('tableHeaders.total')}</TableHead>
+                <TableHead>{t('tableHeaders.deal')}</TableHead>
+                <TableHead>{t('tableHeaders.date')}</TableHead>
+                <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {quotes.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={isSuperAdmin ? 7 : 6} className="text-center py-8 text-gray-500">
-                    Teklif bulunamadı
+                    {tCommon('noData')}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -690,24 +807,31 @@ export default function QuoteList() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        <Link href={`/${locale}/quotes/${quote.id}`} prefetch={true}>
-                          <Button variant="ghost" size="icon" aria-label={`${quote.title} teklifini görüntüle`}>
-                            <Eye className="h-4 w-4 text-gray-600" />
-                          </Button>
-                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setSelectedQuoteId(quote.id)
+                            setSelectedQuoteData(quote)
+                            setDetailModalOpen(true)
+                          }}
+                          aria-label={t('viewQuote', { title: quote.title })}
+                        >
+                          <Eye className="h-4 w-4 text-gray-600" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => {
                             if (quote.status === 'ACCEPTED') {
-                              toast.warning('Bu teklif onaylandığı için değiştirilemez', 'Bu teklif kabul edildi ve fatura oluşturuldu.')
+                              toast.warning(t('cannotEditAccepted'), t('cannotEditAcceptedMessage'))
                               return
                             }
                             handleEdit(quote)
                           }}
                           disabled={quote.status === 'ACCEPTED'}
-                          aria-label={`${quote.title} teklifini düzenle`}
-                          title={quote.status === 'ACCEPTED' ? 'Bu teklif onaylandığı için değiştirilemez' : 'Düzenle'}
+                          aria-label={t('editQuote', { title: quote.title })}
+                          title={quote.status === 'ACCEPTED' ? t('cannotEditAccepted') : tCommon('edit')}
                         >
                           <Edit className="h-4 w-4 text-gray-600" />
                         </Button>
@@ -716,15 +840,15 @@ export default function QuoteList() {
                           size="icon"
                           onClick={() => {
                             if (quote.status === 'ACCEPTED') {
-                              toast.warning('Bu teklif onaylandığı için silemezsiniz', 'Bu teklif kabul edildi ve fatura oluşturuldu. Teklifi silmek için önce oluşturulan faturayı silmeniz gerekir.')
+                              toast.warning(t('cannotDeleteAccepted'), t('cannotDeleteAcceptedMessage'))
                               return
                             }
                             handleDelete(quote.id, quote.title)
                           }}
                           disabled={quote.status === 'ACCEPTED'}
                           className="text-red-600 hover:text-red-700 disabled:opacity-50"
-                          aria-label={`${quote.title} teklifini sil`}
-                          title={quote.status === 'ACCEPTED' ? 'Bu teklif onaylandığı için silemezsiniz' : 'Sil'}
+                          aria-label={t('deleteQuote', { title: quote.title })}
+                          title={quote.status === 'ACCEPTED' ? t('cannotDeleteAccepted') : tCommon('delete')}
                         >
                           <Trash2 className="h-4 w-4 text-red-600" />
                         </Button>
@@ -738,6 +862,18 @@ export default function QuoteList() {
         </div>
       )}
 
+      {/* Detail Modal */}
+      <QuoteDetailModal
+        quoteId={selectedQuoteId}
+        open={detailModalOpen}
+        onClose={() => {
+          setDetailModalOpen(false)
+          setSelectedQuoteId(null)
+          setSelectedQuoteData(null)
+        }}
+        initialData={selectedQuoteData || undefined}
+      />
+
       {/* Form Modal */}
       <QuoteForm
         quote={selectedQuote || undefined}
@@ -746,10 +882,10 @@ export default function QuoteList() {
         onSuccess={async (savedQuote) => {
           // Başarı bildirimi
           toast.success(
-            selectedQuote ? 'Teklif güncellendi!' : 'Teklif oluşturuldu!',
-            selectedQuote 
-              ? `${savedQuote.title} başarıyla güncellendi.`
-              : `${savedQuote.title} başarıyla oluşturuldu.`
+            selectedQuote ? t('rejectDialog.quoteUpdatedToast') : t('rejectDialog.quoteCreatedToast'),
+            selectedQuote
+              ? t('rejectDialog.quoteUpdatedMessage', { title: savedQuote.title })
+              : t('rejectDialog.quoteCreatedMessage', { title: savedQuote.title })
           )
           
           // Optimistic update - yeni/güncellenmiş kaydı hemen cache'e ekle
@@ -775,7 +911,7 @@ export default function QuoteList() {
             const updatedQuotes = [savedQuote, ...quotes]
             
             // Table view için SWR cache'i güncelle - optimistic update
-            // ÖNEMLİ: Her zaman table view cache'ini güncelle (viewMode ne olursa olsun)
+            // ÖNEMLĘ: Her zaman table view cache'ini güncelle (viewMode ne olursa olsun)
             await mutateQuotes(updatedQuotes, { revalidate: false })
             await Promise.all([
               mutate('/api/quotes', updatedQuotes, { revalidate: false }),
@@ -785,7 +921,7 @@ export default function QuoteList() {
           }
           
           // Kanban view için optimistic update - yeni kaydı kanban data'ya ekle
-          // ÖNEMLİ: Her zaman kanban data'yı güncelle (viewMode ne olursa olsun)
+          // ÖNEMLĘ: Her zaman kanban data'yı güncelle (viewMode ne olursa olsun)
           if (Array.isArray(kanbanData)) {
             const status = savedQuote.status || 'DRAFT'
             const updatedKanbanData = kanbanData.map((col: any) => {
@@ -826,8 +962,8 @@ export default function QuoteList() {
           }
           
           // ✅ ÇÖZÜM: Sadece dashboard'daki diğer query'leri invalidate et (background'da, refetch olmadan)
-          // ÖNEMLİ: kanban-quotes query'sini invalidate ETME - optimistic update'i koru
-          // ÖNEMLİ: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
+          // ÖNEMLĘ: kanban-quotes query'sini invalidate ETME - optimistic update'i koru
+          // ÖNEMLĘ: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
           // Sadece dashboard'daki diğer query'leri invalidate et - onlar kendi staleTime'larına göre refetch olur
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['quotes'] }), // Table view için
@@ -845,18 +981,18 @@ export default function QuoteList() {
       <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Teklifi Reddet</DialogTitle>
+            <DialogTitle>{t('rejectDialog.title')}</DialogTitle>
             <DialogDescription>
-              Teklifi reddetmek için lütfen sebep belirtin. Bu sebep teklif detay sayfasında not olarak görünecektir.
+              {t('rejectDialog.description')}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="rejectReason">Reddetme Sebebi *</Label>
+              <Label htmlFor="rejectReason">{t('rejectDialog.reasonLabel')} *</Label>
               <Textarea
                 id="rejectReason"
-                placeholder="Örn: Fiyat uygun değil, Müşteri ihtiyacı değişti, Teknik uyumsuzluk..."
+                placeholder={t('rejectDialog.reasonPlaceholder')}
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
                 rows={4}
@@ -874,18 +1010,18 @@ export default function QuoteList() {
                 setRejectingQuoteId(null)
               }}
             >
-              İptal
+              {tCommon('cancel')}
             </Button>
             <Button
               variant="destructive"
               onClick={async () => {
                 if (!rejectReason.trim()) {
-                  toast.error('Sebep gerekli', 'Lütfen reddetme sebebini belirtin.')
+                  toast.error(t('rejectDialog.reasonRequired'), t('rejectDialog.reasonRequiredMessage'))
                   return
                 }
 
                 if (!rejectingQuoteId) {
-                  toast.error('Hata', 'Teklif ID bulunamadı.')
+                  toast.error(t('rejectDialog.error'), t('rejectDialog.quoteIdNotFound'))
                   setRejectDialogOpen(false)
                   return
                 }
@@ -1030,15 +1166,15 @@ export default function QuoteList() {
                     queryClient.invalidateQueries({ queryKey: ['kpis'] }),
                   ])
                   
-                  toast.success('Teklif reddedildi', 'Teklif reddedildi ve sebep not olarak eklendi.')
+                  toast.success(t('quoteRejected'), t('quoteRejectedMessage'))
                 } catch (error: any) {
                   console.error('Reject error:', error)
-                  toast.error('Reddetme başarısız', error?.message || 'Teklif reddedilemedi.')
+                  toast.error(t('rejectDialog.rejectFailed'), error?.message || t('quoteRejected'))
                 }
               }}
               disabled={!rejectReason.trim()}
             >
-              Reddet
+              {t('rejectDialog.rejectButton')}
             </Button>
           </DialogFooter>
         </DialogContent>

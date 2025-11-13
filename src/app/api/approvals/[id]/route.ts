@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabase } from '@/lib/supabase'
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/authOptions'
 
 // Dynamic route - build-time'da çalışmasın
 export const dynamic = 'force-dynamic'
@@ -11,13 +12,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession()
+    const session = await getServerSession(authOptions)
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const supabase = getSupabase()
+    const supabase = getSupabaseWithServiceRole()
     const { id: approvalId } = await params
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
 
     // Approval bilgisini getir (ilişkilerle)
     const { data: approval, error: approvalError } = await supabase
@@ -28,12 +30,15 @@ export async function GET(
         approver:User!ApprovalRequest_approvedBy_fkey(name, email)
       `)
       .eq('id', approvalId)
-      .eq('companyId', session.user.companyId)
-      .single()
+      .maybeSingle()
 
-    if (approvalError) {
+    if (approvalError || !approval) {
       console.error('Approval fetch error:', approvalError)
       return NextResponse.json({ error: 'Onay talebi bulunamadı' }, { status: 404 })
+    }
+
+    if (!isSuperAdmin && approval.companyId !== session.user.companyId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
     }
 
     // Onaylayıcıları getir

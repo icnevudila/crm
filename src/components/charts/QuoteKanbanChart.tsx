@@ -81,8 +81,8 @@ const statusLabels: Record<string, string> = {
 // Her aşama için bilgilendirme mesajları - CRM'e uygun yönlendirici mesajlar (kart içinde gösterilecek)
 const statusInfoMessages: Record<string, string> = {
   DRAFT: '💡 Bu aşamada: Teklifi gönderin. Kart içindeki "Gönder" butonunu kullanın. Teklif gönderildikten sonra "Gönderildi" aşamasına taşınır.',
-  SENT: '💡 Bu aşamada: Müşteri onayı bekleniyor. Kart içindeki "Kabul Et" veya "Reddet" butonlarını kullanın. Kabul edilirse otomatik olarak fatura oluşturulur.',
-  ACCEPTED: '✅ Teklif kabul edildi! Otomatik olarak fatura oluşturuldu. Faturalar sayfasından kontrol edebilirsiniz. Bu aşamadaki teklifler değiştirilemez.',
+  SENT: '💡 Bu aşamada: Müşteri onayı bekleniyor. Kart içindeki "Kabul Et" veya "Reddet" butonlarını kullanın. Kabul edilirse otomatik olarak fatura ve sözleşme oluşturulur.',
+  ACCEPTED: '✅ Teklif kabul edildi! Otomatik olarak fatura ve sözleşme oluşturuldu. Faturalar ve Sözleşmeler sayfalarından kontrol edebilirsiniz. Bu aşamadaki teklifler değiştirilemez.',
   REJECTED: '❌ Teklif reddedildi. Revizyon görevi otomatik olarak oluşturuldu. Görevler sayfasından kontrol edebilirsiniz. Bu aşamadaki teklifler değiştirilemez.',
   WAITING: '⏳ Teklif müşteri onayı bekliyor. Kart içindeki "Kabul Et", "Reddet", "Tekrar Gönder" veya "Hatırlat" butonlarını kullanabilirsiniz.',
 }
@@ -385,7 +385,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange }: 
                         if (onStatusChange) {
                           try {
                             await onStatusChange(quote.id, 'ACCEPTED')
-                            toast.success('Teklif kabul edildi! Fatura oluşturuldu.')
+                            toast.success('Teklif kabul edildi! Fatura ve sözleşme oluşturuldu.')
                           } catch (error: any) {
                             if (process.env.NODE_ENV === 'development') {
                               console.error('Status change error:', error)
@@ -501,7 +501,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange }: 
                     if (onStatusChange) {
                       try {
                         await onStatusChange(quote.id, 'ACCEPTED')
-                        toast.success('Teklif kabul edildi! Fatura oluşturuldu.')
+                        toast.success('Teklif kabul edildi! Fatura ve sözleşme oluşturuldu.')
                       } catch (error: any) {
                         // Hata zaten onStatusChange içinde handle ediliyor
                         if (process.env.NODE_ENV === 'development') {
@@ -567,198 +567,275 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange }: 
             <div className="flex gap-2 flex-wrap">
               {/* DRAFT → Gönder */}
               {quote.status === 'DRAFT' && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="flex-1 min-w-[80px] text-xs h-7"
-                  onClick={async (e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    if (dragMode) return
-                    
-                    // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
-                    if (onStatusChange) {
-                      try {
-                        await onStatusChange(quote.id, 'SENT')
-                        toast.success('Teklif gönderildi', 'Teklif başarıyla gönderildi ve durumu güncellendi.')
-                      } catch (error: any) {
-                        // Hata zaten onStatusChange içinde handle ediliyor
-                        if (process.env.NODE_ENV === 'development') {
-                          console.error('Status change error:', error)
-                        }
-                      }
-                    } else {
-                      toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
-                    }
-                  }}
-                >
-                  <Send className="h-3 w-3 mr-1" />
-                  Gönder
-                </Button>
+                <TooltipProvider delayDuration={200}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 min-w-[80px] text-xs h-7"
+                        onClick={async (e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          if (dragMode) return
+                          
+                          // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
+                          if (onStatusChange) {
+                            try {
+                              await onStatusChange(quote.id, 'SENT')
+                              toast.success('Teklif gönderildi', 'Teklif başarıyla gönderildi ve durumu güncellendi.')
+                            } catch (error: any) {
+                              // Hata zaten onStatusChange içinde handle ediliyor
+                              if (process.env.NODE_ENV === 'development') {
+                                console.error('Status change error:', error)
+                              }
+                            }
+                          } else {
+                            toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                          }
+                        }}
+                      >
+                        <Send className="h-3 w-3 mr-1" />
+                        Gönder
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs border-2 border-indigo-200 bg-white p-3 text-left shadow-xl">
+                      <p className="text-xs font-medium text-slate-700">
+                        Teklifi müşteriye gönderir. Bu işlemden sonra teklif durumu "Gönderildi" olur.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               )}
               {/* SENT → Kabul Et ve Reddet */}
               {quote.status === 'SENT' && (
                 <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1 min-w-[80px] text-xs h-7 bg-green-50 hover:bg-green-100 border-green-300 text-green-700"
-                    onClick={async (e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      if (dragMode) return
-                      
-                      // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
-                      if (onStatusChange) {
-                        try {
-                          await onStatusChange(quote.id, 'ACCEPTED')
-                          toast.success('Teklif kabul edildi', 'Teklif kabul edildi, otomatik olarak fatura ve sözleşme oluşturuldu.')
-                        } catch (error: any) {
-                          // Hata zaten onStatusChange içinde handle ediliyor
-                          if (process.env.NODE_ENV === 'development') {
-                            console.error('Status change error:', error)
-                          }
-                        }
-                      } else {
-                        toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
-                      }
-                    }}
-                  >
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    Kabul Et
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1 min-w-[80px] text-xs h-7 bg-red-50 hover:bg-red-100 border-red-300 text-red-700"
-                    onClick={async (e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      if (dragMode) return
-                      
-                      // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
-                      if (onStatusChange) {
-                        try {
-                          await onStatusChange(quote.id, 'REJECTED')
-                          toast.success('Teklif reddedildi', 'Teklif reddedildi, otomatik olarak revizyon görevi oluşturuldu.')
-                        } catch (error: any) {
-                          // Hata zaten onStatusChange içinde handle ediliyor
-                          if (process.env.NODE_ENV === 'development') {
-                            console.error('Status change error:', error)
-                          }
-                        }
-                      } else {
-                        toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
-                      }
-                    }}
-                  >
-                    <XCircle className="h-3 w-3 mr-1" />
-                    Reddet
-                  </Button>
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 min-w-[80px] text-xs h-7 bg-green-50 hover:bg-green-100 border-green-300 text-green-700"
+                          onClick={async (e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            if (dragMode) return
+                            
+                            // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
+                            if (onStatusChange) {
+                              try {
+                                await onStatusChange(quote.id, 'ACCEPTED')
+                                toast.success('Teklif kabul edildi', 'Teklif kabul edildi, otomatik olarak fatura ve sözleşme oluşturuldu.')
+                              } catch (error: any) {
+                                // Hata zaten onStatusChange içinde handle ediliyor
+                                if (process.env.NODE_ENV === 'development') {
+                                  console.error('Status change error:', error)
+                                }
+                              }
+                            } else {
+                              toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                            }
+                          }}
+                        >
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Kabul Et
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs border-2 border-green-200 bg-white p-3 text-left shadow-xl">
+                        <p className="text-xs font-medium text-slate-700">
+                          Teklifi kabul eder. Otomatik olarak fatura ve sözleşme oluşturulur.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 min-w-[80px] text-xs h-7 bg-red-50 hover:bg-red-100 border-red-300 text-red-700"
+                          onClick={async (e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            if (dragMode) return
+                            
+                            // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
+                            if (onStatusChange) {
+                              try {
+                                await onStatusChange(quote.id, 'REJECTED')
+                                toast.success('Teklif reddedildi', 'Teklif reddedildi, otomatik olarak revizyon görevi oluşturuldu.')
+                              } catch (error: any) {
+                                // Hata zaten onStatusChange içinde handle ediliyor
+                                if (process.env.NODE_ENV === 'development') {
+                                  console.error('Status change error:', error)
+                                }
+                              }
+                            } else {
+                              toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                            }
+                          }}
+                        >
+                          <XCircle className="h-3 w-3 mr-1" />
+                          Reddet
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs border-2 border-red-200 bg-white p-3 text-left shadow-xl">
+                        <p className="text-xs font-medium text-slate-700">
+                          Teklifi reddeder. Sebep sorulacak ve otomatik olarak revizyon görevi oluşturulur.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </>
               )}
               {/* WAITING → Kabul Et, Reddet, Tekrar Gönder, Hatırlatma */}
               {quote.status === 'WAITING' && (
                 <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1 min-w-[80px] text-xs h-7 bg-green-50 hover:bg-green-100 border-green-300 text-green-700"
-                    onClick={async (e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      if (dragMode) return
-                      
-                      // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
-                      if (onStatusChange) {
-                        try {
-                          await onStatusChange(quote.id, 'ACCEPTED')
-                          toast.success('Teklif kabul edildi', 'Teklif kabul edildi, otomatik olarak fatura ve sözleşme oluşturuldu.')
-                        } catch (error: any) {
-                          // Hata zaten onStatusChange içinde handle ediliyor
-                          if (process.env.NODE_ENV === 'development') {
-                            console.error('Status change error:', error)
-                          }
-                        }
-                      } else {
-                        toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
-                      }
-                    }}
-                  >
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    Kabul Et
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1 min-w-[80px] text-xs h-7 bg-red-50 hover:bg-red-100 border-red-300 text-red-700"
-                    onClick={async (e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      if (dragMode) return
-                      
-                      // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
-                      if (onStatusChange) {
-                        try {
-                          await onStatusChange(quote.id, 'REJECTED')
-                          toast.success('Teklif reddedildi', 'Teklif reddedildi, otomatik olarak revizyon görevi oluşturuldu.')
-                        } catch (error: any) {
-                          // Hata zaten onStatusChange içinde handle ediliyor
-                          if (process.env.NODE_ENV === 'development') {
-                            console.error('Status change error:', error)
-                          }
-                        }
-                      } else {
-                        toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
-                      }
-                    }}
-                  >
-                    <XCircle className="h-3 w-3 mr-1" />
-                    Reddet
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1 min-w-[80px] text-xs h-7 bg-blue-50 hover:bg-blue-100 border-blue-300 text-blue-700"
-                    onClick={async (e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      if (dragMode) return
-                      
-                      // Tekrar gönder - SENT durumuna taşı
-                      if (onStatusChange) {
-                        try {
-                          await onStatusChange(quote.id, 'SENT')
-                          toast.success('Teklif tekrar gönderildi', 'Teklif başarıyla tekrar gönderildi.')
-                        } catch (error: any) {
-                          if (process.env.NODE_ENV === 'development') {
-                            console.error('Status change error:', error)
-                          }
-                        }
-                      } else {
-                        toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
-                      }
-                    }}
-                  >
-                    <RefreshCw className="h-3 w-3 mr-1" />
-                    Tekrar Gönder
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1 min-w-[80px] text-xs h-7 bg-yellow-50 hover:bg-yellow-100 border-yellow-300 text-yellow-700"
-                    onClick={async (e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      if (dragMode) return
-                      
-                      // Hatırlatma gönder - şimdilik sadece toast göster, gelecekte e-posta gönderilebilir
-                      toast.info('Hatırlatma gönderildi', 'Müşteriye hatırlatma bildirimi gönderildi.')
-                    }}
-                  >
-                    <Mail className="h-3 w-3 mr-1" />
-                    Hatırlat
-                  </Button>
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 min-w-[80px] text-xs h-7 bg-green-50 hover:bg-green-100 border-green-300 text-green-700"
+                          onClick={async (e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            if (dragMode) return
+                            
+                            // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
+                            if (onStatusChange) {
+                              try {
+                                await onStatusChange(quote.id, 'ACCEPTED')
+                                toast.success('Teklif kabul edildi', 'Teklif kabul edildi, otomatik olarak fatura ve sözleşme oluşturuldu.')
+                              } catch (error: any) {
+                                // Hata zaten onStatusChange içinde handle ediliyor
+                                if (process.env.NODE_ENV === 'development') {
+                                  console.error('Status change error:', error)
+                                }
+                              }
+                            } else {
+                              toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                            }
+                          }}
+                        >
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Kabul Et
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs border-2 border-green-200 bg-white p-3 text-left shadow-xl">
+                        <p className="text-xs font-medium text-slate-700">
+                          Teklifi kabul eder. Otomatik olarak fatura ve sözleşme oluşturulur.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 min-w-[80px] text-xs h-7 bg-red-50 hover:bg-red-100 border-red-300 text-red-700"
+                          onClick={async (e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            if (dragMode) return
+                            
+                            // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
+                            if (onStatusChange) {
+                              try {
+                                await onStatusChange(quote.id, 'REJECTED')
+                                toast.success('Teklif reddedildi', 'Teklif reddedildi, otomatik olarak revizyon görevi oluşturuldu.')
+                              } catch (error: any) {
+                                // Hata zaten onStatusChange içinde handle ediliyor
+                                if (process.env.NODE_ENV === 'development') {
+                                  console.error('Status change error:', error)
+                                }
+                              }
+                            } else {
+                              toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                            }
+                          }}
+                        >
+                          <XCircle className="h-3 w-3 mr-1" />
+                          Reddet
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs border-2 border-red-200 bg-white p-3 text-left shadow-xl">
+                        <p className="text-xs font-medium text-slate-700">
+                          Teklifi reddeder. Sebep sorulacak ve otomatik olarak revizyon görevi oluşturulur.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 min-w-[80px] text-xs h-7 bg-blue-50 hover:bg-blue-100 border-blue-300 text-blue-700"
+                          onClick={async (e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            if (dragMode) return
+                            
+                            // Tekrar gönder - SENT durumuna taşı
+                            if (onStatusChange) {
+                              try {
+                                await onStatusChange(quote.id, 'SENT')
+                                toast.success('Teklif tekrar gönderildi', 'Teklif başarıyla tekrar gönderildi.')
+                              } catch (error: any) {
+                                if (process.env.NODE_ENV === 'development') {
+                                  console.error('Status change error:', error)
+                                }
+                              }
+                            } else {
+                              toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                            }
+                          }}
+                        >
+                          <RefreshCw className="h-3 w-3 mr-1" />
+                          Tekrar Gönder
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs border-2 border-blue-200 bg-white p-3 text-left shadow-xl">
+                        <p className="text-xs font-medium text-slate-700">
+                          Teklifi tekrar müşteriye gönderir. Durum "Gönderildi" olarak güncellenir.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 min-w-[80px] text-xs h-7 bg-yellow-50 hover:bg-yellow-100 border-yellow-300 text-yellow-700"
+                          onClick={async (e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            if (dragMode) return
+                            
+                            // Hatırlatma gönder - şimdilik sadece toast göster, gelecekte e-posta gönderilebilir
+                            toast.info('Hatırlatma gönderildi', 'Müşteriye hatırlatma bildirimi gönderildi.')
+                          }}
+                        >
+                          <Mail className="h-3 w-3 mr-1" />
+                          Hatırlat
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs border-2 border-yellow-200 bg-white p-3 text-left shadow-xl">
+                        <p className="text-xs font-medium text-slate-700">
+                          Müşteriye hatırlatma bildirimi gönderir. Teklif durumu değişmez.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </>
               )}
             </div>

@@ -1,0 +1,3154 @@
+﻿# ğŸš€ CRM Enterprise V3 - Cursor AI Development Rules
+
+## ğŸ“‹ Proje TanÄ±mÄ±
+
+Next.js 15 (App Router, Edge Runtime) tabanlÄ± Supabase destekli CRM sistemi.
+- Performans odaklÄ± (<300ms sekme geÃ§iÅŸi, <500ms dashboard)
+- Multi-tenant (Ã§oklu kurum) yapÄ±sÄ±
+- TR/EN locale desteÄŸi
+- Premium UI temasÄ±
+
+---
+
+## âš¡ PERFORMANS KURALLARI (Ã–NCE HIZ!)
+
+### 1. Veri Ã‡ekme Stratejisi
+- âœ… **Her zaman SWR cache kullan** (`useData` hook)
+- âœ… **Server Components Ã¶ncelik** (client component sadece gerekli yerlerde)
+- âœ… **Suspense boundaries kullan** (yÃ¼kleniyor ekranÄ± YOK, skeleton gÃ¶ster)
+- âœ… **Prefetching aktif** (Link hover'da prefetch)
+- âœ… **Optimistic updates** (mutasyonlar anÄ±nda UI'da gÃ¶rÃ¼nÃ¼r)
+
+### 2. API Layer KurallarÄ±
+- âœ… **Ortak `fetchData()` fonksiyonu kullan** (`lib/api.ts`)
+- âœ… **Retry policy**: Exponential backoff (1s, 2s, 4s, max 3 deneme)
+- âœ… **Cache strategy**: `no-store` + `revalidate: 60` saniye
+- âœ… **Error handling**: Fallback UI gÃ¶ster, user-friendly mesajlar
+
+### 3. Supabase KullanÄ±mÄ±
+- âœ… **Singleton client** (`getSupabase()`) - connection pooling
+- âœ… **RLS kontrolÃ¼**: Her query'de `companyId` filtresi
+- âœ… **Index kullanÄ±mÄ±**: `status`, `companyId` bazlÄ± sorgular
+- âœ… **Connection reuse**: Tek instance kullan, her seferinde yeni client oluÅŸturma
+
+### 4. Component PerformansÄ±
+- âœ… **Lazy loading**: Grafik ve modal componentleri `dynamic import`
+- âœ… **Memoization**: `useMemo`, `useCallback` kullan (gerektiÄŸinde)
+- âœ… **Code splitting**: Route bazlÄ± chunk'lar
+- âœ… **Image optimization**: `next/image` kullan (product fotoÄŸraflarÄ± iÃ§in)
+
+### 5. Sayfa GeÃ§iÅŸleri
+- âœ… **Framer Motion**: 0.3s fade transition (max)
+- âœ… **Loading states kaldÄ±r**: Skeleton gÃ¶ster, yÃ¼kleniyor ekranÄ± YOK
+- âœ… **Route prefetch**: Link component'lerinde `prefetch={true}`
+- âœ… **Instant navigation**: Cache'de varsa anÄ±nda render
+
+---
+
+## ğŸ¨ TEMA & UI KURALLARI
+
+### 1. Premium Tema Renkleri
+```typescript
+Primary: #6366f1 (Indigo-500)
+Secondary: #8b5cf6 (Purple-500)
+Accent: #ec4899 (Pink-500)
+Background: #ffffff (Beyaz)
+Surface: #f8fafc (Slate-50)
+```
+
+### 2. Component StandartlarÄ±
+- âœ… **shadcn/ui componentleri kullan** (Button, Input, Card, Table, Dialog, Tabs)
+- âœ… **TutarlÄ± stil**: TÃ¼m sayfalarda aynÄ± renk paleti
+- âœ… **Animasyonlar**: Framer Motion ile smooth transitions
+- âœ… **Responsive**: Mobile-first yaklaÅŸÄ±m
+
+### 3. UI Component YapÄ±sÄ±
+```
+components/
+â”œâ”€â”€ ui/           # shadcn/ui components
+â”œâ”€â”€ layout/       # Sidebar, Header, Breadcrumbs
+â”œâ”€â”€ skeletons/    # Loading skeletons
+â”œâ”€â”€ charts/       # Recharts wrappers
+â””â”€â”€ [module]/     # Module-specific components
+```
+
+### 4. Premium UI Elementleri
+- âœ… **GradientCard**: Radial gradient + blur background
+- âœ… **AnimatedCounter**: KPI kartlarÄ± iÃ§in sayÄ± animasyonu
+- âœ… **Neumorphism**: SeÃ§ili elementlerde kullan
+- âœ… **Shadow consistency**: `shadow-card`, `shadow-card-hover`
+
+---
+
+## ğŸ—„ï¸ VERÄ°TABANI KURALLARI
+
+### 1. Supabase TablolarÄ±
+```sql
+- Company (multi-tenant root)
+- User (Company iliÅŸkisi)
+- Customer (Company iliÅŸkisi)
+- Deal (Customer, Company iliÅŸkileri)
+- Quote (Deal, Company iliÅŸkileri)
+- Invoice (Quote, Company iliÅŸkileri)
+- Product (Company iliÅŸkisi)
+- Finance (Company iliÅŸkisi)
+- Task (Company, User iliÅŸkileri)
+- Ticket (Customer, Company iliÅŸkileri)
+- Shipment (Invoice, Company iliÅŸkileri)
+- ActivityLog (User, Company iliÅŸkileri, meta JSON)
+```
+
+### 2. Foreign Key KurallarÄ±
+- âœ… **companyId zorunlu**: Her tabloda (multi-tenant)
+- âœ… **ON DELETE CASCADE**: Company silinince tÃ¼m veriler silinir
+- âœ… **Referential integrity**: Foreign key constraints aktif
+
+### 3. RLS (Row-Level Security)
+- âœ… **Company isolation**: KullanÄ±cÄ± sadece kendi `companyId`'sini gÃ¶rÃ¼r
+- âœ… **SUPER_ADMIN bypass**: SuperAdmin tÃ¼m ÅŸirketleri gÃ¶rebilir
+- âœ… **Policy test**: Her yeni tablo iÃ§in RLS testi yap
+
+### 4. Index Stratejisi
+```sql
+CREATE INDEX idx_quote_status ON "Quote"("status");
+CREATE INDEX idx_invoice_status ON "Invoice"("status");
+CREATE INDEX idx_activitylog_company ON "ActivityLog"("companyId");
+CREATE INDEX idx_customer_company ON "Customer"("companyId");
+CREATE INDEX idx_deal_company ON "Deal"("companyId");
+CREATE INDEX idx_user_company ON "User"("companyId");
+```
+
+---
+
+## ğŸ“ DOSYA YAPISI KURALLARI
+
+### 1. App Router YapÄ±sÄ±
+```
+src/app/
+â”œâ”€â”€ (auth)/              # Auth routes
+â”‚   â””â”€â”€ login/
+â”œâ”€â”€ dashboard/           # Dashboard
+â”œâ”€â”€ [module]/            # CRUD modules
+â”‚   â”œâ”€â”€ page.tsx        # List
+â”‚   â”œâ”€â”€ new/            # Create form
+â”‚   â””â”€â”€ [id]/           # Detail page
+â”œâ”€â”€ api/
+â”‚   â”œâ”€â”€ [module]/       # CRUD endpoints
+â”‚   â””â”€â”€ analytics/      # Dashboard/Reports endpoints
+â””â”€â”€ layout.tsx          # Root layout
+```
+
+### 2. Component YapÄ±sÄ±
+```
+src/components/
+â”œâ”€â”€ ui/                  # shadcn/ui
+â”œâ”€â”€ layout/              # Layout components
+â”œâ”€â”€ skeletons/           # Loading skeletons
+â”œâ”€â”€ charts/              # Recharts wrappers
+â””â”€â”€ [module]/            # Module components
+    â”œâ”€â”€ [Module]Form.tsx
+    â”œâ”€â”€ [Module]Card.tsx
+    â””â”€â”€ [Module]List.tsx
+```
+
+### 3. Lib YapÄ±sÄ±
+```
+src/lib/
+â”œâ”€â”€ supabase.ts         # Supabase client
+â”œâ”€â”€ api.ts              # API layer
+â”œâ”€â”€ utils.ts            # Utilities
+â”œâ”€â”€ i18n.ts             # Locale config
+â””â”€â”€ hooks/              # Custom hooks
+```
+
+---
+
+## ğŸ’» KODLAMA STANDARTLARI
+
+### 1. TypeScript KurallarÄ±
+- âœ… **Strict mode aktif**: `tsconfig.json` strict: true
+- âœ… **Type safety**: `any` kullanma, tip tanÄ±mlarÄ± yap
+- âœ… **Interface Ã¶ncelik**: Type alias yerine interface kullan (geniÅŸletilebilir)
+
+### 2. Component YazÄ±mÄ±
+```typescript
+// âœ… DOÄRU
+export default function CustomerList() {
+  const { data, isLoading } = useData('/api/customers')
+  
+  if (isLoading) return <SkeletonList />
+  
+  return (
+    <div className="space-y-4">
+      {data?.map(customer => (
+        <CustomerCard key={customer.id} customer={customer} />
+      ))}
+    </div>
+  )
+}
+
+// âŒ YANLIÅ
+export default function CustomerList() {
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(true)
+  
+  useEffect(() => {
+    fetch('/api/customers').then(res => {
+      setData(res.json())
+      setLoading(false)
+    })
+  }, [])
+  
+  if (loading) return <div>YÃ¼kleniyor...</div>
+  // ...
+}
+```
+
+### 3. API Endpoint StandartlarÄ±
+```typescript
+// âœ… DOÄRU
+export async function GET(request: Request) {
+  const supabase = getSupabase()
+  const session = await getServerSession() // Auth kontrolÃ¼
+  
+  const { data, error } = await supabase
+    .from('Customer')
+    .select('*')
+    .eq('companyId', session.user.companyId) // RLS kontrolÃ¼
+  
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+  
+  return NextResponse.json(data)
+}
+
+// âŒ YANLIÅ
+export async function GET() {
+  const supabase = createClient(...) // Her seferinde yeni client
+  const { data } = await supabase.from('Customer').select('*') // RLS yok!
+  return Response.json(data)
+}
+```
+
+### 4. Hook StandartlarÄ±
+```typescript
+// âœ… DOÄRU - SWR cache ile
+export function useCustomers() {
+  return useData('/api/customers')
+}
+
+// âŒ YANLIÅ - useState + useEffect
+export function useCustomers() {
+  const [data, setData] = useState([])
+  useEffect(() => {
+    fetch('/api/customers').then(...)
+  }, [])
+  return data
+}
+```
+
+---
+
+## ğŸ” AUTH & GÃœVENLÄ°K KURALLARI
+
+### 1. Authentication
+- âœ… **NextAuth.js** kullan (Supabase adapter ile)
+- âœ… **Session kontrolÃ¼**: Her protected route'da
+- âœ… **Role-based access**: Admin, Sales, SuperAdmin rolleri
+- âœ… **Middleware**: `middleware.ts` ile route protection
+
+### 2. RLS (Row-Level Security)
+- âœ… **Her API endpoint'te**: `companyId` filtresi zorunlu
+- âœ… **SuperAdmin bypass**: Role kontrolÃ¼ ile
+- âœ… **Test RLS**: KullanÄ±cÄ± sadece kendi ÅŸirketini gÃ¶rmeli
+
+### 3. API GÃ¼venliÄŸi
+- âœ… **Auth middleware**: TÃ¼m `/api/*` endpoint'lerinde
+- âœ… **Input validation**: Zod schema ile
+- âœ… **Error handling**: Sensitive bilgi sÄ±zdÄ±rma
+
+---
+
+## ğŸŒ LOCALE KURALLARI
+
+### 1. Ã‡eviri Sistemi
+- âœ… **next-intl** kullan
+- âœ… **TÃ¼m metinler**: `useTranslations()` hook ile
+- âœ… **ActivityLog**: TR/EN otomatik Ã§eviri
+- âœ… **Dil switcher**: Header'da saÄŸ Ã¼st
+
+### 2. Locale DosyalarÄ±
+```json
+// src/locales/tr.json
+{
+  "common": { "save": "Kaydet", "cancel": "Ä°ptal" },
+  "nav": { "dashboard": "GÃ¶sterge Paneli" },
+  "activity": { "create": "oluÅŸturuldu" }
+}
+```
+
+### 3. KullanÄ±m
+```typescript
+// âœ… DOÄRU
+const t = useTranslations('common')
+<Button>{t('save')}</Button>
+
+// âŒ YANLIÅ
+<Button>Kaydet</Button>
+```
+
+---
+
+## ğŸ“Š DASHBOARD & REPORTS KURALLARI
+
+### 1. Dashboard YapÄ±sÄ±
+- âœ… **6 KPI kartÄ±**: AnimatedCounter ile
+- âœ… **5 grafik**: Recharts (Line, Pie, Radar, Doughnut, Kanban)
+- âœ… **Real-time**: 30 saniyede bir refetch
+- âœ… **Cache**: 60 saniye revalidation
+
+### 2. Reports YapÄ±sÄ±
+- âœ… **Filtreleme**: Tarih, kullanÄ±cÄ±, firma, modÃ¼l
+- âœ… **Export**: Excel, PDF, CSV
+- âœ… **Performance**: Pagination, lazy loading
+
+### 3. API Endpoints
+- âœ… `/api/analytics/kpis` - Dashboard KPI'larÄ±
+- âœ… `/api/analytics/reports` - DetaylÄ± raporlar
+- âœ… Cache: 60s revalidation
+
+---
+
+## ğŸ’¼ CRUD MODÃœL KURALLARI
+
+### 1. Standart YapÄ±
+Her modÃ¼l iÃ§in:
+- âœ… `app/[module]/page.tsx` - Liste (DataTable + filtre)
+- âœ… `app/[module]/new/page.tsx` - Yeni kayÄ±t formu
+- âœ… `app/[module]/[id]/page.tsx` - Detay sayfasÄ±
+- âœ… `app/api/[module]/route.ts` - GET, POST
+- âœ… `app/api/[module]/[id]/route.ts` - GET, PUT, DELETE
+- âœ… `components/[module]/[Module]Form.tsx` - Form component
+- âœ… `components/[module]/[Module]Card.tsx` - Kart component
+- âœ… `components/[module]/[Module]List.tsx` - Liste component (CustomerList pattern'i ile)
+
+### 2. CustomerList Pattern (STANDART PATTERN - TÃœM LÄ°STELER Ä°Ã‡Ä°N ZORUNLU!)
+
+Her yeni liste component'i (`[Module]List.tsx`) **MUTLAKA** aÅŸaÄŸÄ±daki pattern'i takip etmeli:
+
+#### 2.1. Veri Ã‡ekme Pattern'i
+```typescript
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useLocale } from 'next-intl'
+import { Plus, Search, Edit, Trash2, Eye } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import [Module]Form from './[Module]Form'
+import SkeletonList from '@/components/skeletons/SkeletonList'
+import Link from 'next/link'
+import { useData } from '@/hooks/useData'
+import { mutate } from 'swr'
+
+interface [Module] {
+  id: string
+  name: string
+  // ... diÄŸer alanlar
+  status: string
+  createdAt: string
+}
+
+export default function [Module]List() {
+  const locale = useLocale()
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('')
+  const [formOpen, setFormOpen] = useState(false)
+  const [selected[Module], setSelected[Module]] = useState<[Module] | null>(null)
+
+  // Debounced search - performans iÃ§in (kullanÄ±cÄ± yazmayÄ± bitirdikten 300ms sonra arama)
+  const [debouncedSearch, setDebouncedSearch] = useState(search)
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 300) // 300ms debounce - her harfte arama yapÄ±lmaz
+    
+    return () => clearTimeout(timer)
+  }, [search])
+
+  // SWR ile veri Ã§ekme (repo kurallarÄ±na uygun) - debounced search kullanÄ±yoruz
+  const params = new URLSearchParams()
+  if (debouncedSearch) params.append('search', debouncedSearch)
+  if (status) params.append('status', status)
+  
+  const apiUrl = `/api/[module]?${params.toString()}`
+  const { data: [module]s = [], isLoading, error, mutate: mutate[Module]s } = useData<[Module][]>(apiUrl, {
+    dedupingInterval: 5000, // 5 saniye cache (daha kÄ±sa - gÃ¼ncellemeler daha hÄ±zlÄ±)
+    revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
+  })
+
+  // ... CRUD handler'lar
+}
+```
+
+#### 2.2. Delete Handler Pattern'i (Optimistic Update)
+```typescript
+const handleDelete = async (id: string, name: string) => {
+  if (!confirm(`${name} [item]Ä±nÄ± silmek istediÄŸinize emin misiniz?`)) {
+    return
+  }
+
+  try {
+    const res = await fetch(`/api/[module]/${id}`, {
+      method: 'DELETE',
+    })
+    
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}))
+      throw new Error(errorData.error || 'Failed to delete [module]')
+    }
+    
+    // Optimistic update - silinen kaydÄ± listeden kaldÄ±r
+    const updated[Module]s = [module]s.filter((item) => item.id !== id)
+    
+    // Cache'i gÃ¼ncelle - yeni listeyi hemen gÃ¶ster
+    await mutate[Module]s(updated[Module]s, { revalidate: false })
+    
+    // TÃ¼m diÄŸer [module] URL'lerini de gÃ¼ncelle
+    await Promise.all([
+      mutate('/api/[module]', updated[Module]s, { revalidate: false }),
+      mutate('/api/[module]?', updated[Module]s, { revalidate: false }),
+      mutate(apiUrl, updated[Module]s, { revalidate: false }),
+    ])
+  } catch (error: any) {
+    console.error('Delete error:', error)
+    alert(error?.message || 'Silme iÅŸlemi baÅŸarÄ±sÄ±z oldu')
+  }
+}
+```
+
+#### 2.3. Form Modal Pattern'i (Optimistic Update)
+```typescript
+<[Module]Form
+  [module]={selected[Module] || undefined}
+  open={formOpen}
+  onClose={handleFormClose}
+  onSuccess={async (saved[Module]: [Module]) => {
+    // Optimistic update - yeni/ gÃ¼ncellenmiÅŸ kaydÄ± hemen cache'e ekle ve UI'da gÃ¶ster
+    // BÃ¶ylece form kapanmadan Ã¶nce [item] listede gÃ¶rÃ¼nÃ¼r
+    
+    let updated[Module]s: [Module][]
+    
+    if (selected[Module]) {
+      // UPDATE: Mevcut kaydÄ± gÃ¼ncelle
+      updated[Module]s = [module]s.map((item) =>
+        item.id === saved[Module].id ? saved[Module] : item
+      )
+    } else {
+      // CREATE: Yeni kaydÄ± listenin baÅŸÄ±na ekle
+      updated[Module]s = [saved[Module], ...[module]s]
+    }
+    
+    // Cache'i gÃ¼ncelle - optimistic update'i hemen uygula ve koru
+    // revalidate: false = background refetch yapmaz, optimistic update korunur
+    await mutate[Module]s(updated[Module]s, { revalidate: false })
+    
+    // TÃ¼m diÄŸer [module] URL'lerini de gÃ¼ncelle (optimistic update)
+    await Promise.all([
+      mutate('/api/[module]', updated[Module]s, { revalidate: false }),
+      mutate('/api/[module]?', updated[Module]s, { revalidate: false }),
+      mutate(apiUrl, updated[Module]s, { revalidate: false }),
+    ])
+  }}
+/>
+```
+
+#### 2.4. Table Actions Pattern'i (GÃ¶rÃ¼ntÃ¼le, DÃ¼zenle, Sil)
+```typescript
+<TableCell className="text-right">
+  <div className="flex justify-end gap-2">
+    <Link href={`/${locale}/[module]/${item.id}`} prefetch={true}>
+      <Button variant="ghost" size="icon">
+        <Eye className="h-4 w-4" />
+      </Button>
+    </Link>
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => handleEdit(item)}
+    >
+      <Edit className="h-4 w-4" />
+    </Button>
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => handleDelete(item.id, item.name)}
+      className="text-red-600 hover:text-red-700"
+    >
+      <Trash2 className="h-4 w-4" />
+    </Button>
+  </div>
+</TableCell>
+```
+
+### 3. Form Component Pattern'i (STANDART PATTERN - TÃœM FORM'LAR Ä°Ã‡Ä°N ZORUNLU!)
+
+Her yeni form component'i (`[Module]Form.tsx`) **MUTLAKA** aÅŸaÄŸÄ±daki pattern'i takip etmeli:
+
+#### 3.1. Form Props Pattern'i
+```typescript
+interface [Module]FormProps {
+  [module]?: any
+  open: boolean
+  onClose: () => void
+  onSuccess?: (saved[Module]: any) => void // Cache gÃ¼ncelleme iÃ§in callback - kaydedilen [item]Ä± parametre olarak geÃ§iyoruz
+}
+```
+
+#### 3.2. useEffect ile Form Population Pattern'i
+```typescript
+export default function [Module]Form({
+  [module],
+  open,
+  onClose,
+  onSuccess,
+}: [Module]FormProps) {
+  const { register, handleSubmit, formState: { errors }, reset } = useForm<[Module]FormData>({
+    resolver: zodResolver([module]Schema),
+    defaultValues: {
+      // ... varsayÄ±lan deÄŸerler
+    },
+  })
+
+  // [Module] prop deÄŸiÅŸtiÄŸinde veya modal aÃ§Ä±ldÄ±ÄŸÄ±nda form'u gÃ¼ncelle
+  useEffect(() => {
+    if (open) {
+      if ([module]) {
+        // DÃ¼zenleme modu - [item] bilgilerini yÃ¼kle
+        reset({
+          name: [module].name || '',
+          // ... diÄŸer alanlar
+          status: [module].status || 'ACTIVE',
+        })
+      } else {
+        // Yeni kayÄ±t modu - form'u temizle
+        reset({
+          // ... varsayÄ±lan deÄŸerler
+        })
+      }
+    }
+  }, [[module], open, reset])
+
+  const onSubmit = async (data: [Module]FormData) => {
+    setLoading(true)
+    try {
+      const url = [module]
+        ? `/api/[module]/${[module].id}`
+        : '/api/[module]'
+      const method = [module] ? 'PUT' : 'POST'
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to save [module]')
+      }
+
+      const saved[Module] = await res.json()
+      
+      // onSuccess callback'i Ã§aÄŸÄ±r - optimistic update iÃ§in
+      if (onSuccess) {
+        onSuccess(saved[Module])
+      }
+      
+      reset()
+      onClose()
+    } catch (error: any) {
+      console.error('Error:', error)
+      alert(error?.message || 'Kaydetme iÅŸlemi baÅŸarÄ±sÄ±z oldu')
+    } finally {
+      setLoading(false)
+    }
+  }
+}
+```
+
+### 4. Detay SayfasÄ± Pattern'i
+Her modÃ¼l iÃ§in detay sayfasÄ± (`app/[module]/[id]/page.tsx`) **MUTLAKA** ÅŸunlarÄ± iÃ§ermeli:
+- âœ… KayÄ±t bilgilerini gÃ¶rÃ¼ntÃ¼leme (read-only)
+- âœ… **DÃ¼zenle** butonu (modal aÃ§Ä±lÄ±r, [Module]Form component'i kullanÄ±r)
+- âœ… **Sil** butonu (confirm dialog ile)
+- âœ… **Geri** butonu (liste sayfasÄ±na dÃ¶n)
+- âœ… SWR ile veri Ã§ekme (`useData` hook)
+- âœ… Skeleton loading state
+
+### 5. Form KurallarÄ±
+- âœ… **react-hook-form** + **Zod** validation
+- âœ… **Optimistic update**: SWR mutate ile (onSuccess callback'te)
+- âœ… **Toast notification**: BaÅŸarÄ±/hata mesajlarÄ± (alert ile, sonra toast'a geÃ§ilebilir)
+- âœ… **Loading state**: Skeleton veya disabled button
+- âœ… **useEffect ile form population**: Edit modunda form'u doldur
+
+### 6. DataTable KurallarÄ±
+- âœ… **Pagination**: 10-20-50 kayÄ±t seÃ§enekleri (gelecekte eklenebilir)
+- âœ… **Filtreleme**: Status, tarih, arama (debounced search)
+- âœ… **SÄ±ralama**: TÄ±klanabilir sÃ¼tun baÅŸlÄ±klarÄ± (gelecekte eklenebilir)
+- âœ… **Mobile**: Scrollable table
+- âœ… **Actions**: Her satÄ±rda GÃ¶rÃ¼ntÃ¼le (Eye), DÃ¼zenle (Edit), Sil (Trash2) butonlarÄ±
+
+### 7. Otomasyon KurallarÄ±
+- âœ… **Quote ACCEPTED** â†’ Invoice oluÅŸtur + stok dÃ¼ÅŸ + ActivityLog
+- âœ… **Invoice PAID** â†’ Finance kaydÄ± oluÅŸtur + ActivityLog
+- âœ… **Shipment DELIVERED** â†’ ActivityLog yaz
+- âœ… **TÃ¼m CRUD** â†’ ActivityLog'a meta JSON ile kaydet
+
+---
+
+## ğŸ“„ PDF KURALLARI
+
+### 1. PDF Generator
+- âœ… **@react-pdf/renderer** kullan (Edge Runtime uyumlu)
+- âœ… **Edge Runtime**: `/api/pdf/*/route.ts` dosyalarÄ±nda
+- âœ… **Template componentleri**: `components/pdf/QuotePDF.tsx`, `InvoicePDF.tsx`
+
+### 2. PDF Ä°Ã§erik
+- âœ… **Åirket logosu**: Supabase Storage'dan
+- âœ… **MÃ¼ÅŸteri bilgileri**: Tablodan Ã§ek
+- âœ… **ÃœrÃ¼n listesi**: Tablo formatÄ±nda
+- âœ… **KDV hesaplama**: Otomatik
+- âœ… **Ä°mza alanÄ±**: Footer'da
+
+### 3. PDF Entegrasyonu
+- âœ… **Download butonu**: Detay sayfalarÄ±nda
+- âœ… **Preview**: Browser'da aÃ§ma Ã¶zelliÄŸi
+- âœ… **API endpoint**: `/api/pdf/quote/[id]`, `/api/pdf/invoice/[id]`
+
+---
+
+## ğŸ“± MOBÄ°L KURALLARI
+
+### 1. Responsive Breakpoints
+- âœ… **Mobile**: < 768px (tek sÃ¼tun, hamburger menu)
+- âœ… **Tablet**: 768px - 1024px (2 sÃ¼tun)
+- âœ… **Desktop**: > 1024px (full layout)
+
+### 2. Touch Optimization
+- âœ… **Button size**: Min 44x44px
+- âœ… **Touch targets**: Spacing yeterli
+- âœ… **Swipe gestures**: Kanban drag & drop
+
+### 3. Mobile Navigation
+- âœ… **Hamburger menu**: Sidebar yerine
+- âœ… **Bottom nav**: Mobile'da (opsiyonel)
+- âœ… **Animations**: Framer Motion smooth transitions
+
+---
+
+## ğŸ§ª TEST KURALLARI
+
+### 1. Test YapÄ±sÄ±
+- âœ… **Jest**: Unit testler (hooks, utils)
+- âœ… **Playwright**: E2E testler (login â†’ dashboard â†’ CRUD)
+- âœ… **Integration**: API endpoint testleri
+
+### 2. Test Coverage
+- âœ… **CRUD operations**: Create, Read, Update, Delete
+- âœ… **RLS**: Company isolation test
+- âœ… **Performance**: API response time < 200ms
+
+### 3. Pre-Deploy Test
+- âœ… **Lint**: `npm run lint`
+- âœ… **Build**: `npm run build`
+- âœ… **Test**: `npm test`
+- âœ… **Pipeline**: `build && test && lint`
+
+---
+
+## ğŸš€ DEPLOY KURALLARI
+
+### 1. Vercel Deploy
+- âœ… **Environment variables**: Supabase URL, keys
+- âœ… **Build command**: `next build`
+- âœ… **Output directory**: `.next`
+
+### 2. Database Migration
+- âœ… **Supabase CLI**: `supabase db push`
+- âœ… **Seed data**: `supabase db seed`
+- âœ… **RLS policies**: Migration dosyalarÄ±nda
+
+### 3. Post-Deploy
+- âœ… **Health check**: `/api/health` endpoint
+- âœ… **SSL**: Vercel otomatik
+- âœ… **Monitoring**: Performance tracking
+
+---
+
+## ğŸ“ DOKÃœMANTASYON KURALLARI
+
+### 1. PRD.md
+- âœ… **Performance Requirements**: Hedef metrikler
+- âœ… **Teknik Spesifikasyonlar**: Mimari detaylar
+- âœ… **Cache Strategy**: SWR, ISR, Edge Runtime
+
+### 2. TODO.md
+- âœ… **Faz bazlÄ± gÃ¶rev listesi**: 21 faz
+- âœ… **Ä°lerleme takibi**: % tamamlanma
+- âœ… **Test checklist**: Her modÃ¼l iÃ§in
+
+### 3. README.md
+- âœ… **Kurulum**: Step-by-step
+- âœ… **Environment variables**: Ã–rnek .env
+- âœ… **KullanÄ±m**: API endpoint'leri
+
+---
+
+## âš ï¸ YAPILMAYACAKLAR
+
+### 1. Performans
+- âŒ **YÃ¼kleniyor ekranÄ± kullanma**: Skeleton gÃ¶ster
+- âŒ **Her seferinde yeni Supabase client**: Singleton kullan
+- âŒ **Hardcoded text**: Locale kullan
+- âŒ **Client-side data fetching**: Server Components Ã¶ncelik
+
+### 2. Kod
+- âŒ **`any` type kullanma**: Tip tanÄ±mlarÄ± yap
+- âŒ **Inline styles**: Tailwind CSS kullan
+- âŒ **Console.log production'da**: Error logging kullan
+- âŒ **Duplicated code**: Component'leri tekrar kullan
+
+### 3. GÃ¼venlik
+- âŒ **RLS bypass**: SuperAdmin dÄ±ÅŸÄ±nda
+- âŒ **Sensitive data loglama**: Error mesajlarÄ±nda gizle
+- âŒ **Auth kontrolÃ¼ atlama**: Her API endpoint'te
+
+---
+
+## âœ… CHECKLIST - Her Yeni Ã–zellik Ä°Ã§in
+
+### Performans
+- [ ] SWR cache kullanÄ±ldÄ± mÄ±?
+- [ ] Skeleton component gÃ¶steriliyor mu?
+- [ ] Prefetching aktif mi?
+- [ ] Optimistic update var mÄ±?
+
+### Tema
+- [ ] Premium renk paleti kullanÄ±ldÄ± mÄ±?
+- [ ] Animasyonlar smooth mu?
+- [ ] Responsive test edildi mi?
+
+### GÃ¼venlik
+- [ ] Auth kontrolÃ¼ yapÄ±ldÄ± mÄ±?
+- [ ] RLS kontrolÃ¼ yapÄ±ldÄ± mÄ±?
+- [ ] Input validation var mÄ±?
+
+### Test
+- [ ] CRUD iÅŸlemleri test edildi mi?
+- [ ] API endpoint'ler Ã§alÄ±ÅŸÄ±yor mu?
+- [ ] YÃ¶nlendirmeler doÄŸru mu?
+
+### Locale
+- [ ] TÃ¼m metinler Ã§evrilebilir mi?
+- [ ] ActivityLog TR/EN desteÄŸi var mÄ±?
+
+---
+
+## ğŸ¯ PERFORMANS HEDEFLERÄ° (MUTLAKA SAÄLANMALI!)
+
+| Metrik | Hedef | Ã–lÃ§Ã¼m |
+|--------|-------|-------|
+| Sekme geÃ§iÅŸi | <300ms | Link click â†’ render |
+| Dashboard ilk render | <500ms | Page load â†’ visible |
+| API response (cache hit) | <200ms | Request â†’ response |
+| API response (cache miss) | <1000ms | Request â†’ response |
+| Skeleton gÃ¶rÃ¼nÃ¼m | <100ms | Loading â†’ skeleton |
+| Lighthouse Performance | >95 | Performance score |
+
+---
+
+## ğŸ”„ GÃœNCELLEME NOTLARI
+
+- **Versiyon**: 1.0.0
+- **Son GÃ¼ncelleme**: 2024
+- **PRD Uyumu**: PRD.md ile birebir uyumlu
+- **TODO Uyumu**: TODO.md'deki 21 faz ile uyumlu
+
+---
+
+**Ã–NEMLÄ°**: Bu kurallara gÃ¶re kod yaz. Performans Ã¶ncelikli, premium tema tutarlÄ±, gÃ¼venlik kontrolÃ¼ her yerde!
+
+
+
+
+## ğŸ“‹ Proje TanÄ±mÄ±
+
+Next.js 15 (App Router, Edge Runtime) tabanlÄ± Supabase destekli CRM sistemi.
+- Performans odaklÄ± (<300ms sekme geÃ§iÅŸi, <500ms dashboard)
+- Multi-tenant (Ã§oklu kurum) yapÄ±sÄ±
+- TR/EN locale desteÄŸi
+- Premium UI temasÄ±
+
+---
+
+## âš¡ PERFORMANS KURALLARI (Ã–NCE HIZ!)
+
+### 1. Veri Ã‡ekme Stratejisi
+- âœ… **Her zaman SWR cache kullan** (`useData` hook)
+- âœ… **Server Components Ã¶ncelik** (client component sadece gerekli yerlerde)
+- âœ… **Suspense boundaries kullan** (yÃ¼kleniyor ekranÄ± YOK, skeleton gÃ¶ster)
+- âœ… **Prefetching aktif** (Link hover'da prefetch)
+- âœ… **Optimistic updates** (mutasyonlar anÄ±nda UI'da gÃ¶rÃ¼nÃ¼r)
+
+### 2. API Layer KurallarÄ±
+- âœ… **Ortak `fetchData()` fonksiyonu kullan** (`lib/api.ts`)
+- âœ… **Retry policy**: Exponential backoff (1s, 2s, 4s, max 3 deneme)
+- âœ… **Cache strategy**: `no-store` + `revalidate: 60` saniye
+- âœ… **Error handling**: Fallback UI gÃ¶ster, user-friendly mesajlar
+
+### 3. Supabase KullanÄ±mÄ±
+- âœ… **Singleton client** (`getSupabase()`) - connection pooling
+- âœ… **RLS kontrolÃ¼**: Her query'de `companyId` filtresi
+- âœ… **Index kullanÄ±mÄ±**: `status`, `companyId` bazlÄ± sorgular
+- âœ… **Connection reuse**: Tek instance kullan, her seferinde yeni client oluÅŸturma
+
+### 4. Component PerformansÄ±
+- âœ… **Lazy loading**: Grafik ve modal componentleri `dynamic import`
+- âœ… **Memoization**: `useMemo`, `useCallback` kullan (gerektiÄŸinde)
+- âœ… **Code splitting**: Route bazlÄ± chunk'lar
+- âœ… **Image optimization**: `next/image` kullan (product fotoÄŸraflarÄ± iÃ§in)
+
+### 5. Sayfa GeÃ§iÅŸleri
+- âœ… **Framer Motion**: 0.3s fade transition (max)
+- âœ… **Loading states kaldÄ±r**: Skeleton gÃ¶ster, yÃ¼kleniyor ekranÄ± YOK
+- âœ… **Route prefetch**: Link component'lerinde `prefetch={true}`
+- âœ… **Instant navigation**: Cache'de varsa anÄ±nda render
+
+---
+
+## ğŸ¨ TEMA & UI KURALLARI
+
+### 1. Premium Tema Renkleri
+```typescript
+Primary: #6366f1 (Indigo-500)
+Secondary: #8b5cf6 (Purple-500)
+Accent: #ec4899 (Pink-500)
+Background: #ffffff (Beyaz)
+Surface: #f8fafc (Slate-50)
+```
+
+### 2. Component StandartlarÄ±
+- âœ… **shadcn/ui componentleri kullan** (Button, Input, Card, Table, Dialog, Tabs)
+- âœ… **TutarlÄ± stil**: TÃ¼m sayfalarda aynÄ± renk paleti
+- âœ… **Animasyonlar**: Framer Motion ile smooth transitions
+- âœ… **Responsive**: Mobile-first yaklaÅŸÄ±m
+
+### 3. UI Component YapÄ±sÄ±
+```
+components/
+â”œâ”€â”€ ui/           # shadcn/ui components
+â”œâ”€â”€ layout/       # Sidebar, Header, Breadcrumbs
+â”œâ”€â”€ skeletons/    # Loading skeletons
+â”œâ”€â”€ charts/       # Recharts wrappers
+â””â”€â”€ [module]/     # Module-specific components
+```
+
+### 4. Premium UI Elementleri
+- âœ… **GradientCard**: Radial gradient + blur background
+- âœ… **AnimatedCounter**: KPI kartlarÄ± iÃ§in sayÄ± animasyonu
+- âœ… **Neumorphism**: SeÃ§ili elementlerde kullan
+- âœ… **Shadow consistency**: `shadow-card`, `shadow-card-hover`
+
+---
+
+## ğŸ—„ï¸ VERÄ°TABANI KURALLARI
+
+### 1. Supabase TablolarÄ±
+```sql
+- Company (multi-tenant root)
+- User (Company iliÅŸkisi)
+- Customer (Company iliÅŸkisi)
+- Deal (Customer, Company iliÅŸkileri)
+- Quote (Deal, Company iliÅŸkileri)
+- Invoice (Quote, Company iliÅŸkileri)
+- Product (Company iliÅŸkisi)
+- Finance (Company iliÅŸkisi)
+- Task (Company, User iliÅŸkileri)
+- Ticket (Customer, Company iliÅŸkileri)
+- Shipment (Invoice, Company iliÅŸkileri)
+- ActivityLog (User, Company iliÅŸkileri, meta JSON)
+```
+
+### 2. Foreign Key KurallarÄ±
+- âœ… **companyId zorunlu**: Her tabloda (multi-tenant)
+- âœ… **ON DELETE CASCADE**: Company silinince tÃ¼m veriler silinir
+- âœ… **Referential integrity**: Foreign key constraints aktif
+
+### 3. RLS (Row-Level Security)
+- âœ… **Company isolation**: KullanÄ±cÄ± sadece kendi `companyId`'sini gÃ¶rÃ¼r
+- âœ… **SUPER_ADMIN bypass**: SuperAdmin tÃ¼m ÅŸirketleri gÃ¶rebilir
+- âœ… **Policy test**: Her yeni tablo iÃ§in RLS testi yap
+
+### 4. Index Stratejisi
+```sql
+CREATE INDEX idx_quote_status ON "Quote"("status");
+CREATE INDEX idx_invoice_status ON "Invoice"("status");
+CREATE INDEX idx_activitylog_company ON "ActivityLog"("companyId");
+CREATE INDEX idx_customer_company ON "Customer"("companyId");
+CREATE INDEX idx_deal_company ON "Deal"("companyId");
+CREATE INDEX idx_user_company ON "User"("companyId");
+```
+
+---
+
+## ğŸ“ DOSYA YAPISI KURALLARI
+
+### 1. App Router YapÄ±sÄ±
+```
+src/app/
+â”œâ”€â”€ (auth)/              # Auth routes
+â”‚   â””â”€â”€ login/
+â”œâ”€â”€ dashboard/           # Dashboard
+â”œâ”€â”€ [module]/            # CRUD modules
+â”‚   â”œâ”€â”€ page.tsx        # List
+â”‚   â”œâ”€â”€ new/            # Create form
+â”‚   â””â”€â”€ [id]/           # Detail page
+â”œâ”€â”€ api/
+â”‚   â”œâ”€â”€ [module]/       # CRUD endpoints
+â”‚   â””â”€â”€ analytics/      # Dashboard/Reports endpoints
+â””â”€â”€ layout.tsx          # Root layout
+```
+
+### 2. Component YapÄ±sÄ±
+```
+src/components/
+â”œâ”€â”€ ui/                  # shadcn/ui
+â”œâ”€â”€ layout/              # Layout components
+â”œâ”€â”€ skeletons/           # Loading skeletons
+â”œâ”€â”€ charts/              # Recharts wrappers
+â””â”€â”€ [module]/            # Module components
+    â”œâ”€â”€ [Module]Form.tsx
+    â”œâ”€â”€ [Module]Card.tsx
+    â””â”€â”€ [Module]List.tsx
+```
+
+### 3. Lib YapÄ±sÄ±
+```
+src/lib/
+â”œâ”€â”€ supabase.ts         # Supabase client
+â”œâ”€â”€ api.ts              # API layer
+â”œâ”€â”€ utils.ts            # Utilities
+â”œâ”€â”€ i18n.ts             # Locale config
+â””â”€â”€ hooks/              # Custom hooks
+```
+
+---
+
+## ğŸ’» KODLAMA STANDARTLARI
+
+### 1. TypeScript KurallarÄ±
+- âœ… **Strict mode aktif**: `tsconfig.json` strict: true
+- âœ… **Type safety**: `any` kullanma, tip tanÄ±mlarÄ± yap
+- âœ… **Interface Ã¶ncelik**: Type alias yerine interface kullan (geniÅŸletilebilir)
+
+### 2. Component YazÄ±mÄ±
+```typescript
+// âœ… DOÄRU
+export default function CustomerList() {
+  const { data, isLoading } = useData('/api/customers')
+  
+  if (isLoading) return <SkeletonList />
+  
+  return (
+    <div className="space-y-4">
+      {data?.map(customer => (
+        <CustomerCard key={customer.id} customer={customer} />
+      ))}
+    </div>
+  )
+}
+
+// âŒ YANLIÅ
+export default function CustomerList() {
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(true)
+  
+  useEffect(() => {
+    fetch('/api/customers').then(res => {
+      setData(res.json())
+      setLoading(false)
+    })
+  }, [])
+  
+  if (loading) return <div>YÃ¼kleniyor...</div>
+  // ...
+}
+```
+
+### 3. API Endpoint StandartlarÄ±
+```typescript
+// âœ… DOÄRU
+export async function GET(request: Request) {
+  const supabase = getSupabase()
+  const session = await getServerSession() // Auth kontrolÃ¼
+  
+  const { data, error } = await supabase
+    .from('Customer')
+    .select('*')
+    .eq('companyId', session.user.companyId) // RLS kontrolÃ¼
+  
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+  
+  return NextResponse.json(data)
+}
+
+// âŒ YANLIÅ
+export async function GET() {
+  const supabase = createClient(...) // Her seferinde yeni client
+  const { data } = await supabase.from('Customer').select('*') // RLS yok!
+  return Response.json(data)
+}
+```
+
+### 4. Hook StandartlarÄ±
+```typescript
+// âœ… DOÄRU - SWR cache ile
+export function useCustomers() {
+  return useData('/api/customers')
+}
+
+// âŒ YANLIÅ - useState + useEffect
+export function useCustomers() {
+  const [data, setData] = useState([])
+  useEffect(() => {
+    fetch('/api/customers').then(...)
+  }, [])
+  return data
+}
+```
+
+---
+
+## ğŸ” AUTH & GÃœVENLÄ°K KURALLARI
+
+### 1. Authentication
+- âœ… **NextAuth.js** kullan (Supabase adapter ile)
+- âœ… **Session kontrolÃ¼**: Her protected route'da
+- âœ… **Role-based access**: Admin, Sales, SuperAdmin rolleri
+- âœ… **Middleware**: `middleware.ts` ile route protection
+
+### 2. RLS (Row-Level Security)
+- âœ… **Her API endpoint'te**: `companyId` filtresi zorunlu
+- âœ… **SuperAdmin bypass**: Role kontrolÃ¼ ile
+- âœ… **Test RLS**: KullanÄ±cÄ± sadece kendi ÅŸirketini gÃ¶rmeli
+
+### 3. API GÃ¼venliÄŸi
+- âœ… **Auth middleware**: TÃ¼m `/api/*` endpoint'lerinde
+- âœ… **Input validation**: Zod schema ile
+- âœ… **Error handling**: Sensitive bilgi sÄ±zdÄ±rma
+
+---
+
+## ğŸŒ LOCALE KURALLARI
+
+### 1. Ã‡eviri Sistemi
+- âœ… **next-intl** kullan
+- âœ… **TÃ¼m metinler**: `useTranslations()` hook ile
+- âœ… **ActivityLog**: TR/EN otomatik Ã§eviri
+- âœ… **Dil switcher**: Header'da saÄŸ Ã¼st
+
+### 2. Locale DosyalarÄ±
+```json
+// src/locales/tr.json
+{
+  "common": { "save": "Kaydet", "cancel": "Ä°ptal" },
+  "nav": { "dashboard": "GÃ¶sterge Paneli" },
+  "activity": { "create": "oluÅŸturuldu" }
+}
+```
+
+### 3. KullanÄ±m
+```typescript
+// âœ… DOÄRU
+const t = useTranslations('common')
+<Button>{t('save')}</Button>
+
+// âŒ YANLIÅ
+<Button>Kaydet</Button>
+```
+
+---
+
+## ğŸ“Š DASHBOARD & REPORTS KURALLARI
+
+### 1. Dashboard YapÄ±sÄ±
+- âœ… **6 KPI kartÄ±**: AnimatedCounter ile
+- âœ… **5 grafik**: Recharts (Line, Pie, Radar, Doughnut, Kanban)
+- âœ… **Real-time**: 30 saniyede bir refetch
+- âœ… **Cache**: 60 saniye revalidation
+
+### 2. Reports YapÄ±sÄ±
+- âœ… **Filtreleme**: Tarih, kullanÄ±cÄ±, firma, modÃ¼l
+- âœ… **Export**: Excel, PDF, CSV
+- âœ… **Performance**: Pagination, lazy loading
+
+### 3. API Endpoints
+- âœ… `/api/analytics/kpis` - Dashboard KPI'larÄ±
+- âœ… `/api/analytics/reports` - DetaylÄ± raporlar
+- âœ… Cache: 60s revalidation
+
+---
+
+## ğŸ’¼ CRUD MODÃœL KURALLARI
+
+### 1. Standart YapÄ±
+Her modÃ¼l iÃ§in:
+- âœ… `app/[module]/page.tsx` - Liste (DataTable + filtre)
+- âœ… `app/[module]/new/page.tsx` - Yeni kayÄ±t formu
+- âœ… `app/[module]/[id]/page.tsx` - Detay sayfasÄ±
+- âœ… `app/api/[module]/route.ts` - GET, POST
+- âœ… `app/api/[module]/[id]/route.ts` - GET, PUT, DELETE
+- âœ… `components/[module]/[Module]Form.tsx` - Form component
+- âœ… `components/[module]/[Module]Card.tsx` - Kart component
+- âœ… `components/[module]/[Module]List.tsx` - Liste component (CustomerList pattern'i ile)
+
+### 2. CustomerList Pattern (STANDART PATTERN - TÃœM LÄ°STELER Ä°Ã‡Ä°N ZORUNLU!)
+
+Her yeni liste component'i (`[Module]List.tsx`) **MUTLAKA** aÅŸaÄŸÄ±daki pattern'i takip etmeli:
+
+#### 2.1. Veri Ã‡ekme Pattern'i
+```typescript
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useLocale } from 'next-intl'
+import { Plus, Search, Edit, Trash2, Eye } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import [Module]Form from './[Module]Form'
+import SkeletonList from '@/components/skeletons/SkeletonList'
+import Link from 'next/link'
+import { useData } from '@/hooks/useData'
+import { mutate } from 'swr'
+
+interface [Module] {
+  id: string
+  name: string
+  // ... diÄŸer alanlar
+  status: string
+  createdAt: string
+}
+
+export default function [Module]List() {
+  const locale = useLocale()
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('')
+  const [formOpen, setFormOpen] = useState(false)
+  const [selected[Module], setSelected[Module]] = useState<[Module] | null>(null)
+
+  // Debounced search - performans iÃ§in (kullanÄ±cÄ± yazmayÄ± bitirdikten 300ms sonra arama)
+  const [debouncedSearch, setDebouncedSearch] = useState(search)
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 300) // 300ms debounce - her harfte arama yapÄ±lmaz
+    
+    return () => clearTimeout(timer)
+  }, [search])
+
+  // SWR ile veri Ã§ekme (repo kurallarÄ±na uygun) - debounced search kullanÄ±yoruz
+  const params = new URLSearchParams()
+  if (debouncedSearch) params.append('search', debouncedSearch)
+  if (status) params.append('status', status)
+  
+  const apiUrl = `/api/[module]?${params.toString()}`
+  const { data: [module]s = [], isLoading, error, mutate: mutate[Module]s } = useData<[Module][]>(apiUrl, {
+    dedupingInterval: 5000, // 5 saniye cache (daha kÄ±sa - gÃ¼ncellemeler daha hÄ±zlÄ±)
+    revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
+  })
+
+  // ... CRUD handler'lar
+}
+```
+
+#### 2.2. Delete Handler Pattern'i (Optimistic Update)
+```typescript
+const handleDelete = async (id: string, name: string) => {
+  if (!confirm(`${name} [item]Ä±nÄ± silmek istediÄŸinize emin misiniz?`)) {
+    return
+  }
+
+  try {
+    const res = await fetch(`/api/[module]/${id}`, {
+      method: 'DELETE',
+    })
+    
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}))
+      throw new Error(errorData.error || 'Failed to delete [module]')
+    }
+    
+    // Optimistic update - silinen kaydÄ± listeden kaldÄ±r
+    const updated[Module]s = [module]s.filter((item) => item.id !== id)
+    
+    // Cache'i gÃ¼ncelle - yeni listeyi hemen gÃ¶ster
+    await mutate[Module]s(updated[Module]s, { revalidate: false })
+    
+    // TÃ¼m diÄŸer [module] URL'lerini de gÃ¼ncelle
+    await Promise.all([
+      mutate('/api/[module]', updated[Module]s, { revalidate: false }),
+      mutate('/api/[module]?', updated[Module]s, { revalidate: false }),
+      mutate(apiUrl, updated[Module]s, { revalidate: false }),
+    ])
+  } catch (error: any) {
+    console.error('Delete error:', error)
+    alert(error?.message || 'Silme iÅŸlemi baÅŸarÄ±sÄ±z oldu')
+  }
+}
+```
+
+#### 2.3. Form Modal Pattern'i (Optimistic Update)
+```typescript
+<[Module]Form
+  [module]={selected[Module] || undefined}
+  open={formOpen}
+  onClose={handleFormClose}
+  onSuccess={async (saved[Module]: [Module]) => {
+    // Optimistic update - yeni/ gÃ¼ncellenmiÅŸ kaydÄ± hemen cache'e ekle ve UI'da gÃ¶ster
+    // BÃ¶ylece form kapanmadan Ã¶nce [item] listede gÃ¶rÃ¼nÃ¼r
+    
+    let updated[Module]s: [Module][]
+    
+    if (selected[Module]) {
+      // UPDATE: Mevcut kaydÄ± gÃ¼ncelle
+      updated[Module]s = [module]s.map((item) =>
+        item.id === saved[Module].id ? saved[Module] : item
+      )
+    } else {
+      // CREATE: Yeni kaydÄ± listenin baÅŸÄ±na ekle
+      updated[Module]s = [saved[Module], ...[module]s]
+    }
+    
+    // Cache'i gÃ¼ncelle - optimistic update'i hemen uygula ve koru
+    // revalidate: false = background refetch yapmaz, optimistic update korunur
+    await mutate[Module]s(updated[Module]s, { revalidate: false })
+    
+    // TÃ¼m diÄŸer [module] URL'lerini de gÃ¼ncelle (optimistic update)
+    await Promise.all([
+      mutate('/api/[module]', updated[Module]s, { revalidate: false }),
+      mutate('/api/[module]?', updated[Module]s, { revalidate: false }),
+      mutate(apiUrl, updated[Module]s, { revalidate: false }),
+    ])
+  }}
+/>
+```
+
+#### 2.4. Table Actions Pattern'i (GÃ¶rÃ¼ntÃ¼le, DÃ¼zenle, Sil)
+```typescript
+<TableCell className="text-right">
+  <div className="flex justify-end gap-2">
+    <Link href={`/${locale}/[module]/${item.id}`} prefetch={true}>
+      <Button variant="ghost" size="icon">
+        <Eye className="h-4 w-4" />
+      </Button>
+    </Link>
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => handleEdit(item)}
+    >
+      <Edit className="h-4 w-4" />
+    </Button>
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => handleDelete(item.id, item.name)}
+      className="text-red-600 hover:text-red-700"
+    >
+      <Trash2 className="h-4 w-4" />
+    </Button>
+  </div>
+</TableCell>
+```
+
+### 3. Form Component Pattern'i (STANDART PATTERN - TÃœM FORM'LAR Ä°Ã‡Ä°N ZORUNLU!)
+
+Her yeni form component'i (`[Module]Form.tsx`) **MUTLAKA** aÅŸaÄŸÄ±daki pattern'i takip etmeli:
+
+#### 3.1. Form Props Pattern'i
+```typescript
+interface [Module]FormProps {
+  [module]?: any
+  open: boolean
+  onClose: () => void
+  onSuccess?: (saved[Module]: any) => void // Cache gÃ¼ncelleme iÃ§in callback - kaydedilen [item]Ä± parametre olarak geÃ§iyoruz
+}
+```
+
+#### 3.2. useEffect ile Form Population Pattern'i
+```typescript
+export default function [Module]Form({
+  [module],
+  open,
+  onClose,
+  onSuccess,
+}: [Module]FormProps) {
+  const { register, handleSubmit, formState: { errors }, reset } = useForm<[Module]FormData>({
+    resolver: zodResolver([module]Schema),
+    defaultValues: {
+      // ... varsayÄ±lan deÄŸerler
+    },
+  })
+
+  // [Module] prop deÄŸiÅŸtiÄŸinde veya modal aÃ§Ä±ldÄ±ÄŸÄ±nda form'u gÃ¼ncelle
+  useEffect(() => {
+    if (open) {
+      if ([module]) {
+        // DÃ¼zenleme modu - [item] bilgilerini yÃ¼kle
+        reset({
+          name: [module].name || '',
+          // ... diÄŸer alanlar
+          status: [module].status || 'ACTIVE',
+        })
+      } else {
+        // Yeni kayÄ±t modu - form'u temizle
+        reset({
+          // ... varsayÄ±lan deÄŸerler
+        })
+      }
+    }
+  }, [[module], open, reset])
+
+  const onSubmit = async (data: [Module]FormData) => {
+    setLoading(true)
+    try {
+      const url = [module]
+        ? `/api/[module]/${[module].id}`
+        : '/api/[module]'
+      const method = [module] ? 'PUT' : 'POST'
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to save [module]')
+      }
+
+      const saved[Module] = await res.json()
+      
+      // onSuccess callback'i Ã§aÄŸÄ±r - optimistic update iÃ§in
+      if (onSuccess) {
+        onSuccess(saved[Module])
+      }
+      
+      reset()
+      onClose()
+    } catch (error: any) {
+      console.error('Error:', error)
+      alert(error?.message || 'Kaydetme iÅŸlemi baÅŸarÄ±sÄ±z oldu')
+    } finally {
+      setLoading(false)
+    }
+  }
+}
+```
+
+### 4. Detay SayfasÄ± Pattern'i
+Her modÃ¼l iÃ§in detay sayfasÄ± (`app/[module]/[id]/page.tsx`) **MUTLAKA** ÅŸunlarÄ± iÃ§ermeli:
+- âœ… KayÄ±t bilgilerini gÃ¶rÃ¼ntÃ¼leme (read-only)
+- âœ… **DÃ¼zenle** butonu (modal aÃ§Ä±lÄ±r, [Module]Form component'i kullanÄ±r)
+- âœ… **Sil** butonu (confirm dialog ile)
+- âœ… **Geri** butonu (liste sayfasÄ±na dÃ¶n)
+- âœ… SWR ile veri Ã§ekme (`useData` hook)
+- âœ… Skeleton loading state
+
+### 5. Form KurallarÄ±
+- âœ… **react-hook-form** + **Zod** validation
+- âœ… **Optimistic update**: SWR mutate ile (onSuccess callback'te)
+- âœ… **Toast notification**: BaÅŸarÄ±/hata mesajlarÄ± (alert ile, sonra toast'a geÃ§ilebilir)
+- âœ… **Loading state**: Skeleton veya disabled button
+- âœ… **useEffect ile form population**: Edit modunda form'u doldur
+
+### 6. DataTable KurallarÄ±
+- âœ… **Pagination**: 10-20-50 kayÄ±t seÃ§enekleri (gelecekte eklenebilir)
+- âœ… **Filtreleme**: Status, tarih, arama (debounced search)
+- âœ… **SÄ±ralama**: TÄ±klanabilir sÃ¼tun baÅŸlÄ±klarÄ± (gelecekte eklenebilir)
+- âœ… **Mobile**: Scrollable table
+- âœ… **Actions**: Her satÄ±rda GÃ¶rÃ¼ntÃ¼le (Eye), DÃ¼zenle (Edit), Sil (Trash2) butonlarÄ±
+
+### 7. Otomasyon KurallarÄ±
+- âœ… **Quote ACCEPTED** â†’ Invoice oluÅŸtur + stok dÃ¼ÅŸ + ActivityLog
+- âœ… **Invoice PAID** â†’ Finance kaydÄ± oluÅŸtur + ActivityLog
+- âœ… **Shipment DELIVERED** â†’ ActivityLog yaz
+- âœ… **TÃ¼m CRUD** â†’ ActivityLog'a meta JSON ile kaydet
+
+---
+
+## ğŸ“„ PDF KURALLARI
+
+### 1. PDF Generator
+- âœ… **@react-pdf/renderer** kullan (Edge Runtime uyumlu)
+- âœ… **Edge Runtime**: `/api/pdf/*/route.ts` dosyalarÄ±nda
+- âœ… **Template componentleri**: `components/pdf/QuotePDF.tsx`, `InvoicePDF.tsx`
+
+### 2. PDF Ä°Ã§erik
+- âœ… **Åirket logosu**: Supabase Storage'dan
+- âœ… **MÃ¼ÅŸteri bilgileri**: Tablodan Ã§ek
+- âœ… **ÃœrÃ¼n listesi**: Tablo formatÄ±nda
+- âœ… **KDV hesaplama**: Otomatik
+- âœ… **Ä°mza alanÄ±**: Footer'da
+
+### 3. PDF Entegrasyonu
+- âœ… **Download butonu**: Detay sayfalarÄ±nda
+- âœ… **Preview**: Browser'da aÃ§ma Ã¶zelliÄŸi
+- âœ… **API endpoint**: `/api/pdf/quote/[id]`, `/api/pdf/invoice/[id]`
+
+---
+
+## ğŸ“± MOBÄ°L KURALLARI
+
+### 1. Responsive Breakpoints
+- âœ… **Mobile**: < 768px (tek sÃ¼tun, hamburger menu)
+- âœ… **Tablet**: 768px - 1024px (2 sÃ¼tun)
+- âœ… **Desktop**: > 1024px (full layout)
+
+### 2. Touch Optimization
+- âœ… **Button size**: Min 44x44px
+- âœ… **Touch targets**: Spacing yeterli
+- âœ… **Swipe gestures**: Kanban drag & drop
+
+### 3. Mobile Navigation
+- âœ… **Hamburger menu**: Sidebar yerine
+- âœ… **Bottom nav**: Mobile'da (opsiyonel)
+- âœ… **Animations**: Framer Motion smooth transitions
+
+---
+
+## ğŸ§ª TEST KURALLARI
+
+### 1. Test YapÄ±sÄ±
+- âœ… **Jest**: Unit testler (hooks, utils)
+- âœ… **Playwright**: E2E testler (login â†’ dashboard â†’ CRUD)
+- âœ… **Integration**: API endpoint testleri
+
+### 2. Test Coverage
+- âœ… **CRUD operations**: Create, Read, Update, Delete
+- âœ… **RLS**: Company isolation test
+- âœ… **Performance**: API response time < 200ms
+
+### 3. Pre-Deploy Test
+- âœ… **Lint**: `npm run lint`
+- âœ… **Build**: `npm run build`
+- âœ… **Test**: `npm test`
+- âœ… **Pipeline**: `build && test && lint`
+
+---
+
+## ğŸš€ DEPLOY KURALLARI
+
+### 1. Vercel Deploy
+- âœ… **Environment variables**: Supabase URL, keys
+- âœ… **Build command**: `next build`
+- âœ… **Output directory**: `.next`
+
+### 2. Database Migration
+- âœ… **Supabase CLI**: `supabase db push`
+- âœ… **Seed data**: `supabase db seed`
+- âœ… **RLS policies**: Migration dosyalarÄ±nda
+
+### 3. Post-Deploy
+- âœ… **Health check**: `/api/health` endpoint
+- âœ… **SSL**: Vercel otomatik
+- âœ… **Monitoring**: Performance tracking
+
+---
+
+## ğŸ“ DOKÃœMANTASYON KURALLARI
+
+### 1. PRD.md
+- âœ… **Performance Requirements**: Hedef metrikler
+- âœ… **Teknik Spesifikasyonlar**: Mimari detaylar
+- âœ… **Cache Strategy**: SWR, ISR, Edge Runtime
+
+### 2. TODO.md
+- âœ… **Faz bazlÄ± gÃ¶rev listesi**: 21 faz
+- âœ… **Ä°lerleme takibi**: % tamamlanma
+- âœ… **Test checklist**: Her modÃ¼l iÃ§in
+
+### 3. README.md
+- âœ… **Kurulum**: Step-by-step
+- âœ… **Environment variables**: Ã–rnek .env
+- âœ… **KullanÄ±m**: API endpoint'leri
+
+---
+
+## âš ï¸ YAPILMAYACAKLAR
+
+### 1. Performans
+- âŒ **YÃ¼kleniyor ekranÄ± kullanma**: Skeleton gÃ¶ster
+- âŒ **Her seferinde yeni Supabase client**: Singleton kullan
+- âŒ **Hardcoded text**: Locale kullan
+- âŒ **Client-side data fetching**: Server Components Ã¶ncelik
+
+### 2. Kod
+- âŒ **`any` type kullanma**: Tip tanÄ±mlarÄ± yap
+- âŒ **Inline styles**: Tailwind CSS kullan
+- âŒ **Console.log production'da**: Error logging kullan
+- âŒ **Duplicated code**: Component'leri tekrar kullan
+
+### 3. GÃ¼venlik
+- âŒ **RLS bypass**: SuperAdmin dÄ±ÅŸÄ±nda
+- âŒ **Sensitive data loglama**: Error mesajlarÄ±nda gizle
+- âŒ **Auth kontrolÃ¼ atlama**: Her API endpoint'te
+
+---
+
+## âœ… CHECKLIST - Her Yeni Ã–zellik Ä°Ã§in
+
+### Performans
+- [ ] SWR cache kullanÄ±ldÄ± mÄ±?
+- [ ] Skeleton component gÃ¶steriliyor mu?
+- [ ] Prefetching aktif mi?
+- [ ] Optimistic update var mÄ±?
+
+### Tema
+- [ ] Premium renk paleti kullanÄ±ldÄ± mÄ±?
+- [ ] Animasyonlar smooth mu?
+- [ ] Responsive test edildi mi?
+
+### GÃ¼venlik
+- [ ] Auth kontrolÃ¼ yapÄ±ldÄ± mÄ±?
+- [ ] RLS kontrolÃ¼ yapÄ±ldÄ± mÄ±?
+- [ ] Input validation var mÄ±?
+
+### Test
+- [ ] CRUD iÅŸlemleri test edildi mi?
+- [ ] API endpoint'ler Ã§alÄ±ÅŸÄ±yor mu?
+- [ ] YÃ¶nlendirmeler doÄŸru mu?
+
+### Locale
+- [ ] TÃ¼m metinler Ã§evrilebilir mi?
+- [ ] ActivityLog TR/EN desteÄŸi var mÄ±?
+
+---
+
+## ğŸ¯ PERFORMANS HEDEFLERÄ° (MUTLAKA SAÄLANMALI!)
+
+| Metrik | Hedef | Ã–lÃ§Ã¼m |
+|--------|-------|-------|
+| Sekme geÃ§iÅŸi | <300ms | Link click â†’ render |
+| Dashboard ilk render | <500ms | Page load â†’ visible |
+| API response (cache hit) | <200ms | Request â†’ response |
+| API response (cache miss) | <1000ms | Request â†’ response |
+| Skeleton gÃ¶rÃ¼nÃ¼m | <100ms | Loading â†’ skeleton |
+| Lighthouse Performance | >95 | Performance score |
+
+---
+
+## ğŸ”„ GÃœNCELLEME NOTLARI
+
+- **Versiyon**: 1.0.0
+- **Son GÃ¼ncelleme**: 2024
+- **PRD Uyumu**: PRD.md ile birebir uyumlu
+- **TODO Uyumu**: TODO.md'deki 21 faz ile uyumlu
+
+---
+
+**Ã–NEMLÄ°**: Bu kurallara gÃ¶re kod yaz. Performans Ã¶ncelikli, premium tema tutarlÄ±, gÃ¼venlik kontrolÃ¼ her yerde!
+
+
+
+
+## ğŸ“‹ Proje TanÄ±mÄ±
+
+Next.js 15 (App Router, Edge Runtime) tabanlÄ± Supabase destekli CRM sistemi.
+- Performans odaklÄ± (<300ms sekme geÃ§iÅŸi, <500ms dashboard)
+- Multi-tenant (Ã§oklu kurum) yapÄ±sÄ±
+- TR/EN locale desteÄŸi
+- Premium UI temasÄ±
+
+---
+
+## âš¡ PERFORMANS KURALLARI (Ã–NCE HIZ!)
+
+### 1. Veri Ã‡ekme Stratejisi
+- âœ… **Her zaman SWR cache kullan** (`useData` hook)
+- âœ… **Server Components Ã¶ncelik** (client component sadece gerekli yerlerde)
+- âœ… **Suspense boundaries kullan** (yÃ¼kleniyor ekranÄ± YOK, skeleton gÃ¶ster)
+- âœ… **Prefetching aktif** (Link hover'da prefetch)
+- âœ… **Optimistic updates** (mutasyonlar anÄ±nda UI'da gÃ¶rÃ¼nÃ¼r)
+
+### 2. API Layer KurallarÄ±
+- âœ… **Ortak `fetchData()` fonksiyonu kullan** (`lib/api.ts`)
+- âœ… **Retry policy**: Exponential backoff (1s, 2s, 4s, max 3 deneme)
+- âœ… **Cache strategy**: `no-store` + `revalidate: 60` saniye
+- âœ… **Error handling**: Fallback UI gÃ¶ster, user-friendly mesajlar
+
+### 3. Supabase KullanÄ±mÄ±
+- âœ… **Singleton client** (`getSupabase()`) - connection pooling
+- âœ… **RLS kontrolÃ¼**: Her query'de `companyId` filtresi
+- âœ… **Index kullanÄ±mÄ±**: `status`, `companyId` bazlÄ± sorgular
+- âœ… **Connection reuse**: Tek instance kullan, her seferinde yeni client oluÅŸturma
+
+### 4. Component PerformansÄ±
+- âœ… **Lazy loading**: Grafik ve modal componentleri `dynamic import`
+- âœ… **Memoization**: `useMemo`, `useCallback` kullan (gerektiÄŸinde)
+- âœ… **Code splitting**: Route bazlÄ± chunk'lar
+- âœ… **Image optimization**: `next/image` kullan (product fotoÄŸraflarÄ± iÃ§in)
+
+### 5. Sayfa GeÃ§iÅŸleri
+- âœ… **Framer Motion**: 0.3s fade transition (max)
+- âœ… **Loading states kaldÄ±r**: Skeleton gÃ¶ster, yÃ¼kleniyor ekranÄ± YOK
+- âœ… **Route prefetch**: Link component'lerinde `prefetch={true}`
+- âœ… **Instant navigation**: Cache'de varsa anÄ±nda render
+
+---
+
+## ğŸ¨ TEMA & UI KURALLARI
+
+### 1. Premium Tema Renkleri
+```typescript
+Primary: #6366f1 (Indigo-500)
+Secondary: #8b5cf6 (Purple-500)
+Accent: #ec4899 (Pink-500)
+Background: #ffffff (Beyaz)
+Surface: #f8fafc (Slate-50)
+```
+
+### 2. Component StandartlarÄ±
+- âœ… **shadcn/ui componentleri kullan** (Button, Input, Card, Table, Dialog, Tabs)
+- âœ… **TutarlÄ± stil**: TÃ¼m sayfalarda aynÄ± renk paleti
+- âœ… **Animasyonlar**: Framer Motion ile smooth transitions
+- âœ… **Responsive**: Mobile-first yaklaÅŸÄ±m
+
+### 3. UI Component YapÄ±sÄ±
+```
+components/
+â”œâ”€â”€ ui/           # shadcn/ui components
+â”œâ”€â”€ layout/       # Sidebar, Header, Breadcrumbs
+â”œâ”€â”€ skeletons/    # Loading skeletons
+â”œâ”€â”€ charts/       # Recharts wrappers
+â””â”€â”€ [module]/     # Module-specific components
+```
+
+### 4. Premium UI Elementleri
+- âœ… **GradientCard**: Radial gradient + blur background
+- âœ… **AnimatedCounter**: KPI kartlarÄ± iÃ§in sayÄ± animasyonu
+- âœ… **Neumorphism**: SeÃ§ili elementlerde kullan
+- âœ… **Shadow consistency**: `shadow-card`, `shadow-card-hover`
+
+---
+
+## ğŸ—„ï¸ VERÄ°TABANI KURALLARI
+
+### 1. Supabase TablolarÄ±
+```sql
+- Company (multi-tenant root)
+- User (Company iliÅŸkisi)
+- Customer (Company iliÅŸkisi)
+- Deal (Customer, Company iliÅŸkileri)
+- Quote (Deal, Company iliÅŸkileri)
+- Invoice (Quote, Company iliÅŸkileri)
+- Product (Company iliÅŸkisi)
+- Finance (Company iliÅŸkisi)
+- Task (Company, User iliÅŸkileri)
+- Ticket (Customer, Company iliÅŸkileri)
+- Shipment (Invoice, Company iliÅŸkileri)
+- ActivityLog (User, Company iliÅŸkileri, meta JSON)
+```
+
+### 2. Foreign Key KurallarÄ±
+- âœ… **companyId zorunlu**: Her tabloda (multi-tenant)
+- âœ… **ON DELETE CASCADE**: Company silinince tÃ¼m veriler silinir
+- âœ… **Referential integrity**: Foreign key constraints aktif
+
+### 3. RLS (Row-Level Security)
+- âœ… **Company isolation**: KullanÄ±cÄ± sadece kendi `companyId`'sini gÃ¶rÃ¼r
+- âœ… **SUPER_ADMIN bypass**: SuperAdmin tÃ¼m ÅŸirketleri gÃ¶rebilir
+- âœ… **Policy test**: Her yeni tablo iÃ§in RLS testi yap
+
+### 4. Index Stratejisi
+```sql
+CREATE INDEX idx_quote_status ON "Quote"("status");
+CREATE INDEX idx_invoice_status ON "Invoice"("status");
+CREATE INDEX idx_activitylog_company ON "ActivityLog"("companyId");
+CREATE INDEX idx_customer_company ON "Customer"("companyId");
+CREATE INDEX idx_deal_company ON "Deal"("companyId");
+CREATE INDEX idx_user_company ON "User"("companyId");
+```
+
+---
+
+## ğŸ“ DOSYA YAPISI KURALLARI
+
+### 1. App Router YapÄ±sÄ±
+```
+src/app/
+â”œâ”€â”€ (auth)/              # Auth routes
+â”‚   â””â”€â”€ login/
+â”œâ”€â”€ dashboard/           # Dashboard
+â”œâ”€â”€ [module]/            # CRUD modules
+â”‚   â”œâ”€â”€ page.tsx        # List
+â”‚   â”œâ”€â”€ new/            # Create form
+â”‚   â””â”€â”€ [id]/           # Detail page
+â”œâ”€â”€ api/
+â”‚   â”œâ”€â”€ [module]/       # CRUD endpoints
+â”‚   â””â”€â”€ analytics/      # Dashboard/Reports endpoints
+â””â”€â”€ layout.tsx          # Root layout
+```
+
+### 2. Component YapÄ±sÄ±
+```
+src/components/
+â”œâ”€â”€ ui/                  # shadcn/ui
+â”œâ”€â”€ layout/              # Layout components
+â”œâ”€â”€ skeletons/           # Loading skeletons
+â”œâ”€â”€ charts/              # Recharts wrappers
+â””â”€â”€ [module]/            # Module components
+    â”œâ”€â”€ [Module]Form.tsx
+    â”œâ”€â”€ [Module]Card.tsx
+    â””â”€â”€ [Module]List.tsx
+```
+
+### 3. Lib YapÄ±sÄ±
+```
+src/lib/
+â”œâ”€â”€ supabase.ts         # Supabase client
+â”œâ”€â”€ api.ts              # API layer
+â”œâ”€â”€ utils.ts            # Utilities
+â”œâ”€â”€ i18n.ts             # Locale config
+â””â”€â”€ hooks/              # Custom hooks
+```
+
+---
+
+## ğŸ’» KODLAMA STANDARTLARI
+
+### 1. TypeScript KurallarÄ±
+- âœ… **Strict mode aktif**: `tsconfig.json` strict: true
+- âœ… **Type safety**: `any` kullanma, tip tanÄ±mlarÄ± yap
+- âœ… **Interface Ã¶ncelik**: Type alias yerine interface kullan (geniÅŸletilebilir)
+
+### 2. Component YazÄ±mÄ±
+```typescript
+// âœ… DOÄRU
+export default function CustomerList() {
+  const { data, isLoading } = useData('/api/customers')
+  
+  if (isLoading) return <SkeletonList />
+  
+  return (
+    <div className="space-y-4">
+      {data?.map(customer => (
+        <CustomerCard key={customer.id} customer={customer} />
+      ))}
+    </div>
+  )
+}
+
+// âŒ YANLIÅ
+export default function CustomerList() {
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(true)
+  
+  useEffect(() => {
+    fetch('/api/customers').then(res => {
+      setData(res.json())
+      setLoading(false)
+    })
+  }, [])
+  
+  if (loading) return <div>YÃ¼kleniyor...</div>
+  // ...
+}
+```
+
+### 3. API Endpoint StandartlarÄ±
+```typescript
+// âœ… DOÄRU
+export async function GET(request: Request) {
+  const supabase = getSupabase()
+  const session = await getServerSession() // Auth kontrolÃ¼
+  
+  const { data, error } = await supabase
+    .from('Customer')
+    .select('*')
+    .eq('companyId', session.user.companyId) // RLS kontrolÃ¼
+  
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+  
+  return NextResponse.json(data)
+}
+
+// âŒ YANLIÅ
+export async function GET() {
+  const supabase = createClient(...) // Her seferinde yeni client
+  const { data } = await supabase.from('Customer').select('*') // RLS yok!
+  return Response.json(data)
+}
+```
+
+### 4. Hook StandartlarÄ±
+```typescript
+// âœ… DOÄRU - SWR cache ile
+export function useCustomers() {
+  return useData('/api/customers')
+}
+
+// âŒ YANLIÅ - useState + useEffect
+export function useCustomers() {
+  const [data, setData] = useState([])
+  useEffect(() => {
+    fetch('/api/customers').then(...)
+  }, [])
+  return data
+}
+```
+
+---
+
+## ğŸ” AUTH & GÃœVENLÄ°K KURALLARI
+
+### 1. Authentication
+- âœ… **NextAuth.js** kullan (Supabase adapter ile)
+- âœ… **Session kontrolÃ¼**: Her protected route'da
+- âœ… **Role-based access**: Admin, Sales, SuperAdmin rolleri
+- âœ… **Middleware**: `middleware.ts` ile route protection
+
+### 2. RLS (Row-Level Security)
+- âœ… **Her API endpoint'te**: `companyId` filtresi zorunlu
+- âœ… **SuperAdmin bypass**: Role kontrolÃ¼ ile
+- âœ… **Test RLS**: KullanÄ±cÄ± sadece kendi ÅŸirketini gÃ¶rmeli
+
+### 3. API GÃ¼venliÄŸi
+- âœ… **Auth middleware**: TÃ¼m `/api/*` endpoint'lerinde
+- âœ… **Input validation**: Zod schema ile
+- âœ… **Error handling**: Sensitive bilgi sÄ±zdÄ±rma
+
+---
+
+## ğŸŒ LOCALE KURALLARI
+
+### 1. Ã‡eviri Sistemi
+- âœ… **next-intl** kullan
+- âœ… **TÃ¼m metinler**: `useTranslations()` hook ile
+- âœ… **ActivityLog**: TR/EN otomatik Ã§eviri
+- âœ… **Dil switcher**: Header'da saÄŸ Ã¼st
+
+### 2. Locale DosyalarÄ±
+```json
+// src/locales/tr.json
+{
+  "common": { "save": "Kaydet", "cancel": "Ä°ptal" },
+  "nav": { "dashboard": "GÃ¶sterge Paneli" },
+  "activity": { "create": "oluÅŸturuldu" }
+}
+```
+
+### 3. KullanÄ±m
+```typescript
+// âœ… DOÄRU
+const t = useTranslations('common')
+<Button>{t('save')}</Button>
+
+// âŒ YANLIÅ
+<Button>Kaydet</Button>
+```
+
+---
+
+## ğŸ“Š DASHBOARD & REPORTS KURALLARI
+
+### 1. Dashboard YapÄ±sÄ±
+- âœ… **6 KPI kartÄ±**: AnimatedCounter ile
+- âœ… **5 grafik**: Recharts (Line, Pie, Radar, Doughnut, Kanban)
+- âœ… **Real-time**: 30 saniyede bir refetch
+- âœ… **Cache**: 60 saniye revalidation
+
+### 2. Reports YapÄ±sÄ±
+- âœ… **Filtreleme**: Tarih, kullanÄ±cÄ±, firma, modÃ¼l
+- âœ… **Export**: Excel, PDF, CSV
+- âœ… **Performance**: Pagination, lazy loading
+
+### 3. API Endpoints
+- âœ… `/api/analytics/kpis` - Dashboard KPI'larÄ±
+- âœ… `/api/analytics/reports` - DetaylÄ± raporlar
+- âœ… Cache: 60s revalidation
+
+---
+
+## ğŸ’¼ CRUD MODÃœL KURALLARI
+
+### 1. Standart YapÄ±
+Her modÃ¼l iÃ§in:
+- âœ… `app/[module]/page.tsx` - Liste (DataTable + filtre)
+- âœ… `app/[module]/new/page.tsx` - Yeni kayÄ±t formu
+- âœ… `app/[module]/[id]/page.tsx` - Detay sayfasÄ±
+- âœ… `app/api/[module]/route.ts` - GET, POST
+- âœ… `app/api/[module]/[id]/route.ts` - GET, PUT, DELETE
+- âœ… `components/[module]/[Module]Form.tsx` - Form component
+- âœ… `components/[module]/[Module]Card.tsx` - Kart component
+- âœ… `components/[module]/[Module]List.tsx` - Liste component (CustomerList pattern'i ile)
+
+### 2. CustomerList Pattern (STANDART PATTERN - TÃœM LÄ°STELER Ä°Ã‡Ä°N ZORUNLU!)
+
+Her yeni liste component'i (`[Module]List.tsx`) **MUTLAKA** aÅŸaÄŸÄ±daki pattern'i takip etmeli:
+
+#### 2.1. Veri Ã‡ekme Pattern'i
+```typescript
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useLocale } from 'next-intl'
+import { Plus, Search, Edit, Trash2, Eye } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import [Module]Form from './[Module]Form'
+import SkeletonList from '@/components/skeletons/SkeletonList'
+import Link from 'next/link'
+import { useData } from '@/hooks/useData'
+import { mutate } from 'swr'
+
+interface [Module] {
+  id: string
+  name: string
+  // ... diÄŸer alanlar
+  status: string
+  createdAt: string
+}
+
+export default function [Module]List() {
+  const locale = useLocale()
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('')
+  const [formOpen, setFormOpen] = useState(false)
+  const [selected[Module], setSelected[Module]] = useState<[Module] | null>(null)
+
+  // Debounced search - performans iÃ§in (kullanÄ±cÄ± yazmayÄ± bitirdikten 300ms sonra arama)
+  const [debouncedSearch, setDebouncedSearch] = useState(search)
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 300) // 300ms debounce - her harfte arama yapÄ±lmaz
+    
+    return () => clearTimeout(timer)
+  }, [search])
+
+  // SWR ile veri Ã§ekme (repo kurallarÄ±na uygun) - debounced search kullanÄ±yoruz
+  const params = new URLSearchParams()
+  if (debouncedSearch) params.append('search', debouncedSearch)
+  if (status) params.append('status', status)
+  
+  const apiUrl = `/api/[module]?${params.toString()}`
+  const { data: [module]s = [], isLoading, error, mutate: mutate[Module]s } = useData<[Module][]>(apiUrl, {
+    dedupingInterval: 5000, // 5 saniye cache (daha kÄ±sa - gÃ¼ncellemeler daha hÄ±zlÄ±)
+    revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
+  })
+
+  // ... CRUD handler'lar
+}
+```
+
+#### 2.2. Delete Handler Pattern'i (Optimistic Update)
+```typescript
+const handleDelete = async (id: string, name: string) => {
+  if (!confirm(`${name} [item]Ä±nÄ± silmek istediÄŸinize emin misiniz?`)) {
+    return
+  }
+
+  try {
+    const res = await fetch(`/api/[module]/${id}`, {
+      method: 'DELETE',
+    })
+    
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}))
+      throw new Error(errorData.error || 'Failed to delete [module]')
+    }
+    
+    // Optimistic update - silinen kaydÄ± listeden kaldÄ±r
+    const updated[Module]s = [module]s.filter((item) => item.id !== id)
+    
+    // Cache'i gÃ¼ncelle - yeni listeyi hemen gÃ¶ster
+    await mutate[Module]s(updated[Module]s, { revalidate: false })
+    
+    // TÃ¼m diÄŸer [module] URL'lerini de gÃ¼ncelle
+    await Promise.all([
+      mutate('/api/[module]', updated[Module]s, { revalidate: false }),
+      mutate('/api/[module]?', updated[Module]s, { revalidate: false }),
+      mutate(apiUrl, updated[Module]s, { revalidate: false }),
+    ])
+  } catch (error: any) {
+    console.error('Delete error:', error)
+    alert(error?.message || 'Silme iÅŸlemi baÅŸarÄ±sÄ±z oldu')
+  }
+}
+```
+
+#### 2.3. Form Modal Pattern'i (Optimistic Update)
+```typescript
+<[Module]Form
+  [module]={selected[Module] || undefined}
+  open={formOpen}
+  onClose={handleFormClose}
+  onSuccess={async (saved[Module]: [Module]) => {
+    // Optimistic update - yeni/ gÃ¼ncellenmiÅŸ kaydÄ± hemen cache'e ekle ve UI'da gÃ¶ster
+    // BÃ¶ylece form kapanmadan Ã¶nce [item] listede gÃ¶rÃ¼nÃ¼r
+    
+    let updated[Module]s: [Module][]
+    
+    if (selected[Module]) {
+      // UPDATE: Mevcut kaydÄ± gÃ¼ncelle
+      updated[Module]s = [module]s.map((item) =>
+        item.id === saved[Module].id ? saved[Module] : item
+      )
+    } else {
+      // CREATE: Yeni kaydÄ± listenin baÅŸÄ±na ekle
+      updated[Module]s = [saved[Module], ...[module]s]
+    }
+    
+    // Cache'i gÃ¼ncelle - optimistic update'i hemen uygula ve koru
+    // revalidate: false = background refetch yapmaz, optimistic update korunur
+    await mutate[Module]s(updated[Module]s, { revalidate: false })
+    
+    // TÃ¼m diÄŸer [module] URL'lerini de gÃ¼ncelle (optimistic update)
+    await Promise.all([
+      mutate('/api/[module]', updated[Module]s, { revalidate: false }),
+      mutate('/api/[module]?', updated[Module]s, { revalidate: false }),
+      mutate(apiUrl, updated[Module]s, { revalidate: false }),
+    ])
+  }}
+/>
+```
+
+#### 2.4. Table Actions Pattern'i (GÃ¶rÃ¼ntÃ¼le, DÃ¼zenle, Sil)
+```typescript
+<TableCell className="text-right">
+  <div className="flex justify-end gap-2">
+    <Link href={`/${locale}/[module]/${item.id}`} prefetch={true}>
+      <Button variant="ghost" size="icon">
+        <Eye className="h-4 w-4" />
+      </Button>
+    </Link>
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => handleEdit(item)}
+    >
+      <Edit className="h-4 w-4" />
+    </Button>
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => handleDelete(item.id, item.name)}
+      className="text-red-600 hover:text-red-700"
+    >
+      <Trash2 className="h-4 w-4" />
+    </Button>
+  </div>
+</TableCell>
+```
+
+### 3. Form Component Pattern'i (STANDART PATTERN - TÃœM FORM'LAR Ä°Ã‡Ä°N ZORUNLU!)
+
+Her yeni form component'i (`[Module]Form.tsx`) **MUTLAKA** aÅŸaÄŸÄ±daki pattern'i takip etmeli:
+
+#### 3.1. Form Props Pattern'i
+```typescript
+interface [Module]FormProps {
+  [module]?: any
+  open: boolean
+  onClose: () => void
+  onSuccess?: (saved[Module]: any) => void // Cache gÃ¼ncelleme iÃ§in callback - kaydedilen [item]Ä± parametre olarak geÃ§iyoruz
+}
+```
+
+#### 3.2. useEffect ile Form Population Pattern'i
+```typescript
+export default function [Module]Form({
+  [module],
+  open,
+  onClose,
+  onSuccess,
+}: [Module]FormProps) {
+  const { register, handleSubmit, formState: { errors }, reset } = useForm<[Module]FormData>({
+    resolver: zodResolver([module]Schema),
+    defaultValues: {
+      // ... varsayÄ±lan deÄŸerler
+    },
+  })
+
+  // [Module] prop deÄŸiÅŸtiÄŸinde veya modal aÃ§Ä±ldÄ±ÄŸÄ±nda form'u gÃ¼ncelle
+  useEffect(() => {
+    if (open) {
+      if ([module]) {
+        // DÃ¼zenleme modu - [item] bilgilerini yÃ¼kle
+        reset({
+          name: [module].name || '',
+          // ... diÄŸer alanlar
+          status: [module].status || 'ACTIVE',
+        })
+      } else {
+        // Yeni kayÄ±t modu - form'u temizle
+        reset({
+          // ... varsayÄ±lan deÄŸerler
+        })
+      }
+    }
+  }, [[module], open, reset])
+
+  const onSubmit = async (data: [Module]FormData) => {
+    setLoading(true)
+    try {
+      const url = [module]
+        ? `/api/[module]/${[module].id}`
+        : '/api/[module]'
+      const method = [module] ? 'PUT' : 'POST'
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to save [module]')
+      }
+
+      const saved[Module] = await res.json()
+      
+      // onSuccess callback'i Ã§aÄŸÄ±r - optimistic update iÃ§in
+      if (onSuccess) {
+        onSuccess(saved[Module])
+      }
+      
+      reset()
+      onClose()
+    } catch (error: any) {
+      console.error('Error:', error)
+      alert(error?.message || 'Kaydetme iÅŸlemi baÅŸarÄ±sÄ±z oldu')
+    } finally {
+      setLoading(false)
+    }
+  }
+}
+```
+
+### 4. Detay SayfasÄ± Pattern'i
+Her modÃ¼l iÃ§in detay sayfasÄ± (`app/[module]/[id]/page.tsx`) **MUTLAKA** ÅŸunlarÄ± iÃ§ermeli:
+- âœ… KayÄ±t bilgilerini gÃ¶rÃ¼ntÃ¼leme (read-only)
+- âœ… **DÃ¼zenle** butonu (modal aÃ§Ä±lÄ±r, [Module]Form component'i kullanÄ±r)
+- âœ… **Sil** butonu (confirm dialog ile)
+- âœ… **Geri** butonu (liste sayfasÄ±na dÃ¶n)
+- âœ… SWR ile veri Ã§ekme (`useData` hook)
+- âœ… Skeleton loading state
+
+### 5. Form KurallarÄ±
+- âœ… **react-hook-form** + **Zod** validation
+- âœ… **Optimistic update**: SWR mutate ile (onSuccess callback'te)
+- âœ… **Toast notification**: BaÅŸarÄ±/hata mesajlarÄ± (alert ile, sonra toast'a geÃ§ilebilir)
+- âœ… **Loading state**: Skeleton veya disabled button
+- âœ… **useEffect ile form population**: Edit modunda form'u doldur
+
+### 6. DataTable KurallarÄ±
+- âœ… **Pagination**: 10-20-50 kayÄ±t seÃ§enekleri (gelecekte eklenebilir)
+- âœ… **Filtreleme**: Status, tarih, arama (debounced search)
+- âœ… **SÄ±ralama**: TÄ±klanabilir sÃ¼tun baÅŸlÄ±klarÄ± (gelecekte eklenebilir)
+- âœ… **Mobile**: Scrollable table
+- âœ… **Actions**: Her satÄ±rda GÃ¶rÃ¼ntÃ¼le (Eye), DÃ¼zenle (Edit), Sil (Trash2) butonlarÄ±
+
+### 7. Otomasyon KurallarÄ±
+- âœ… **Quote ACCEPTED** â†’ Invoice oluÅŸtur + stok dÃ¼ÅŸ + ActivityLog
+- âœ… **Invoice PAID** â†’ Finance kaydÄ± oluÅŸtur + ActivityLog
+- âœ… **Shipment DELIVERED** â†’ ActivityLog yaz
+- âœ… **TÃ¼m CRUD** â†’ ActivityLog'a meta JSON ile kaydet
+
+---
+
+## ğŸ“„ PDF KURALLARI
+
+### 1. PDF Generator
+- âœ… **@react-pdf/renderer** kullan (Edge Runtime uyumlu)
+- âœ… **Edge Runtime**: `/api/pdf/*/route.ts` dosyalarÄ±nda
+- âœ… **Template componentleri**: `components/pdf/QuotePDF.tsx`, `InvoicePDF.tsx`
+
+### 2. PDF Ä°Ã§erik
+- âœ… **Åirket logosu**: Supabase Storage'dan
+- âœ… **MÃ¼ÅŸteri bilgileri**: Tablodan Ã§ek
+- âœ… **ÃœrÃ¼n listesi**: Tablo formatÄ±nda
+- âœ… **KDV hesaplama**: Otomatik
+- âœ… **Ä°mza alanÄ±**: Footer'da
+
+### 3. PDF Entegrasyonu
+- âœ… **Download butonu**: Detay sayfalarÄ±nda
+- âœ… **Preview**: Browser'da aÃ§ma Ã¶zelliÄŸi
+- âœ… **API endpoint**: `/api/pdf/quote/[id]`, `/api/pdf/invoice/[id]`
+
+---
+
+## ğŸ“± MOBÄ°L KURALLARI
+
+### 1. Responsive Breakpoints
+- âœ… **Mobile**: < 768px (tek sÃ¼tun, hamburger menu)
+- âœ… **Tablet**: 768px - 1024px (2 sÃ¼tun)
+- âœ… **Desktop**: > 1024px (full layout)
+
+### 2. Touch Optimization
+- âœ… **Button size**: Min 44x44px
+- âœ… **Touch targets**: Spacing yeterli
+- âœ… **Swipe gestures**: Kanban drag & drop
+
+### 3. Mobile Navigation
+- âœ… **Hamburger menu**: Sidebar yerine
+- âœ… **Bottom nav**: Mobile'da (opsiyonel)
+- âœ… **Animations**: Framer Motion smooth transitions
+
+---
+
+## ğŸ§ª TEST KURALLARI
+
+### 1. Test YapÄ±sÄ±
+- âœ… **Jest**: Unit testler (hooks, utils)
+- âœ… **Playwright**: E2E testler (login â†’ dashboard â†’ CRUD)
+- âœ… **Integration**: API endpoint testleri
+
+### 2. Test Coverage
+- âœ… **CRUD operations**: Create, Read, Update, Delete
+- âœ… **RLS**: Company isolation test
+- âœ… **Performance**: API response time < 200ms
+
+### 3. Pre-Deploy Test
+- âœ… **Lint**: `npm run lint`
+- âœ… **Build**: `npm run build`
+- âœ… **Test**: `npm test`
+- âœ… **Pipeline**: `build && test && lint`
+
+---
+
+## ğŸš€ DEPLOY KURALLARI
+
+### 1. Vercel Deploy
+- âœ… **Environment variables**: Supabase URL, keys
+- âœ… **Build command**: `next build`
+- âœ… **Output directory**: `.next`
+
+### 2. Database Migration
+- âœ… **Supabase CLI**: `supabase db push`
+- âœ… **Seed data**: `supabase db seed`
+- âœ… **RLS policies**: Migration dosyalarÄ±nda
+
+### 3. Post-Deploy
+- âœ… **Health check**: `/api/health` endpoint
+- âœ… **SSL**: Vercel otomatik
+- âœ… **Monitoring**: Performance tracking
+
+---
+
+## ğŸ“ DOKÃœMANTASYON KURALLARI
+
+### 1. PRD.md
+- âœ… **Performance Requirements**: Hedef metrikler
+- âœ… **Teknik Spesifikasyonlar**: Mimari detaylar
+- âœ… **Cache Strategy**: SWR, ISR, Edge Runtime
+
+### 2. TODO.md
+- âœ… **Faz bazlÄ± gÃ¶rev listesi**: 21 faz
+- âœ… **Ä°lerleme takibi**: % tamamlanma
+- âœ… **Test checklist**: Her modÃ¼l iÃ§in
+
+### 3. README.md
+- âœ… **Kurulum**: Step-by-step
+- âœ… **Environment variables**: Ã–rnek .env
+- âœ… **KullanÄ±m**: API endpoint'leri
+
+---
+
+## âš ï¸ YAPILMAYACAKLAR
+
+### 1. Performans
+- âŒ **YÃ¼kleniyor ekranÄ± kullanma**: Skeleton gÃ¶ster
+- âŒ **Her seferinde yeni Supabase client**: Singleton kullan
+- âŒ **Hardcoded text**: Locale kullan
+- âŒ **Client-side data fetching**: Server Components Ã¶ncelik
+
+### 2. Kod
+- âŒ **`any` type kullanma**: Tip tanÄ±mlarÄ± yap
+- âŒ **Inline styles**: Tailwind CSS kullan
+- âŒ **Console.log production'da**: Error logging kullan
+- âŒ **Duplicated code**: Component'leri tekrar kullan
+
+### 3. GÃ¼venlik
+- âŒ **RLS bypass**: SuperAdmin dÄ±ÅŸÄ±nda
+- âŒ **Sensitive data loglama**: Error mesajlarÄ±nda gizle
+- âŒ **Auth kontrolÃ¼ atlama**: Her API endpoint'te
+
+---
+
+## âœ… CHECKLIST - Her Yeni Ã–zellik Ä°Ã§in
+
+### Performans
+- [ ] SWR cache kullanÄ±ldÄ± mÄ±?
+- [ ] Skeleton component gÃ¶steriliyor mu?
+- [ ] Prefetching aktif mi?
+- [ ] Optimistic update var mÄ±?
+
+### Tema
+- [ ] Premium renk paleti kullanÄ±ldÄ± mÄ±?
+- [ ] Animasyonlar smooth mu?
+- [ ] Responsive test edildi mi?
+
+### GÃ¼venlik
+- [ ] Auth kontrolÃ¼ yapÄ±ldÄ± mÄ±?
+- [ ] RLS kontrolÃ¼ yapÄ±ldÄ± mÄ±?
+- [ ] Input validation var mÄ±?
+
+### Test
+- [ ] CRUD iÅŸlemleri test edildi mi?
+- [ ] API endpoint'ler Ã§alÄ±ÅŸÄ±yor mu?
+- [ ] YÃ¶nlendirmeler doÄŸru mu?
+
+### Locale
+- [ ] TÃ¼m metinler Ã§evrilebilir mi?
+- [ ] ActivityLog TR/EN desteÄŸi var mÄ±?
+
+---
+
+## ğŸ¯ PERFORMANS HEDEFLERÄ° (MUTLAKA SAÄLANMALI!)
+
+| Metrik | Hedef | Ã–lÃ§Ã¼m |
+|--------|-------|-------|
+| Sekme geÃ§iÅŸi | <300ms | Link click â†’ render |
+| Dashboard ilk render | <500ms | Page load â†’ visible |
+| API response (cache hit) | <200ms | Request â†’ response |
+| API response (cache miss) | <1000ms | Request â†’ response |
+| Skeleton gÃ¶rÃ¼nÃ¼m | <100ms | Loading â†’ skeleton |
+| Lighthouse Performance | >95 | Performance score |
+
+---
+
+## ğŸ”„ GÃœNCELLEME NOTLARI
+
+- **Versiyon**: 1.0.0
+- **Son GÃ¼ncelleme**: 2024
+- **PRD Uyumu**: PRD.md ile birebir uyumlu
+- **TODO Uyumu**: TODO.md'deki 21 faz ile uyumlu
+
+---
+
+**Ã–NEMLÄ°**: Bu kurallara gÃ¶re kod yaz. Performans Ã¶ncelikli, premium tema tutarlÄ±, gÃ¼venlik kontrolÃ¼ her yerde!
+
+
+
+
+## ğŸ“‹ Proje TanÄ±mÄ±
+
+Next.js 15 (App Router, Edge Runtime) tabanlÄ± Supabase destekli CRM sistemi.
+- Performans odaklÄ± (<300ms sekme geÃ§iÅŸi, <500ms dashboard)
+- Multi-tenant (Ã§oklu kurum) yapÄ±sÄ±
+- TR/EN locale desteÄŸi
+- Premium UI temasÄ±
+
+---
+
+## âš¡ PERFORMANS KURALLARI (Ã–NCE HIZ!)
+
+### 1. Veri Ã‡ekme Stratejisi
+- âœ… **Her zaman SWR cache kullan** (`useData` hook)
+- âœ… **Server Components Ã¶ncelik** (client component sadece gerekli yerlerde)
+- âœ… **Suspense boundaries kullan** (yÃ¼kleniyor ekranÄ± YOK, skeleton gÃ¶ster)
+- âœ… **Prefetching aktif** (Link hover'da prefetch)
+- âœ… **Optimistic updates** (mutasyonlar anÄ±nda UI'da gÃ¶rÃ¼nÃ¼r)
+
+### 2. API Layer KurallarÄ±
+- âœ… **Ortak `fetchData()` fonksiyonu kullan** (`lib/api.ts`)
+- âœ… **Retry policy**: Exponential backoff (1s, 2s, 4s, max 3 deneme)
+- âœ… **Cache strategy**: `no-store` + `revalidate: 60` saniye
+- âœ… **Error handling**: Fallback UI gÃ¶ster, user-friendly mesajlar
+
+### 3. Supabase KullanÄ±mÄ±
+- âœ… **Singleton client** (`getSupabase()`) - connection pooling
+- âœ… **RLS kontrolÃ¼**: Her query'de `companyId` filtresi
+- âœ… **Index kullanÄ±mÄ±**: `status`, `companyId` bazlÄ± sorgular
+- âœ… **Connection reuse**: Tek instance kullan, her seferinde yeni client oluÅŸturma
+
+### 4. Component PerformansÄ±
+- âœ… **Lazy loading**: Grafik ve modal componentleri `dynamic import`
+- âœ… **Memoization**: `useMemo`, `useCallback` kullan (gerektiÄŸinde)
+- âœ… **Code splitting**: Route bazlÄ± chunk'lar
+- âœ… **Image optimization**: `next/image` kullan (product fotoÄŸraflarÄ± iÃ§in)
+
+### 5. Sayfa GeÃ§iÅŸleri
+- âœ… **Framer Motion**: 0.3s fade transition (max)
+- âœ… **Loading states kaldÄ±r**: Skeleton gÃ¶ster, yÃ¼kleniyor ekranÄ± YOK
+- âœ… **Route prefetch**: Link component'lerinde `prefetch={true}`
+- âœ… **Instant navigation**: Cache'de varsa anÄ±nda render
+
+---
+
+## ğŸ¨ TEMA & UI KURALLARI
+
+### 1. Premium Tema Renkleri
+```typescript
+Primary: #6366f1 (Indigo-500)
+Secondary: #8b5cf6 (Purple-500)
+Accent: #ec4899 (Pink-500)
+Background: #ffffff (Beyaz)
+Surface: #f8fafc (Slate-50)
+```
+
+### 2. Component StandartlarÄ±
+- âœ… **shadcn/ui componentleri kullan** (Button, Input, Card, Table, Dialog, Tabs)
+- âœ… **TutarlÄ± stil**: TÃ¼m sayfalarda aynÄ± renk paleti
+- âœ… **Animasyonlar**: Framer Motion ile smooth transitions
+- âœ… **Responsive**: Mobile-first yaklaÅŸÄ±m
+
+### 3. UI Component YapÄ±sÄ±
+```
+components/
+â”œâ”€â”€ ui/           # shadcn/ui components
+â”œâ”€â”€ layout/       # Sidebar, Header, Breadcrumbs
+â”œâ”€â”€ skeletons/    # Loading skeletons
+â”œâ”€â”€ charts/       # Recharts wrappers
+â””â”€â”€ [module]/     # Module-specific components
+```
+
+### 4. Premium UI Elementleri
+- âœ… **GradientCard**: Radial gradient + blur background
+- âœ… **AnimatedCounter**: KPI kartlarÄ± iÃ§in sayÄ± animasyonu
+- âœ… **Neumorphism**: SeÃ§ili elementlerde kullan
+- âœ… **Shadow consistency**: `shadow-card`, `shadow-card-hover`
+
+---
+
+## ğŸ—„ï¸ VERÄ°TABANI KURALLARI
+
+### 1. Supabase TablolarÄ±
+```sql
+- Company (multi-tenant root)
+- User (Company iliÅŸkisi)
+- Customer (Company iliÅŸkisi)
+- Deal (Customer, Company iliÅŸkileri)
+- Quote (Deal, Company iliÅŸkileri)
+- Invoice (Quote, Company iliÅŸkileri)
+- Product (Company iliÅŸkisi)
+- Finance (Company iliÅŸkisi)
+- Task (Company, User iliÅŸkileri)
+- Ticket (Customer, Company iliÅŸkileri)
+- Shipment (Invoice, Company iliÅŸkileri)
+- ActivityLog (User, Company iliÅŸkileri, meta JSON)
+```
+
+### 2. Foreign Key KurallarÄ±
+- âœ… **companyId zorunlu**: Her tabloda (multi-tenant)
+- âœ… **ON DELETE CASCADE**: Company silinince tÃ¼m veriler silinir
+- âœ… **Referential integrity**: Foreign key constraints aktif
+
+### 3. RLS (Row-Level Security)
+- âœ… **Company isolation**: KullanÄ±cÄ± sadece kendi `companyId`'sini gÃ¶rÃ¼r
+- âœ… **SUPER_ADMIN bypass**: SuperAdmin tÃ¼m ÅŸirketleri gÃ¶rebilir
+- âœ… **Policy test**: Her yeni tablo iÃ§in RLS testi yap
+
+### 4. Index Stratejisi
+```sql
+CREATE INDEX idx_quote_status ON "Quote"("status");
+CREATE INDEX idx_invoice_status ON "Invoice"("status");
+CREATE INDEX idx_activitylog_company ON "ActivityLog"("companyId");
+CREATE INDEX idx_customer_company ON "Customer"("companyId");
+CREATE INDEX idx_deal_company ON "Deal"("companyId");
+CREATE INDEX idx_user_company ON "User"("companyId");
+```
+
+---
+
+## ğŸ“ DOSYA YAPISI KURALLARI
+
+### 1. App Router YapÄ±sÄ±
+```
+src/app/
+â”œâ”€â”€ (auth)/              # Auth routes
+â”‚   â””â”€â”€ login/
+â”œâ”€â”€ dashboard/           # Dashboard
+â”œâ”€â”€ [module]/            # CRUD modules
+â”‚   â”œâ”€â”€ page.tsx        # List
+â”‚   â”œâ”€â”€ new/            # Create form
+â”‚   â””â”€â”€ [id]/           # Detail page
+â”œâ”€â”€ api/
+â”‚   â”œâ”€â”€ [module]/       # CRUD endpoints
+â”‚   â””â”€â”€ analytics/      # Dashboard/Reports endpoints
+â””â”€â”€ layout.tsx          # Root layout
+```
+
+### 2. Component YapÄ±sÄ±
+```
+src/components/
+â”œâ”€â”€ ui/                  # shadcn/ui
+â”œâ”€â”€ layout/              # Layout components
+â”œâ”€â”€ skeletons/           # Loading skeletons
+â”œâ”€â”€ charts/              # Recharts wrappers
+â””â”€â”€ [module]/            # Module components
+    â”œâ”€â”€ [Module]Form.tsx
+    â”œâ”€â”€ [Module]Card.tsx
+    â””â”€â”€ [Module]List.tsx
+```
+
+### 3. Lib YapÄ±sÄ±
+```
+src/lib/
+â”œâ”€â”€ supabase.ts         # Supabase client
+â”œâ”€â”€ api.ts              # API layer
+â”œâ”€â”€ utils.ts            # Utilities
+â”œâ”€â”€ i18n.ts             # Locale config
+â””â”€â”€ hooks/              # Custom hooks
+```
+
+---
+
+## ğŸ’» KODLAMA STANDARTLARI
+
+### 1. TypeScript KurallarÄ±
+- âœ… **Strict mode aktif**: `tsconfig.json` strict: true
+- âœ… **Type safety**: `any` kullanma, tip tanÄ±mlarÄ± yap
+- âœ… **Interface Ã¶ncelik**: Type alias yerine interface kullan (geniÅŸletilebilir)
+
+### 2. Component YazÄ±mÄ±
+```typescript
+// âœ… DOÄRU
+export default function CustomerList() {
+  const { data, isLoading } = useData('/api/customers')
+  
+  if (isLoading) return <SkeletonList />
+  
+  return (
+    <div className="space-y-4">
+      {data?.map(customer => (
+        <CustomerCard key={customer.id} customer={customer} />
+      ))}
+    </div>
+  )
+}
+
+// âŒ YANLIÅ
+export default function CustomerList() {
+  const [data, setData] = useState([])
+  const [loading, setLoading] = useState(true)
+  
+  useEffect(() => {
+    fetch('/api/customers').then(res => {
+      setData(res.json())
+      setLoading(false)
+    })
+  }, [])
+  
+  if (loading) return <div>YÃ¼kleniyor...</div>
+  // ...
+}
+```
+
+### 3. API Endpoint StandartlarÄ±
+```typescript
+// âœ… DOÄRU
+export async function GET(request: Request) {
+  const supabase = getSupabase()
+  const session = await getServerSession() // Auth kontrolÃ¼
+  
+  const { data, error } = await supabase
+    .from('Customer')
+    .select('*')
+    .eq('companyId', session.user.companyId) // RLS kontrolÃ¼
+  
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+  
+  return NextResponse.json(data)
+}
+
+// âŒ YANLIÅ
+export async function GET() {
+  const supabase = createClient(...) // Her seferinde yeni client
+  const { data } = await supabase.from('Customer').select('*') // RLS yok!
+  return Response.json(data)
+}
+```
+
+### 4. Hook StandartlarÄ±
+```typescript
+// âœ… DOÄRU - SWR cache ile
+export function useCustomers() {
+  return useData('/api/customers')
+}
+
+// âŒ YANLIÅ - useState + useEffect
+export function useCustomers() {
+  const [data, setData] = useState([])
+  useEffect(() => {
+    fetch('/api/customers').then(...)
+  }, [])
+  return data
+}
+```
+
+---
+
+## ğŸ” AUTH & GÃœVENLÄ°K KURALLARI
+
+### 1. Authentication
+- âœ… **NextAuth.js** kullan (Supabase adapter ile)
+- âœ… **Session kontrolÃ¼**: Her protected route'da
+- âœ… **Role-based access**: Admin, Sales, SuperAdmin rolleri
+- âœ… **Middleware**: `middleware.ts` ile route protection
+
+### 2. RLS (Row-Level Security)
+- âœ… **Her API endpoint'te**: `companyId` filtresi zorunlu
+- âœ… **SuperAdmin bypass**: Role kontrolÃ¼ ile
+- âœ… **Test RLS**: KullanÄ±cÄ± sadece kendi ÅŸirketini gÃ¶rmeli
+
+### 3. API GÃ¼venliÄŸi
+- âœ… **Auth middleware**: TÃ¼m `/api/*` endpoint'lerinde
+- âœ… **Input validation**: Zod schema ile
+- âœ… **Error handling**: Sensitive bilgi sÄ±zdÄ±rma
+
+---
+
+## ğŸŒ LOCALE KURALLARI
+
+### 1. Ã‡eviri Sistemi
+- âœ… **next-intl** kullan
+- âœ… **TÃ¼m metinler**: `useTranslations()` hook ile
+- âœ… **ActivityLog**: TR/EN otomatik Ã§eviri
+- âœ… **Dil switcher**: Header'da saÄŸ Ã¼st
+
+### 2. Locale DosyalarÄ±
+```json
+// src/locales/tr.json
+{
+  "common": { "save": "Kaydet", "cancel": "Ä°ptal" },
+  "nav": { "dashboard": "GÃ¶sterge Paneli" },
+  "activity": { "create": "oluÅŸturuldu" }
+}
+```
+
+### 3. KullanÄ±m
+```typescript
+// âœ… DOÄRU
+const t = useTranslations('common')
+<Button>{t('save')}</Button>
+
+// âŒ YANLIÅ
+<Button>Kaydet</Button>
+```
+
+---
+
+## ğŸ“Š DASHBOARD & REPORTS KURALLARI
+
+### 1. Dashboard YapÄ±sÄ±
+- âœ… **6 KPI kartÄ±**: AnimatedCounter ile
+- âœ… **5 grafik**: Recharts (Line, Pie, Radar, Doughnut, Kanban)
+- âœ… **Real-time**: 30 saniyede bir refetch
+- âœ… **Cache**: 60 saniye revalidation
+
+### 2. Reports YapÄ±sÄ±
+- âœ… **Filtreleme**: Tarih, kullanÄ±cÄ±, firma, modÃ¼l
+- âœ… **Export**: Excel, PDF, CSV
+- âœ… **Performance**: Pagination, lazy loading
+
+### 3. API Endpoints
+- âœ… `/api/analytics/kpis` - Dashboard KPI'larÄ±
+- âœ… `/api/analytics/reports` - DetaylÄ± raporlar
+- âœ… Cache: 60s revalidation
+
+---
+
+## ğŸ’¼ CRUD MODÃœL KURALLARI
+
+### 1. Standart YapÄ±
+Her modÃ¼l iÃ§in:
+- âœ… `app/[module]/page.tsx` - Liste (DataTable + filtre)
+- âœ… `app/[module]/new/page.tsx` - Yeni kayÄ±t formu
+- âœ… `app/[module]/[id]/page.tsx` - Detay sayfasÄ±
+- âœ… `app/api/[module]/route.ts` - GET, POST
+- âœ… `app/api/[module]/[id]/route.ts` - GET, PUT, DELETE
+- âœ… `components/[module]/[Module]Form.tsx` - Form component
+- âœ… `components/[module]/[Module]Card.tsx` - Kart component
+- âœ… `components/[module]/[Module]List.tsx` - Liste component (CustomerList pattern'i ile)
+
+### 2. CustomerList Pattern (STANDART PATTERN - TÃœM LÄ°STELER Ä°Ã‡Ä°N ZORUNLU!)
+
+Her yeni liste component'i (`[Module]List.tsx`) **MUTLAKA** aÅŸaÄŸÄ±daki pattern'i takip etmeli:
+
+#### 2.1. Veri Ã‡ekme Pattern'i
+```typescript
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useLocale } from 'next-intl'
+import { Plus, Search, Edit, Trash2, Eye } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import [Module]Form from './[Module]Form'
+import SkeletonList from '@/components/skeletons/SkeletonList'
+import Link from 'next/link'
+import { useData } from '@/hooks/useData'
+import { mutate } from 'swr'
+
+interface [Module] {
+  id: string
+  name: string
+  // ... diÄŸer alanlar
+  status: string
+  createdAt: string
+}
+
+export default function [Module]List() {
+  const locale = useLocale()
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('')
+  const [formOpen, setFormOpen] = useState(false)
+  const [selected[Module], setSelected[Module]] = useState<[Module] | null>(null)
+
+  // Debounced search - performans iÃ§in (kullanÄ±cÄ± yazmayÄ± bitirdikten 300ms sonra arama)
+  const [debouncedSearch, setDebouncedSearch] = useState(search)
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 300) // 300ms debounce - her harfte arama yapÄ±lmaz
+    
+    return () => clearTimeout(timer)
+  }, [search])
+
+  // SWR ile veri Ã§ekme (repo kurallarÄ±na uygun) - debounced search kullanÄ±yoruz
+  const params = new URLSearchParams()
+  if (debouncedSearch) params.append('search', debouncedSearch)
+  if (status) params.append('status', status)
+  
+  const apiUrl = `/api/[module]?${params.toString()}`
+  const { data: [module]s = [], isLoading, error, mutate: mutate[Module]s } = useData<[Module][]>(apiUrl, {
+    dedupingInterval: 5000, // 5 saniye cache (daha kÄ±sa - gÃ¼ncellemeler daha hÄ±zlÄ±)
+    revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
+  })
+
+  // ... CRUD handler'lar
+}
+```
+
+#### 2.2. Delete Handler Pattern'i (Optimistic Update)
+```typescript
+const handleDelete = async (id: string, name: string) => {
+  if (!confirm(`${name} [item]Ä±nÄ± silmek istediÄŸinize emin misiniz?`)) {
+    return
+  }
+
+  try {
+    const res = await fetch(`/api/[module]/${id}`, {
+      method: 'DELETE',
+    })
+    
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}))
+      throw new Error(errorData.error || 'Failed to delete [module]')
+    }
+    
+    // Optimistic update - silinen kaydÄ± listeden kaldÄ±r
+    const updated[Module]s = [module]s.filter((item) => item.id !== id)
+    
+    // Cache'i gÃ¼ncelle - yeni listeyi hemen gÃ¶ster
+    await mutate[Module]s(updated[Module]s, { revalidate: false })
+    
+    // TÃ¼m diÄŸer [module] URL'lerini de gÃ¼ncelle
+    await Promise.all([
+      mutate('/api/[module]', updated[Module]s, { revalidate: false }),
+      mutate('/api/[module]?', updated[Module]s, { revalidate: false }),
+      mutate(apiUrl, updated[Module]s, { revalidate: false }),
+    ])
+  } catch (error: any) {
+    console.error('Delete error:', error)
+    alert(error?.message || 'Silme iÅŸlemi baÅŸarÄ±sÄ±z oldu')
+  }
+}
+```
+
+#### 2.3. Form Modal Pattern'i (Optimistic Update)
+```typescript
+<[Module]Form
+  [module]={selected[Module] || undefined}
+  open={formOpen}
+  onClose={handleFormClose}
+  onSuccess={async (saved[Module]: [Module]) => {
+    // Optimistic update - yeni/ gÃ¼ncellenmiÅŸ kaydÄ± hemen cache'e ekle ve UI'da gÃ¶ster
+    // BÃ¶ylece form kapanmadan Ã¶nce [item] listede gÃ¶rÃ¼nÃ¼r
+    
+    let updated[Module]s: [Module][]
+    
+    if (selected[Module]) {
+      // UPDATE: Mevcut kaydÄ± gÃ¼ncelle
+      updated[Module]s = [module]s.map((item) =>
+        item.id === saved[Module].id ? saved[Module] : item
+      )
+    } else {
+      // CREATE: Yeni kaydÄ± listenin baÅŸÄ±na ekle
+      updated[Module]s = [saved[Module], ...[module]s]
+    }
+    
+    // Cache'i gÃ¼ncelle - optimistic update'i hemen uygula ve koru
+    // revalidate: false = background refetch yapmaz, optimistic update korunur
+    await mutate[Module]s(updated[Module]s, { revalidate: false })
+    
+    // TÃ¼m diÄŸer [module] URL'lerini de gÃ¼ncelle (optimistic update)
+    await Promise.all([
+      mutate('/api/[module]', updated[Module]s, { revalidate: false }),
+      mutate('/api/[module]?', updated[Module]s, { revalidate: false }),
+      mutate(apiUrl, updated[Module]s, { revalidate: false }),
+    ])
+  }}
+/>
+```
+
+#### 2.4. Table Actions Pattern'i (GÃ¶rÃ¼ntÃ¼le, DÃ¼zenle, Sil)
+```typescript
+<TableCell className="text-right">
+  <div className="flex justify-end gap-2">
+    <Link href={`/${locale}/[module]/${item.id}`} prefetch={true}>
+      <Button variant="ghost" size="icon">
+        <Eye className="h-4 w-4" />
+      </Button>
+    </Link>
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => handleEdit(item)}
+    >
+      <Edit className="h-4 w-4" />
+    </Button>
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => handleDelete(item.id, item.name)}
+      className="text-red-600 hover:text-red-700"
+    >
+      <Trash2 className="h-4 w-4" />
+    </Button>
+  </div>
+</TableCell>
+```
+
+### 3. Form Component Pattern'i (STANDART PATTERN - TÃœM FORM'LAR Ä°Ã‡Ä°N ZORUNLU!)
+
+Her yeni form component'i (`[Module]Form.tsx`) **MUTLAKA** aÅŸaÄŸÄ±daki pattern'i takip etmeli:
+
+#### 3.1. Form Props Pattern'i
+```typescript
+interface [Module]FormProps {
+  [module]?: any
+  open: boolean
+  onClose: () => void
+  onSuccess?: (saved[Module]: any) => void // Cache gÃ¼ncelleme iÃ§in callback - kaydedilen [item]Ä± parametre olarak geÃ§iyoruz
+}
+```
+
+#### 3.2. useEffect ile Form Population Pattern'i
+```typescript
+export default function [Module]Form({
+  [module],
+  open,
+  onClose,
+  onSuccess,
+}: [Module]FormProps) {
+  const { register, handleSubmit, formState: { errors }, reset } = useForm<[Module]FormData>({
+    resolver: zodResolver([module]Schema),
+    defaultValues: {
+      // ... varsayÄ±lan deÄŸerler
+    },
+  })
+
+  // [Module] prop deÄŸiÅŸtiÄŸinde veya modal aÃ§Ä±ldÄ±ÄŸÄ±nda form'u gÃ¼ncelle
+  useEffect(() => {
+    if (open) {
+      if ([module]) {
+        // DÃ¼zenleme modu - [item] bilgilerini yÃ¼kle
+        reset({
+          name: [module].name || '',
+          // ... diÄŸer alanlar
+          status: [module].status || 'ACTIVE',
+        })
+      } else {
+        // Yeni kayÄ±t modu - form'u temizle
+        reset({
+          // ... varsayÄ±lan deÄŸerler
+        })
+      }
+    }
+  }, [[module], open, reset])
+
+  const onSubmit = async (data: [Module]FormData) => {
+    setLoading(true)
+    try {
+      const url = [module]
+        ? `/api/[module]/${[module].id}`
+        : '/api/[module]'
+      const method = [module] ? 'PUT' : 'POST'
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        throw new Error(error.error || 'Failed to save [module]')
+      }
+
+      const saved[Module] = await res.json()
+      
+      // onSuccess callback'i Ã§aÄŸÄ±r - optimistic update iÃ§in
+      if (onSuccess) {
+        onSuccess(saved[Module])
+      }
+      
+      reset()
+      onClose()
+    } catch (error: any) {
+      console.error('Error:', error)
+      alert(error?.message || 'Kaydetme iÅŸlemi baÅŸarÄ±sÄ±z oldu')
+    } finally {
+      setLoading(false)
+    }
+  }
+}
+```
+
+### 4. Detay SayfasÄ± Pattern'i
+Her modÃ¼l iÃ§in detay sayfasÄ± (`app/[module]/[id]/page.tsx`) **MUTLAKA** ÅŸunlarÄ± iÃ§ermeli:
+- âœ… KayÄ±t bilgilerini gÃ¶rÃ¼ntÃ¼leme (read-only)
+- âœ… **DÃ¼zenle** butonu (modal aÃ§Ä±lÄ±r, [Module]Form component'i kullanÄ±r)
+- âœ… **Sil** butonu (confirm dialog ile)
+- âœ… **Geri** butonu (liste sayfasÄ±na dÃ¶n)
+- âœ… SWR ile veri Ã§ekme (`useData` hook)
+- âœ… Skeleton loading state
+
+### 5. Form KurallarÄ±
+- âœ… **react-hook-form** + **Zod** validation
+- âœ… **Optimistic update**: SWR mutate ile (onSuccess callback'te)
+- âœ… **Toast notification**: BaÅŸarÄ±/hata mesajlarÄ± (alert ile, sonra toast'a geÃ§ilebilir)
+- âœ… **Loading state**: Skeleton veya disabled button
+- âœ… **useEffect ile form population**: Edit modunda form'u doldur
+
+### 6. DataTable KurallarÄ±
+- âœ… **Pagination**: 10-20-50 kayÄ±t seÃ§enekleri (gelecekte eklenebilir)
+- âœ… **Filtreleme**: Status, tarih, arama (debounced search)
+- âœ… **SÄ±ralama**: TÄ±klanabilir sÃ¼tun baÅŸlÄ±klarÄ± (gelecekte eklenebilir)
+- âœ… **Mobile**: Scrollable table
+- âœ… **Actions**: Her satÄ±rda GÃ¶rÃ¼ntÃ¼le (Eye), DÃ¼zenle (Edit), Sil (Trash2) butonlarÄ±
+
+### 7. Otomasyon KurallarÄ±
+- âœ… **Quote ACCEPTED** â†’ Invoice oluÅŸtur + stok dÃ¼ÅŸ + ActivityLog
+- âœ… **Invoice PAID** â†’ Finance kaydÄ± oluÅŸtur + ActivityLog
+- âœ… **Shipment DELIVERED** â†’ ActivityLog yaz
+- âœ… **TÃ¼m CRUD** â†’ ActivityLog'a meta JSON ile kaydet
+
+---
+
+## ğŸ“„ PDF KURALLARI
+
+### 1. PDF Generator
+- âœ… **@react-pdf/renderer** kullan (Edge Runtime uyumlu)
+- âœ… **Edge Runtime**: `/api/pdf/*/route.ts` dosyalarÄ±nda
+- âœ… **Template componentleri**: `components/pdf/QuotePDF.tsx`, `InvoicePDF.tsx`
+
+### 2. PDF Ä°Ã§erik
+- âœ… **Åirket logosu**: Supabase Storage'dan
+- âœ… **MÃ¼ÅŸteri bilgileri**: Tablodan Ã§ek
+- âœ… **ÃœrÃ¼n listesi**: Tablo formatÄ±nda
+- âœ… **KDV hesaplama**: Otomatik
+- âœ… **Ä°mza alanÄ±**: Footer'da
+
+### 3. PDF Entegrasyonu
+- âœ… **Download butonu**: Detay sayfalarÄ±nda
+- âœ… **Preview**: Browser'da aÃ§ma Ã¶zelliÄŸi
+- âœ… **API endpoint**: `/api/pdf/quote/[id]`, `/api/pdf/invoice/[id]`
+
+---
+
+## ğŸ“± MOBÄ°L KURALLARI
+
+### 1. Responsive Breakpoints
+- âœ… **Mobile**: < 768px (tek sÃ¼tun, hamburger menu)
+- âœ… **Tablet**: 768px - 1024px (2 sÃ¼tun)
+- âœ… **Desktop**: > 1024px (full layout)
+
+### 2. Touch Optimization
+- âœ… **Button size**: Min 44x44px
+- âœ… **Touch targets**: Spacing yeterli
+- âœ… **Swipe gestures**: Kanban drag & drop
+
+### 3. Mobile Navigation
+- âœ… **Hamburger menu**: Sidebar yerine
+- âœ… **Bottom nav**: Mobile'da (opsiyonel)
+- âœ… **Animations**: Framer Motion smooth transitions
+
+---
+
+## ğŸ§ª TEST KURALLARI
+
+### 1. Test YapÄ±sÄ±
+- âœ… **Jest**: Unit testler (hooks, utils)
+- âœ… **Playwright**: E2E testler (login â†’ dashboard â†’ CRUD)
+- âœ… **Integration**: API endpoint testleri
+
+### 2. Test Coverage
+- âœ… **CRUD operations**: Create, Read, Update, Delete
+- âœ… **RLS**: Company isolation test
+- âœ… **Performance**: API response time < 200ms
+
+### 3. Pre-Deploy Test
+- âœ… **Lint**: `npm run lint`
+- âœ… **Build**: `npm run build`
+- âœ… **Test**: `npm test`
+- âœ… **Pipeline**: `build && test && lint`
+
+---
+
+## ğŸš€ DEPLOY KURALLARI
+
+### 1. Vercel Deploy
+- âœ… **Environment variables**: Supabase URL, keys
+- âœ… **Build command**: `next build`
+- âœ… **Output directory**: `.next`
+
+### 2. Database Migration
+- âœ… **Supabase CLI**: `supabase db push`
+- âœ… **Seed data**: `supabase db seed`
+- âœ… **RLS policies**: Migration dosyalarÄ±nda
+
+### 3. Post-Deploy
+- âœ… **Health check**: `/api/health` endpoint
+- âœ… **SSL**: Vercel otomatik
+- âœ… **Monitoring**: Performance tracking
+
+---
+
+## ğŸ“ DOKÃœMANTASYON KURALLARI
+
+### 1. PRD.md
+- âœ… **Performance Requirements**: Hedef metrikler
+- âœ… **Teknik Spesifikasyonlar**: Mimari detaylar
+- âœ… **Cache Strategy**: SWR, ISR, Edge Runtime
+
+### 2. TODO.md
+- âœ… **Faz bazlÄ± gÃ¶rev listesi**: 21 faz
+- âœ… **Ä°lerleme takibi**: % tamamlanma
+- âœ… **Test checklist**: Her modÃ¼l iÃ§in
+
+### 3. README.md
+- âœ… **Kurulum**: Step-by-step
+- âœ… **Environment variables**: Ã–rnek .env
+- âœ… **KullanÄ±m**: API endpoint'leri
+
+---
+
+## âš ï¸ YAPILMAYACAKLAR
+
+### 1. Performans
+- âŒ **YÃ¼kleniyor ekranÄ± kullanma**: Skeleton gÃ¶ster
+- âŒ **Her seferinde yeni Supabase client**: Singleton kullan
+- âŒ **Hardcoded text**: Locale kullan
+- âŒ **Client-side data fetching**: Server Components Ã¶ncelik
+
+### 2. Kod
+- âŒ **`any` type kullanma**: Tip tanÄ±mlarÄ± yap
+- âŒ **Inline styles**: Tailwind CSS kullan
+- âŒ **Console.log production'da**: Error logging kullan
+- âŒ **Duplicated code**: Component'leri tekrar kullan
+
+### 3. GÃ¼venlik
+- âŒ **RLS bypass**: SuperAdmin dÄ±ÅŸÄ±nda
+- âŒ **Sensitive data loglama**: Error mesajlarÄ±nda gizle
+- âŒ **Auth kontrolÃ¼ atlama**: Her API endpoint'te
+
+---
+
+## âœ… CHECKLIST - Her Yeni Ã–zellik Ä°Ã§in
+
+### Performans
+- [ ] SWR cache kullanÄ±ldÄ± mÄ±?
+- [ ] Skeleton component gÃ¶steriliyor mu?
+- [ ] Prefetching aktif mi?
+- [ ] Optimistic update var mÄ±?
+
+### Tema
+- [ ] Premium renk paleti kullanÄ±ldÄ± mÄ±?
+- [ ] Animasyonlar smooth mu?
+- [ ] Responsive test edildi mi?
+
+### GÃ¼venlik
+- [ ] Auth kontrolÃ¼ yapÄ±ldÄ± mÄ±?
+- [ ] RLS kontrolÃ¼ yapÄ±ldÄ± mÄ±?
+- [ ] Input validation var mÄ±?
+
+### Test
+- [ ] CRUD iÅŸlemleri test edildi mi?
+- [ ] API endpoint'ler Ã§alÄ±ÅŸÄ±yor mu?
+- [ ] YÃ¶nlendirmeler doÄŸru mu?
+
+### Locale
+- [ ] TÃ¼m metinler Ã§evrilebilir mi?
+- [ ] ActivityLog TR/EN desteÄŸi var mÄ±?
+
+---
+
+## ğŸ¯ PERFORMANS HEDEFLERÄ° (MUTLAKA SAÄLANMALI!)
+
+| Metrik | Hedef | Ã–lÃ§Ã¼m |
+|--------|-------|-------|
+| Sekme geÃ§iÅŸi | <300ms | Link click â†’ render |
+| Dashboard ilk render | <500ms | Page load â†’ visible |
+| API response (cache hit) | <200ms | Request â†’ response |
+| API response (cache miss) | <1000ms | Request â†’ response |
+| Skeleton gÃ¶rÃ¼nÃ¼m | <100ms | Loading â†’ skeleton |
+| Lighthouse Performance | >95 | Performance score |
+
+---
+
+## ğŸ”„ GÃœNCELLEME NOTLARI
+
+- **Versiyon**: 1.0.0
+- **Son GÃ¼ncelleme**: 2024
+- **PRD Uyumu**: PRD.md ile birebir uyumlu
+- **TODO Uyumu**: TODO.md'deki 21 faz ile uyumlu
+
+---
+
+**Ã–NEMLÄ°**: Bu kurallara gÃ¶re kod yaz. Performans Ã¶ncelikli, premium tema tutarlÄ±, gÃ¼venlik kontrolÃ¼ her yerde!
+
+
+
+

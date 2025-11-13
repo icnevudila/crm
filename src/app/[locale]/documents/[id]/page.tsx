@@ -1,7 +1,10 @@
 'use client'
 
+/* eslint-disable react/no-unescaped-entities */
+
 import { useParams, useRouter } from 'next/navigation'
 import { useState } from 'react'
+import Image from 'next/image'
 import { ArrowLeft, Download, Eye, FileText, Trash2, Edit, FolderOpen, Calendar, User } from 'lucide-react'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
@@ -267,10 +270,14 @@ export default function DocumentDetailPage() {
         <Card className="p-6">
           <h3 className="font-semibold mb-4">Önizleme</h3>
           <div className="flex justify-center">
-            <img 
-              src={document.fileUrl} 
+            <Image
+              src={document.fileUrl}
               alt={document.title}
-              className="max-w-full max-h-96 rounded-lg border"
+              width={1024}
+              height={768}
+              sizes="(max-width: 768px) 100vw, 768px"
+              unoptimized
+              className="max-h-96 w-auto max-w-full rounded-lg border object-contain"
             />
           </div>
         </Card>

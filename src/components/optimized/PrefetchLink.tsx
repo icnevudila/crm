@@ -7,7 +7,7 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, startTransition } from 'react'
 import { cn } from '@/lib/utils'
 
 interface PrefetchLinkProps extends React.ComponentProps<typeof Link> {
@@ -35,11 +35,14 @@ export function PrefetchLink({
     if (!container) return
 
     // Hover'da anında prefetch - sekme geçişini <100ms'e düşürür
+    // startTransition ile non-blocking yap (React 18)
     const handleMouseEnter = () => {
       if (!prefetchedRef.current) {
         const prefetchUrl = href as string
-        router.prefetch(prefetchUrl)
-        prefetchedRef.current = true
+        startTransition(() => {
+          router.prefetch(prefetchUrl)
+          prefetchedRef.current = true
+        })
         if (process.env.NODE_ENV === 'development') {
           console.log('[PrefetchLink] Prefetched on hover:', prefetchUrl)
         }
@@ -54,8 +57,10 @@ export function PrefetchLink({
         entries.forEach((entry) => {
           if (entry.isIntersecting && !prefetchedRef.current) {
             const prefetchUrl = href as string
-            router.prefetch(prefetchUrl)
-            prefetchedRef.current = true
+            startTransition(() => {
+              router.prefetch(prefetchUrl)
+              prefetchedRef.current = true
+            })
             if (process.env.NODE_ENV === 'development') {
               console.log('[PrefetchLink] Prefetched on viewport:', prefetchUrl)
             }

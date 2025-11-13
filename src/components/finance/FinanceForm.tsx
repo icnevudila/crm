@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { toast } from '@/lib/toast'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -26,95 +27,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-// Gider kategorileri
-const EXPENSE_CATEGORIES = [
-  { value: 'FUEL', label: 'Araç Yakıtı' },
-  { value: 'ACCOMMODATION', label: 'Konaklama' },
-  { value: 'FOOD', label: 'Yemek' },
-  { value: 'TRANSPORT', label: 'Ulaşım' },
-  { value: 'OFFICE', label: 'Ofis Giderleri' },
-  { value: 'MARKETING', label: 'Pazarlama' },
-  { value: 'OTHER', label: 'Diğer' },
-]
-
-// Gelir kategorileri (genişletilmiş)
-const INCOME_CATEGORIES = [
-  { value: 'INVOICE_INCOME', label: 'Fatura Geliri' },
-  { value: 'SERVICE', label: 'Hizmet Geliri' },
-  { value: 'PRODUCT_SALE', label: 'Ürün Satışı' },
-  { value: 'CONSULTING', label: 'Danışmanlık' },
-  { value: 'LICENSE', label: 'Lisans Geliri' },
-  { value: 'INVESTMENT', label: 'Yatırım Geliri' },
-  { value: 'OTHER', label: 'Diğer' },
-]
-
-// Gider kategorileri (genişletilmiş)
-const EXPENSE_CATEGORIES_FULL = [
-  { value: 'FUEL', label: 'Araç Yakıtı' },
-  { value: 'ACCOMMODATION', label: 'Konaklama' },
-  { value: 'FOOD', label: 'Yemek' },
-  { value: 'TRANSPORT', label: 'Ulaşım' },
-  { value: 'OFFICE', label: 'Ofis Giderleri' },
-  { value: 'MARKETING', label: 'Pazarlama' },
-  { value: 'SHIPPING', label: 'Kargo/Sevkiyat' },
-  { value: 'PURCHASE', label: 'Alış Giderleri' },
-  { value: 'TRAVEL', label: 'Seyahat' },
-  { value: 'UTILITIES', label: 'Faturalar (Elektrik, Su, İnternet)' },
-  { value: 'RENT', label: 'Kira' },
-  { value: 'SALARY', label: 'Maaş' },
-  { value: 'TAX', label: 'Vergi' },
-  { value: 'INSURANCE', label: 'Sigorta' },
-  { value: 'MAINTENANCE', label: 'Bakım/Onarım' },
-  { value: 'TRAINING', label: 'Eğitim' },
-  { value: 'SOFTWARE', label: 'Yazılım/Lisans' },
-  { value: 'OTHER', label: 'Diğer' },
-]
-
-// İlişkili entity tipleri
-const RELATED_ENTITY_TYPES = [
-  { value: 'INVOICE', label: 'Fatura' },
-  { value: 'SHIPMENT', label: 'Sevkiyat' },
-  { value: 'PURCHASE', label: 'Alış İşlemi' },
-  { value: 'TASK', label: 'Görev' },
-  { value: 'TICKET', label: 'Destek Talebi' },
-  { value: 'MEETING', label: 'Toplantı' },
-  { value: 'PRODUCT', label: 'Ürün' },
-  { value: 'DEAL', label: 'Anlaşma' },
-  { value: 'QUOTE', label: 'Teklif' },
-  { value: 'NONE', label: 'İlişkisiz' },
-]
-
-// Ödeme yöntemleri
-const PAYMENT_METHODS = [
-  { value: 'CASH', label: 'Nakit' },
-  { value: 'BANK', label: 'Banka Transferi' },
-  { value: 'CREDIT_CARD', label: 'Kredi Kartı' },
-  { value: 'DEBIT_CARD', label: 'Banka Kartı' },
-  { value: 'CHECK', label: 'Çek' },
-  { value: 'OTHER', label: 'Diğer' },
-]
-
-const financeSchema = z.object({
-  type: z.enum(['INCOME', 'EXPENSE']).default('INCOME'),
-  amount: z.number().min(0.01, 'Tutar 0\'dan büyük olmalı').max(999999999, 'Tutar çok büyük'),
-  category: z.string().optional(),
-  description: z.string().max(1000, 'Açıklama en fazla 1000 karakter olabilir').optional(),
-  relatedTo: z.string().optional(), // Eski format (backward compatibility)
-  relatedEntityType: z.string().optional(), // Yeni: Entity tipi (Invoice, Shipment, vb.)
-  relatedEntityId: z.string().optional(), // Yeni: Entity ID
-  customerCompanyId: z.string().optional(), // Firma bazlı ilişki
-  paymentMethod: z.string().optional(), // Ödeme yöntemi
-  paymentDate: z.string().optional(), // Ödeme tarihi
-  isRecurring: z.boolean().optional().default(false), // Tekrarlayan gider
-})
-
-type FinanceFormData = z.infer<typeof financeSchema>
-
 interface FinanceFormProps {
   finance?: any
   open: boolean
   onClose: () => void
   onSuccess?: (savedFinance: any) => void | Promise<void>
+  customerCompanyId?: string
 }
 
 interface CustomerCompany {
@@ -122,12 +40,92 @@ interface CustomerCompany {
   name: string
 }
 
-export default function FinanceForm({ finance, open, onClose, onSuccess }: FinanceFormProps) {
+export default function FinanceForm({
+  finance,
+  open,
+  onClose,
+  onSuccess,
+  customerCompanyId: customerCompanyIdProp,
+}: FinanceFormProps) {
+  const t = useTranslations('finance.form')
+  const tCommon = useTranslations('common.form')
   const router = useRouter()
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
   const urlCustomerCompanyId = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
+  const customerCompanyId = customerCompanyIdProp || urlCustomerCompanyId
   const [loading, setLoading] = useState(false)
+
+  // Schema'yı component içinde oluştur - locale desteği için
+  const financeSchema = z.object({
+    type: z.enum(['INCOME', 'EXPENSE']).default('INCOME'),
+    amount: z.number().min(0.01, t('amountMin')).max(999999999, t('amountMax')),
+    category: z.string().optional(),
+    description: z.string().max(1000, t('descriptionMaxLength')).optional(),
+    relatedTo: z.string().optional(), // Eski format (backward compatibility)
+    relatedEntityType: z.string().optional(), // Yeni: Entity tipi (Invoice, Shipment, vb.)
+    relatedEntityId: z.string().optional(), // Yeni: Entity ID
+    customerCompanyId: z.string().optional(), // Firma bazlı ilişki
+    paymentMethod: z.string().optional(), // Ödeme yöntemi
+    paymentDate: z.string().optional(), // Ödeme tarihi
+    isRecurring: z.boolean().optional().default(false), // Tekrarlayan gider
+  })
+
+  type FinanceFormData = z.infer<typeof financeSchema>
+
+  // Kategorileri locale'den al
+  const getIncomeCategories = () => [
+    { value: 'INVOICE_INCOME', label: t('categoryInvoiceIncome') },
+    { value: 'SERVICE', label: t('categoryService') },
+    { value: 'PRODUCT_SALE', label: t('categoryProductSale') },
+    { value: 'CONSULTING', label: t('categoryConsulting') },
+    { value: 'LICENSE', label: t('categoryLicense') },
+    { value: 'INVESTMENT', label: t('categoryInvestment') },
+    { value: 'OTHER', label: t('categoryOther') },
+  ]
+
+  const getExpenseCategories = () => [
+    { value: 'FUEL', label: t('categoryFuel') },
+    { value: 'ACCOMMODATION', label: t('categoryAccommodation') },
+    { value: 'FOOD', label: t('categoryFood') },
+    { value: 'TRANSPORT', label: t('categoryTransport') },
+    { value: 'OFFICE', label: t('categoryOffice') },
+    { value: 'MARKETING', label: t('categoryMarketing') },
+    { value: 'SHIPPING', label: t('categoryShipping') },
+    { value: 'PURCHASE', label: t('categoryPurchase') },
+    { value: 'TRAVEL', label: t('categoryTravel') },
+    { value: 'UTILITIES', label: t('categoryUtilities') },
+    { value: 'RENT', label: t('categoryRent') },
+    { value: 'SALARY', label: t('categorySalary') },
+    { value: 'TAX', label: t('categoryTax') },
+    { value: 'INSURANCE', label: t('categoryInsurance') },
+    { value: 'MAINTENANCE', label: t('categoryMaintenance') },
+    { value: 'TRAINING', label: t('categoryTraining') },
+    { value: 'SOFTWARE', label: t('categorySoftware') },
+    { value: 'OTHER', label: t('categoryOther') },
+  ]
+
+  const getRelatedEntityTypes = () => [
+    { value: 'INVOICE', label: t('relatedEntityTypeInvoice') },
+    { value: 'SHIPMENT', label: t('relatedEntityTypeShipment') },
+    { value: 'PURCHASE', label: t('relatedEntityTypePurchase') },
+    { value: 'TASK', label: t('relatedEntityTypeTask') },
+    { value: 'TICKET', label: t('relatedEntityTypeTicket') },
+    { value: 'MEETING', label: t('relatedEntityTypeMeeting') },
+    { value: 'PRODUCT', label: t('relatedEntityTypeProduct') },
+    { value: 'DEAL', label: t('relatedEntityTypeDeal') },
+    { value: 'QUOTE', label: t('relatedEntityTypeQuote') },
+    { value: 'NONE', label: t('relatedEntityTypeNone') },
+  ]
+
+  const getPaymentMethods = () => [
+    { value: 'CASH', label: t('paymentMethodCash') },
+    { value: 'BANK', label: t('paymentMethodBank') },
+    { value: 'CREDIT_CARD', label: t('paymentMethodCreditCard') },
+    { value: 'DEBIT_CARD', label: t('paymentMethodDebitCard') },
+    { value: 'CHECK', label: t('paymentMethodCheck') },
+    { value: 'OTHER', label: t('paymentMethodOther') },
+  ]
 
   // Müşteri firmalarını çek (firma seçimi için)
   const { data: customerCompanies = [] } = useData<CustomerCompany[]>('/api/customer-companies', {
@@ -150,7 +148,7 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
       category: '',
       description: '',
       relatedTo: '',
-      customerCompanyId: urlCustomerCompanyId,
+      customerCompanyId,
     },
   })
 
@@ -173,7 +171,7 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
           relatedTo: finance.relatedTo || '',
           relatedEntityType: finance.relatedEntityType || '',
           relatedEntityId: finance.relatedEntityId || '',
-          customerCompanyId: finance.customerCompanyId || urlCustomerCompanyId,
+          customerCompanyId: finance.customerCompanyId || customerCompanyId || undefined,
           paymentMethod: finance.paymentMethod || '',
           paymentDate: finance.paymentDate ? new Date(finance.paymentDate).toISOString().split('T')[0] : '',
           isRecurring: finance.isRecurring || false,
@@ -188,14 +186,15 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
           relatedTo: '',
           relatedEntityType: '',
           relatedEntityId: '',
-          customerCompanyId: urlCustomerCompanyId,
+          customerCompanyId: customerCompanyId || undefined,
           paymentMethod: '',
           paymentDate: new Date().toISOString().split('T')[0],
           isRecurring: false,
         })
       }
     }
-  }, [finance, open, reset, urlCustomerCompanyId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finance, open, reset]) // reset eklendi - dependency array boyutunu sabit tutmak için (reset stable'dır, sonsuz döngüye neden olmaz)
 
   // İlişkili entity seçildiğinde entity listesini çek
   useEffect(() => {
@@ -242,12 +241,23 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
 
       return res.json()
     },
-    onSuccess: (savedFinance) => {
+    onSuccess: async (savedFinance) => {
+      // Toast mesajı göster
+      if (finance) {
+        toast.success(t('financeUpdated'), t('financeUpdatedMessage', { title: savedFinance.title || savedFinance.description || t('financeCreatedMessage') }))
+      } else {
+        toast.success(t('financeCreated'), t('financeCreatedMessage'))
+      }
+      
       // onSuccess callback'i çağır - optimistic update için
+      // CRITICAL FIX: onSuccess'i önce çağır, sonra form'u kapat
+      // onSuccess içinde onClose çağrılmamalı - form zaten kendi içinde onClose çağırıyor
       if (onSuccess) {
-        onSuccess(savedFinance)
+        // onSuccess async olabilir - Promise.resolve ile await kullan
+        await Promise.resolve(onSuccess(savedFinance))
       }
       reset()
+      // Form'u kapat - onSuccess callback'inden SONRA (sonsuz döngü önleme)
       onClose()
     },
   })
@@ -255,10 +265,30 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
   const onSubmit = async (data: FinanceFormData) => {
     setLoading(true)
     try {
-      await mutation.mutateAsync(data)
+      // Boş string'leri null'a çevir - UUID alanları için
+      const cleanData = {
+        ...data,
+        customerCompanyId: data.customerCompanyId && data.customerCompanyId.trim() !== '' && data.customerCompanyId !== 'none'
+          ? data.customerCompanyId
+          : (customerCompanyId && customerCompanyId.trim() !== '' ? customerCompanyId : null),
+        relatedEntityId: data.relatedEntityId && data.relatedEntityId.trim() !== '' && data.relatedEntityId !== 'none'
+          ? data.relatedEntityId
+          : null,
+        relatedEntityType: data.relatedEntityType && data.relatedEntityType !== 'NONE'
+          ? data.relatedEntityType
+          : null,
+        // Opsiyonel string alanları temizle
+        description: data.description && data.description.trim() !== '' ? data.description : undefined,
+        relatedTo: data.relatedTo && data.relatedTo.trim() !== '' ? data.relatedTo : undefined,
+        category: data.category && data.category.trim() !== '' ? data.category : undefined,
+        paymentMethod: data.paymentMethod && data.paymentMethod.trim() !== '' ? data.paymentMethod : undefined,
+        paymentDate: data.paymentDate && data.paymentDate.trim() !== '' ? data.paymentDate : undefined,
+      }
+      
+      await mutation.mutateAsync(cleanData)
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error('Kaydedilemedi', error?.message)
+      toast.error(t('saveFailed'), error?.message)
     } finally {
       setLoading(false)
     }
@@ -269,17 +299,17 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {finance ? 'Finans Kaydı Düzenle' : 'Yeni Finans Kaydı'}
+            {finance ? t('editTitle') : t('newTitle')}
           </DialogTitle>
           <DialogDescription>
-            {finance ? 'Finans kaydını güncelleyin' : 'Yeni gelir/gider kaydı oluşturun'}
+            {finance ? t('editDescription') : t('newDescription')}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pb-4">
           {/* Type */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Tip *</label>
+            <label className="text-sm font-medium">{t('typeLabel')} *</label>
             <Select
               value={type}
               onValueChange={(value) =>
@@ -291,20 +321,20 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="INCOME">Gelir</SelectItem>
-                <SelectItem value="EXPENSE">Gider</SelectItem>
+                <SelectItem value="INCOME">{t('typeIncome')}</SelectItem>
+                <SelectItem value="EXPENSE">{t('typeExpense')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           {/* Amount */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Tutar (₺) *</label>
+            <label className="text-sm font-medium">{t('amountLabel')} *</label>
             <Input
               type="number"
               step="0.01"
               {...register('amount', { valueAsNumber: true })}
-              placeholder="0.00"
+              placeholder={t('amountPlaceholder')}
               disabled={loading}
             />
             {errors.amount && (
@@ -314,7 +344,7 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
 
           {/* Category */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Kategori</label>
+            <label className="text-sm font-medium">{t('categoryLabel')}</label>
             <Select
               value={selectedCategory || 'none'}
               onValueChange={(value) =>
@@ -323,11 +353,11 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
               disabled={loading}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Kategori seçin" />
+                <SelectValue placeholder={t('categoryPlaceholder')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Kategori Seçilmedi</SelectItem>
-                {(type === 'INCOME' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES_FULL).map((cat) => (
+                <SelectItem value="none">{t('categoryNotSelected')}</SelectItem>
+                {(type === 'INCOME' ? getIncomeCategories() : getExpenseCategories()).map((cat) => (
                   <SelectItem key={cat.value} value={cat.value}>
                     {cat.label}
                   </SelectItem>
@@ -338,10 +368,10 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
 
           {/* Description */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Açıklama</label>
+            <label className="text-sm font-medium">{t('descriptionLabel')}</label>
             <Textarea
               {...register('description')}
-              placeholder="Detaylı açıklama girin..."
+              placeholder={t('descriptionPlaceholder')}
               rows={3}
               disabled={loading}
             />
@@ -352,7 +382,7 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
 
           {/* Customer Company (Müşteri Firması) */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Müşteri Firması</label>
+            <label className="text-sm font-medium">{t('customerCompanyLabel')}</label>
             <Select
               value={watch('customerCompanyId') || 'none'}
               onValueChange={(value) =>
@@ -361,10 +391,10 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
               disabled={loading}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Firma seçin" />
+                <SelectValue placeholder={t('customerCompanyPlaceholder')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Firma Seçilmedi</SelectItem>
+                <SelectItem value="none">{t('customerCompanyNotSelected')}</SelectItem>
                 {customerCompanies.map((company) => (
                   <SelectItem key={company.id} value={company.id}>
                     {company.name}
@@ -376,20 +406,20 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
 
           {/* Related Entity Type */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">İlişkili Entity Tipi</label>
+            <label className="text-sm font-medium">{t('relatedEntityTypeLabel')}</label>
             <Select
               value={relatedEntityType || 'NONE'}
               onValueChange={(value) => {
-                setValue('relatedEntityType', value === 'NONE' ? '' : value)
-                setValue('relatedEntityId', '') // Entity tipi değiştiğinde ID'yi temizle
+                setValue('relatedEntityType', value === 'NONE' ? undefined : value)
+                setValue('relatedEntityId', undefined) // Entity tipi değiştiğinde ID'yi temizle
               }}
               disabled={loading}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Entity tipi seçin" />
+                <SelectValue placeholder={t('relatedEntityTypePlaceholder')} />
               </SelectTrigger>
               <SelectContent>
-                {RELATED_ENTITY_TYPES.map((entity) => (
+                {getRelatedEntityTypes().map((entity) => (
                   <SelectItem key={entity.value} value={entity.value}>
                     {entity.label}
                   </SelectItem>
@@ -402,20 +432,20 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
           {relatedEntityType && relatedEntityType !== 'NONE' && (
             <div className="space-y-2">
               <label className="text-sm font-medium">
-                {RELATED_ENTITY_TYPES.find((e) => e.value === relatedEntityType)?.label || 'Entity'} Seçin
+                {getRelatedEntityTypes().find((e) => e.value === relatedEntityType)?.label || t('relatedEntityLabel')}
               </label>
               <Select
               value={watch('relatedEntityId') || 'none'}
               onValueChange={(value) =>
-                setValue('relatedEntityId', value === 'none' ? '' : value)
+                setValue('relatedEntityId', value === 'none' ? undefined : value)
               }
               disabled={loading || loadingEntities}
             >
               <SelectTrigger>
-                <SelectValue placeholder={loadingEntities ? 'Yükleniyor...' : 'Entity seçin'} />
+                <SelectValue placeholder={loadingEntities ? t('relatedEntityLoading') : t('relatedEntityPlaceholder')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Entity Seçilmedi</SelectItem>
+                <SelectItem value="none">{t('relatedEntityNotSelected')}</SelectItem>
                 {relatedEntities.map((entity: any) => (
                   <SelectItem key={entity.id} value={entity.id}>
                     {entity.title || entity.name || entity.subject || entity.tracking || entity.id}
@@ -428,7 +458,7 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
 
           {/* Payment Method */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Ödeme Yöntemi</label>
+            <label className="text-sm font-medium">{t('paymentMethodLabel')}</label>
             <Select
               value={watch('paymentMethod') || 'none'}
               onValueChange={(value) =>
@@ -437,11 +467,11 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
               disabled={loading}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Ödeme yöntemi seçin" />
+                <SelectValue placeholder={t('paymentMethodPlaceholder')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Ödeme Yöntemi Seçilmedi</SelectItem>
-                {PAYMENT_METHODS.map((method) => (
+                <SelectItem value="none">{t('paymentMethodNotSelected')}</SelectItem>
+                {getPaymentMethods().map((method) => (
                   <SelectItem key={method.value} value={method.value}>
                     {method.label}
                   </SelectItem>
@@ -452,7 +482,7 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
 
           {/* Payment Date */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Ödeme Tarihi</label>
+            <label className="text-sm font-medium">{t('paymentDateLabel')}</label>
             <Input
               type="date"
               {...register('paymentDate')}
@@ -471,21 +501,21 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
                 disabled={loading}
               />
               <label htmlFor="isRecurring" className="text-sm font-medium">
-                Tekrarlayan Gider (Aylık otomatik oluştur)
+                {t('isRecurringLabel')}
               </label>
             </div>
           )}
 
           {/* Related To (Eski format - backward compatibility) */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">İlişkili (Manuel - Eski Format)</label>
+            <label className="text-sm font-medium">{t('relatedToLabel')}</label>
             <Input
               {...register('relatedTo')}
-              placeholder="Örn: Invoice: xxx, Meeting: xxx (Manuel giriş)"
+              placeholder={t('relatedToPlaceholder')}
               disabled={loading}
             />
             <p className="text-xs text-gray-500">
-              Yeni sistemde yukarıdaki "İlişkili Entity Tipi" kullanılmalı. Bu alan eski kayıtlar için.
+              {t('relatedToHint')}
             </p>
           </div>
 
@@ -497,14 +527,14 @@ export default function FinanceForm({ finance, open, onClose, onSuccess }: Finan
               onClick={onClose}
               disabled={loading}
             >
-              İptal
+              {t('cancel')}
             </Button>
             <Button
               type="submit"
               className="bg-gradient-primary text-white"
               disabled={loading}
             >
-              {loading ? 'Kaydediliyor...' : finance ? 'Güncelle' : 'Kaydet'}
+              {loading ? t('saving') : finance ? t('update') : t('save')}
             </Button>
           </div>
         </form>

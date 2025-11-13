@@ -2,16 +2,17 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { Card } from '@/components/ui/card'
-import { FileText, TrendingUp, CheckCircle } from 'lucide-react'
+import { FileText, PieChart, TrendingUp } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import { ReportSectionProps } from './types'
 
-const QuoteStatusPieChart = dynamic(() => import('@/components/reports/charts/QuoteStatusPieChart'), {
+const QuoteTrendLineChart = dynamic(() => import('@/components/reports/charts/QuoteTrendLineChart'), {
   ssr: false,
   loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
 })
 
-const QuoteTrendLineChart = dynamic(() => import('@/components/reports/charts/QuoteTrendLineChart'), {
+const QuoteStatusPieChart = dynamic(() => import('@/components/reports/charts/QuoteStatusPieChart'), {
   ssr: false,
   loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
 })
@@ -25,27 +26,28 @@ async function fetchQuoteReports() {
   return res.json()
 }
 
-export default function QuoteReports() {
+export default function QuoteReports({ isActive }: ReportSectionProps) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['quote-reports'],
     queryFn: fetchQuoteReports,
     staleTime: 5 * 60 * 1000,
     refetchOnMount: true,
+    enabled: isActive,
   })
 
+  if (!isActive) return null
   if (isLoading) return <SkeletonList />
   if (error) return <div className="text-red-600">Rapor yüklenirken hata oluştu</div>
 
   return (
     <div className="space-y-6">
-      <Card className="p-4 bg-indigo-50 border-indigo-200">
+      <Card className="p-4 bg-rose-50 border-rose-200">
         <div className="flex items-start gap-3">
-          <FileText className="h-5 w-5 text-indigo-600 mt-0.5" />
+          <FileText className="h-5 w-5 text-rose-600 mt-0.5" />
           <div>
             <h3 className="font-semibold text-gray-900 mb-1">Teklif Raporları</h3>
             <p className="text-sm text-gray-600">
-              Teklif bazlı detaylı analizler. Durum dağılımı, trend analizi ve 
-              kabul/red oranlarını görüntüleyin. Tüm veriler anlık olarak güncellenir.
+              Teklif trendleri ve durum dağılımları. Kazanma/kaybetme oranlarını ve durum bazlı performansı inceleyin.
             </p>
           </div>
         </div>
@@ -55,31 +57,23 @@ export default function QuoteReports() {
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Teklif Durum Dağılımı</h3>
-              <p className="text-sm text-gray-500 mt-1">Durum bazlı teklif dağılımı</p>
+              <h3 className="text-lg font-semibold text-gray-900">Teklif Trendi</h3>
+              <p className="text-sm text-gray-500 mt-1">Aylık teklif durumu değişimleri</p>
             </div>
-            <CheckCircle className="h-5 w-5 text-primary-600" />
+            <TrendingUp className="h-5 w-5 text-primary-600" />
           </div>
-          <QuoteStatusPieChart data={data?.statusDistribution || []} />
-          <div className="mt-4 p-3 bg-gray-50 rounded text-xs text-gray-600">
-            <strong>Açıklama:</strong> Tekliflerin durum bazlı dağılımı. 
-            Taslak, gönderildi, kabul edildi ve reddedildi tekliflerin oranlarını görüntüleyin.
-          </div>
+          <QuoteTrendLineChart data={data?.trend || []} />
         </Card>
 
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Teklif Trend Analizi</h3>
-              <p className="text-sm text-gray-500 mt-1">Aylık teklif oluşturma trendi</p>
+              <h3 className="text-lg font-semibold text-gray-900">Teklif Durum Dağılımı</h3>
+              <p className="text-sm text-gray-500 mt-1">Durum bazlı teklif sayısı</p>
             </div>
-            <TrendingUp className="h-5 w-5 text-primary-600" />
+            <PieChart className="h-5 w-5 text-primary-600" />
           </div>
-          <QuoteTrendLineChart data={data?.trend || []} />
-          <div className="mt-4 p-3 bg-gray-50 rounded text-xs text-gray-600">
-            <strong>Açıklama:</strong> Aylık bazda teklif oluşturma trendi. 
-            Hangi aylarda daha fazla teklif oluşturulduğunu görüntüleyin.
-          </div>
+          <QuoteStatusPieChart data={data?.statusDistribution || []} />
         </Card>
       </div>
     </div>

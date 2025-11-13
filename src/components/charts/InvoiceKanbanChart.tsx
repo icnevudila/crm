@@ -1,6 +1,6 @@
 'use client'
 
-import { memo, useMemo, type ComponentType } from 'react'
+import { memo, useMemo, useRef, type ComponentType } from 'react'
 import { formatCurrency } from '@/lib/utils'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -15,6 +15,8 @@ import {
   Package,
   CheckCircle,
   XCircle,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
@@ -34,6 +36,8 @@ interface KanbanInvoice {
   createdAt?: string
   Company?: { name?: string }
   company?: { name?: string }
+  invoiceType?: 'SALES' | 'PURCHASE' | 'SERVICE_SALES' | 'SERVICE_PURCHASE'
+  serviceDescription?: string
 }
 
 interface KanbanColumn {
@@ -64,12 +68,12 @@ const STATUS_LABELS: Record<string, string> = {
 
 const STATUS_INFO: Record<string, string> = {
   DRAFT: '💡 Bu statüde: Fatura taslak halinde. Gönderilmeden önce içerikleri kontrol edin ve "Gönderildi" statüsüne alın.',
-  SENT: '📬 Bu statüde: Fatura müşteriye iletildi. Sevkiyat tamamlandığında "Sevkiyat Yapıldı" statüsüne taşıyın.',
-  SHIPPED: '🚚 Bu statüde: Sevkiyat yapıldı. Mal kabul onaylandıktan sonra "Mal Kabul" statüsüne geçirin.',
-  RECEIVED: '📦 Bu statüde: Mal kabul edildi. Ödeme alındığında "Ödendi" statüsüne taşıyın.',
-  PAID: '✅ Bu statüde: Ödeme alındı. Finans kayıtları otomatik olarak güncellendi.',
-  OVERDUE: '⏰ Bu statüde: Vadesi geçmiş faturalar. Ödeme hatırlatması gönderin ve tahsilatı takip edin.',
-  CANCELLED: '❌ Bu statüde: İptal edilen faturalar. Gerekirse yeniden oluşturun veya not ekleyin.',
+  SENT: '📬 Bu statüde: Fatura müşteriye/tedarikçiye iletildi. Satış faturaları için "Sevkiyat Yapıldı", alış faturaları için "Mal Kabul Edildi", hizmet faturaları için "Ödendi" statüsüne geçin.',
+  SHIPPED: '🚚 Bu statüde: Sevkiyat yapıldı ve stoktan düşüldü. Ödeme alındığında "Ödendi" statüsüne taşıyın. Sadece satış faturaları için geçerlidir.',
+  RECEIVED: '📦 Bu statüde: Mal kabul edildi ve stoğa giriş yapıldı. Ödeme yapıldığında "Ödendi" statüsüne taşıyın. Sadece alış faturaları için geçerlidir.',
+  PAID: '✅ Bu statüde: Ödeme alındı/yapıldı. Finans kayıtları otomatik olarak oluşturuldu. Bu durumdaki faturalar değiştirilemez.',
+  OVERDUE: '⏰ Bu statüde: Vadesi geçmiş faturalar. Ödeme hatırlatması gönderin ve tahsilatı takip edin. Ödeme alındığında "Ödendi" statüsüne geçin.',
+  CANCELLED: '❌ Bu statüde: İptal edilen faturalar. Bu durumdaki faturalar değiştirilemez. Gerekirse yeniden oluşturun veya not ekleyin.',
 }
 
 const STATUS_STYLES: Record<
@@ -187,31 +191,115 @@ interface QuickActionConfig {
   targetStatus: string
   icon: ComponentType<{ className?: string }>
   variant: 'default' | 'outline'
+  tooltip?: string // Kullanıcı bilgilendirmesi için tooltip
 }
 
 const QUICK_ACTIONS: Record<string, QuickActionConfig[]> = {
   DRAFT: [
-    { id: 'send', label: 'Gönder', targetStatus: 'SENT', icon: Send, variant: 'default' },
-    { id: 'cancel', label: 'İptal Et', targetStatus: 'CANCELLED', icon: XCircle, variant: 'outline' },
+    { 
+      id: 'send', 
+      label: 'Gönder', 
+      targetStatus: 'SENT', 
+      icon: Send, 
+      variant: 'default',
+      tooltip: 'Faturayı müşteriye/tedarikçiye gönderir. Bu işlemden sonra fatura durumu "Gönderildi" olur ve otomatik sevkiyat/mal kabul kaydı oluşturulur.'
+    },
+    { 
+      id: 'cancel', 
+      label: 'İptal Et', 
+      targetStatus: 'CANCELLED', 
+      icon: XCircle, 
+      variant: 'outline',
+      tooltip: 'Faturayı iptal eder. İptal edilen faturalar değiştirilemez.'
+    },
   ],
   SENT: [
-    { id: 'mark-shipped', label: 'Sevkiyat Yapıldı', targetStatus: 'SHIPPED', icon: Truck, variant: 'default' },
-    { id: 'mark-received', label: 'Mal Kabul Edildi', targetStatus: 'RECEIVED', icon: Package, variant: 'outline' },
-    { id: 'mark-paid', label: 'Ödendi', targetStatus: 'PAID', icon: CheckCircle, variant: 'outline' },
-    { id: 'cancel', label: 'İptal Et', targetStatus: 'CANCELLED', icon: XCircle, variant: 'outline' },
+    { 
+      id: 'mark-shipped', 
+      label: 'Sevkiyat Yapıldı', 
+      targetStatus: 'SHIPPED', 
+      icon: Truck, 
+      variant: 'default',
+      tooltip: 'Ürünlerin sevk edildiğini işaretler. Stoktan otomatik olarak düşülür. Sadece satış faturaları için kullanılır.'
+    },
+    { 
+      id: 'mark-received', 
+      label: 'Mal Kabul Edildi', 
+      targetStatus: 'RECEIVED', 
+      icon: Package, 
+      variant: 'default',
+      tooltip: 'Ürünlerin teslim alındığını işaretler. Stoğa otomatik olarak giriş yapılır. Sadece alış faturaları için kullanılır.'
+    },
+    { 
+      id: 'mark-paid', 
+      label: 'Ödendi', 
+      targetStatus: 'PAID', 
+      icon: CheckCircle, 
+      variant: 'outline',
+      tooltip: 'Ödemenin alındığını işaretler. Otomatik olarak finans kaydı oluşturulur. Hizmet faturaları için kullanılır.'
+    },
+    { 
+      id: 'cancel', 
+      label: 'İptal Et', 
+      targetStatus: 'CANCELLED', 
+      icon: XCircle, 
+      variant: 'outline',
+      tooltip: 'Faturayı iptal eder. İptal edilen faturalar değiştirilemez.'
+    },
   ],
   SHIPPED: [
-    { id: 'mark-received', label: 'Mal Kabul Edildi', targetStatus: 'RECEIVED', icon: Package, variant: 'default' },
-    { id: 'mark-paid', label: 'Ödendi', targetStatus: 'PAID', icon: CheckCircle, variant: 'outline' },
-    { id: 'cancel', label: 'İptal Et', targetStatus: 'CANCELLED', icon: XCircle, variant: 'outline' },
+    { 
+      id: 'mark-paid', 
+      label: 'Ödendi', 
+      targetStatus: 'PAID', 
+      icon: CheckCircle, 
+      variant: 'default',
+      tooltip: 'Ödemenin alındığını işaretler. Otomatik olarak finans kaydı oluşturulur.'
+    },
+    { 
+      id: 'cancel', 
+      label: 'İptal Et', 
+      targetStatus: 'CANCELLED', 
+      icon: XCircle, 
+      variant: 'outline',
+      tooltip: 'Faturayı iptal eder. Rezerve edilen stok geri alınır.'
+    },
   ],
   RECEIVED: [
-    { id: 'mark-paid', label: 'Ödendi', targetStatus: 'PAID', icon: CheckCircle, variant: 'default' },
-    { id: 'cancel', label: 'İptal Et', targetStatus: 'CANCELLED', icon: XCircle, variant: 'outline' },
+    { 
+      id: 'mark-paid', 
+      label: 'Ödendi', 
+      targetStatus: 'PAID', 
+      icon: CheckCircle, 
+      variant: 'default',
+      tooltip: 'Ödemenin yapıldığını işaretler. Otomatik olarak finans kaydı oluşturulur.'
+    },
+    { 
+      id: 'cancel', 
+      label: 'İptal Et', 
+      targetStatus: 'CANCELLED', 
+      icon: XCircle, 
+      variant: 'outline',
+      tooltip: 'Faturayı iptal eder. Stoğa giriş yapılan ürünler geri alınır.'
+    },
   ],
   OVERDUE: [
-    { id: 'mark-paid', label: 'Ödendi', targetStatus: 'PAID', icon: CheckCircle, variant: 'default' },
-    { id: 'cancel', label: 'İptal Et', targetStatus: 'CANCELLED', icon: XCircle, variant: 'outline' },
+    { 
+      id: 'mark-paid', 
+      label: 'Ödendi', 
+      targetStatus: 'PAID', 
+      icon: CheckCircle, 
+      variant: 'default',
+      tooltip: 'Geciken ödemenin alındığını işaretler. Otomatik olarak finans kaydı oluşturulur.'
+    },
+    { 
+      id: 'cancel', 
+      label: 'İptal Et', 
+      targetStatus: 'CANCELLED', 
+      icon: XCircle, 
+      variant: 'outline',
+      tooltip: 'Faturayı iptal eder. İptal edilen faturalar değiştirilemez.'
+    },
   ],
 }
 
@@ -235,17 +323,111 @@ const STATUS_ALIAS_MAP: Record<string, keyof typeof QUICK_ACTIONS> = {
   'IPTAL EDILDI': 'CANCELLED',
 }
 
-const getQuickActions = (status: string): QuickActionConfig[] => {
+const getQuickActions = (status: string, invoiceType?: string): QuickActionConfig[] => {
+  if (!status) {
+    return []
+  }
+  
   const normalized = typeof status === 'string' ? status.trim().toUpperCase() : ''
   const mapped = STATUS_ALIAS_MAP[normalized] || (normalized as keyof typeof QUICK_ACTIONS)
+  let actions: QuickActionConfig[] = []
+  
+  // Status'e göre actions al
   if (mapped && QUICK_ACTIONS[mapped]) {
-    return QUICK_ACTIONS[mapped]
+    actions = QUICK_ACTIONS[mapped]
+  } else if (QUICK_ACTIONS[normalized]) {
+    actions = QUICK_ACTIONS[normalized]
+  } else {
+    // Status bulunamadıysa boş döndür
+    return []
   }
-  return QUICK_ACTIONS[normalized] || []
+  
+  // Eğer hiç action yoksa boş döndür
+  if (!actions || actions.length === 0) {
+    return []
+  }
+  
+  // Fatura tipi yoksa veya geçersizse tüm butonları göster
+  if (!invoiceType || (invoiceType !== 'SALES' && invoiceType !== 'PURCHASE' && invoiceType !== 'SERVICE_SALES' && invoiceType !== 'SERVICE_PURCHASE')) {
+    return actions
+  }
+  
+  // Fatura tipine göre filtreleme - Sadece alakasız butonları kaldır
+  const filteredActions = actions.filter(action => {
+    const targetStatus = action.targetStatus
+    const currentStatus = normalized
+    
+    // CANCELLED her zaman gösterilebilir
+    if (targetStatus === 'CANCELLED') {
+      return true
+    }
+    
+    // ============================================
+    // SATIŞ FATURALARI (SALES)
+    // ============================================
+    if (invoiceType === 'SALES') {
+      // RECEIVED hiçbir zaman gösterilmez
+      if (targetStatus === 'RECEIVED') {
+        return false
+      }
+      
+      // SENT durumunda: PAID'i kaldır (önce SHIPPED olmalı)
+      if (currentStatus === 'SENT' && targetStatus === 'PAID') {
+        return false
+      }
+      
+      // Diğer durumlar: Tüm geçerli butonlar gösterilir
+      return true
+    }
+    
+    // ============================================
+    // ALIŞ FATURALARI (PURCHASE)
+    // ============================================
+    if (invoiceType === 'PURCHASE') {
+      // SHIPPED hiçbir zaman gösterilmez
+      if (targetStatus === 'SHIPPED') {
+        return false
+      }
+      
+      // SENT durumunda: PAID'i kaldır (önce RECEIVED olmalı)
+      if (currentStatus === 'SENT' && targetStatus === 'PAID') {
+        return false
+      }
+      
+      // Diğer durumlar: Tüm geçerli butonlar gösterilir
+      return true
+    }
+    
+    // ============================================
+    // HİZMET FATURALARI (SERVICE_SALES, SERVICE_PURCHASE)
+    // ============================================
+    if (invoiceType === 'SERVICE_SALES' || invoiceType === 'SERVICE_PURCHASE') {
+      // SHIPPED ve RECEIVED hiçbir zaman gösterilmez
+      if (targetStatus === 'SHIPPED' || targetStatus === 'RECEIVED') {
+        return false
+      }
+      
+      // Diğer durumlar: Tüm geçerli butonlar gösterilir
+      return true
+    }
+    
+    // Bilinmeyen durum: Tüm butonları göster
+    return true
+  })
+  
+  return filteredActions
 }
 
 function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange }: InvoiceKanbanChartProps) {
   const locale = useLocale()
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+
+  const handleHorizontalScroll = (direction: 'left' | 'right') => {
+    const node = scrollContainerRef.current
+    if (!node) return
+    const delta = direction === 'left' ? -360 : 360
+    node.scrollBy({ left: delta, behavior: 'smooth' })
+  }
 
   const columns = useMemo(() => {
     return STATUS_FLOW.map((status) => {
@@ -267,7 +449,39 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange }: Inv
   }, [data])
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-4">
+    <>
+      <div className="sticky top-0 z-20 mb-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white/95 px-4 py-2 shadow-sm backdrop-blur">
+        <p className="text-sm font-medium text-slate-600">
+          Kanbanı yatay kaydırmak için okları ya da trackpad&apos;inizi kullanın.
+        </p>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+            onClick={() => handleHorizontalScroll('left')}
+            aria-label="Sola kaydır"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 rounded-full border-slate-200 text-slate-600 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
+            onClick={() => handleHorizontalScroll('right')}
+            aria-label="Sağa kaydır"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      <div
+        ref={scrollContainerRef}
+        className="kanban-scroll-container flex gap-4 overflow-x-auto pb-4"
+        style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}
+      >
       {columns.map((column) => {
         const styles = STATUS_STYLES[column.status] || STATUS_STYLES.DRAFT
         return (
@@ -335,9 +549,37 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange }: Inv
                     >
                       <div className="flex flex-col gap-3 p-4">
                         <div className="flex items-start justify-between gap-3">
-                          <div className="space-y-1">
-                            <p className="text-sm font-semibold text-slate-900 line-clamp-2">{invoice.title}</p>
+                          <div className="space-y-1.5 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-semibold text-slate-900 line-clamp-2">{invoice.title}</p>
+                              {invoice.invoiceType && (
+                                <Badge className={
+                                  invoice.invoiceType === 'SALES' 
+                                    ? 'bg-blue-50 text-blue-700 text-[10px] px-2 py-0.5 font-medium border border-blue-200'
+                                    : invoice.invoiceType === 'PURCHASE'
+                                    ? 'bg-purple-50 text-purple-700 text-[10px] px-2 py-0.5 font-medium border border-purple-200'
+                                    : invoice.invoiceType === 'SERVICE_SALES'
+                                    ? 'bg-green-50 text-green-700 text-[10px] px-2 py-0.5 font-medium border border-green-200'
+                                    : invoice.invoiceType === 'SERVICE_PURCHASE'
+                                    ? 'bg-orange-50 text-orange-700 text-[10px] px-2 py-0.5 font-medium border border-orange-200'
+                                    : 'bg-gray-50 text-gray-700 text-[10px] px-2 py-0.5 font-medium border border-gray-200'
+                                }>
+                                  {invoice.invoiceType === 'SALES' 
+                                    ? 'Satış'
+                                    : invoice.invoiceType === 'PURCHASE'
+                                    ? 'Alış'
+                                    : invoice.invoiceType === 'SERVICE_SALES'
+                                    ? 'Hizmet Satış'
+                                    : invoice.invoiceType === 'SERVICE_PURCHASE'
+                                    ? 'Hizmet Alış'
+                                    : invoice.invoiceType}
+                                </Badge>
+                              )}
+                            </div>
                             {company && <p className="text-xs text-slate-500">{company}</p>}
+                            {(invoice.invoiceType === 'SERVICE_SALES' || invoice.invoiceType === 'SERVICE_PURCHASE') && invoice.serviceDescription && (
+                              <p className="text-xs text-slate-600 line-clamp-2 mt-1">{invoice.serviceDescription}</p>
+                            )}
                           </div>
                           <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${styles.chipBg} ${styles.chipText}`}>
                             {STATUS_LABELS[invoice.status] || invoice.status}
@@ -400,11 +642,22 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange }: Inv
                           </div>
                         </div>
 
-                        {onStatusChange && getQuickActions(column.status || invoice.status).length > 0 && (
+                        {onStatusChange && getQuickActions(invoice.status, invoice.invoiceType).length > 0 && (
                           <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
-                            {getQuickActions(column.status || invoice.status).map((action) => {
+                            {getQuickActions(invoice.status, invoice.invoiceType).map((action) => {
                               const Icon = action.icon
-                              return (
+                              
+                              // İptal Et butonu için özel handler - onay sorusu sor
+                              const handleClick = () => {
+                                if (action.targetStatus === 'CANCELLED') {
+                                  if (!confirm(`"${invoice.title}" faturasını iptal etmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz ve ilgili sevkiyat/stok işlemleri geri alınacaktır.`)) {
+                                    return
+                                  }
+                                }
+                                onStatusChange(invoice.id, action.targetStatus)
+                              }
+                              
+                              const button = (
                                 <Button
                                   key={action.id}
                                   variant={action.variant}
@@ -414,12 +667,32 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange }: Inv
                                       ? 'bg-indigo-600 text-white hover:bg-indigo-700'
                                       : 'border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600'
                                   }`}
-                                  onClick={() => onStatusChange(invoice.id, action.targetStatus)}
+                                  onClick={handleClick}
                                 >
                                   <Icon className="h-3.5 w-3.5" />
                                   {action.label}
                                 </Button>
                               )
+                              
+                              // Tooltip varsa ekle
+                              if (action.tooltip) {
+                                return (
+                                  <TooltipProvider key={action.id} delayDuration={200}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        {button}
+                                      </TooltipTrigger>
+                                      <TooltipContent className="max-w-xs border-2 border-indigo-200 bg-white p-3 text-left shadow-xl">
+                                        <p className="text-xs font-medium text-slate-700">
+                                          {action.tooltip}
+                                        </p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                )
+                              }
+                              
+                              return button
                             })}
                           </div>
                         )}
@@ -433,6 +706,7 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange }: Inv
         )
       })}
     </div>
+    </>
   )
 }
 

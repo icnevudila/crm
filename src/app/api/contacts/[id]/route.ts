@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { logAction } from '@/lib/logger'
-import { hasPermission, PERMISSION_DENIED_MESSAGE } from '@/lib/permissions'
+import { hasPermission, buildPermissionDeniedResponse } from '@/lib/permissions'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,26 +22,14 @@ export async function GET(
 
     const canRead = await hasPermission('contact', 'read', session.user.id)
     if (!canRead) {
-      return NextResponse.json(
-        {
-          error: 'Forbidden',
-          message: PERMISSION_DENIED_MESSAGE,
-        },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     const companyId = session.user.companyId
     const canUpdate = await hasPermission('contact', 'update', session.user.id)
     if (!canUpdate) {
-      return NextResponse.json(
-        {
-          error: 'Forbidden',
-          message: PERMISSION_DENIED_MESSAGE,
-        },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const { id } = await params
@@ -68,7 +56,7 @@ export async function GET(
     const { data, error } = await contactQuery.single()
 
     if (error) {
-      const message = error.message || 'Failed to fetch contact'
+      const message = error.message || 'İletişim kaydı getirilemedi'
       if (message.includes('schema cache')) {
         return NextResponse.json(
           {
@@ -86,7 +74,7 @@ export async function GET(
     }
 
     if (!data) {
-      return NextResponse.json({ error: 'Contact not found' }, { status: 404 })
+      return NextResponse.json({ error: 'İletişim kaydı bulunamadı' }, { status: 404 })
     }
 
     // ActivityLog'ları çek
@@ -123,7 +111,7 @@ export async function GET(
     )
   } catch (error) {
     return NextResponse.json(
-      { error: 'Failed to fetch contact' },
+      { error: 'İletişim kaydı getirilemedi' },
       { status: 500 }
     )
   }
@@ -145,13 +133,7 @@ export async function PUT(
 
     const canDelete = await hasPermission('contact', 'delete', session.user.id)
     if (!canDelete) {
-      return NextResponse.json(
-        {
-          error: 'Forbidden',
-          message: PERMISSION_DENIED_MESSAGE,
-        },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const { id } = await params
@@ -167,7 +149,7 @@ export async function PUT(
         console.error('Contacts [id] PUT API JSON parse error:', jsonError)
       }
       return NextResponse.json(
-        { error: 'Invalid JSON body', message: jsonError?.message || 'Failed to parse request body' },
+        { error: 'Geçersiz JSON', message: jsonError?.message || 'İstek gövdesi çözümlenemedi' },
         { status: 400 }
       )
     }
@@ -187,7 +169,7 @@ export async function PUT(
 
     if (checkError || !existingContact) {
       return NextResponse.json(
-        { error: 'Contact not found or access denied' },
+        { error: 'İletişim kaydı bulunamadı veya erişim yetkiniz yok' },
         { status: 404 }
       )
     }
@@ -227,7 +209,7 @@ export async function PUT(
       .single()
 
     if (updateError) {
-      const message = updateError.message || 'Failed to update contact'
+      const message = updateError.message || 'İletişim kaydı güncellenemedi'
       if (message.includes('schema cache')) {
         return NextResponse.json(
           {
@@ -294,7 +276,7 @@ export async function PUT(
       console.error('Contacts [id] PUT API error:', error)
     }
     return NextResponse.json(
-      { error: error?.message || 'Failed to update contact' },
+      { error: error?.message || 'İletişim kaydı güncellenemedi' },
       { status: 500 }
     )
   }
@@ -345,7 +327,7 @@ export async function DELETE(
       .eq('companyId', existingContact.companyId)
 
     if (deleteError) {
-      const message = deleteError.message || 'Failed to delete contact'
+      const message = deleteError.message || 'İletişim kaydı silinemedi'
       if (message.includes('schema cache')) {
         return NextResponse.json(
           {
@@ -372,7 +354,7 @@ export async function DELETE(
     })
 
     return NextResponse.json(
-      { message: 'Contact deleted successfully' },
+      { message: 'Kişi başarıyla silindi' },
       {
         headers: {
           'Cache-Control': 'no-store, must-revalidate',
@@ -384,7 +366,7 @@ export async function DELETE(
       console.error('Contacts [id] DELETE API error:', error)
     }
     return NextResponse.json(
-      { error: error?.message || 'Failed to delete contact' },
+      { error: error?.message || 'İletişim kaydı silinemedi' },
       { status: 500 }
     )
   }

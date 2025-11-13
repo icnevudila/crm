@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { toast } from '@/lib/toast'
 import { useSearchParams } from 'next/navigation'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -28,25 +28,6 @@ import { useQuery } from '@tanstack/react-query'
 import { useData } from '@/hooks/useData'
 import { Checkbox } from '@/components/ui/checkbox'
 
-const meetingSchema = z.object({
-  title: z.string().min(1, 'Görüşme başlığı gereklidir').max(200, 'Başlık en fazla 200 karakter olabilir'),
-  description: z.string().optional(),
-  meetingDate: z.string().min(1, 'Görüşme tarihi gereklidir'),
-  meetingDuration: z.number().min(1, 'Süre en az 1 dakika olmalı').max(1440, 'Süre en fazla 24 saat (1440 dakika) olabilir').optional(),
-  location: z.string().max(500, 'Konum en fazla 500 karakter olabilir').optional(),
-  status: z.enum(['PLANNED', 'DONE', 'CANCELLED']).default('PLANNED'),
-  customerId: z.string().optional(),
-  dealId: z.string().optional(),
-  customerCompanyId: z.string().optional(), // Firma bazlı ilişki
-  participantIds: z.array(z.string()).optional(), // Çoklu kullanıcı atama
-  notes: z.string().optional(), // Görüşme notları
-  outcomes: z.string().optional(), // Çıktılar/sonuçlar
-  actionItems: z.string().optional(), // Aksiyon maddeleri
-  attendees: z.string().optional(), // Katılımcılar (metin)
-})
-
-type MeetingFormData = z.infer<typeof meetingSchema>
-
 interface MeetingFormProps {
   meeting?: any
   open: boolean
@@ -55,6 +36,8 @@ interface MeetingFormProps {
   dealId?: string // Prop olarak dealId geçilebilir (modal içinde kullanım için)
   quoteId?: string // Prop olarak quoteId geçilebilir (modal içinde kullanım için)
   customerId?: string // Prop olarak customerId geçilebilir (modal içinde kullanım için)
+  customerCompanyId?: string
+  customerCompanyName?: string
 }
 
 export default function MeetingForm({
@@ -65,10 +48,14 @@ export default function MeetingForm({
   dealId: dealIdProp,
   quoteId: quoteIdProp,
   customerId: customerIdProp,
+  customerCompanyId: customerCompanyIdProp,
+  customerCompanyName,
 }: MeetingFormProps) {
+  const t = useTranslations('meetings.form')
+  const tCommon = useTranslations('common.form')
   const locale = useLocale()
   const searchParams = useSearchParams()
-  const customerCompanyId = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
+  const customerCompanyIdFromUrl = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
   const dealIdFromUrl = searchParams.get('dealId') || undefined // URL'den dealId al
   const quoteIdFromUrl = searchParams.get('quoteId') || undefined // URL'den quoteId al
   const customerIdFromUrl = searchParams.get('customerId') || undefined // URL'den customerId al
@@ -77,8 +64,29 @@ export default function MeetingForm({
   const dealId = dealIdProp || dealIdFromUrl
   const quoteId = quoteIdProp || quoteIdFromUrl
   const customerId = customerIdProp || customerIdFromUrl
+  const customerCompanyId = customerCompanyIdProp || customerCompanyIdFromUrl
   const [loading, setLoading] = useState(false)
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([])
+
+  // Schema'yı component içinde oluştur - locale desteği için
+  const meetingSchema = z.object({
+    title: z.string().min(1, t('titleRequired')).max(200, t('titleMaxLength')),
+    description: z.string().optional(),
+    meetingDate: z.string().min(1, t('meetingDateRequired')),
+    meetingDuration: z.number().min(1, t('meetingDurationMin')).max(1440, t('meetingDurationMax')).optional(),
+    location: z.string().max(500, t('locationMaxLength')).optional(),
+    status: z.enum(['PLANNED', 'DONE', 'CANCELLED']).default('PLANNED'),
+    customerId: z.string().optional(),
+    dealId: z.string().optional(),
+    customerCompanyId: z.string().optional(), // Firma bazlı ilişki
+    participantIds: z.array(z.string()).optional(), // Çoklu kullanıcı atama
+    notes: z.string().optional(), // Görüşme notları
+    outcomes: z.string().optional(), // Çıktılar/sonuçlar
+    actionItems: z.string().optional(), // Aksiyon maddeleri
+    attendees: z.string().optional(), // Katılımcılar (metin)
+  })
+
+  type MeetingFormData = z.infer<typeof meetingSchema>
 
   // Kullanıcıları çek
   async function fetchUsers() {
@@ -102,6 +110,9 @@ export default function MeetingForm({
   const customers = Array.isArray(customersResponse) 
     ? customersResponse 
     : (customersResponse?.data || [])
+  const filteredCustomers = customerCompanyId
+    ? customers.filter((customer: any) => customer.customerCompanyId === customerCompanyId)
+    : customers
 
   // Debug: Müşteri listesi kontrolü
   useEffect(() => {
@@ -112,7 +123,7 @@ export default function MeetingForm({
       console.log('Customers response:', customersResponse)
       console.log('Customers loaded:', customers.length, customers)
     }
-  }, [customersResponse, customersError, customers.length])
+  }, [customersResponse, customersError, customers.length, customers])
 
   // Fırsatları çek - TÜM fırsatları çekmek için pagination parametresi ekle
   const { data: dealsResponse } = useData<any>('/api/deals?page=1&pageSize=1000', {
@@ -123,6 +134,9 @@ export default function MeetingForm({
   const deals = Array.isArray(dealsResponse) 
     ? dealsResponse 
     : (dealsResponse?.data || [])
+  const dealsByCompany = customerCompanyId
+    ? deals.filter((deal: any) => deal.customerCompanyId === customerCompanyId)
+    : deals
 
   // Deal bilgilerini çek (dealId varsa) - QuoteForm pattern'i ile
   const { data: dealData } = useQuery({
@@ -166,6 +180,7 @@ export default function MeetingForm({
       status: 'PLANNED',
       customerId: '',
       dealId: '',
+      customerCompanyId: customerCompanyId || '',
     },
   })
 
@@ -187,6 +202,7 @@ export default function MeetingForm({
           customerId: meeting.customerId || '',
           dealId: meeting.dealId || '',
           participantIds: participantIds,
+          customerCompanyId: meeting.customerCompanyId || customerCompanyId || '',
         })
       } else {
         // Yeni kayıt modu
@@ -196,7 +212,7 @@ export default function MeetingForm({
         if (dealId && dealData) {
           const deal = dealData
           reset({
-            title: deal.title ? `Görüşme - ${deal.title}` : '',
+            title: deal.title ? t('autoTitleFromDeal', { dealTitle: deal.title }) : '',
             description: deal.description || '',
             meetingDate: new Date().toISOString().slice(0, 16),
             meetingDuration: 60,
@@ -205,6 +221,7 @@ export default function MeetingForm({
             customerId: deal.customerId || customerId || '',
             dealId: dealId,
             participantIds: [],
+            customerCompanyId: customerCompanyId || deal.customerCompanyId || '',
           })
           // Deal'dan customer bilgilerini otomatik doldur
           if (deal.customerId) {
@@ -214,7 +231,7 @@ export default function MeetingForm({
           // Quote bilgileri varsa formu otomatik doldur
           const quote = quoteData
           reset({
-            title: quote.title ? `Görüşme - ${quote.title}` : '',
+            title: quote.title ? t('autoTitleFromQuote', { quoteTitle: quote.title }) : '',
             description: quote.description || '',
             meetingDate: new Date().toISOString().slice(0, 16),
             meetingDuration: 60,
@@ -223,6 +240,7 @@ export default function MeetingForm({
             customerId: quote.customerId || customerId || '',
             dealId: quote.dealId || dealId || '',
             participantIds: [],
+            customerCompanyId: customerCompanyId || quote.customerCompanyId || '',
           })
           // Quote'dan deal ve customer bilgilerini otomatik doldur
           if (quote.dealId) {
@@ -243,6 +261,7 @@ export default function MeetingForm({
             customerId: customerId || '',
             dealId: dealId || '',
             participantIds: [],
+            customerCompanyId: customerCompanyId || '',
           })
           // Prop veya URL'den gelen ID'leri set et
           if (dealId) {
@@ -254,15 +273,21 @@ export default function MeetingForm({
         }
       }
     }
-  }, [meeting, open, reset, dealId, customerId, setValue, dealData, quoteId, quoteData])
+  }, [meeting, open, reset, dealId, customerId, setValue, dealData, quoteId, quoteData, customerCompanyId]) // Tüm dependency'ler gerekli - dealData ve quoteData query sonuçları, değişebilir
 
   const status = watch('status')
   const selectedCustomerId = watch('customerId') // Form'dan seçilen müşteri ID'si
 
   // Müşteri seçildiğinde ilgili fırsatları filtrele
   const filteredDeals = selectedCustomerId
-    ? deals.filter((deal: any) => deal.customerId === selectedCustomerId)
-    : deals
+    ? dealsByCompany.filter((deal: any) => deal.customerId === selectedCustomerId)
+    : dealsByCompany
+
+  useEffect(() => {
+    if (open && !meeting && filteredCustomers.length === 1 && !customerId) {
+      setValue('customerId', filteredCustomers[0].id)
+    }
+  }, [open, meeting, filteredCustomers, customerId, setValue])
 
   const onSubmit = async (data: MeetingFormData) => {
     setLoading(true)
@@ -272,7 +297,9 @@ export default function MeetingForm({
         ...data,
         customerId: data.customerId === 'none' ? null : (data.customerId || null),
         dealId: data.dealId === 'none' ? null : (data.dealId || null),
-        // NOT: customerCompanyId kolonu Meeting tablosunda yok, bu yüzden kaldırıldı
+        customerCompanyId: data.customerCompanyId && data.customerCompanyId !== ''
+          ? data.customerCompanyId
+          : customerCompanyId || null,
         participantIds: selectedParticipants, // Çoklu kullanıcı seçimi
       }
 
@@ -294,40 +321,51 @@ export default function MeetingForm({
 
       const savedMeeting = await res.json()
       
-      // Başarı mesajı - deal/quote bilgisi ile
-      let successMessage = 'Görüşme başarıyla oluşturuldu'
-      const stageUpdated = savedMeeting.dealStageUpdated === true
-      
-      if (dealId && dealData) {
-        if (stageUpdated) {
-          successMessage = `Görüşme oluşturuldu: "${dealData.title}" fırsatı için. Fırsat otomatik olarak "Pazarlık" aşamasına taşındı.`
-        } else {
-          successMessage = `Görüşme oluşturuldu: "${dealData.title}" fırsatı için`
-        }
-      } else if (quoteId && quoteData) {
-        successMessage = `Görüşme oluşturuldu: "${quoteData.title}" teklifi için`
-      }
-      
       // Toast mesajı göster
-      if (stageUpdated) {
-        toast.success(
-          'Görüşme Oluşturuldu & Fırsat Güncellendi',
-          successMessage
-        )
+      if (meeting) {
+        // Güncelleme durumu
+        toast.success(t('meetingUpdated'), t('meetingUpdatedMessage', { title: savedMeeting.title }))
       } else {
-        toast.success('Görüşme Oluşturuldu', successMessage)
+        // Yeni oluşturma durumu
+        const stageUpdated = savedMeeting.dealStageUpdated === true
+        let successMessage = t('meetingCreatedMessage')
+        let successTitle = t('meetingCreated')
+        
+        if (dealId && dealData) {
+          if (stageUpdated) {
+            successMessage = customerCompanyName
+              ? t('meetingCreatedWithDealStageUpdatedAndCompany', { company: customerCompanyName, dealTitle: dealData.title })
+              : t('meetingCreatedWithDealStageUpdated', { dealTitle: dealData.title })
+            successTitle = t('meetingCreatedAndDealUpdated')
+          } else {
+            successMessage = customerCompanyName
+              ? t('meetingCreatedWithDealAndCompany', { company: customerCompanyName, dealTitle: dealData.title })
+              : t('meetingCreatedWithDeal', { dealTitle: dealData.title })
+          }
+        } else if (quoteId && quoteData) {
+          successMessage = customerCompanyName
+            ? t('meetingCreatedWithQuoteAndCompany', { company: customerCompanyName, quoteTitle: quoteData.title })
+            : t('meetingCreatedWithQuote', { quoteTitle: quoteData.title })
+        } else if (customerCompanyName) {
+          successMessage = t('meetingCreatedWithCompany', { company: customerCompanyName })
+        }
+        
+        toast.success(successTitle, successMessage)
       }
       
       // onSuccess callback'i çağır - yönlendirme burada yapılacak
+      // CRITICAL FIX: onSuccess'i önce çağır, sonra form'u kapat
+      // onSuccess içinde onClose çağrılmamalı - form zaten kendi içinde onClose çağırıyor
       if (onSuccess) {
-        onSuccess(savedMeeting)
+        await onSuccess(savedMeeting)
       }
       
       reset()
+      // Form'u kapat - onSuccess callback'inden SONRA (sonsuz döngü önleme)
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error('Kaydedilemedi', error?.message)
+      toast.error(t('saveFailed'), error?.message)
     } finally {
       setLoading(false)
     }
@@ -338,20 +376,33 @@ export default function MeetingForm({
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {meeting ? 'Görüşme Düzenle' : 'Yeni Görüşme'}
+            {meeting ? t('editTitle') : t('newTitle')}
           </DialogTitle>
           <DialogDescription>
-            {meeting ? 'Görüşme bilgilerini güncelleyin' : 'Yeni görüşme ekleyin'}
+            {meeting ? t('editDescription') : t('newDescription')}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {customerCompanyId && (
+            <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3 text-sm text-indigo-700">
+              <p className="font-semibold">
+                {t('companyLabel')}: {customerCompanyName || t('selectedCompany')}
+              </p>
+              <p>
+                {filteredCustomers.length > 0
+                  ? t('customersCount', { count: filteredCustomers.length })
+                  : t('noCustomersFound')}
+              </p>
+            </div>
+          )}
+          <input type="hidden" {...register('customerCompanyId')} />
           {/* Title */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Başlık *</label>
+            <label className="text-sm font-medium">{t('titleLabel')} *</label>
             <Input
               {...register('title')}
-              placeholder="Görüşme başlığı"
+              placeholder={t('titlePlaceholder')}
               disabled={loading}
             />
             {errors.title && (
@@ -361,10 +412,10 @@ export default function MeetingForm({
 
           {/* Description */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Açıklama</label>
+            <label className="text-sm font-medium">{t('descriptionLabel')}</label>
             <Textarea
               {...register('description')}
-              placeholder="Görüşme notları..."
+              placeholder={t('descriptionPlaceholder')}
               rows={4}
               disabled={loading}
             />
@@ -373,7 +424,7 @@ export default function MeetingForm({
           {/* Meeting Date & Duration */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Tarih & Saat *</label>
+              <label className="text-sm font-medium">{t('meetingDateLabel')} *</label>
               <Input
                 type="datetime-local"
                 {...register('meetingDate')}
@@ -384,43 +435,55 @@ export default function MeetingForm({
               )}
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Süre (dakika)</label>
+              <label className="text-sm font-medium">{t('meetingDurationLabel')}</label>
               <Input
                 type="number"
                 {...register('meetingDuration', { valueAsNumber: true })}
-                placeholder="60"
+                placeholder={t('meetingDurationPlaceholder')}
                 disabled={loading}
               />
+              {errors.meetingDuration && (
+                <p className="text-sm text-red-600">{errors.meetingDuration.message}</p>
+              )}
             </div>
           </div>
 
           {/* Location */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Konum</label>
+            <label className="text-sm font-medium">{t('locationLabel')}</label>
             <Input
               {...register('location')}
-              placeholder="Görüşme yeri"
+              placeholder={t('locationPlaceholder')}
               disabled={loading}
             />
+            {errors.location && (
+              <p className="text-sm text-red-600">{errors.location.message}</p>
+            )}
           </div>
 
           {/* Customer & Deal */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Müşteri</label>
+              <label className="text-sm font-medium">{t('customerLabel')}</label>
               <Select
                 value={customerId || 'none'}
                 onValueChange={(value) => {
                   setValue('customerId', value === 'none' ? '' : (value || ''))
                   setValue('dealId', '') // Müşteri değiştiğinde fırsatı temizle
                 }}
+                disabled={filteredCustomers.length === 0}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Müşteri seçin" />
+                  <SelectValue placeholder={t('customerPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Müşteri yok</SelectItem>
-                  {customers.map((customer: any) => (
+                  {filteredCustomers.length === 0 && (
+                    <SelectItem value="none" disabled>
+                      {t('customerNotFound')}
+                    </SelectItem>
+                  )}
+                  <SelectItem value="none">{t('customerNone')}</SelectItem>
+                  {filteredCustomers.map((customer: any) => (
                     <SelectItem key={customer.id} value={customer.id}>
                       {customer.name}
                     </SelectItem>
@@ -429,17 +492,17 @@ export default function MeetingForm({
               </Select>
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Fırsat</label>
+              <label className="text-sm font-medium">{t('dealLabel')}</label>
               <Select
                 value={watch('dealId') || 'none'}
                 onValueChange={(value) => setValue('dealId', value === 'none' ? '' : (value || ''))}
-                disabled={!customerId}
+                disabled={filteredDeals.length === 0}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Fırsat seçin" />
+                  <SelectValue placeholder={t('dealPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Fırsat yok</SelectItem>
+                  <SelectItem value="none">{t('dealNone')}</SelectItem>
                   {filteredDeals.map((deal: any) => (
                     <SelectItem key={deal.id} value={deal.id}>
                       {deal.title}
@@ -452,10 +515,10 @@ export default function MeetingForm({
 
           {/* Participants - Çoklu Kullanıcı Seçimi */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Katılımcılar</label>
+            <label className="text-sm font-medium">{t('participantsLabel')}</label>
             <div className="border rounded-lg p-4 max-h-48 overflow-y-auto">
               {users.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Kullanıcı yükleniyor...</p>
+                <p className="text-sm text-muted-foreground">{t('participantsLoading')}</p>
               ) : (
                 <div className="space-y-2">
                   {users.map((user: any) => (
@@ -484,53 +547,53 @@ export default function MeetingForm({
             </div>
             {selectedParticipants.length > 0 && (
               <p className="text-xs text-muted-foreground">
-                {selectedParticipants.length} kullanıcı seçildi
+                {t('participantsSelected', { count: selectedParticipants.length })}
               </p>
             )}
           </div>
 
           {/* Notes */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Görüşme Notları</label>
+            <label className="text-sm font-medium">{t('notesLabel')}</label>
             <Textarea
               {...register('notes')}
-              placeholder="Görüşme sırasında alınan notlar..."
+              placeholder={t('notesPlaceholder')}
               rows={3}
             />
           </div>
 
           {/* Outcomes */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Sonuçlar / Çıktılar</label>
+            <label className="text-sm font-medium">{t('outcomesLabel')}</label>
             <Textarea
               {...register('outcomes')}
-              placeholder="Görüşmeden elde edilen sonuçlar..."
+              placeholder={t('outcomesPlaceholder')}
               rows={3}
             />
           </div>
 
           {/* Action Items */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Aksiyon Maddeleri</label>
+            <label className="text-sm font-medium">{t('actionItemsLabel')}</label>
             <Textarea
               {...register('actionItems')}
-              placeholder="Yapılacaklar listesi (her satıra bir madde)..."
+              placeholder={t('actionItemsPlaceholder')}
               rows={3}
             />
           </div>
 
           {/* Attendees */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Katılımcılar (Metin)</label>
+            <label className="text-sm font-medium">{t('attendeesLabel')}</label>
             <Input
               {...register('attendees')}
-              placeholder="Örn: Ahmet Yılmaz, Ayşe Demir"
+              placeholder={t('attendeesPlaceholder')}
             />
           </div>
 
           {/* Status */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Durum</label>
+            <label className="text-sm font-medium">{t('statusLabel')}</label>
             <Select
               value={status}
               onValueChange={(value) => setValue('status', value as 'PLANNED' | 'DONE' | 'CANCELLED')}
@@ -539,9 +602,9 @@ export default function MeetingForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="PLANNED">Planlandı</SelectItem>
-                <SelectItem value="DONE">Tamamlandı</SelectItem>
-                <SelectItem value="CANCELLED">İptal Edildi</SelectItem>
+                <SelectItem value="PLANNED">{t('statusPlanned')}</SelectItem>
+                <SelectItem value="DONE">{t('statusDone')}</SelectItem>
+                <SelectItem value="CANCELLED">{t('statusCancelled')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -554,14 +617,14 @@ export default function MeetingForm({
               onClick={onClose}
               disabled={loading}
             >
-              İptal
+              {t('cancel')}
             </Button>
             <Button
               type="submit"
               className="bg-gradient-to-r from-primary-600 to-secondary-600 text-white hover:from-primary-700 hover:to-secondary-700 disabled:opacity-50"
               disabled={loading}
             >
-              {loading ? 'Kaydediliyor...' : meeting ? 'Güncelle' : 'Kaydet'}
+              {loading ? t('saving') : meeting ? t('update') : t('save')}
             </Button>
           </div>
         </form>

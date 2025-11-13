@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -56,6 +56,8 @@ interface Contact {
 
 export default function ContactList() {
   const locale = useLocale()
+  const t = useTranslations('contacts')
+  const tCommon = useTranslations('common')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [role, setRole] = useState('')
@@ -93,7 +95,7 @@ export default function ContactList() {
   }, [response])
 
   const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!confirm(`${name} contact'ını silmek istediğinize emin misiniz?`)) {
+    if (!confirm(t('deleteConfirm', { name }))) {
       return
     }
 
@@ -119,7 +121,7 @@ export default function ContactList() {
       ])
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error('Silinemedi', error?.message)
+      toast.error(t('deleteFailed'), error?.message)
     }
   }, [contacts, mutateContacts, apiUrl])
 
@@ -156,15 +158,15 @@ export default function ContactList() {
   const getRoleText = (role: string) => {
     switch (role) {
       case 'DECISION_MAKER':
-        return 'Karar Verici'
+        return t('roleDecisionMaker')
       case 'INFLUENCER':
-        return 'Etkileyici'
+        return t('roleInfluencer')
       case 'END_USER':
-        return 'Son Kullanıcı'
+        return t('roleEndUser')
       case 'GATEKEEPER':
-        return 'Kapı Bekçisi'
+        return t('roleGatekeeper')
       default:
-        return 'Diğer'
+        return t('roleOther')
     }
   }
 
@@ -175,7 +177,7 @@ export default function ContactList() {
   if (error) {
     return (
       <div className="p-8 text-center text-red-600">
-        <p>Hata: {error.message || 'Veriler yüklenemedi'}</p>
+        <p>{tCommon('error')}: {error.message || t('errorLoading')}</p>
       </div>
     )
   }
@@ -185,12 +187,12 @@ export default function ContactList() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Contacts</h2>
-          <p className="text-sm text-gray-600">Müşteri firma yetkilileri ve iletişim kişileri</p>
+          <h2 className="text-2xl font-bold">{t('title')}</h2>
+          <p className="text-sm text-gray-600">{t('description')}</p>
         </div>
         <Button onClick={handleAdd}>
           <Plus className="mr-2 h-4 w-4" />
-          Yeni Contact
+          {t('newContact')}
         </Button>
       </div>
 
@@ -199,7 +201,7 @@ export default function ContactList() {
         <div className="relative col-span-2">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
-            placeholder="İsim, email veya telefon ara..."
+            placeholder={t('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -208,26 +210,26 @@ export default function ContactList() {
         
         <Select value={status || 'all'} onValueChange={(value) => setStatus(value === 'all' ? '' : value)}>
           <SelectTrigger>
-            <SelectValue placeholder="Tüm Durumlar" />
+            <SelectValue placeholder={t('allStatuses')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tüm Durumlar</SelectItem>
-            <SelectItem value="ACTIVE">Aktif</SelectItem>
-            <SelectItem value="INACTIVE">Pasif</SelectItem>
+            <SelectItem value="all">{t('allStatuses')}</SelectItem>
+            <SelectItem value="ACTIVE">{tCommon('active')}</SelectItem>
+            <SelectItem value="INACTIVE">{tCommon('inactive')}</SelectItem>
           </SelectContent>
         </Select>
 
         <Select value={role || 'all'} onValueChange={(value) => setRole(value === 'all' ? '' : value)}>
           <SelectTrigger>
-            <SelectValue placeholder="Tüm Roller" />
+            <SelectValue placeholder={t('allRoles')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tüm Roller</SelectItem>
-            <SelectItem value="DECISION_MAKER">Karar Verici</SelectItem>
-            <SelectItem value="INFLUENCER">Etkileyici</SelectItem>
-            <SelectItem value="END_USER">Son Kullanıcı</SelectItem>
-            <SelectItem value="GATEKEEPER">Kapı Bekçisi</SelectItem>
-            <SelectItem value="OTHER">Diğer</SelectItem>
+            <SelectItem value="all">{t('allRoles')}</SelectItem>
+            <SelectItem value="DECISION_MAKER">{t('roleDecisionMaker')}</SelectItem>
+            <SelectItem value="INFLUENCER">{t('roleInfluencer')}</SelectItem>
+            <SelectItem value="END_USER">{t('roleEndUser')}</SelectItem>
+            <SelectItem value="GATEKEEPER">{t('roleGatekeeper')}</SelectItem>
+            <SelectItem value="OTHER">{t('roleOther')}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -236,10 +238,10 @@ export default function ContactList() {
       {contacts.length === 0 ? (
         <EmptyState
           icon={User}
-          title="Henüz contact yok"
-          description="Yeni bir contact ekleyerek başlayın"
+          title={t('noContactsFound')}
+          description={t('noContactsDescription')}
           action={{
-            label: 'Yeni Contact Ekle',
+            label: t('newContact'),
             onClick: handleAdd,
           }}
         />
@@ -248,14 +250,14 @@ export default function ContactList() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>İsim</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Telefon</TableHead>
-                <TableHead>Ünvan</TableHead>
-                <TableHead>Rol</TableHead>
-                <TableHead>Müşteri Firma</TableHead>
-                <TableHead>Durum</TableHead>
-                <TableHead className="text-right">İşlemler</TableHead>
+                <TableHead>{t('tableHeaders.name')}</TableHead>
+                <TableHead>{t('tableHeaders.email')}</TableHead>
+                <TableHead>{t('tableHeaders.phone')}</TableHead>
+                <TableHead>{t('tableHeaders.title')}</TableHead>
+                <TableHead>{t('tableHeaders.role')}</TableHead>
+                <TableHead>{t('tableHeaders.customerCompany')}</TableHead>
+                <TableHead>{t('tableHeaders.status')}</TableHead>
+                <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

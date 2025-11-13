@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
-import { Plus, Search, Edit, Trash2, Eye, Upload, Download, CheckSquare, Square, Building2 } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Eye, Upload, Download, CheckSquare, Square, Building2, Sparkles, Briefcase, FileText, Receipt, Calendar } from 'lucide-react'
 import { useSession } from 'next-auth/react'
-import { useQuery } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/lib/toast'
@@ -39,17 +39,53 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Users } from 'lucide-react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
-import { useQueryClient } from '@tanstack/react-query'
 import dynamic from 'next/dynamic'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 // Lazy load CustomerForm - performans için
 const CustomerForm = dynamic(() => import('./CustomerForm'), {
   ssr: false,
   loading: () => null,
 })
+const CustomerDetailModal = dynamic(() => import('./CustomerDetailModal'), {
+  ssr: false,
+  loading: () => null,
+})
+const DealForm = dynamic(() => import('../deals/DealForm'), {
+  ssr: false,
+  loading: () => null,
+})
+const QuoteForm = dynamic(() => import('../quotes/QuoteForm'), {
+  ssr: false,
+  loading: () => null,
+})
+const InvoiceForm = dynamic(() => import('../invoices/InvoiceForm'), {
+  ssr: false,
+  loading: () => null,
+})
+const TaskForm = dynamic(() => import('../tasks/TaskForm'), {
+  ssr: false,
+  loading: () => null,
+})
+const MeetingForm = dynamic(() => import('../meetings/MeetingForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
+interface CustomerListProps {
+  isOpen?: boolean
+}
 
 interface Customer {
   id: string
@@ -62,6 +98,7 @@ interface Customer {
   createdAt: string
   companyId?: string
   customerCompanyId?: string
+  logoUrl?: string
   Company?: {
     id: string
     name: string
@@ -84,8 +121,10 @@ interface CustomersResponse {
   }
 }
 
-export default function CustomerList() {
+export default function CustomerList({ isOpen = true }: CustomerListProps) {
   const locale = useLocale()
+  const t = useTranslations('customers')
+  const tCommon = useTranslations('common')
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
   const { data: session } = useSession()
@@ -106,7 +145,7 @@ export default function CustomerList() {
   
   // SuperAdmin için firmaları çek
   const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
-    isSuperAdmin ? '/api/superadmin/companies' : null,
+    isOpen && isSuperAdmin ? '/api/superadmin/companies' : null,
     { dedupingInterval: 60000, revalidateOnFocus: false }
   )
   // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
@@ -122,9 +161,13 @@ export default function CustomerList() {
     if (sectorFromUrl && sectorFromUrl !== sector) {
       setSector(sectorFromUrl)
     }
-  }, [cityFromUrl, sectorFromUrl])
+  }, [cityFromUrl, sectorFromUrl, city, sector])
   const [formOpen, setFormOpen] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+  const [quickAction, setQuickAction] = useState<{ type: 'deal' | 'quote' | 'invoice' | 'task' | 'meeting'; customer: Customer } | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
+  const [selectedCustomerData, setSelectedCustomerData] = useState<Customer | null>(null)
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -151,20 +194,36 @@ export default function CustomerList() {
   }, [search])
 
   // SWR ile veri çekme (repo kurallarına uygun) - debounced search kullanıyoruz
-  const params = new URLSearchParams()
-  if (debouncedSearch) params.append('search', debouncedSearch)
-  if (status) params.append('status', status)
-  if (sector) params.append('sector', sector)
-  if (city) params.append('city', city)
-  if (customerCompanyId) params.append('customerCompanyId', customerCompanyId) // Müşteri firması filtresi
-  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId) // SuperAdmin için firma filtresi
-  params.append('page', currentPage.toString())
-  params.append('pageSize', pageSize.toString())
-  
-  const apiUrl = `/api/customers?${params.toString()}`
+  const apiUrl = useMemo(() => {
+    if (!isOpen) return null
+
+    const params = new URLSearchParams()
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    if (status) params.append('status', status)
+    if (sector) params.append('sector', sector)
+    if (city) params.append('city', city)
+    if (customerCompanyId) params.append('customerCompanyId', customerCompanyId)
+    if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+    params.append('page', currentPage.toString())
+    params.append('pageSize', pageSize.toString())
+
+    return `/api/customers?${params.toString()}`
+  }, [
+    isOpen,
+    debouncedSearch,
+    status,
+    sector,
+    city,
+    customerCompanyId,
+    isSuperAdmin,
+    filterCompanyId,
+    currentPage,
+    pageSize,
+  ])
+
   const { data: response, isLoading, error, mutate: mutateCustomers } = useData<CustomersResponse | Customer[]>(apiUrl, {
-    dedupingInterval: 0, // Cache'i kapat - her zaman fresh data çek
-    revalidateOnFocus: true, // Focus'ta yeniden fetch yap
+    dedupingInterval: 60000, // 60 saniye cache (performans için)
+    revalidateOnFocus: false, // Focus'ta yeniden fetch yapma (instant navigation)
     refreshInterval: 0, // Otomatik refresh yok
   })
 
@@ -212,13 +271,13 @@ export default function CustomerList() {
   }, [response])
 
   // Stats verisini çek - toplam sayı için
-  const { data: stats } = useData<any>('/api/stats/customers', {
+  const { data: stats } = useData<any>(isOpen ? '/api/stats/customers' : null, {
     dedupingInterval: 5000,
     revalidateOnFocus: false,
   })
 
   const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!confirm(`${name} müşterisini silmek istediğinize emin misiniz?`)) {
+    if (!confirm(t('deleteConfirm', { name }))) {
       return
     }
 
@@ -264,10 +323,12 @@ export default function CustomerList() {
           data: updatedCustomers,
           pagination: updatedPagination,
         }, { revalidate: false }),
-        mutate(apiUrl, {
-          data: updatedCustomers,
-          pagination: updatedPagination,
-        }, { revalidate: false }),
+        apiUrl
+          ? mutate(apiUrl, {
+              data: updatedCustomers,
+              pagination: updatedPagination,
+            }, { revalidate: false })
+          : Promise.resolve(),
         // Dashboard'daki müşteri sektör dağılımı grafiğini güncelle (silinen müşteri grafikten çıkarılmalı)
         queryClient.invalidateQueries({ queryKey: ['distribution'] }),
       ])
@@ -279,9 +340,9 @@ export default function CustomerList() {
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error('Silinemedi', error?.message)
+      toast.error(tCommon('error'), error?.message)
     }
-  }, [customers, pagination, mutateCustomers, apiUrl, queryClient])
+  }, [customers, pagination, mutateCustomers, apiUrl, queryClient, t, tCommon])
 
   const handleEdit = useCallback((customer: Customer) => {
     setSelectedCustomer(customer)
@@ -297,6 +358,10 @@ export default function CustomerList() {
     setFormOpen(false)
     setSelectedCustomer(null)
     // Form kapanırken cache'i güncelleme yapılmaz - onSuccess callback'te zaten yapılıyor
+  }, [])
+
+  const closeQuickAction = useCallback(() => {
+    setQuickAction(null)
   }, [])
 
   // Bulk operations handlers
@@ -355,13 +420,15 @@ export default function CustomerList() {
             totalItems: pagination.totalItems - ids.length,
           },
         }, { revalidate: false }),
-        mutate(apiUrl, {
-          data: updatedCustomers,
-          pagination: {
-            ...pagination,
-            totalItems: pagination.totalItems - ids.length,
-          },
-        }, { revalidate: false }),
+        apiUrl
+          ? mutate(apiUrl, {
+              data: updatedCustomers,
+              pagination: {
+                ...pagination,
+                totalItems: pagination.totalItems - ids.length,
+              },
+            }, { revalidate: false })
+          : Promise.resolve(),
         // Dashboard'daki müşteri sektör dağılımı grafiğini güncelle (silinen müşteriler grafikten çıkarılmalı)
         queryClient.invalidateQueries({ queryKey: ['distribution'] }),
       ])
@@ -401,7 +468,7 @@ export default function CustomerList() {
   // Import handlers
   const handleImport = useCallback(async () => {
     if (!importFile) {
-      toast.warning('Dosya seçmediniz')
+      toast.warning(t('noFileSelected'))
       return
     }
 
@@ -417,16 +484,16 @@ export default function CustomerList() {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
-        throw new Error(errorData.error || 'İçe aktarılamadı')
+        throw new Error(errorData.error || t('importFailed'))
       }
 
       const result = await res.json()
-      toast.success('Dosya yüklendi', `${result.importedCount} müşteri başarıyla import edildi`)
+      toast.success(t('fileUploaded'), t('customersImported', { count: result.importedCount }))
 
       // Cache'i invalidate et - yeni verileri çek
       await Promise.all([
         mutateCustomers(undefined, { revalidate: true }),
-        mutate(apiUrl, undefined, { revalidate: true }),
+        apiUrl,
         // Dashboard'daki müşteri sektör dağılımı grafiğini güncelle (yeni import edilen müşteriler grafikte görünmeli)
         queryClient.invalidateQueries({ queryKey: ['distribution'] }),
       ])
@@ -438,7 +505,7 @@ export default function CustomerList() {
       setImportFile(null)
     } catch (error: any) {
       console.error('Import error:', error)
-      toast.error('İçe aktarılamadı', error?.message)
+      toast.error(t('importFailed'), error?.message)
     } finally{
       setImporting(false)
     }
@@ -460,14 +527,14 @@ export default function CustomerList() {
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `musteriler.${format === 'excel' ? 'xlsx' : 'csv'}`
+      a.download = `${t('customersFileName')}.${format === 'excel' ? 'xlsx' : 'csv'}`
       document.body.appendChild(a)
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
     } catch (error: any) {
       console.error('Export error:', error)
-      toast.error('Dışa aktarılamadı')
+      toast.error(t('exportFailed'))
     }
   }, [debouncedSearch, status, sector])
 
@@ -479,6 +546,10 @@ export default function CustomerList() {
       setSelectAll(false)
     }
   }, [selectedIds, customers])
+
+  if (!isOpen) {
+    return null
+  }
 
   if (isLoading) {
     return <SkeletonList />
@@ -492,34 +563,34 @@ export default function CustomerList() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Müşteriler</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
           <p className="mt-2 text-gray-600">
-            Toplam {stats?.total || pagination.totalItems || customers.length} müşteri
+            {t('totalCustomers', { count: stats?.total || pagination.totalItems || customers.length })}
           </p>
         </div>
         <div className="flex gap-2">
           <Button
             variant="outline"
             onClick={() => setImportOpen(true)}
-            aria-label="Müşteri import et"
+            aria-label={t('import')}
           >
             <Upload className="mr-2 h-4 w-4" />
-            Import
+            {t('import')}
           </Button>
           <Button
             variant="outline"
             onClick={() => handleExport('excel')}
-            aria-label="Excel olarak export et"
+            aria-label={t('export')}
           >
             <Download className="mr-2 h-4 w-4" />
-            Export
+            {t('export')}
           </Button>
           <Button
             onClick={handleAdd}
             className="bg-gradient-primary text-white"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Yeni Müşteri
+            {t('newCustomer')}
           </Button>
         </div>
       </div>
@@ -530,7 +601,7 @@ export default function CustomerList() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             type="search"
-            placeholder="İsim, e-posta veya telefon ile ara..."
+            placeholder={t('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -539,10 +610,10 @@ export default function CustomerList() {
         {isSuperAdmin && (
           <Select value={filterCompanyId || 'all'} onValueChange={(value) => setFilterCompanyId(value === 'all' ? '' : value)}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Firma Seç" />
+              <SelectValue placeholder={t('selectCompany')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Tüm Firmalar</SelectItem>
+              <SelectItem value="all">{t('allCompanies')}</SelectItem>
               {companies.map((company) => (
                 <SelectItem key={company.id} value={company.id}>
                   {company.name}
@@ -553,20 +624,20 @@ export default function CustomerList() {
         )}
         <Select value={status || 'all'} onValueChange={(value) => setStatus(value === 'all' ? '' : value)}>
           <SelectTrigger className="w-48">
-            <SelectValue placeholder="Durum" />
+            <SelectValue placeholder={t('selectStatus')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tüm Durumlar</SelectItem>
-            <SelectItem value="ACTIVE">Aktif</SelectItem>
-            <SelectItem value="INACTIVE">Pasif</SelectItem>
+            <SelectItem value="all">{t('allStatuses')}</SelectItem>
+            <SelectItem value="ACTIVE">{t('active')}</SelectItem>
+            <SelectItem value="INACTIVE">{t('inactive')}</SelectItem>
           </SelectContent>
         </Select>
         <Select value={sector || 'all'} onValueChange={(value) => setSector(value === 'all' ? '' : value)}>
           <SelectTrigger className="w-48">
-            <SelectValue placeholder="Sektör" />
+            <SelectValue placeholder={t('selectSector')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tüm Sektörler</SelectItem>
+            <SelectItem value="all">{t('allSectors')}</SelectItem>
             <SelectItem value="Teknoloji">Teknoloji</SelectItem>
             <SelectItem value="Sağlık">Sağlık</SelectItem>
             <SelectItem value="Eğitim">Eğitim</SelectItem>
@@ -594,7 +665,7 @@ export default function CustomerList() {
           selectedIds={selectedIds}
           onBulkDelete={handleBulkDelete}
           onClearSelection={handleClearSelection}
-          itemName="müşteri"
+          itemName={t('title').toLowerCase()}
         />
       )}
 
@@ -607,17 +678,17 @@ export default function CustomerList() {
                 <Checkbox
                   checked={selectAll}
                   onCheckedChange={handleSelectAll}
-                  aria-label="Tümünü seç"
+                  aria-label={t('selectAll')}
                 />
               </TableHead>
-              <TableHead>İsim</TableHead>
-              {isSuperAdmin && <TableHead>Firma</TableHead>}
-              <TableHead>E-posta</TableHead>
-              <TableHead>Telefon</TableHead>
-              <TableHead>Şehir</TableHead>
-              <TableHead>Sektör</TableHead>
-              <TableHead>Durum</TableHead>
-              <TableHead className="text-right">İşlemler</TableHead>
+              <TableHead>{t('tableHeaders.name')}</TableHead>
+              {isSuperAdmin && <TableHead>{t('company')}</TableHead>}
+              <TableHead>{t('tableHeaders.email')}</TableHead>
+              <TableHead>{t('tableHeaders.phone')}</TableHead>
+              <TableHead>{t('tableHeaders.city')}</TableHead>
+              <TableHead>{t('tableHeaders.sector')}</TableHead>
+              <TableHead>{t('tableHeaders.status')}</TableHead>
+              <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -626,10 +697,10 @@ export default function CustomerList() {
                 <TableCell colSpan={isSuperAdmin ? 9 : 8} className="p-0">
                   <EmptyState
                     icon={Users}
-                    title="Henüz müşteri yok"
-                    description="Yeni müşteri ekleyerek başlayın"
+                    title={t('emptyStateTitle')}
+                    description={t('emptyStateDescription')}
                     action={{
-                      label: 'Yeni Müşteri Ekle',
+                      label: t('emptyStateButton'),
                       onClick: handleAdd,
                     }}
                     className="border-0 shadow-none"
@@ -643,10 +714,26 @@ export default function CustomerList() {
                     <Checkbox
                       checked={selectedIds.includes(customer.id)}
                       onCheckedChange={(checked) => handleSelectItem(customer.id, checked as boolean)}
-                      aria-label={`${customer.name} müşterisini seç`}
+                      aria-label={t('selectCustomer', { name: customer.name })}
                     />
                   </TableCell>
-                  <TableCell className="font-medium">{customer.name}</TableCell>
+                  <TableCell className="font-medium">
+                    <div className="flex items-center gap-3">
+                      {customer.logoUrl && (
+                        <div className="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
+                          <Image
+                            src={customer.logoUrl}
+                            alt={customer.name}
+                            width={40}
+                            height={40}
+                            className="w-full h-full object-cover"
+                            unoptimized={customer.logoUrl.startsWith('blob:') || customer.logoUrl.startsWith('data:')}
+                          />
+                        </div>
+                      )}
+                      <span>{customer.name}</span>
+                    </div>
+                  </TableCell>
                   {isSuperAdmin && (
                     <TableCell>
                       <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
@@ -668,23 +755,79 @@ export default function CustomerList() {
                   </TableCell>
                   <TableCell>
                     <Badge
-                      variant={customer.status === 'ACTIVE' ? 'default' : 'secondary'}
+                      className={
+                        customer.status === 'ACTIVE'
+                          ? 'bg-green-600 text-white border-green-700'
+                          : 'bg-red-600 text-white border-red-700'
+                      }
                     >
-                      {customer.status === 'ACTIVE' ? 'Aktif' : 'Pasif'}
+                      {customer.status === 'ACTIVE' ? t('active') : t('inactive')}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Link href={`/${locale}/customers/${customer.id}`} prefetch={true}>
-                        <Button variant="ghost" size="icon" aria-label={`${customer.name} müşterisini görüntüle`}>
-                          <Eye className="h-4 w-4 text-gray-600" />
-                        </Button>
-                      </Link>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={t('quickActions.open', { name: customer.name })}
+                          >
+                            <Sparkles className="h-4 w-4 text-indigo-500" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
+                          <DropdownMenuLabel>{t('quickActions.title')}</DropdownMenuLabel>
+                          <DropdownMenuItem
+                            onSelect={() => setQuickAction({ type: 'deal', customer })}
+                          >
+                            <Briefcase className="h-4 w-4" />
+                            {t('quickActions.createDeal')}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => setQuickAction({ type: 'quote', customer })}
+                          >
+                            <FileText className="h-4 w-4" />
+                            {t('quickActions.createQuote')}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => setQuickAction({ type: 'invoice', customer })}
+                          >
+                            <Receipt className="h-4 w-4" />
+                            {t('quickActions.createInvoice')}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onSelect={() => setQuickAction({ type: 'task', customer })}
+                          >
+                            <CheckSquare className="h-4 w-4" />
+                            {t('quickActions.createTask')}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => setQuickAction({ type: 'meeting', customer })}
+                          >
+                            <Calendar className="h-4 w-4" />
+                            {t('quickActions.scheduleMeeting')}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setSelectedCustomerId(customer.id)
+                          setSelectedCustomerData(customer) // Liste sayfasındaki veriyi hemen göster (hızlı açılış)
+                          setDetailModalOpen(true)
+                        }}
+                        aria-label={t('viewCustomer', { name: customer.name })}
+                      >
+                        <Eye className="h-4 w-4 text-gray-600" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => handleEdit(customer)}
-                        aria-label={`${customer.name} müşterisini düzenle`}
+                        aria-label={t('editCustomer', { name: customer.name })}
                       >
                         <Edit className="h-4 w-4 text-gray-600" />
                       </Button>
@@ -693,7 +836,7 @@ export default function CustomerList() {
                         size="icon"
                         onClick={() => handleDelete(customer.id, customer.name)}
                         className="text-red-600 hover:text-red-700"
-                        aria-label={`${customer.name} müşterisini sil`}
+                        aria-label={t('deleteCustomer', { name: customer.name })}
                       >
                         <Trash2 className="h-4 w-4 text-red-600" />
                       </Button>
@@ -722,10 +865,9 @@ export default function CustomerList() {
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Müşteri Import Et</DialogTitle>
+            <DialogTitle>{t('importTitle')}</DialogTitle>
             <DialogDescription>
-              Excel (.xlsx, .xls) veya CSV dosyası yükleyin. Dosya formatı:
-              Müşteri Adı, E-posta, Telefon, Şehir, Sektör, Durum
+              {t('importDescription')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -746,19 +888,31 @@ export default function CustomerList() {
                 }}
                 disabled={importing}
               >
-                İptal
+                {tCommon('cancel')}
               </Button>
               <Button
                 onClick={handleImport}
                 disabled={!importFile || importing}
                 className="bg-gradient-primary text-white"
               >
-                {importing ? 'Import ediliyor...' : 'Import Et'}
+                {importing ? t('importing') : t('importButton')}
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Detail Modal */}
+      <CustomerDetailModal
+        customerId={selectedCustomerId}
+        open={detailModalOpen}
+        onClose={() => {
+          setDetailModalOpen(false)
+          setSelectedCustomerId(null)
+          setSelectedCustomerData(null)
+        }}
+        initialData={selectedCustomerData || undefined}
+      />
 
       {/* Form Modal */}
       <CustomerForm
@@ -793,7 +947,7 @@ export default function CustomerList() {
             setTimeout(async () => {
               await Promise.all([
                 mutateCustomers(undefined, { revalidate: true }),
-                mutate(apiUrl, undefined, { revalidate: true }),
+                apiUrl,
                 // Dashboard'daki müşteri sektör dağılımı grafiğini tekrar güncelle
                 queryClient.refetchQueries({ queryKey: ['distribution'] }),
               ])
@@ -817,7 +971,7 @@ export default function CustomerList() {
             await Promise.all([
               mutate('/api/customers', undefined, { revalidate: true }),
               mutate('/api/customers?', undefined, { revalidate: true }),
-              mutate(apiUrl, undefined, { revalidate: true }),
+              apiUrl,
               mutate(firstPageUrl, undefined, { revalidate: true }),
               // Dashboard'daki müşteri sektör dağılımı grafiğini güncelle
               queryClient.invalidateQueries({ queryKey: ['distribution'] }),
@@ -840,6 +994,72 @@ export default function CustomerList() {
             }, 500)
           }
         }}
+      />
+
+      {/* Quick Action Forms */}
+      <DealForm
+        open={quickAction?.type === 'deal'}
+        onClose={closeQuickAction}
+        onSuccess={async (savedDeal) => {
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
+          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
+          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
+        }}
+        customerCompanyId={quickAction?.customer.customerCompanyId}
+        customerCompanyName={quickAction?.customer.CustomerCompany?.name}
+        customerId={quickAction?.customer.id}
+      />
+      <QuoteForm
+        open={quickAction?.type === 'quote'}
+        onClose={closeQuickAction}
+        onSuccess={async (savedQuote) => {
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
+          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
+          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
+        }}
+        customerCompanyId={quickAction?.customer.customerCompanyId}
+        customerCompanyName={quickAction?.customer.CustomerCompany?.name}
+        customerId={quickAction?.customer.id}
+      />
+      <InvoiceForm
+        open={quickAction?.type === 'invoice'}
+        onClose={closeQuickAction}
+        onSuccess={async (savedInvoice) => {
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
+          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
+          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
+        }}
+        customerCompanyId={quickAction?.customer.customerCompanyId}
+        customerCompanyName={quickAction?.customer.CustomerCompany?.name}
+        customerId={quickAction?.customer.id}
+      />
+      <TaskForm
+        open={quickAction?.type === 'task'}
+        onClose={closeQuickAction}
+        onSuccess={async (savedTask) => {
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
+          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
+          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
+        }}
+        customerName={quickAction?.customer.name}
+        customerCompanyName={quickAction?.customer.CustomerCompany?.name}
+      />
+      <MeetingForm
+        open={quickAction?.type === 'meeting'}
+        onClose={closeQuickAction}
+        onSuccess={async (savedMeeting) => {
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
+          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
+          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
+        }}
+        customerCompanyId={quickAction?.customer.customerCompanyId}
+        customerCompanyName={quickAction?.customer.CustomerCompany?.name}
+        customerId={quickAction?.customer.id}
       />
     </div>
   )

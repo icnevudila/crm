@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Plus, FileText, Users, Receipt, Briefcase } from 'lucide-react'
 import Link from 'next/link'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 
 interface SmartEmptyStateProps {
   entityType: 'quotes' | 'customers' | 'invoices' | 'deals' | 'products'
@@ -21,41 +21,42 @@ export default function SmartEmptyState({
   onCreateClick,
 }: SmartEmptyStateProps) {
   const locale = useLocale()
+  const t = useTranslations('emptyState')
 
   const config = {
     quotes: {
       icon: FileText,
-      title: 'Henüz teklif oluşturmadın',
-      message: 'İlk teklifini oluşturarak müşterilerine profesyonel teklifler sunmaya başla.',
-      buttonText: 'Teklif Oluştur',
+      title: t('quotes.title'),
+      message: t('quotes.message'),
+      buttonText: t('quotes.buttonText'),
       href: `/${locale}/quotes/new`,
     },
     customers: {
       icon: Users,
-      title: 'Henüz müşteri eklemedin',
-      message: 'İlk müşterini ekleyerek CRM sistemini kullanmaya başla.',
-      buttonText: 'Müşteri Ekle',
+      title: t('customers.title'),
+      message: t('customers.message'),
+      buttonText: t('customers.buttonText'),
       href: `/${locale}/customers/new`,
     },
     invoices: {
       icon: Receipt,
-      title: 'Henüz fatura oluşturmadın',
-      message: 'İlk faturanı oluşturarak satış sürecini başlat.',
-      buttonText: 'Fatura Oluştur',
+      title: t('invoices.title'),
+      message: t('invoices.message'),
+      buttonText: t('invoices.buttonText'),
       href: `/${locale}/invoices/new`,
     },
     deals: {
       icon: Briefcase,
-      title: 'Henüz fırsat oluşturmadın',
-      message: 'İlk fırsatını oluşturarak satış sürecini takip etmeye başla.',
-      buttonText: 'Fırsat Oluştur',
+      title: t('deals.title'),
+      message: t('deals.message'),
+      buttonText: t('deals.buttonText'),
       href: `/${locale}/deals/new`,
     },
     products: {
       icon: Plus,
-      title: 'Henüz ürün eklemedin',
-      message: 'İlk ürününü ekleyerek ürün kataloğunu oluşturmaya başla.',
-      buttonText: 'Ürün Ekle',
+      title: t('products.title'),
+      message: t('products.message'),
+      buttonText: t('products.buttonText'),
       href: `/${locale}/products/new`,
     },
   }
@@ -201,6 +202,19 @@ export default function SmartEmptyState({
     </Card>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -47,12 +47,12 @@ export async function GET(
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     const companyId = session.user.companyId
 
-    // Quote'u ilişkili verilerle çek
+    // Quote'u sadece gerekli kolonlarla çek (performans için)
     let query = supabase
       .from('Quote')
       .select(
         `
-        *,
+        id, title, status, totalAmount, dealId, customerCompanyId, companyId, createdAt, updatedAt, validUntil,
         Deal (
           id,
           title,
@@ -83,7 +83,7 @@ export async function GET(
     if (error) {
       console.error('Quote GET error:', error)
       return NextResponse.json(
-        { error: error.message || 'Failed to fetch quote' },
+        { error: error.message || 'Teklif getirilemedi' },
         { status: 500 }
       )
     }
@@ -136,38 +136,17 @@ export async function GET(
       return NextResponse.json({ error: 'Teklif bulunamadı' }, { status: 404 })
     }
 
-    // ActivityLog'ları çek
-    let activityQuery = supabase
-      .from('ActivityLog')
-      .select(
-        `
-        *,
-        User (
-          name,
-          email
-        )
-      `
-      )
-      .eq('entity', 'Quote')
-      .eq('meta->>id', id)
+    // ActivityLog'lar KALDIRILDI - Lazy load için ayrı endpoint kullanılacak (/api/activity?entity=Quote&id=...)
+    // (Performans optimizasyonu: Detay sayfası daha hızlı açılır, ActivityLog'lar gerektiğinde yüklenir)
     
-    // SuperAdmin değilse companyId filtresi ekle
-    if (!isSuperAdmin) {
-      activityQuery = activityQuery.eq('companyId', companyId)
-    }
-    
-    const { data: activities } = await activityQuery
-      .order('createdAt', { ascending: false })
-      .limit(20)
-
     return NextResponse.json({
       ...(data as any),
       quoteItems: quoteItems || [],
-      activities: activities || [],
+      activities: [], // Boş array - lazy load için ayrı endpoint kullanılacak
     })
   } catch (error) {
     return NextResponse.json(
-      { error: 'Failed to fetch quote' },
+      { error: 'Teklif getirilemedi' },
       { status: 500 }
     )
   }
@@ -222,7 +201,7 @@ export async function PUT(
         console.error('Quote fetch error in PUT:', quoteError)
       }
       return NextResponse.json(
-        { error: 'Quote not found', message: quoteError.message || 'Failed to fetch quote' },
+        { error: 'Teklif bulunamadı', message: quoteError.message || 'Teklif bilgisi getirilemedi' },
         { status: 404 }
       )
     }
@@ -297,81 +276,7 @@ export async function PUT(
       }
 
       // ✅ ACCEPTED veya DECLINED'e geçiş için onay talebi kontrolü
-      if ((body.status === 'ACCEPTED' || body.status === 'DECLINED') && currentStatus === 'SENT') {
-        const resolvedParams = await params
-        const quoteId = resolvedParams.id
-        
-        // Zaten onay talebi var mı kontrol et
-        const { data: existingApproval } = await supabase
-          .from('ApprovalRequest')
-          .select('id, status')
-          .eq('relatedTo', 'Quote')
-          .eq('relatedId', quoteId)
-          .eq('status', 'PENDING')
-          .maybeSingle()
-
-        // Eğer onay talebi yoksa oluştur
-        if (!existingApproval) {
-          // Manager'ları bul (ADMIN ve SUPER_ADMIN rolleri)
-          const { data: managers } = await supabase
-            .from('User')
-            .select('id')
-            .eq('companyId', session.user.companyId)
-            .in('role', ['ADMIN', 'SUPER_ADMIN'])
-            .eq('status', 'ACTIVE')
-
-          if (managers && managers.length > 0) {
-            const managerIds = managers.map((m: any) => m.id)
-            
-            // Onay talebi oluştur
-            const { data: approvalRequest, error: approvalError } = await supabase
-              .from('ApprovalRequest')
-              .insert({
-                title: `Teklif ${body.status === 'ACCEPTED' ? 'Onay' : 'Red'} Talebi: ${(currentQuote as any)?.title || 'Teklif'}`,
-                description: `Teklif durumu ${body.status === 'ACCEPTED' ? 'Kabul Edildi' : 'Reddedildi'} olarak değiştirilmek isteniyor.`,
-                relatedTo: 'Quote',
-                relatedId: quoteId,
-                requestedBy: session.user.id,
-                approverIds: managerIds,
-                priority: 'HIGH',
-                status: 'PENDING',
-                companyId: session.user.companyId,
-              } as any)
-              .select()
-              .single()
-
-            if (approvalError) {
-              console.error('Approval request creation error:', approvalError)
-            }
-
-            // Onay talebi oluşturuldu, status değişikliğini engelle
-            return NextResponse.json(
-              {
-                error: 'Onay talebi oluşturuldu',
-                message: `Teklif durumu değiştirmek için onay gerekiyor. Onay talebi oluşturuldu ve yöneticilere bildirildi.`,
-                reason: 'APPROVAL_REQUIRED',
-                approvalRequestId: (approvalRequest as any)?.id,
-                currentStatus,
-                attemptedStatus: body.status,
-              },
-              { status: 202 } // 202 Accepted - Onay talebi oluşturuldu
-            )
-          }
-        } else {
-          // Onay talebi var ama henüz onaylanmamış
-          return NextResponse.json(
-            {
-              error: 'Onay bekleniyor',
-              message: `Bu teklif için zaten bir onay talebi var ve henüz onaylanmadı. Lütfen onaylar sayfasından kontrol edin.`,
-              reason: 'APPROVAL_PENDING',
-              approvalRequestId: (existingApproval as any)?.id,
-              currentStatus,
-              attemptedStatus: body.status,
-            },
-            { status: 403 }
-          )
-        }
-      }
+      // Not: Teklif status değişiklikleri için artık onay süreci gerekmiyor
     }
 
     // Status değiştirme yetkisi kontrolü
@@ -404,6 +309,7 @@ export async function PUT(
       updateData.totalAmount = parseFloat(body.total) // Fallback: total → totalAmount
     }
     if (body.dealId !== undefined) updateData.dealId = body.dealId || null
+    if (body.customerCompanyId !== undefined) updateData.customerCompanyId = body.customerCompanyId || null
     // ✅ ÇÖZÜM: notes kolonu migration ile eklendi (057_add_quote_notes.sql)
     if (body.notes !== undefined) {
       updateData.notes = body.notes
@@ -493,9 +399,8 @@ export async function PUT(
     // ✅ %100 KESİN ÇÖZÜM: Update başarılı oldu, şimdi güncellenmiş veriyi çek
     // ÖNEMLİ: updatedAt'in gerçekten güncellendiğini kontrol et
     // ÖNEMLİ: Update sonrası ayrı select yap - RLS policy'si select'e izin verebilir
-    // ✅ ÇÖZÜM: Update sonrası kısa bir bekleme ekle - trigger'ların çalışması için
-    // ÖNEMLİ: Supabase trigger'ları asenkron çalışabilir, kısa bir bekleme ekle
-    await new Promise(resolve => setTimeout(resolve, 200)) // 200ms bekle - trigger'ların çalışması için
+    // OPTİMİZE: Bekleme kaldırıldı - trigger'lar zaten anında çalışır (performans için)
+    // await new Promise(resolve => setTimeout(resolve, 200)) // KALDIRILDI - gereksiz gecikme
     
     let query = supabase
       .from('Quote')
@@ -547,8 +452,8 @@ export async function PUT(
         }, { status: 500 })
       }
       
-      // ✅ ÇÖZÜM: Retry sonrası tekrar kontrol et
-      await new Promise(resolve => setTimeout(resolve, 200)) // 200ms bekle
+      // OPTİMİZE: Bekleme kaldırıldı - anında kontrol et (performans için)
+      // await new Promise(resolve => setTimeout(resolve, 200)) // KALDIRILDI - gereksiz gecikme
       let retryQuery = supabase
         .from('Quote')
         .select('*')
@@ -601,6 +506,9 @@ export async function PUT(
       return NextResponse.json({ error: 'Quote bulunamadı veya güncellenemedi' }, { status: 404 })
     }
 
+    // Otomasyon bilgilerini sakla (response'a eklemek için)
+    const automationInfo: any = {}
+    
     // Quote ACCEPTED olduğunda otomatik Invoice oluştur
     if (body.status === 'ACCEPTED' && data) {
       const invoiceData = {
@@ -622,6 +530,10 @@ export async function PUT(
         console.error('Invoice creation error:', invoiceError)
         // Invoice oluşturma hatası ana işlemi engellemez, sadece log'la
       } else if (invoice) {
+        // Otomasyon bilgilerini sakla
+        automationInfo.invoiceId = (invoice as any).id
+        automationInfo.invoiceCreated = true
+        automationInfo.invoiceTitle = invoiceData.title
         // ✅ Email otomasyonu: Quote ACCEPTED → Müşteriye email gönder
         try {
           const { getAndRenderEmailTemplate, getTemplateVariables } = await import('@/lib/template-renderer')
@@ -782,9 +694,32 @@ export async function PUT(
       }
     }
 
+    // REJECTED/DECLINED durumunda Task oluşturuldu mu kontrol et
+    if ((body.status === 'REJECTED' || body.status === 'DECLINED') && (data as any)?.status !== body.status) {
+      try {
+        const { data: tasks } = await supabase
+          .from('Task')
+          .select('id')
+          .eq('relatedTo', `Quote: ${id}`)
+          .eq('companyId', session.user.companyId)
+          .order('createdAt', { ascending: false })
+          .limit(1)
+        
+        if (tasks && tasks.length > 0) {
+          automationInfo.taskId = tasks[0].id
+          automationInfo.taskCreated = true
+        }
+      } catch (taskError) {
+        // Task kontrolü hatası ana işlemi engellemez
+      }
+    }
+    
     // ✅ %100 KESİN ÇÖZÜM: Cache-Control header'ları ekle - Next.js ve browser cache'ini kapat
     // ÖNEMLİ: API response'da cache'i tamamen kapat - refresh sonrası kesinlikle fresh data çekilsin
-    return NextResponse.json(data, {
+    return NextResponse.json({
+      ...data,
+      automation: automationInfo,
+    }, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
         'Pragma': 'no-cache',
@@ -795,7 +730,7 @@ export async function PUT(
     console.error('Quote PUT error:', error)
     return NextResponse.json(
       { 
-        error: error?.message || 'Failed to update quote',
+        error: error?.message || 'Teklif güncellenemedi',
         details: error?.details || error?.hint || null,
         code: error?.code || null
       },
@@ -933,7 +868,7 @@ export async function DELETE(
           match: quoteWithoutCompany?.companyId === session.user.companyId,
         })
       }
-      return NextResponse.json({ error: 'Quote not found or could not be deleted' }, { status: 404 })
+      return NextResponse.json({ error: 'Teklif bulunamadı veya silinemedi' }, { status: 404 })
     }
 
     // Debug: Silme işleminin başarılı olduğunu logla
@@ -979,9 +914,9 @@ export async function DELETE(
     }
     return NextResponse.json(
       { 
-        error: 'Failed to delete quote',
+        error: 'Teklif silinemedi',
         ...(process.env.NODE_ENV === 'development' && {
-          message: error?.message || 'Unknown error',
+          message: error?.message || 'Bilinmeyen hata',
           stack: error?.stack,
         }),
       },

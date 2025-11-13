@@ -1,10 +1,11 @@
 import { getRequestConfig } from 'next-intl/server'
-import { locales, defaultLocale } from '@/lib/i18n'
+import { defaultLocale } from '@/lib/i18n'
 
-export default getRequestConfig(async () => {
+export default getRequestConfig(async ({ requestLocale }) => {
   // Bu fonksiyon server-side çalışır
-  // Locale'i cookie veya header'dan alabilirsiniz
-  const locale = defaultLocale
+  // requestLocale otomatik olarak URL'den alınır (middleware sayesinde)
+  // Eğer requestLocale yoksa defaultLocale kullanılır
+  let locale = await requestLocale || defaultLocale
 
   return {
     locale,

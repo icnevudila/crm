@@ -42,14 +42,14 @@ export async function GET(request: Request) {
     if (findError) {
       console.error('Check Low Stock - Find Error:', findError)
       return NextResponse.json(
-        { error: 'Failed to find low stock products', details: findError.message },
+        { error: 'Düşük stoklu ürünler alınamadı', details: findError.message },
         { status: 500 }
       )
     }
 
     if (!lowStockProducts || lowStockProducts.length === 0) {
       return NextResponse.json({
-        message: 'No low stock products found',
+        message: 'Düşük stoklu ürün bulunamadı',
         count: 0,
         date: new Date().toISOString().split('T')[0],
       })
@@ -98,7 +98,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      message: 'Low stock products checked',
+      message: 'Düşük stoklu ürünler kontrol edildi',
       totalProducts: lowStockProducts.length,
       notificationsSent: notificationCount,
       date: new Date().toISOString().split('T')[0],
@@ -106,7 +106,7 @@ export async function GET(request: Request) {
   } catch (error: any) {
     console.error('Check Low Stock - Error:', error)
     return NextResponse.json(
-      { error: error?.message || 'Failed to check low stock products' },
+      { error: error?.message || 'Düşük stok kontrolü gerçekleştirilemedi' },
       { status: 500 }
     )
   }

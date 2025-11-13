@@ -1,407 +1,274 @@
 'use client'
 
-import { useState } from 'react'
-import { useLocale } from 'next-intl'
+import { useTranslations } from 'next-intl'
+import { motion } from 'framer-motion'
 import Link from 'next/link'
 import {
-  HelpCircle,
-  ChevronDown,
-  ChevronUp,
-  Book,
+  BookOpen,
   FileText,
-  Shield,
-  Settings,
-  Users,
-  Briefcase,
-  FileCheck,
-  BarChart3,
-  Search,
+  Video,
+  MessageCircle,
+  Mail,
+  HelpCircle,
+  ArrowRight,
 } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
+import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-
-interface FAQItem {
-  id: string
-  question: string
-  answer: string
-  category: string
-}
-
-const faqData: FAQItem[] = [
-  // Genel Sorular
-  {
-    id: '1',
-    question: 'CRM sistemi nedir ve ne işe yarar?',
-    answer: 'CRM (Customer Relationship Management) sistemi, müşteri ilişkilerinizi yönetmek, satış süreçlerinizi takip etmek ve iş operasyonlarınızı optimize etmek için kullanılan kapsamlı bir yönetim sistemidir. Müşteri bilgileri, fırsatlar, teklifler, faturalar ve tüm iş süreçlerinizi tek bir platformda toplar.',
-    category: 'genel',
-  },
-  {
-    id: '2',
-    question: 'Sisteme nasıl giriş yapabilirim?',
-    answer: 'Sisteme giriş yapmak için login sayfasındaki email ve şifrenizi kullanarak giriş yapabilirsiniz. Eğer hesabınız yoksa, sistem yöneticinizden hesap oluşturmasını talep edebilirsiniz.',
-    category: 'genel',
-  },
-  {
-    id: '3',
-    question: 'Şifremi unuttum, ne yapmalıyım?',
-    answer: 'Şifrenizi unuttuysanız, login sayfasındaki "Şifremi Unuttum" linkine tıklayarak şifre sıfırlama işlemini başlatabilirsiniz. Email adresinize şifre sıfırlama linki gönderilecektir.',
-    category: 'genel',
-  },
-  // Müşteri Yönetimi
-  {
-    id: '4',
-    question: 'Yeni müşteri nasıl eklerim?',
-    answer: 'Müşteriler sayfasına gidin ve "Yeni Müşteri" butonuna tıklayın. Müşteri bilgilerini (ad, email, telefon, adres vb.) doldurup kaydedin. Müşteri otomatik olarak sisteminize eklenir.',
-    category: 'musteri',
-  },
-  {
-    id: '5',
-    question: 'Müşteri bilgilerini nasıl düzenlerim?',
-    answer: 'Müşteriler listesinden düzenlemek istediğiniz müşteriye tıklayın. Detay sayfasında "Düzenle" butonuna tıklayarak bilgileri güncelleyebilirsiniz.',
-    category: 'musteri',
-  },
-  // Fırsat ve Teklif Yönetimi
-  {
-    id: '6',
-    question: 'Fırsat (Deal) nasıl oluşturulur?',
-    answer: 'Fırsatlar sayfasına gidin ve "Yeni Fırsat" butonuna tıklayın. Müşteriyi seçin, fırsat başlığı, değer, aşama ve diğer bilgileri doldurun. Fırsat otomatik olarak pipeline\'a eklenir.',
-    category: 'firsat',
-  },
-  {
-    id: '7',
-    question: 'Teklif nasıl hazırlanır?',
-    answer: 'Teklifler sayfasından "Yeni Teklif" butonuna tıklayın. İlgili fırsatı seçin, ürünleri ekleyin, fiyatları ve indirimleri belirleyin. Teklif hazır olduğunda müşteriye gönderebilirsiniz.',
-    category: 'teklif',
-  },
-  {
-    id: '8',
-    question: 'Teklif PDF\'ini nasıl indiririm?',
-    answer: 'Teklif detay sayfasında "PDF İndir" butonuna tıklayarak teklifinizi PDF formatında indirebilirsiniz. PDF, profesyonel bir formatta hazırlanır ve müşteriye gönderilebilir.',
-    category: 'teklif',
-  },
-  // Fatura Yönetimi
-  {
-    id: '9',
-    question: 'Fatura nasıl oluşturulur?',
-    answer: 'Kabul edilen bir tekliften otomatik olarak fatura oluşturulabilir veya Faturalar sayfasından manuel olarak yeni fatura oluşturabilirsiniz. Fatura numarası, tarih ve ödeme bilgilerini doldurun.',
-    category: 'fatura',
-  },
-  {
-    id: '10',
-    question: 'Fatura durumunu nasıl güncellerim?',
-    answer: 'Fatura detay sayfasında durum alanını değiştirerek fatura durumunu (Taslak, Gönderildi, Ödendi vb.) güncelleyebilirsiniz.',
-    category: 'fatura',
-  },
-  // Ürün Yönetimi
-  {
-    id: '11',
-    question: 'Ürün nasıl eklenir?',
-    answer: 'Ürünler sayfasına gidin ve "Yeni Ürün" butonuna tıklayın. Ürün adı, fiyat, stok miktarı ve diğer bilgileri doldurun. Ürün otomatik olarak kataloğunuza eklenir.',
-    category: 'urun',
-  },
-  {
-    id: '12',
-    question: 'Stok takibi nasıl yapılır?',
-    answer: 'Ürünler sayfasında her ürünün stok miktarı görüntülenir. Stok seviyesi düşük ürünler için uyarılar gösterilir. Stok giriş/çıkış işlemleri otomatik olarak takip edilir.',
-    category: 'urun',
-  },
-  // Raporlar ve Analitik
-  {
-    id: '13',
-    question: 'Dashboard\'da hangi bilgileri görebilirim?',
-    answer: 'Dashboard\'da toplam satış, teklif sayısı, başarı oranı, aktif müşteriler, fırsatlar ve diğer önemli KPI\'ları görebilirsiniz. Ayrıca grafikler ve trend analizleri de mevcuttur.',
-    category: 'rapor',
-  },
-  {
-    id: '14',
-    question: 'Raporları nasıl oluştururum?',
-    answer: 'Raporlar sayfasına gidin, modül, tarih aralığı ve diğer filtreleri seçin. Rapor otomatik olarak oluşturulur ve Excel, PDF veya CSV formatında dışa aktarabilirsiniz.',
-    category: 'rapor',
-  },
-  // Yetki ve Güvenlik
-  {
-    id: '15',
-    question: 'Kullanıcı yetkileri nasıl yönetilir?',
-    answer: 'Admin panelinden kullanıcıların modül bazlı yetkilerini (okuma, yazma, düzenleme, silme) yönetebilirsiniz. Her kullanıcı için ayrı ayrı yetki tanımlaması yapabilirsiniz.',
-    category: 'yetki',
-  },
-  {
-    id: '16',
-    question: 'Admin ve SuperAdmin arasındaki fark nedir?',
-    answer: 'Admin, kendi kurumundaki kullanıcıları ve yetkileri yönetebilir. SuperAdmin ise tüm kurumları, kurum yetkilerini ve sistem genelindeki ayarları yönetebilir.',
-    category: 'yetki',
-  },
-  // Teknik Sorular
-  {
-    id: '17',
-    question: 'Sistem gereksinimleri nelerdir?',
-    answer: 'Sistem modern bir web tarayıcısı (Chrome, Firefox, Safari, Edge) gerektirir. Mobil cihazlardan da erişilebilir. İnternet bağlantısı gereklidir.',
-    category: 'teknik',
-  },
-  {
-    id: '18',
-    question: 'Verilerim güvende mi?',
-    answer: 'Evet, tüm verileriniz şifrelenmiş olarak saklanır. Multi-tenant yapı sayesinde her kurumun verileri birbirinden izole edilmiştir. Düzenli yedeklemeler yapılmaktadır.',
-    category: 'teknik',
-  },
-]
 
 export default function HelpPage() {
-  const locale = useLocale()
-  const [searchQuery, setSearchQuery] = useState('')
-  const [openItems, setOpenItems] = useState<Set<string>>(new Set())
+  const t = useTranslations('help')
 
-  const toggleItem = (id: string) => {
-    const newOpenItems = new Set(openItems)
-    if (newOpenItems.has(id)) {
-      newOpenItems.delete(id)
-    } else {
-      newOpenItems.add(id)
-    }
-    setOpenItems(newOpenItems)
-  }
-
-  const filteredFAQs = faqData.filter((faq) => {
-    if (!searchQuery) return true
-    const query = searchQuery.toLowerCase()
-    return (
-      faq.question.toLowerCase().includes(query) ||
-      faq.answer.toLowerCase().includes(query) ||
-      faq.category.toLowerCase().includes(query)
-    )
-  })
-
-  const categories = [
-    { value: 'all', label: 'Tümü', icon: FileText },
-    { value: 'genel', label: 'Genel', icon: HelpCircle },
-    { value: 'musteri', label: 'Müşteri', icon: Users },
-    { value: 'firsat', label: 'Fırsat', icon: Briefcase },
-    { value: 'teklif', label: 'Teklif', icon: FileCheck },
-    { value: 'fatura', label: 'Fatura', icon: FileText },
-    { value: 'urun', label: 'Ürün', icon: Briefcase },
-    { value: 'rapor', label: 'Rapor', icon: BarChart3 },
-    { value: 'yetki', label: 'Yetki', icon: Shield },
-    { value: 'teknik', label: 'Teknik', icon: Settings },
+  const helpSections = [
+    {
+      id: 'getting-started',
+      title: 'Başlangıç Rehberi',
+      description: 'Sisteme ilk kez giriş yapan kullanıcılar için temel bilgiler',
+      icon: BookOpen,
+      color: 'from-indigo-500 to-purple-500',
+      items: [
+        {
+          title: 'İlk Giriş ve Hesap Kurulumu',
+          link: '/help/getting-started/login',
+        },
+        {
+          title: 'Dashboard Kullanımı',
+          link: '/help/getting-started/dashboard',
+        },
+        {
+          title: 'Temel Navigasyon',
+          link: '/help/getting-started/navigation',
+        },
+      ],
+    },
+    {
+      id: 'modules',
+      title: 'Modül Kılavuzları',
+      description: 'Her modülün detaylı kullanım kılavuzu',
+      icon: FileText,
+      color: 'from-purple-500 to-pink-500',
+      items: [
+        {
+          title: 'Müşteri Yönetimi',
+          link: '/help/modules/customers',
+        },
+        {
+          title: 'Satış Süreci (Fırsatlar, Teklifler)',
+          link: '/help/modules/sales',
+        },
+        {
+          title: 'Fatura ve Finans',
+          link: '/help/modules/invoices',
+        },
+        {
+          title: 'Görevler ve Takvim',
+          link: '/help/modules/tasks',
+        },
+        {
+          title: 'Raporlar',
+          link: '/help/modules/reports',
+        },
+      ],
+    },
+    {
+      id: 'troubleshooting',
+      title: 'Sorun Giderme',
+      description: 'Yaygın sorunlar ve çözümleri',
+      icon: HelpCircle,
+      color: 'from-pink-500 to-red-500',
+      items: [
+        {
+          title: 'Giriş Sorunları',
+          link: '/help/troubleshooting/login',
+        },
+        {
+          title: 'Veri Görüntüleme Sorunları',
+          link: '/help/troubleshooting/data',
+        },
+        {
+          title: 'Performans Sorunları',
+          link: '/help/troubleshooting/performance',
+        },
+      ],
+    },
   ]
 
-  const [selectedCategory, setSelectedCategory] = useState('all')
-
-  const categoryFilteredFAQs =
-    selectedCategory === 'all'
-      ? filteredFAQs
-      : filteredFAQs.filter((faq) => faq.category === selectedCategory)
+  const quickLinks = [
+    {
+      title: 'Müşteri Kılavuzu',
+      description: 'Detaylı kullanım kılavuzu (PDF)',
+      icon: FileText,
+      link: '/docs/CUSTOMER_GUIDE_TR.pdf',
+      external: false,
+    },
+    {
+      title: 'Sık Sorulan Sorular',
+      description: 'SSS sayfasına git',
+      icon: HelpCircle,
+      link: '/faq',
+      external: false,
+    },
+    {
+      title: 'Video Eğitimler',
+      description: 'Yakında...',
+      icon: Video,
+      link: '#',
+      external: false,
+      disabled: true,
+    },
+  ]
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-            <HelpCircle className="h-8 w-8 text-indigo-600" />
-            Yardım ve Destek
+    <div className="container mx-auto max-w-6xl px-4 py-8">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="space-y-8"
+      >
+        {/* Header */}
+        <div className="text-center space-y-4">
+          <motion.div
+            initial={{ scale: 0.9 }}
+            animate={{ scale: 1 }}
+            transition={{ delay: 0.1 }}
+            className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white shadow-lg"
+          >
+            <BookOpen className="w-8 h-8" />
+          </motion.div>
+          <h1 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            Yardım Merkezi
           </h1>
-          <p className="mt-2 text-gray-600">
-            Sık sorulan sorular, kullanım kılavuzu ve sistem bilgileri
+          <p className="text-slate-600 max-w-2xl mx-auto">
+            CRM Enterprise V3 kullanımı hakkında ihtiyacınız olan tüm bilgilere buradan ulaşabilirsiniz.
           </p>
         </div>
-      </div>
 
-      {/* Search */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <Input
-              placeholder="Sorunuzu arayın..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      <Tabs defaultValue="faq" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="faq">
-            <HelpCircle className="h-4 w-4 mr-2" />
-            Sık Sorulan Sorular
-          </TabsTrigger>
-          <TabsTrigger value="guide">
-            <Book className="h-4 w-4 mr-2" />
-            Kullanım Kılavuzu
-          </TabsTrigger>
-          <TabsTrigger value="terms">
-            <FileText className="h-4 w-4 mr-2" />
-            Şartlar ve Koşullar
-          </TabsTrigger>
-        </TabsList>
-
-        {/* FAQ Tab */}
-        <TabsContent value="faq" className="space-y-4">
-          {/* Category Filter */}
-          <div className="flex flex-wrap gap-2">
-            {categories.map((cat) => {
-              const Icon = cat.icon
-              return (
-                    <Button
-                  key={cat.value}
-                  variant={selectedCategory === cat.value ? 'default' : 'outline'}
-                      size="sm"
-                  onClick={() => setSelectedCategory(cat.value)}
-                  className="flex items-center gap-2"
-                >
-                  <Icon className="h-4 w-4" />
-                  {cat.label}
-                </Button>
-              )
-            })}
-          </div>
-
-          {/* FAQ List */}
-          <div className="space-y-4">
-            {categoryFilteredFAQs.length > 0 ? (
-              categoryFilteredFAQs.map((faq) => {
-                const isOpen = openItems.has(faq.id)
-                return (
-                  <Card key={faq.id} className="hover:shadow-md transition-shadow">
-                    <CardHeader
-                      className="cursor-pointer"
-                      onClick={() => toggleItem(faq.id)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg">{faq.question}</CardTitle>
-                        {isOpen ? (
-                          <ChevronUp className="h-5 w-5 text-gray-400" />
-                        ) : (
-                          <ChevronDown className="h-5 w-5 text-gray-400" />
-                )}
-              </div>
-                      <CardDescription>
-                        <Badge variant="outline" className="mt-2">
-                          {categories.find((c) => c.value === faq.category)?.label || faq.category}
-                        </Badge>
-                      </CardDescription>
-                    </CardHeader>
-                    {isOpen && (
-                      <CardContent>
-                        <p className="text-gray-700 leading-relaxed">{faq.answer}</p>
-                      </CardContent>
+        {/* Quick Links */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {quickLinks.map((link, index) => (
+            <motion.div
+              key={link.title}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 + index * 0.1 }}
+            >
+              <Card
+                className={`p-6 border-2 hover:border-indigo-300 transition-all cursor-pointer ${
+                  link.disabled ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
+              >
+                <div className="flex items-start gap-4">
+                  <div className="p-2 rounded-lg bg-indigo-100 text-indigo-600">
+                    <link.icon className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-slate-800 mb-1">
+                      {link.title}
+                    </h3>
+                    <p className="text-sm text-slate-600">{link.description}</p>
+                    {!link.disabled && (
+                      <Link
+                        href={link.link}
+                        className="inline-flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-700 mt-2 font-medium"
+                      >
+                        Devam et <ArrowRight className="w-4 h-4" />
+                      </Link>
                     )}
-                  </Card>
-                )
-              })
-            ) : (
-              <Card>
-                <CardContent className="py-12 text-center">
-                  <p className="text-gray-500">Aradığınız soru bulunamadı.</p>
-            </CardContent>
-          </Card>
-            )}
-          </div>
-        </TabsContent>
+                  </div>
+                </div>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
 
-        {/* Kullanım Kılavuzu Tab */}
-        <TabsContent value="guide" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Hızlı Başlangıç</CardTitle>
-              <CardDescription>CRM sistemini kullanmaya başlamak için adım adım kılavuz</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <h3 className="font-semibold mb-2">1. Müşteri Ekleme</h3>
-                <p className="text-gray-600">
-                  Müşteriler sayfasından yeni müşteri ekleyerek başlayın. Müşteri bilgileri (ad, email, telefon) sistemde saklanır.
-                </p>
-                        </div>
-              <div>
-                <h3 className="font-semibold mb-2">2. Fırsat Oluşturma</h3>
-                <p className="text-gray-600">
-                  Müşteriye bağlı bir fırsat oluşturun. Fırsat değeri, aşama ve kazanma olasılığını belirleyin.
-                </p>
-                      </div>
-              <div>
-                <h3 className="font-semibold mb-2">3. Teklif Hazırlama</h3>
-                <p className="text-gray-600">
-                  Fırsattan teklif oluşturun, ürünleri ekleyin ve fiyatlandırın. Teklifi PDF olarak indirip müşteriye gönderin.
-                </p>
-                    </div>
-              <div>
-                <h3 className="font-semibold mb-2">4. Fatura Oluşturma</h3>
-                <p className="text-gray-600">
-                  Kabul edilen tekliften otomatik olarak fatura oluşturulur veya manuel olarak fatura oluşturabilirsiniz.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Şartlar ve Koşullar Tab */}
-        <TabsContent value="terms" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Kullanım Şartları</CardTitle>
-              <CardDescription>CRM sistemini kullanırken uymanız gereken kurallar</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <h3 className="font-semibold mb-2">Veri Güvenliği</h3>
-                <p className="text-gray-600">
-                  Tüm verileriniz şifrelenmiş olarak saklanır. Verilerinizin güvenliği bizim önceliğimizdir.
-                </p>
-              </div>
-              <div>
-                <h3 className="font-semibold mb-2">Kullanıcı Sorumlulukları</h3>
-                <p className="text-gray-600">
-                  Kullanıcılar, sistemdeki verilerin doğruluğundan ve güncelliğinden sorumludur.
+        {/* Help Sections */}
+        <div className="space-y-6">
+          {helpSections.map((section, sectionIndex) => (
+            <motion.div
+              key={section.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 + sectionIndex * 0.1 }}
+            >
+              <Card className="p-6 border-2 border-slate-200 shadow-sm">
+                <div className="flex items-start gap-4 mb-4">
+                  <div
+                    className={`p-3 rounded-lg bg-gradient-to-br ${section.color} text-white shadow-md`}
+                  >
+                    <section.icon className="w-6 h-6" />
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-xl font-semibold text-slate-800 mb-1">
+                      {section.title}
+                    </h2>
+                    <p className="text-slate-600 text-sm">
+                      {section.description}
                     </p>
                   </div>
-              <div>
-                <h3 className="font-semibold mb-2">Gizlilik</h3>
-                <p className="text-gray-600">
-                  Müşteri bilgileri ve iş verileri gizli tutulur. Yetkisiz erişim engellenir.
-                </p>
-              </div>
-              <div className="pt-4 border-t">
-                <p className="text-sm text-gray-600 mb-2">Detaylı bilgi için:</p>
-                <div className="flex flex-wrap gap-2">
-                  <Link
-                    href={`/${locale}/terms`}
-                    className="text-primary-600 hover:text-primary-700 text-sm font-medium"
-                  >
-                    Şartlar ve Koşullar
-                  </Link>
-                  <span className="text-gray-400">•</span>
-                  <Link
-                    href={`/${locale}/privacy`}
-                    className="text-primary-600 hover:text-primary-700 text-sm font-medium"
-                  >
-                    Gizlilik Politikası
-                  </Link>
-                  <span className="text-gray-400">•</span>
-                  <Link
-                    href={`/${locale}/faq`}
-                    className="text-primary-600 hover:text-primary-700 text-sm font-medium"
-                  >
-                    Sık Sorulan Sorular
-                  </Link>
-                  <span className="text-gray-400">•</span>
-                  <Link
-                    href={`/${locale}/about`}
-                    className="text-primary-600 hover:text-primary-700 text-sm font-medium"
-                  >
-                    Hakkımızda
-                  </Link>
                 </div>
-              </div>
-            </CardContent>
+                <div className="space-y-2 pl-16">
+                  {section.items.map((item, itemIndex) => (
+                    <Link
+                      key={itemIndex}
+                      href={item.link}
+                      className="block p-3 rounded-lg hover:bg-slate-50 transition-colors group"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-700 group-hover:text-indigo-600 font-medium">
+                          {item.title}
+                        </span>
+                        <ArrowRight className="w-4 h-4 text-slate-400 group-hover:text-indigo-600 transition-colors" />
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </Card>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Contact Support */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.7 }}
+          className="text-center pt-8"
+        >
+          <Card className="p-6 bg-gradient-to-br from-indigo-50 to-purple-50 border-2 border-indigo-200">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <MessageCircle className="w-6 h-6 text-indigo-600" />
+              <h3 className="text-lg font-semibold text-slate-800">
+                Hala Yardıma İhtiyacınız mı Var?
+              </h3>
+            </div>
+            <p className="text-slate-600 mb-4">
+              Destek ekibimizle iletişime geçmek için aşağıdaki kanalları kullanabilirsiniz.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-4">
+              <Button
+                variant="outline"
+                className="border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                asChild
+              >
+                <Link href="/faq">
+                  <HelpCircle className="w-4 h-4 mr-2" />
+                  SSS
+                </Link>
+              </Button>
+              <Button
+                variant="outline"
+                className="border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                asChild
+              >
+                <a href="mailto:support@yourdomain.com">
+                  <Mail className="w-4 h-4 mr-2" />
+                  E-posta Gönder
+                </a>
+              </Button>
+            </div>
           </Card>
-        </TabsContent>
-      </Tabs>
+        </motion.div>
+      </motion.div>
     </div>
   )
 }

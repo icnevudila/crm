@@ -2,16 +2,17 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { Card } from '@/components/ui/card'
-import { Receipt, DollarSign, Calendar } from 'lucide-react'
+import { Receipt, PieChart, LineChart } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import { ReportSectionProps } from './types'
 
-const InvoicePaymentBarChart = dynamic(() => import('@/components/reports/charts/InvoicePaymentBarChart'), {
+const InvoiceMonthlyAreaChart = dynamic(() => import('@/components/reports/charts/InvoiceMonthlyAreaChart'), {
   ssr: false,
   loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
 })
 
-const InvoiceMonthlyAreaChart = dynamic(() => import('@/components/reports/charts/InvoiceMonthlyAreaChart'), {
+const InvoicePaymentBarChart = dynamic(() => import('@/components/reports/charts/InvoicePaymentBarChart'), {
   ssr: false,
   loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
 })
@@ -25,27 +26,28 @@ async function fetchInvoiceReports() {
   return res.json()
 }
 
-export default function InvoiceReports() {
+export default function InvoiceReports({ isActive }: ReportSectionProps) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['invoice-reports'],
     queryFn: fetchInvoiceReports,
     staleTime: 5 * 60 * 1000,
     refetchOnMount: true,
+    enabled: isActive,
   })
 
+  if (!isActive) return null
   if (isLoading) return <SkeletonList />
   if (error) return <div className="text-red-600">Rapor yüklenirken hata oluştu</div>
 
   return (
     <div className="space-y-6">
-      <Card className="p-4 bg-orange-50 border-orange-200">
+      <Card className="p-4 bg-amber-50 border-amber-200">
         <div className="flex items-start gap-3">
-          <Receipt className="h-5 w-5 text-orange-600 mt-0.5" />
+          <Receipt className="h-5 w-5 text-amber-600 mt-0.5" />
           <div>
             <h3 className="font-semibold text-gray-900 mb-1">Fatura Raporları</h3>
             <p className="text-sm text-gray-600">
-              Fatura bazlı detaylı analizler. Ödeme durumu, aylık trend ve 
-              tahsilat oranlarını görüntüleyin. Tüm veriler anlık olarak güncellenir.
+              Fatura ödeme trendleri ve durum dağılımları. Tahsilat performansınızı analiz edin.
             </p>
           </div>
         </div>
@@ -55,31 +57,23 @@ export default function InvoiceReports() {
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Ödeme Durumu Dağılımı</h3>
-              <p className="text-sm text-gray-500 mt-1">Durum bazlı fatura dağılımı</p>
+              <h3 className="text-lg font-semibold text-gray-900">Aylık Fatura Trendleri</h3>
+              <p className="text-sm text-gray-500 mt-1">Aylık fatura tutarı ve sayısı</p>
             </div>
-            <DollarSign className="h-5 w-5 text-primary-600" />
+            <LineChart className="h-5 w-5 text-primary-600" />
           </div>
-          <InvoicePaymentBarChart data={data?.paymentDistribution || []} />
-          <div className="mt-4 p-3 bg-gray-50 rounded text-xs text-gray-600">
-            <strong>Açıklama:</strong> Faturaların ödeme durumuna göre dağılımı. 
-            Ödenen, bekleyen ve gecikmiş faturaların sayılarını görüntüleyin.
-          </div>
+          <InvoiceMonthlyAreaChart data={data?.monthlyTrend || []} />
         </Card>
 
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Aylık Fatura Trendi</h3>
-              <p className="text-sm text-gray-500 mt-1">Aylık fatura oluşturma trendi</p>
+              <h3 className="text-lg font-semibold text-gray-900">Ödeme Durum Dağılımı</h3>
+              <p className="text-sm text-gray-500 mt-1">Durum bazlı fatura sayısı</p>
             </div>
-            <Calendar className="h-5 w-5 text-primary-600" />
+            <PieChart className="h-5 w-5 text-primary-600" />
           </div>
-          <InvoiceMonthlyAreaChart data={data?.monthlyTrend || []} />
-          <div className="mt-4 p-3 bg-gray-50 rounded text-xs text-gray-600">
-            <strong>Açıklama:</strong> Aylık bazda fatura oluşturma trendi. 
-            Hangi aylarda daha fazla fatura oluşturulduğunu görüntüleyin.
-          </div>
+          <InvoicePaymentBarChart data={data?.statusDistribution || []} />
         </Card>
       </div>
     </div>

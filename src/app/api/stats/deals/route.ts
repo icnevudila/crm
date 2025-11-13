@@ -67,7 +67,26 @@ export async function GET() {
       return dealDate >= new Date(firstDayOfMonth)
     }).length
     
-    // Debug: JavaScript'te sayılan değerleri logla - HER ZAMAN logla (sorun tespiti için)
+    // Tüm deal'ların toplam değeri
+    const totalValue = deals.reduce((sum: number, deal: any) => {
+      const dealValue = deal.value || (typeof deal.value === 'string' ? parseFloat(deal.value) || 0 : 0)
+      return sum + dealValue
+    }, 0) || 0
+
+    // OPEN olan deal'ların toplam değeri (aktif tutar)
+    const openDeals = deals.filter((d: any) => d.status === 'OPEN') || []
+    const activeValue = openDeals.reduce((sum: number, deal: any) => {
+      const dealValue = deal.value || (typeof deal.value === 'string' ? parseFloat(deal.value) || 0 : 0)
+      return sum + dealValue
+    }, 0) || 0
+
+    // Ortalama değer (tüm deal'lar için)
+    const avgValue = totalCount > 0 ? Math.round(totalValue / totalCount) : 0
+    
+    // Aktif deal'lar: OPEN status'ündeki deal'lar
+    const active = openCount
+
+    // Debug: Değerleri logla (development)
     if (process.env.NODE_ENV === 'development') {
       console.log('[Stats Deals API] Counted from deals array:', {
         leadCount,
@@ -87,25 +106,6 @@ export async function GET() {
         active,
       })
     }
-    
-    // Tüm deal'ların toplam değeri
-    const totalValue = deals.reduce((sum: number, deal: any) => {
-      const dealValue = deal.value || (typeof deal.value === 'string' ? parseFloat(deal.value) || 0 : 0)
-      return sum + dealValue
-    }, 0) || 0
-
-    // OPEN olan deal'ların toplam değeri (aktif tutar)
-    const openDeals = deals.filter((d: any) => d.status === 'OPEN') || []
-    const activeValue = openDeals.reduce((sum: number, deal: any) => {
-      const dealValue = deal.value || (typeof deal.value === 'string' ? parseFloat(deal.value) || 0 : 0)
-      return sum + dealValue
-    }, 0) || 0
-
-    // Ortalama değer (tüm deal'lar için)
-    const avgValue = totalCount > 0 ? Math.round(totalValue / totalCount) : 0
-    
-    // Aktif deal'lar: OPEN status'ündeki deal'lar
-    const active = openCount
 
     return NextResponse.json(
       {

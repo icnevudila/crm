@@ -1,7 +1,10 @@
 'use client'
 
+/* eslint-disable react/no-unescaped-entities */
+
 import { useState, memo, useEffect } from 'react'
 import { motion, useScroll, useTransform, useSpring, AnimatePresence } from 'framer-motion'
+import type { LucideIcon } from 'lucide-react'
 import {
   ArrowRight,
   BarChart3,
@@ -48,8 +51,295 @@ import { Textarea } from '@/components/ui/textarea'
 import LandingHeader from '@/components/landing/LandingHeader'
 import ContactForm from '@/components/landing/ContactForm'
 import GradientCard from '@/components/ui/GradientCard'
-import AnimatedCounter from '@/components/ui/AnimatedCounter'
 import HeroShowcase from '@/components/landing/HeroShowcase'
+
+const faqItems = [
+  {
+    question: 'Nasıl çalışır?',
+    answer:
+      'Bulut tabanlı bir platform. Web tarayıcınızdan erişebilir, müşteri ilişkilerinizi, satış süreçlerinizi, stok yönetiminizi ve daha fazlasını tek bir platformda yönetebilirsiniz. Kurulum gerektirmez, hemen kullanmaya başlayabilirsiniz.',
+  },
+  {
+    question: 'Verilerim güvende mi?',
+    answer:
+      'Evet, verileriniz endüstri standardı şifreleme ile korunur. Tüm verileriniz düzenli olarak yedeklenir ve SSL sertifikası ile güvenli bağlantı sağlanır. Ayrıca rol tabanlı erişim kontrolü ile sadece yetkili kullanıcılar verilerinize erişebilir.',
+  },
+  {
+    question: 'Mobil uygulama var mı?',
+    answer:
+      'Enterprise V3 tamamen responsive tasarıma sahiptir. Mobil cihazlardan, tabletlerden ve masaüstü bilgisayarlardan sorunsuz bir şekilde erişebilirsiniz. Ayrıca PWA (Progressive Web App) desteği sayesinde uygulama gibi kullanabilirsiniz.',
+  },
+  {
+    question: 'Fiyatlandırma nasıl?',
+    answer:
+      'Esnek fiyatlandırma seçeneklerimiz var. İhtiyacınıza göre özelleştirilmiş paketler sunuyoruz. Detaylı bilgi için bizimle iletişime geçebilirsiniz. Ayrıca ücretsiz deneme süremiz mevcuttur.',
+  },
+  {
+    question: 'Destek alabilir miyim?',
+    answer:
+      'Evet, 7/24 teknik destek ekibimiz yanınızda. E-posta, telefon ve canlı destek kanallarımızdan bize ulaşabilirsiniz. Ayrıca kapsamlı dokümantasyon ve video eğitimlerimiz mevcuttur.',
+  },
+]
+
+interface FAQItem {
+  question: string
+  answer: string
+}
+
+interface LandingFeatureModule {
+  icon: LucideIcon
+  title: string
+  features: string[]
+  gradient: 'primary' | 'info'
+}
+
+const CRM_FEATURES: LandingFeatureModule[] = [
+  {
+    icon: Users,
+    title: 'Müşteri Yönetimi',
+    features: [
+      'Müşteri ve firma bilgileri',
+      'İletişim kişileri yönetimi',
+      'Toplu işlemler (Bulk operations)',
+      'Import/Export (Excel, CSV)',
+      'Dosya ekleme ve yönetimi',
+    ],
+    gradient: 'primary',
+  },
+  {
+    icon: Briefcase,
+    title: 'Fırsat Yönetimi',
+    features: [
+      'Satış pipeline takibi',
+      'Stage yönetimi (LEAD → WON/LOST)',
+      'Win probability takibi',
+      'Kanban board görünümü',
+      'Değer ve kazanç analizi',
+    ],
+    gradient: 'info',
+  },
+  {
+    icon: FileText,
+    title: 'Teklif Sistemi',
+    features: [
+      'Profesyonel teklif oluşturma',
+      'PDF export özelliği',
+      'Durum takibi (DRAFT → ACCEPTED)',
+      'Revize sistemi',
+      'Otomatik fatura oluşturma',
+    ],
+    gradient: 'primary',
+  },
+  {
+    icon: Receipt,
+    title: 'Fatura Yönetimi',
+    features: [
+      'Satış ve alış faturaları',
+      'PDF oluşturma ve indirme',
+      'Ödeme takibi',
+      'Durum yönetimi',
+      'Otomatik sevkiyat oluşturma',
+    ],
+    gradient: 'info',
+  },
+  {
+    icon: Package,
+    title: 'Stok Yönetimi',
+    features: [
+      'Gerçek zamanlı stok takibi',
+      'Rezerve ve gelen stok yönetimi',
+      'Stok hareketleri kaydı',
+      'Düşük stok uyarıları',
+      'Kategori ve SKU yönetimi',
+    ],
+    gradient: 'primary',
+  },
+  {
+    icon: Truck,
+    title: 'Sevkiyat Takibi',
+    features: [
+      'Sevkiyat oluşturma ve takibi',
+      'Durum yönetimi',
+      'Onay sistemi',
+      'Otomatik stok düşürme',
+      'Tracking numarası yönetimi',
+    ],
+    gradient: 'info',
+  },
+  {
+    icon: BarChart3,
+    title: 'Raporlama ve Analitik',
+    features: [
+      'Gerçek zamanlı dashboard',
+      'Satış performans raporları',
+      'Müşteri aktivite analizleri',
+      'Stok ve ürün raporları',
+      'Excel, PDF, CSV export',
+    ],
+    gradient: 'primary',
+  },
+  {
+    icon: Target,
+    title: 'Görev Yönetimi',
+    features: [
+      'Görev oluşturma ve atama',
+      'Durum ve öncelik takibi',
+      'Hatırlatıcı sistemi',
+      'Müşteri ve fırsat ilişkilendirme',
+      'Tamamlanma takibi',
+    ],
+    gradient: 'info',
+  },
+  {
+    icon: Calendar,
+    title: 'Toplantı Yönetimi',
+    features: [
+      'Toplantı planlama ve takvim entegrasyonu',
+      'Hatırlatma bildirimleri',
+      'Toplantı notları ve aksiyon maddeleri',
+      'Müşteri ve fırsat ilişkilendirme',
+      'Toplantı geçmişi takibi',
+    ],
+    gradient: 'primary',
+  },
+  {
+    icon: FileText,
+    title: 'Sözleşme Yönetimi',
+    features: [
+      'Sözleşme oluşturma ve takibi',
+      'Otomatik yenileme bildirimleri',
+      'Milestone ve ödeme takibi',
+      'MRR/ARR hesaplama',
+      'Sözleşme PDF export',
+    ],
+    gradient: 'info',
+  },
+  {
+    icon: Database,
+    title: 'Doküman Yönetimi',
+    features: [
+      'Dosya yükleme ve indirme',
+      'Klasör sistemi',
+      'Erişim kontrolü (VIEW, DOWNLOAD, EDIT)',
+      'Müşteri, fırsat, sözleşme ilişkilendirme',
+      'Süre dolumu takibi',
+    ],
+    gradient: 'primary',
+  },
+  {
+    icon: Shield,
+    title: 'Onay Yönetimi',
+    features: [
+      'Çoklu onaylayıcı sistemi',
+      'Onay talepleri ve red nedenleri',
+      'Öncelik seviyeleri (LOW, NORMAL, HIGH, URGENT)',
+      'Teklif, sözleşme, indirim onayları',
+      'Otomatik hatırlatıcılar',
+    ],
+    gradient: 'info',
+  },
+  {
+    icon: Bell,
+    title: 'Bildirim Sistemi',
+    features: [
+      'Gerçek zamanlı bildirimler',
+      'E-posta ve sistem bildirimleri',
+      'Okundu/okunmadı takibi',
+      'Bildirim kategorileri',
+      'Toplu işlemler',
+    ],
+    gradient: 'primary',
+  },
+  {
+    icon: Activity,
+    title: 'Aktivite Takibi',
+    features: [
+      'Tüm CRUD işlemlerinin otomatik kaydı',
+      'Meta JSON ile detaylı loglama',
+      'Kullanıcı bazlı aktivite geçmişi',
+      'Modül bazlı filtreleme',
+      'TR/EN otomatik çeviri',
+    ],
+    gradient: 'info',
+  },
+  {
+    icon: Building2,
+    title: 'Firma Yönetimi',
+    features: [
+      'Firma ve müşteri hiyerarşisi',
+      'Durum yönetimi (POT, MUS, ALT, PAS)',
+      'Firma detay sayfası ve istatistikler',
+      'Hızlı işlem butonları',
+      'Görüşme, teklif, görev ilişkilendirme',
+    ],
+    gradient: 'primary',
+  },
+  {
+    icon: Package,
+    title: 'Ürün Kataloğu',
+    features: [
+      'Ürün ekleme ve düzenleme',
+      'Kategori yönetimi',
+      'SKU ve barcode yönetimi',
+      'Fiyat yönetimi',
+      'Ürün görselleri yönetimi',
+    ],
+    gradient: 'info',
+  },
+  {
+    icon: Search,
+    title: 'Gelişmiş Arama',
+    features: [
+      'Global arama özelliği',
+      'Filtreleme ve sıralama',
+      'Sayfalama (10-20-50-100 kayıt)',
+      'Toplu işlemler',
+      'Export (Excel, PDF, CSV)',
+    ],
+    gradient: 'primary',
+  },
+]
+
+function FAQAccordionItem({ faq, index }: { faq: FAQItem; index: number }) {
+  const [isOpen, setIsOpen] = useState(false)
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      transition={{ duration: 0.5, delay: index * 0.1 }}
+      whileHover={{ scale: 1.01 }}
+    >
+      <GradientCard gradient="primary" className="overflow-hidden">
+        <button
+          onClick={() => setIsOpen((prev) => !prev)}
+          className="w-full p-6 text-left flex items-center justify-between group"
+        >
+          <h3 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors duration-300">
+            {faq.question}
+          </h3>
+          <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.3 }}>
+            <ChevronDown className="h-6 w-6 text-gray-600 group-hover:text-blue-600 transition-colors duration-300" />
+          </motion.div>
+        </button>
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="overflow-hidden"
+            >
+              <div className="px-6 pb-6 text-gray-600 leading-relaxed">{faq.answer}</div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </GradientCard>
+    </motion.div>
+  )
+}
 
 function LandingPage() {
   const [contactOpen, setContactOpen] = useState(false)
@@ -297,10 +587,10 @@ function LandingPage() {
         </motion.div>
       </section>
 
-      {/* İstatistikler Section - Premium Animated Counters */}
+      {/* Hızlı Kazanımlar Section - Premium Highlights */}
       <section
         id="stats"
-        className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-white via-blue-50/30 to-indigo-50/20 relative overflow-hidden"
+        className="relative overflow-hidden bg-gradient-to-b from-white via-blue-50/30 to-indigo-50/20 px-4 py-20 sm:px-6 lg:px-8"
       >
         {/* Animated Background */}
         <div className="absolute inset-0 overflow-hidden">
@@ -335,69 +625,79 @@ function LandingPage() {
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
+            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+            className="mb-16 text-center"
+          >
+            <h2 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-4">
+              Sonuç Odaklı Yaklaşım
+            </h2>
+            <p className="text-lg md:text-xl font-light text-gray-600 max-w-3xl mx-auto">
+              Enterprise V3; satış, operasyon ve müşteri ekiplerini tek çatı altında buluşturarak ekiplerinizin daha az çaba ile daha çok değer üretmesine odaklanır.
+            </p>
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
             transition={{ duration: 0.8 }}
-            className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8"
+            className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4 md:gap-8"
           >
             {[
               {
-                value: 1000,
-                suffix: '+',
-                label: 'Aktif Kullanıcı',
+                title: 'Ekipler Arası Uyum',
+                description:
+                  'CRM, teklif, stok ve finans verileri tek platformda birleşir; satış ve operasyon ekipleri gerçek zamanlı çalışır.',
                 icon: Users,
-                color: 'blue',
+                gradient: 'primary' as const,
               },
               {
-                value: 500,
-                suffix: '+',
-                label: 'Toplam Müşteri',
-                icon: Building2,
-                color: 'indigo',
+                title: 'Süreç Otomasyonu',
+                description:
+                  'Hazır otomasyon şablonları ve AI önerileri ile onay, bildirim, hatırlatıcı akışları otomatik ilerler.',
+                icon: Workflow,
+                gradient: 'info' as const,
               },
               {
-                value: 2500,
-                suffix: '+',
-                label: 'İşlenen Teklif',
-                icon: FileText,
-                color: 'purple',
+                title: 'Güvenli İş Süreçleri',
+                description:
+                  'Rol bazlı yetkilendirme ve RLS ile çoklu şirket yapılarında bile veri izolasyonu ve güven sağlanır.',
+                icon: Shield,
+                gradient: 'primary' as const,
               },
               {
-                value: 95,
-                suffix: '%',
-                label: 'Başarı Oranı',
+                title: 'Ölçülebilir Büyüme',
+                description:
+                  'KPI panoları ve gerçek zamanlı raporlar sayesinde ekip performansını anında ölçün ve optimize edin.',
                 icon: TrendingUp,
-                color: 'cyan',
+                gradient: 'info' as const,
               },
             ].map((stat, index) => {
               const Icon = stat.icon
               return (
                 <motion.div
-                  key={stat.label}
+                  key={stat.title}
                   initial={{ opacity: 0, y: 30 }}
                   whileInView={{ opacity: 1, y: 0 }}
                   viewport={{ once: true }}
                   transition={{ duration: 0.6, delay: index * 0.1 }}
                   whileHover={{ y: -8, scale: 1.05 }}
-                  className="text-center group"
+                  className="group"
                 >
-                  <GradientCard gradient="primary" className="p-8 relative overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/0 to-indigo-500/0 group-hover:from-blue-500/10 group-hover:to-indigo-500/10 transition-all duration-500" />
+                  <GradientCard gradient={stat.gradient} className="relative overflow-hidden p-8">
+                    <div className="absolute inset-0 bg-gradient-to-br from-blue-500/0 to-indigo-500/0 transition-all duration-500 group-hover:from-blue-500/10 group-hover:to-indigo-500/10" />
                     <motion.div
                       whileHover={{ rotate: 360, scale: 1.15 }}
                       transition={{ duration: 0.6 }}
-                      className={`inline-flex p-4 rounded-2xl bg-gradient-to-br from-${stat.color}-100 to-${stat.color === 'blue' ? 'indigo' : stat.color === 'cyan' ? 'blue' : 'purple'}-100 mb-4 shadow-lg group-hover:shadow-xl transition-all duration-300`}
+                      className="inline-flex p-4 rounded-2xl bg-white/80 shadow-lg transition-all duration-300 group-hover:shadow-xl"
                     >
-                      <Icon className={`h-8 w-8 text-${stat.color}-600`} />
+                      <Icon className="h-8 w-8 text-blue-600" />
                     </motion.div>
                     <div className="relative z-10">
-                      <div className="text-4xl md:text-5xl font-extrabold mb-2">
-                        <AnimatedCounter
-                          value={stat.value}
-                          suffix={stat.suffix}
-                          className={`bg-gradient-to-r from-${stat.color}-600 to-${stat.color === 'blue' ? 'indigo' : stat.color === 'cyan' ? 'blue' : 'purple'}-600 bg-clip-text text-transparent`}
-                        />
-                      </div>
-                      <p className="text-gray-600 font-medium text-sm md:text-base">
-                        {stat.label}
+                      <h3 className="text-xl font-bold text-gray-900 mb-2 transition-colors duration-300 group-hover:text-blue-600">
+                        {stat.title}
+                      </h3>
+                      <p className="text-sm md:text-base font-medium leading-relaxed text-gray-600">
+                        {stat.description}
                       </p>
                     </div>
                   </GradientCard>
@@ -408,49 +708,145 @@ function LandingPage() {
         </div>
       </section>
 
-      {/* Hakkımızda Section - Premium Design */}
+      {/* Hakkımızda Section - Premium Narrative */}
       <section
         id="about"
-        className="py-32 px-4 sm:px-6 lg:px-8 relative"
+        className="relative overflow-hidden bg-gradient-to-b from-indigo-50/30 via-white to-indigo-50/20 px-4 py-32 sm:px-6 lg:px-8"
       >
-        <div className="max-w-6xl mx-auto">
-                      <motion.div
-            initial={{ opacity: 0, y: 50 }}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-24 -left-16 h-[360px] w-[360px] rounded-full bg-gradient-to-br from-indigo-400/30 via-purple-400/20 to-transparent blur-[120px]" />
+          <div className="absolute top-1/2 right-10 h-[260px] w-[260px] -translate-y-1/2 rounded-full bg-gradient-to-tr from-purple-400/25 via-pink-400/20 to-transparent blur-[110px]" />
+          <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-[0.04]" />
+        </div>
+
+        <div className="relative z-10 mx-auto max-w-6xl">
+          <motion.div
+            initial={{ opacity: 0, y: 40 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-100px' }}
-            transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
-            className="text-center mb-20"
+            viewport={{ once: true, margin: '-120px' }}
+            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            className="text-center"
           >
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: 0.1, duration: 0.6 }}
+              className="inline-flex items-center gap-2 rounded-full border border-indigo-200/70 bg-white/75 px-4 py-2 text-xs font-semibold uppercase tracking-[0.35em] text-indigo-500 shadow-sm backdrop-blur"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Yeni Nesil Yaklaşım
+            </motion.div>
             <motion.h2
-              initial={{ opacity: 0, scale: 0.9 }}
+              initial={{ opacity: 0, scale: 0.94 }}
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true }}
-              transition={{ duration: 0.6 }}
-              className="text-5xl md:text-6xl font-extrabold text-gray-900 mb-6"
+              transition={{ duration: 0.6, delay: 0.15 }}
+              className="mt-6 text-4xl font-extrabold tracking-tight text-slate-900 sm:text-5xl lg:text-[3.2rem]"
             >
-              İşiniz İçin Neler Sunuyoruz?
+              <span className="block text-slate-900/85">İşiniz İçin</span>
+              <span className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
+                Neler Sunuyoruz?
+              </span>
             </motion.h2>
-                        <motion.div
-              initial={{ width: 0 }}
-              whileInView={{ width: 120 }}
+            <motion.p
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-              className="h-1.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 mx-auto rounded-full shadow-lg"
-            />
+              transition={{ duration: 0.6, delay: 0.25 }}
+              className="mx-auto mt-6 max-w-3xl text-lg leading-relaxed text-slate-600"
+            >
+              Operasyon, satış ve müşteri ekiplerinizi aynı vizyonda buluşturan, ölçeklenebilir ve güvenli bir CRM motoru sunuyoruz. Süreçlerinizi dijitalleştirirken premium kullanıcı deneyimi ve yüksek performans önceliğimiz.
+            </motion.p>
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, y: 50 }}
+            initial={{ opacity: 0, y: 40 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: '-50px' }}
-            transition={{ duration: 0.8, delay: 0.2 }}
+            viewport={{ once: true, margin: '-80px' }}
+            transition={{ duration: 0.7, delay: 0.2 }}
+            className="mt-16 grid gap-6 md:grid-cols-2"
           >
-            <GradientCard gradient="primary" className="p-10 md:p-16 relative overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-cyan-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-              <p className="text-xl md:text-2xl text-gray-700 leading-relaxed text-center relative z-10 font-light">
-                İş süreçlerinizi kolaylaştıran, zamanınızı kazandıran ve satışlarınızı artıran kapsamlı bir çözüm. Müşteri ilişkilerinizi profesyonelce yönetin, stok takibinizi otomatikleştirin, teklif ve fatura süreçlerinizi hızlandırın. Tüm kritik iş süreçleriniz tek bir platformda. Verilerinize her yerden güvenli erişin, ekibinizle gerçek zamanlı çalışın. İşletmeniz büyüdükçe birlikte büyüyen, küçük işletmeden büyük kurumsal şirketlere kadar her ölçekte işletmeye uygun bir sistem.
+            {[
+              {
+                icon: Workflow,
+                title: 'Uçtan Uca Süreçler',
+                description:
+                  'Tekliften faturaya kadar tüm iş akışlarını tek platformda yönetin, otomasyon senaryolarıyla manuel işleri ortadan kaldırın.',
+              },
+              {
+                icon: Shield,
+                title: 'Kurumsal Güvenlik',
+                description:
+                  'RLS, rol bazlı yetki ve audit log’lar ile verilerinizi güvenle saklayın; çoklu şirket mimarisinde bile izolasyonu koruyun.',
+              },
+              {
+                icon: Sparkles,
+                title: 'AI Destekli Kararlar',
+                description:
+                  'Akıllı içgörüler ve öneriler ile fırsatları önceliklendirin, satış dönüşümlerinizi gerçek zamanlı olarak takip edin.',
+              },
+              {
+                icon: TrendingUp,
+                title: 'Ölçülebilir Büyüme',
+                description:
+                  'Canlı dashboard’lar, KPI panoları ve ileri raporlama araçları ile ekip performansını anında izleyin ve optimize edin.',
+              },
+            ].map(({ icon: Icon, title, description }) => (
+              <motion.div
+                key={title}
+                whileHover={{ y: -8, scale: 1.01 }}
+                transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+                className="group relative overflow-hidden rounded-3xl border border-indigo-100/70 bg-white/80 p-8 shadow-[0_20px_70px_-40px_rgba(99,102,241,0.45)] backdrop-blur transition"
+              >
+                <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/0 via-purple-500/0 to-pink-500/0 opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+                <div className="relative flex items-start gap-4">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500/15 via-purple-500/15 to-pink-500/20 text-indigo-500 shadow-inner">
+                    <Icon className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold text-slate-900">{title}</h3>
+                    <p className="mt-3 text-sm leading-relaxed text-slate-600">{description}</p>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6, delay: 0.25 }}
+            className="mt-16 flex flex-col items-center justify-between gap-6 rounded-3xl border border-indigo-100/70 bg-white/85 p-8 shadow-[0_30px_90px_-45px_rgba(99,102,241,0.45)] backdrop-blur lg:flex-row"
+          >
+            <div className="text-center lg:text-left">
+              <p className="text-sm font-semibold uppercase tracking-[0.25em] text-indigo-500">
+                Dijital dönüşüm
               </p>
-            </GradientCard>
+              <h3 className="mt-3 text-2xl font-bold text-slate-900">
+                İş süreçlerinizi premium bir deneyimle hızlandırmaya hazır mısınız?
+              </h3>
+              <p className="mt-3 text-sm text-slate-600">
+                Demo ekibimiz, çoklu şirket mimarisi ve otomasyon senaryoları ile sizi dakikalar içinde
+                canlı sisteme taşıyabilir.
+              </p>
+            </div>
+            <Button
+              size="lg"
+              onClick={() => scrollToSection('#contact')}
+              className="group rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 px-8 py-6 text-sm font-semibold text-white shadow-[0_18px_45px_-20px_rgba(99,102,241,0.65)] transition hover:shadow-[0_22px_65px_-20px_rgba(99,102,241,0.55)]"
+            >
+              <span className="flex items-center gap-3">
+                Demo Talep Et
+                <motion.div
+                  animate={{ x: [0, 5, 0] }}
+                  transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+                >
+                  <ArrowRight className="h-5 w-5" />
+                </motion.div>
+              </span>
+            </Button>
           </motion.div>
         </div>
       </section>
@@ -961,212 +1357,7 @@ function LandingPage() {
             viewport={{ once: true, margin: '-50px' }}
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8"
           >
-            {[
-              {
-                icon: Users,
-                title: 'Müşteri Yönetimi',
-                features: [
-                  'Müşteri ve firma bilgileri',
-                  'İletişim kişileri yönetimi',
-                  'Toplu işlemler (Bulk operations)',
-                  'Import/Export (Excel, CSV)',
-                  'Dosya ekleme ve yönetimi',
-                ],
-                gradient: 'primary' as const,
-              },
-              {
-                icon: Briefcase,
-                title: 'Fırsat Yönetimi',
-                features: [
-                  'Satış pipeline takibi',
-                  'Stage yönetimi (LEAD → WON/LOST)',
-                  'Win probability takibi',
-                  'Kanban board görünümü',
-                  'Değer ve kazanç analizi',
-                ],
-                gradient: 'info' as const,
-              },
-              {
-                icon: FileText,
-                title: 'Teklif Sistemi',
-                features: [
-                  'Profesyonel teklif oluşturma',
-                  'PDF export özelliği',
-                  'Durum takibi (DRAFT → ACCEPTED)',
-                  'Revize sistemi',
-                  'Otomatik fatura oluşturma',
-                ],
-                gradient: 'primary' as const,
-              },
-              {
-                icon: Receipt,
-                title: 'Fatura Yönetimi',
-                features: [
-                  'Satış ve alış faturaları',
-                  'PDF oluşturma ve indirme',
-                  'Ödeme takibi',
-                  'Durum yönetimi',
-                  'Otomatik sevkiyat oluşturma',
-                ],
-                gradient: 'info' as const,
-              },
-              {
-                icon: Package,
-                title: 'Stok Yönetimi',
-                features: [
-                  'Gerçek zamanlı stok takibi',
-                  'Rezerve ve gelen stok yönetimi',
-                  'Stok hareketleri kaydı',
-                  'Düşük stok uyarıları',
-                  'Kategori ve SKU yönetimi',
-                ],
-                gradient: 'primary' as const,
-              },
-              {
-                icon: Truck,
-                title: 'Sevkiyat Takibi',
-                features: [
-                  'Sevkiyat oluşturma ve takibi',
-                  'Durum yönetimi',
-                  'Onay sistemi',
-                  'Otomatik stok düşürme',
-                  'Tracking numarası yönetimi',
-                ],
-                gradient: 'info' as const,
-              },
-              {
-                icon: BarChart3,
-                title: 'Raporlama ve Analitik',
-                features: [
-                  'Gerçek zamanlı dashboard',
-                  'Satış performans raporları',
-                  'Müşteri aktivite analizleri',
-                  'Stok ve ürün raporları',
-                  'Excel, PDF, CSV export',
-                ],
-                gradient: 'primary' as const,
-              },
-              {
-                icon: Target,
-                title: 'Görev Yönetimi',
-                features: [
-                  'Görev oluşturma ve atama',
-                  'Durum ve öncelik takibi',
-                  'Hatırlatıcı sistemi',
-                  'Müşteri ve fırsat ilişkilendirme',
-                  'Tamamlanma takibi',
-                ],
-                gradient: 'info' as const,
-              },
-              {
-                icon: Calendar,
-                title: 'Toplantı Yönetimi',
-                features: [
-                  'Toplantı planlama ve takvim entegrasyonu',
-                  'Hatırlatma bildirimleri',
-                  'Toplantı notları ve aksiyon maddeleri',
-                  'Müşteri ve fırsat ilişkilendirme',
-                  'Toplantı geçmişi takibi',
-                ],
-                gradient: 'primary' as const,
-              },
-              {
-                icon: FileText,
-                title: 'Sözleşme Yönetimi',
-                features: [
-                  'Sözleşme oluşturma ve takibi',
-                  'Otomatik yenileme bildirimleri',
-                  'Milestone ve ödeme takibi',
-                  'MRR/ARR hesaplama',
-                  'Sözleşme PDF export',
-                ],
-                gradient: 'info' as const,
-              },
-              {
-                icon: Database,
-                title: 'Doküman Yönetimi',
-                features: [
-                  'Dosya yükleme ve indirme',
-                  'Klasör sistemi',
-                  'Erişim kontrolü (VIEW, DOWNLOAD, EDIT)',
-                  'Müşteri, fırsat, sözleşme ilişkilendirme',
-                  'Süre dolumu takibi',
-                ],
-                gradient: 'primary' as const,
-              },
-              {
-                icon: Shield,
-                title: 'Onay Yönetimi',
-                features: [
-                  'Çoklu onaylayıcı sistemi',
-                  'Onay talepleri ve red nedenleri',
-                  'Öncelik seviyeleri (LOW, NORMAL, HIGH, URGENT)',
-                  'Teklif, sözleşme, indirim onayları',
-                  'Otomatik hatırlatıcılar',
-                ],
-                gradient: 'info' as const,
-              },
-              {
-                icon: Bell,
-                title: 'Bildirim Sistemi',
-                features: [
-                  'Gerçek zamanlı bildirimler',
-                  'E-posta ve sistem bildirimleri',
-                  'Okundu/okunmadı takibi',
-                  'Bildirim kategorileri',
-                  'Toplu işlemler',
-                ],
-                gradient: 'primary' as const,
-              },
-              {
-                icon: Activity,
-                title: 'Aktivite Takibi',
-                features: [
-                  'Tüm CRUD işlemlerinin otomatik kaydı',
-                  'Meta JSON ile detaylı loglama',
-                  'Kullanıcı bazlı aktivite geçmişi',
-                  'Modül bazlı filtreleme',
-                  'TR/EN otomatik çeviri',
-                ],
-                gradient: 'info' as const,
-              },
-              {
-                icon: Building2,
-                title: 'Firma Yönetimi',
-                features: [
-                  'Firma ve müşteri hiyerarşisi',
-                  'Durum yönetimi (POT, MUS, ALT, PAS)',
-                  'Firma detay sayfası ve istatistikler',
-                  'Hızlı işlem butonları',
-                  'Görüşme, teklif, görev ilişkilendirme',
-                ],
-                gradient: 'primary' as const,
-              },
-              {
-                icon: Package,
-                title: 'Ürün Kataloğu',
-                features: [
-                  'Ürün ekleme ve düzenleme',
-                  'Kategori yönetimi',
-                  'SKU ve barcode yönetimi',
-                  'Fiyat yönetimi',
-                  'Ürün görselleri yönetimi',
-                ],
-                gradient: 'info' as const,
-              },
-              {
-                icon: Search,
-                title: 'Gelişmiş Arama',
-                features: [
-                  'Global arama özelliği',
-                  'Filtreleme ve sıralama',
-                  'Sayfalama (10-20-50-100 kayıt)',
-                  'Toplu işlemler',
-                  'Export (Excel, PDF, CSV)',
-                ],
-                gradient: 'primary' as const,
-              },
-            ].map((module, index) => {
+            {CRM_FEATURES.map((module, index) => {
               const Icon = module.icon
               return (
                 <motion.div
@@ -1525,72 +1716,9 @@ function LandingPage() {
           </motion.div>
 
           <div className="space-y-4">
-            {[
-              {
-                question: 'Nasıl çalışır?',
-                answer: 'Bulut tabanlı bir platform. Web tarayıcınızdan erişebilir, müşteri ilişkilerinizi, satış süreçlerinizi, stok yönetiminizi ve daha fazlasını tek bir platformda yönetebilirsiniz. Kurulum gerektirmez, hemen kullanmaya başlayabilirsiniz.',
-              },
-              {
-                question: 'Verilerim güvende mi?',
-                answer: 'Evet, verileriniz endüstri standardı şifreleme ile korunur. Tüm verileriniz düzenli olarak yedeklenir ve SSL sertifikası ile güvenli bağlantı sağlanır. Ayrıca rol tabanlı erişim kontrolü ile sadece yetkili kullanıcılar verilerinize erişebilir.',
-              },
-              {
-                question: 'Mobil uygulama var mı?',
-                answer: 'Enterprise V3 tamamen responsive tasarıma sahiptir. Mobil cihazlardan, tabletlerden ve masaüstü bilgisayarlardan sorunsuz bir şekilde erişebilirsiniz. Ayrıca PWA (Progressive Web App) desteği sayesinde uygulama gibi kullanabilirsiniz.',
-              },
-              {
-                question: 'Fiyatlandırma nasıl?',
-                answer: 'Esnek fiyatlandırma seçeneklerimiz var. İhtiyacınıza göre özelleştirilmiş paketler sunuyoruz. Detaylı bilgi için bizimle iletişime geçebilirsiniz. Ayrıca ücretsiz deneme süremiz mevcuttur.',
-              },
-              {
-                question: 'Destek alabilir miyim?',
-                answer: 'Evet, 7/24 teknik destek ekibimiz yanınızda. E-posta, telefon ve canlı destek kanallarımızdan bize ulaşabilirsiniz. Ayrıca kapsamlı dokümantasyon ve video eğitimlerimiz mevcuttur.',
-              },
-            ].map((faq, index) => {
-              const [isOpen, setIsOpen] = useState(false)
-              return (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 20 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ duration: 0.5, delay: index * 0.1 }}
-                  whileHover={{ scale: 1.01 }}
-                >
-                  <GradientCard gradient="primary" className="overflow-hidden">
-                    <button
-                      onClick={() => setIsOpen(!isOpen)}
-                      className="w-full p-6 text-left flex items-center justify-between group"
-                    >
-                      <h3 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors duration-300">
-                        {faq.question}
-                      </h3>
-                      <motion.div
-                        animate={{ rotate: isOpen ? 180 : 0 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <ChevronDown className="h-6 w-6 text-gray-600 group-hover:text-blue-600 transition-colors duration-300" />
-                      </motion.div>
-                    </button>
-                    <AnimatePresence>
-                      {isOpen && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.3 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="px-6 pb-6 text-gray-600 leading-relaxed">
-                            {faq.answer}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </GradientCard>
-                </motion.div>
-              )
-            })}
+            {faqItems.map((faq, index) => (
+              <FAQAccordionItem key={faq.question} faq={faq} index={index} />
+            ))}
           </div>
         </div>
       </section>

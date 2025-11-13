@@ -1,20 +1,30 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye, FileText, Calendar, DollarSign } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import ContractForm from './ContractForm'
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import { AutomationInfo } from '@/components/automation/AutomationInfo'
 import Link from 'next/link'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import { toast } from '@/lib/toast'
+import dynamic from 'next/dynamic'
+
+// Lazy load ContractForm ve ContractDetailModal - performans için
+const ContractForm = dynamic(() => import('./ContractForm'), {
+  ssr: false,
+  loading: () => null,
+})
+const ContractDetailModal = dynamic(() => import('./ContractDetailModal'), {
+  ssr: false,
+  loading: () => null,
+})
 
 interface Contract {
   id: string
@@ -41,11 +51,16 @@ interface Contract {
 
 export default function ContractList() {
   const locale = useLocale()
+  const t = useTranslations('contracts')
+  const tCommon = useTranslations('common')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [type, setType] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [selectedContractId, setSelectedContractId] = useState<string | null>(null)
+  const [selectedContractData, setSelectedContractData] = useState<Contract | null>(null)
 
   // Debounced search
   const [debouncedSearch, setDebouncedSearch] = useState(search)
@@ -89,7 +104,7 @@ export default function ContractList() {
   }
 
   const handleDelete = async (id: string, title: string) => {
-    if (!confirm(`${title} sözleşmesini silmek istediğinize emin misiniz?`)) {
+    if (!confirm(t('deleteConfirm', { title }))) {
       return
     }
 
@@ -115,7 +130,7 @@ export default function ContractList() {
       ])
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error('Silinemedi', error?.message)
+      toast.error(t('deleteFailed'), error?.message)
     }
   }
 
@@ -130,12 +145,12 @@ export default function ContractList() {
       SUSPENDED: 'bg-yellow-100 text-yellow-800',
     }
     const labels: Record<string, string> = {
-      DRAFT: 'Taslak',
-      ACTIVE: 'Aktif',
-      EXPIRED: 'Süresi Dolmuş',
-      CANCELLED: 'İptal',
-      RENEWED: 'Yenilendi',
-      SUSPENDED: 'Askıda',
+      DRAFT: t('statusDraft'),
+      ACTIVE: t('statusActive'),
+      EXPIRED: t('statusExpired'),
+      CANCELLED: t('statusCancelled'),
+      RENEWED: t('statusRenewed'),
+      SUSPENDED: t('statusSuspended'),
     }
     return (
       <Badge className={colors[status] || 'bg-gray-100 text-gray-800'}>
@@ -147,12 +162,12 @@ export default function ContractList() {
   // Type badge
   const getTypeBadge = (type: string) => {
     const labels: Record<string, string> = {
-      SERVICE: 'Hizmet',
-      PRODUCT: 'Ürün',
-      SUBSCRIPTION: 'Abonelik',
-      MAINTENANCE: 'Bakım',
-      LICENSE: 'Lisans',
-      CONSULTING: 'Danışmanlık',
+      SERVICE: t('typeService'),
+      PRODUCT: t('typeProduct'),
+      SUBSCRIPTION: t('typeSubscription'),
+      MAINTENANCE: t('typeMaintenance'),
+      LICENSE: t('typeLicense'),
+      CONSULTING: t('typeConsulting'),
     }
     return labels[type] || type
   }
@@ -184,7 +199,7 @@ export default function ContractList() {
   if (error) {
     return (
       <div className="text-center py-8 text-red-600">
-        Sözleşmeler yüklenirken hata oluştu
+        {t('errorLoading')}
       </div>
     )
   }
@@ -193,35 +208,35 @@ export default function ContractList() {
     <div className="space-y-6">
       {/* Otomasyon Bilgileri */}
       <AutomationInfo
-        title="Sözleşmeler Modülü Otomasyonları"
+        title={t('automationTitle')}
         automations={[
           {
-            action: 'Sözleşmeyi "Aktif" yaparsan',
-            result: 'Sözleşme başlar ve takip edilir',
+            action: t('automationActive'),
+            result: t('automationActiveResult'),
             details: [
-              'Sözleşme başlangıç tarihi bugün olarak ayarlanır',
-              'Yenileme bildirimleri aktif olur (30 gün önce)',
-              '"Aktiviteler" sayfasında aktivasyon kaydı görünür',
+              t('automationActiveDetails1'),
+              t('automationActiveDetails2'),
+              t('automationActiveDetails3'),
             ],
           },
           {
-            action: 'Sözleşme süresi dolduğunda (otomatik)',
-            result: 'Sözleşme otomatik olarak "Süresi Doldu" durumuna geçer',
+            action: t('automationExpired'),
+            result: t('automationExpiredResult'),
             details: [
-              'Sistem günlük kontrol eder (cron job)',
-              'Süresi dolan sözleşmeler otomatik "Süresi Doldu" yapılır',
-              'Sistem içi kullanıcılara (Admin, Sales) bildirim gönderilir',
-              '"Aktiviteler" sayfasında süre dolma kaydı görünür',
+              t('automationExpiredDetails1'),
+              t('automationExpiredDetails2'),
+              t('automationExpiredDetails3'),
+              t('automationExpiredDetails4'),
             ],
           },
           {
-            action: 'Otomatik yenileme aktifse (autoRenewEnabled = true)',
-            result: 'Sözleşme otomatik olarak yenilenir',
+            action: t('automationRenewal'),
+            result: t('automationRenewalResult'),
             details: [
-              'Yeni sözleşme kaydı otomatik oluşturulur (Taslak durumunda)',
-              'Eski sözleşme "Yenilendi" durumuna geçer',
-              'Sistem içi kullanıcılara (Admin, Sales) bildirim gönderilir',
-              '"Aktiviteler" sayfasında yenileme kaydı görünür',
+              t('automationRenewalDetails1'),
+              t('automationRenewalDetails2'),
+              t('automationRenewalDetails3'),
+              t('automationRenewalDetails4'),
             ],
           },
         ]}
@@ -230,14 +245,14 @@ export default function ContractList() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Sözleşmeler</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
           <p className="text-gray-600 mt-1">
-            {contracts.length} sözleşme bulundu
+            {t('totalContracts', { count: contracts.length })}
           </p>
         </div>
         <Button onClick={handleAdd} className="gap-2">
           <Plus className="h-4 w-4" />
-          Yeni Sözleşme
+          {t('newContract')}
         </Button>
       </div>
 
@@ -246,7 +261,7 @@ export default function ContractList() {
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
-            placeholder="Sözleşme ara (numara, başlık)..."
+            placeholder={t('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -254,30 +269,30 @@ export default function ContractList() {
         </div>
         <Select value={status || 'all'} onValueChange={(value) => setStatus(value === 'all' ? '' : value)}>
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Durum" />
+            <SelectValue placeholder={t('selectStatus')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tümü</SelectItem>
-            <SelectItem value="DRAFT">Taslak</SelectItem>
-            <SelectItem value="ACTIVE">Aktif</SelectItem>
-            <SelectItem value="EXPIRED">Süresi Dolmuş</SelectItem>
-            <SelectItem value="CANCELLED">İptal</SelectItem>
-            <SelectItem value="RENEWED">Yenilendi</SelectItem>
-            <SelectItem value="SUSPENDED">Askıda</SelectItem>
+            <SelectItem value="all">{t('allStatuses')}</SelectItem>
+            <SelectItem value="DRAFT">{t('statusDraft')}</SelectItem>
+            <SelectItem value="ACTIVE">{t('statusActive')}</SelectItem>
+            <SelectItem value="EXPIRED">{t('statusExpired')}</SelectItem>
+            <SelectItem value="CANCELLED">{t('statusCancelled')}</SelectItem>
+            <SelectItem value="RENEWED">{t('statusRenewed')}</SelectItem>
+            <SelectItem value="SUSPENDED">{t('statusSuspended')}</SelectItem>
           </SelectContent>
         </Select>
         <Select value={type || 'all'} onValueChange={(value) => setType(value === 'all' ? '' : value)}>
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Tip" />
+            <SelectValue placeholder={t('selectType')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tümü</SelectItem>
-            <SelectItem value="SERVICE">Hizmet</SelectItem>
-            <SelectItem value="PRODUCT">Ürün</SelectItem>
-            <SelectItem value="SUBSCRIPTION">Abonelik</SelectItem>
-            <SelectItem value="MAINTENANCE">Bakım</SelectItem>
-            <SelectItem value="LICENSE">Lisans</SelectItem>
-            <SelectItem value="CONSULTING">Danışmanlık</SelectItem>
+            <SelectItem value="all">{t('allTypes')}</SelectItem>
+            <SelectItem value="SERVICE">{t('typeService')}</SelectItem>
+            <SelectItem value="PRODUCT">{t('typeProduct')}</SelectItem>
+            <SelectItem value="SUBSCRIPTION">{t('typeSubscription')}</SelectItem>
+            <SelectItem value="MAINTENANCE">{t('typeMaintenance')}</SelectItem>
+            <SelectItem value="LICENSE">{t('typeLicense')}</SelectItem>
+            <SelectItem value="CONSULTING">{t('typeConsulting')}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -287,22 +302,22 @@ export default function ContractList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Sözleşme No</TableHead>
-              <TableHead>Başlık</TableHead>
-              <TableHead>Müşteri</TableHead>
-              <TableHead>Tip</TableHead>
-              <TableHead>Tutar</TableHead>
-              <TableHead>Başlangıç</TableHead>
-              <TableHead>Bitiş</TableHead>
-              <TableHead>Durum</TableHead>
-              <TableHead className="text-right">İşlemler</TableHead>
+              <TableHead>{t('tableHeaders.contractNumber')}</TableHead>
+              <TableHead>{t('tableHeaders.title')}</TableHead>
+              <TableHead>{t('tableHeaders.customer')}</TableHead>
+              <TableHead>{t('tableHeaders.type')}</TableHead>
+              <TableHead>{t('tableHeaders.value')}</TableHead>
+              <TableHead>{t('tableHeaders.startDate')}</TableHead>
+              <TableHead>{t('tableHeaders.endDate')}</TableHead>
+              <TableHead>{t('tableHeaders.status')}</TableHead>
+              <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {contracts.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={9} className="text-center py-8 text-gray-500">
-                  Henüz sözleşme bulunmuyor
+                  {t('noContractsFound')}
                 </TableCell>
               </TableRow>
             ) : (
@@ -322,7 +337,7 @@ export default function ContractList() {
                       <div className="font-medium">{contract.title}</div>
                       {contract.autoRenewEnabled && (
                         <Badge variant="outline" className="mt-1 text-xs text-gray-700 border-gray-300">
-                          🔄 Otomatik Yenileme
+                          🔄 {t('autoRenewal')}
                         </Badge>
                       )}
                     </TableCell>
@@ -363,11 +378,17 @@ export default function ContractList() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        <Link href={`/${locale}/contracts/${contract.id}`} prefetch={true}>
-                          <Button variant="ghost" size="icon">
-                            <Eye className="h-4 w-4 text-gray-600" />
-                          </Button>
-                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setSelectedContractId(contract.id)
+                            setSelectedContractData(contract)
+                            setDetailModalOpen(true)
+                          }}
+                        >
+                          <Eye className="h-4 w-4 text-gray-600" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -393,6 +414,18 @@ export default function ContractList() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Detail Modal */}
+      <ContractDetailModal
+        contractId={selectedContractId}
+        open={detailModalOpen}
+        onClose={() => {
+          setDetailModalOpen(false)
+          setSelectedContractId(null)
+          setSelectedContractData(null)
+        }}
+        initialData={selectedContractData || undefined}
+      />
 
       {/* Form Modal */}
       <ContractForm

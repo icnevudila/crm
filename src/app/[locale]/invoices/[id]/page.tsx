@@ -228,13 +228,63 @@ export default function InvoiceDetailPage() {
           </Badge>
         </div>
         <div className="bg-white rounded-lg shadow-card p-6">
+          <p className="text-sm text-gray-600 mb-1">Fatura Tipi</p>
+          <Badge className={
+            invoice.invoiceType === 'SALES' 
+              ? 'bg-blue-100 text-blue-800'
+              : invoice.invoiceType === 'PURCHASE'
+              ? 'bg-purple-100 text-purple-800'
+              : invoice.invoiceType === 'SERVICE_SALES'
+              ? 'bg-green-100 text-green-800'
+              : invoice.invoiceType === 'SERVICE_PURCHASE'
+              ? 'bg-orange-100 text-orange-800'
+              : 'bg-gray-100 text-gray-800'
+          }>
+            {invoice.invoiceType === 'SALES' 
+              ? 'Satış Faturası'
+              : invoice.invoiceType === 'PURCHASE'
+              ? 'Alış Faturası'
+              : invoice.invoiceType === 'SERVICE_SALES'
+              ? 'Hizmet Satış Faturası'
+              : invoice.invoiceType === 'SERVICE_PURCHASE'
+              ? 'Hizmet Alım Faturası'
+              : 'Bilinmeyen'}
+          </Badge>
+        </div>
+        <div className="bg-white rounded-lg shadow-card p-6">
           <p className="text-sm text-gray-600 mb-1">Toplam</p>
           <p className="text-2xl font-bold text-gray-900">
-            {formatCurrency(invoice.total || 0)}
+            {formatCurrency(invoice.totalAmount || invoice.total || 0)}
           </p>
           {/* KDV ve İndirim Detayları */}
           {(() => {
             const taxRate = invoice.taxRate || 18 // Varsayılan KDV oranı
+            const totalAmount = invoice.totalAmount || invoice.total || 0
+            
+            // Hizmet faturaları için: totalAmount'dan KDV hariç tutarı hesapla
+            if (invoice.invoiceType === 'SERVICE_SALES' || invoice.invoiceType === 'SERVICE_PURCHASE') {
+              const subtotal = totalAmount / (1 + (taxRate / 100))
+              const taxAmount = totalAmount - subtotal
+              
+              return (
+                <div className="mt-4 pt-4 border-t space-y-2 text-sm">
+                  <div className="flex justify-between text-gray-600">
+                    <span>Ara Toplam (KDV Hariç):</span>
+                    <span className="font-medium">{formatCurrency(subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>KDV (%{taxRate}):</span>
+                    <span className="font-medium">{formatCurrency(taxAmount)}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-900 font-bold pt-2 border-t">
+                    <span>Genel Toplam (KDV Dahil):</span>
+                    <span>{formatCurrency(totalAmount)}</span>
+                  </div>
+                </div>
+              )
+            }
+            
+            // Ürünlü faturalar için: InvoiceItem'lardan hesapla
             const itemsTotal = invoice.InvoiceItem?.reduce((sum: number, item: any) => 
               sum + ((item.unitPrice || 0) * (item.quantity || 0)), 0) || 0
             const discount = invoice.discount || 0
@@ -330,7 +380,7 @@ export default function InvoiceDetailPage() {
 
       {/* Workflow Stepper */}
       <WorkflowStepper
-        steps={getInvoiceWorkflowSteps(invoice.status)}
+        steps={getInvoiceWorkflowSteps(invoice.status, invoice.invoiceType)}
         currentStep={['DRAFT', 'SENT', 'PAID'].indexOf(invoice.status)}
         title="Fatura İş Akışı"
       />
@@ -643,6 +693,14 @@ export default function InvoiceDetailPage() {
           </div>
         )}
       </Card>
+
+      {/* Hizmet Açıklaması - Hizmet Faturaları için */}
+      {(invoice.invoiceType === 'SERVICE_SALES' || invoice.invoiceType === 'SERVICE_PURCHASE') && invoice.serviceDescription && (
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Hizmet Açıklaması</h2>
+          <p className="text-gray-900 whitespace-pre-wrap">{invoice.serviceDescription}</p>
+        </Card>
+      )}
 
       {/* Invoice Details */}
       {(invoice.invoiceNumber || invoice.dueDate || invoice.paymentDate || invoice.taxRate || invoice.description) && (

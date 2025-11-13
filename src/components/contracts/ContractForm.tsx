@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,55 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useData } from '@/hooks/useData'
-
-const contractSchema = z.object({
-  title: z.string().min(1, 'Başlık gerekli').max(200, 'Başlık en fazla 200 karakter olabilir'),
-  description: z.string().optional(),
-  customerId: z.string().optional(),
-  customerCompanyId: z.string().optional(),
-  dealId: z.string().optional(),
-  type: z.string().default('SERVICE'),
-  category: z.string().optional(),
-  startDate: z.string().min(1, 'Başlangıç tarihi gerekli'),
-  endDate: z.string().min(1, 'Bitiş tarihi gerekli'),
-  signedDate: z.string().optional(),
-  renewalType: z.string().default('MANUAL'),
-  renewalNoticeDays: z.number().min(0, 'Bildirim günü 0\'dan küçük olamaz').max(365, 'Bildirim günü 365\'ten büyük olamaz').default(30),
-  autoRenewEnabled: z.boolean().default(false),
-  billingCycle: z.string().default('YEARLY'),
-  billingDay: z.number().min(1, 'Faturalama günü 1-31 arası olmalı').max(31, 'Faturalama günü 1-31 arası olmalı').optional(),
-  paymentTerms: z.number().min(0, 'Ödeme vadesi 0\'dan küçük olamaz').max(365, 'Ödeme vadesi 365 günden fazla olamaz').default(30),
-  value: z.number().min(0, 'Tutar 0\'dan küçük olamaz').max(999999999, 'Tutar çok büyük'),
-  currency: z.string().default('TRY'),
-  taxRate: z.number().min(0, 'KDV oranı 0-100 arası olmalı').max(100, 'KDV oranı 0-100 arası olmalı').default(18),
-  status: z.string().default('DRAFT'),
-  terms: z.string().optional(),
-  notes: z.string().optional(),
-}).refine((data) => {
-  // endDate startDate'den sonra olmalı
-  if (data.startDate && data.endDate) {
-    const start = new Date(data.startDate)
-    const end = new Date(data.endDate)
-    return end >= start
-  }
-  return true
-}, {
-  message: 'Bitiş tarihi başlangıç tarihinden önce olamaz',
-  path: ['endDate'],
-}).refine((data) => {
-  // signedDate startDate'den önce olamaz
-  if (data.startDate && data.signedDate) {
-    const start = new Date(data.startDate)
-    const signed = new Date(data.signedDate)
-    return signed >= start
-  }
-  return true
-}, {
-  message: 'İmza tarihi başlangıç tarihinden önce olamaz',
-  path: ['signedDate'],
-})
-
-type ContractFormData = z.infer<typeof contractSchema>
+import { toast } from '@/lib/toast'
 
 interface ContractFormProps {
   contract?: any
@@ -75,8 +28,63 @@ export default function ContractForm({
   onClose,
   onSuccess,
 }: ContractFormProps) {
+  const t = useTranslations('contracts.form')
+  const tCommon = useTranslations('common.form')
   const [loading, setLoading] = useState(false)
   const [autoRenew, setAutoRenew] = useState(false)
+
+  // Schema'yı component içinde oluştur - locale desteği için
+  const contractSchema = z.object({
+    title: z.string().min(1, t('titleRequired')).max(200, t('titleMaxLength')),
+    description: z.string().optional(),
+    customerId: z.string().optional(),
+    customerCompanyId: z.string().optional(),
+    dealId: z.string().optional(),
+    type: z.string().default('SERVICE'),
+    category: z.string().optional(),
+    startDate: z.string().min(1, t('startDateRequired')),
+    endDate: z.string().min(1, t('endDateRequired')),
+    signedDate: z.string().optional(),
+    renewalType: z.string().default('MANUAL'),
+    renewalNoticeDays: z.number().min(0, t('renewalNoticeDaysMin')).max(365, t('renewalNoticeDaysMax')).default(30),
+    autoRenewEnabled: z.boolean().default(false),
+    billingCycle: z.string().default('YEARLY'),
+    billingDay: z.number().min(1, t('billingDayRange')).max(31, t('billingDayRange')).optional(),
+    paymentTerms: z.number().min(0, t('paymentTermsMin')).max(365, t('paymentTermsMax')).default(30),
+    value: z
+      .number({ invalid_type_error: t('valueRequired') })
+      .min(0, t('valueMin'))
+      .max(999999999, t('valueMax')),
+    currency: z.string().default('TRY'),
+    taxRate: z.number().min(0, t('taxRateRange')).max(100, t('taxRateRange')).default(18),
+    status: z.string().default('DRAFT'),
+    terms: z.string().optional(),
+    notes: z.string().optional(),
+  }).refine((data) => {
+    // endDate startDate'den sonra olmalı
+    if (data.startDate && data.endDate) {
+      const start = new Date(data.startDate)
+      const end = new Date(data.endDate)
+      return end >= start
+    }
+    return true
+  }, {
+    message: t('endDateBeforeStart'),
+    path: ['endDate'],
+  }).refine((data) => {
+    // signedDate startDate'den önce olamaz
+    if (data.startDate && data.signedDate) {
+      const start = new Date(data.startDate)
+      const signed = new Date(data.signedDate)
+      return signed >= start
+    }
+    return true
+  }, {
+    message: t('signedDateBeforeStart'),
+    path: ['signedDate'],
+  })
+
+  type ContractFormData = z.infer<typeof contractSchema>
 
   // Fetch customers for select
   const { data: customersData } = useData<{ data: any[] }>('/api/customers')
@@ -186,12 +194,43 @@ export default function ContractForm({
       const method = contract ? 'PUT' : 'POST'
 
       // Convert autoRenew state to data
-      data.autoRenewEnabled = autoRenew
+      const sanitizedData: Record<string, unknown> = {
+        ...data,
+        autoRenewEnabled: autoRenew,
+        customerId: data.customerId ? data.customerId : null,
+        customerCompanyId: data.customerCompanyId ? data.customerCompanyId : null,
+        dealId: data.dealId ? data.dealId : null,
+        category: data.category ? data.category : null,
+        description: data.description ? data.description : null,
+        signedDate: data.signedDate ? data.signedDate : null,
+        renewalNoticeDays:
+          typeof data.renewalNoticeDays === 'number' && !Number.isNaN(data.renewalNoticeDays)
+            ? data.renewalNoticeDays
+            : 30,
+        billingDay:
+          typeof data.billingDay === 'number' && !Number.isNaN(data.billingDay)
+            ? data.billingDay
+            : null,
+        paymentTerms:
+          typeof data.paymentTerms === 'number' && !Number.isNaN(data.paymentTerms)
+            ? data.paymentTerms
+            : 30,
+        value:
+          typeof data.value === 'number' && !Number.isNaN(data.value)
+            ? data.value
+            : 0,
+        taxRate:
+          typeof data.taxRate === 'number' && !Number.isNaN(data.taxRate)
+            ? data.taxRate
+            : 18,
+        notes: data.notes ? data.notes : null,
+        terms: data.terms ? data.terms : null,
+      }
 
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(sanitizedData),
       })
 
       if (!res.ok) {
@@ -201,6 +240,13 @@ export default function ContractForm({
 
       const savedContract = await res.json()
       
+      // Toast mesajı göster
+      if (contract) {
+        toast.success(t('contractUpdated'), t('contractUpdatedMessage', { title: savedContract.title }))
+      } else {
+        toast.success(t('contractCreated'), t('contractCreatedMessage', { title: savedContract.title }))
+      }
+      
       if (onSuccess) {
         onSuccess(savedContract)
       }
@@ -209,7 +255,7 @@ export default function ContractForm({
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error('Kaydedilemedi', error?.message)
+      toast.error(t('saveFailed'), error?.message)
     } finally {
       setLoading(false)
     }
@@ -220,19 +266,24 @@ export default function ContractForm({
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {contract ? 'Sözleşme Düzenle' : 'Yeni Sözleşme'}
+            {contract ? t('editTitle') : t('newTitle')}
           </DialogTitle>
+          <DialogDescription>
+            {contract ? t('editTitle') : t('newTitle')}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           {/* Temel Bilgiler */}
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
-              <Label htmlFor="title">Sözleşme Başlığı *</Label>
+              <Label htmlFor="title">{t('titleLabel')} *</Label>
               <Input
                 id="title"
                 {...register('title')}
-                placeholder="Örn: Yıllık Yazılım Bakım Sözleşmesi"
+                placeholder={t('titlePlaceholder')}
+                required
+                aria-invalid={errors.title ? 'true' : 'false'}
               />
               {errors.title && (
                 <p className="text-red-600 text-sm mt-1">{errors.title.message}</p>
@@ -240,11 +291,11 @@ export default function ContractForm({
             </div>
 
             <div className="col-span-2">
-              <Label htmlFor="description">Açıklama</Label>
+              <Label htmlFor="description">{t('descriptionLabel')}</Label>
               <Textarea
                 id="description"
                 {...register('description')}
-                placeholder="Sözleşme detayları..."
+                placeholder={t('descriptionPlaceholder')}
                 rows={3}
               />
             </div>
@@ -253,13 +304,13 @@ export default function ContractForm({
           {/* Müşteri Seçimi */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="customerId">Müşteri</Label>
+              <Label htmlFor="customerId">{t('customerLabel')}</Label>
               <select
                 id="customerId"
                 {...register('customerId')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
-                <option value="">Seçiniz...</option>
+                <option value="">{t('customerPlaceholder')}</option>
                 {customers.map((customer) => (
                   <option key={customer.id} value={customer.id}>
                     {customer.name}
@@ -269,13 +320,13 @@ export default function ContractForm({
             </div>
 
             <div>
-              <Label htmlFor="customerCompanyId">Müşteri Firma</Label>
+              <Label htmlFor="customerCompanyId">{t('customerCompanyLabel')}</Label>
               <select
                 id="customerCompanyId"
                 {...register('customerCompanyId')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
-                <option value="">Seçiniz...</option>
+                <option value="">{t('customerCompanyPlaceholder')}</option>
                 {customerCompanies.map((company: any) => (
                   <option key={company.id} value={company.id}>
                     {company.name}
@@ -288,27 +339,29 @@ export default function ContractForm({
           {/* Tip ve Kategori */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="type">Sözleşme Tipi *</Label>
+              <Label htmlFor="type">{t('typeLabel')} *</Label>
               <select
                 id="type"
                 {...register('type')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                required
+                aria-invalid={errors.type ? 'true' : 'false'}
               >
-                <option value="SERVICE">Hizmet</option>
-                <option value="PRODUCT">Ürün</option>
-                <option value="SUBSCRIPTION">Abonelik</option>
-                <option value="MAINTENANCE">Bakım</option>
-                <option value="LICENSE">Lisans</option>
-                <option value="CONSULTING">Danışmanlık</option>
+                <option value="SERVICE">{t('typeService')}</option>
+                <option value="PRODUCT">{t('typeProduct')}</option>
+                <option value="SUBSCRIPTION">{t('typeSubscription')}</option>
+                <option value="MAINTENANCE">{t('typeMaintenance')}</option>
+                <option value="LICENSE">{t('typeLicense')}</option>
+                <option value="CONSULTING">{t('typeConsulting')}</option>
               </select>
             </div>
 
             <div>
-              <Label htmlFor="category">Kategori</Label>
+              <Label htmlFor="category">{t('categoryLabel')}</Label>
               <Input
                 id="category"
                 {...register('category')}
-                placeholder="Örn: Yazılım"
+                placeholder={t('categoryPlaceholder')}
               />
             </div>
           </div>
@@ -316,11 +369,13 @@ export default function ContractForm({
           {/* Tarihler */}
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <Label htmlFor="startDate">Başlangıç Tarihi *</Label>
+              <Label htmlFor="startDate">{t('startDateLabel')} *</Label>
               <Input
                 id="startDate"
                 type="date"
                 {...register('startDate')}
+                required
+                aria-invalid={errors.startDate ? 'true' : 'false'}
               />
               {errors.startDate && (
                 <p className="text-red-600 text-sm mt-1">{errors.startDate.message}</p>
@@ -328,11 +383,13 @@ export default function ContractForm({
             </div>
 
             <div>
-              <Label htmlFor="endDate">Bitiş Tarihi *</Label>
+              <Label htmlFor="endDate">{t('endDateLabel')} *</Label>
               <Input
                 id="endDate"
                 type="date"
                 {...register('endDate')}
+                required
+                aria-invalid={errors.endDate ? 'true' : 'false'}
               />
               {errors.endDate && (
                 <p className="text-red-600 text-sm mt-1">{errors.endDate.message}</p>
@@ -340,25 +397,30 @@ export default function ContractForm({
             </div>
 
             <div>
-              <Label htmlFor="signedDate">İmza Tarihi</Label>
+              <Label htmlFor="signedDate">{t('signedDateLabel')}</Label>
               <Input
                 id="signedDate"
                 type="date"
                 {...register('signedDate')}
               />
+              {errors.signedDate && (
+                <p className="text-red-600 text-sm mt-1">{errors.signedDate.message}</p>
+              )}
             </div>
           </div>
 
           {/* Finansal Bilgiler */}
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <Label htmlFor="value">Tutar *</Label>
+              <Label htmlFor="value">{t('valueLabel')} *</Label>
               <Input
                 id="value"
                 type="number"
                 step="0.01"
                 {...register('value', { valueAsNumber: true })}
-                placeholder="0.00"
+                placeholder={t('valuePlaceholder')}
+                required
+                aria-invalid={errors.value ? 'true' : 'false'}
               />
               {errors.value && (
                 <p className="text-red-600 text-sm mt-1">{errors.value.message}</p>
@@ -366,103 +428,112 @@ export default function ContractForm({
             </div>
 
             <div>
-              <Label htmlFor="taxRate">KDV Oranı (%)</Label>
+              <Label htmlFor="taxRate">{t('taxRateLabel')}</Label>
               <Input
                 id="taxRate"
                 type="number"
                 step="0.01"
                 {...register('taxRate', { valueAsNumber: true })}
-                placeholder="18"
+                placeholder={t('taxRatePlaceholder')}
               />
+              {errors.taxRate && (
+                <p className="text-red-600 text-sm mt-1">{errors.taxRate.message}</p>
+              )}
             </div>
 
             <div>
-              <Label htmlFor="currency">Para Birimi</Label>
+              <Label htmlFor="currency">{t('currencyLabel')}</Label>
               <select
                 id="currency"
                 {...register('currency')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
-                <option value="TRY">TRY</option>
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-                <option value="GBP">GBP</option>
+                <option value="TRY">{t('currencyTRY')}</option>
+                <option value="USD">{t('currencyUSD')}</option>
+                <option value="EUR">{t('currencyEUR')}</option>
+                <option value="GBP">{t('currencyGBP')}</option>
               </select>
             </div>
           </div>
 
           {/* Toplam Tutar */}
           <div className="bg-blue-50 p-4 rounded-lg">
-            <div className="text-sm text-gray-600">Toplam Tutar (KDV Dahil)</div>
+            <div className="text-sm text-gray-600">{t('totalAmountLabel')}</div>
             <div className="text-2xl font-bold text-blue-600">{calculateTotal()}</div>
           </div>
 
           {/* Faturalandırma */}
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <Label htmlFor="billingCycle">Faturalandırma Döngüsü</Label>
+              <Label htmlFor="billingCycle">{t('billingCycleLabel')}</Label>
               <select
                 id="billingCycle"
                 {...register('billingCycle')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
-                <option value="MONTHLY">Aylık</option>
-                <option value="QUARTERLY">3 Aylık</option>
-                <option value="YEARLY">Yıllık</option>
-                <option value="ONE_TIME">Tek Seferlik</option>
+                <option value="MONTHLY">{t('billingCycleMonthly')}</option>
+                <option value="QUARTERLY">{t('billingCycleQuarterly')}</option>
+                <option value="YEARLY">{t('billingCycleYearly')}</option>
+                <option value="ONE_TIME">{t('billingCycleOneTime')}</option>
               </select>
             </div>
 
             <div>
-              <Label htmlFor="paymentTerms">Ödeme Vadesi (Gün)</Label>
+              <Label htmlFor="paymentTerms">{t('paymentTermsLabel')}</Label>
               <Input
                 id="paymentTerms"
                 type="number"
                 {...register('paymentTerms', { valueAsNumber: true })}
-                placeholder="30"
+                placeholder={t('paymentTermsPlaceholder')}
               />
+              {errors.paymentTerms && (
+                <p className="text-red-600 text-sm mt-1">{errors.paymentTerms.message}</p>
+              )}
             </div>
 
             <div>
-              <Label htmlFor="status">Durum</Label>
+              <Label htmlFor="status">{t('statusLabel')}</Label>
               <select
                 id="status"
                 {...register('status')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
               >
-                <option value="DRAFT">Taslak</option>
-                <option value="ACTIVE">Aktif</option>
-                <option value="SUSPENDED">Askıda</option>
-                <option value="CANCELLED">İptal</option>
+                <option value="DRAFT">{t('statusDraft')}</option>
+                <option value="ACTIVE">{t('statusActive')}</option>
+                <option value="SUSPENDED">{t('statusSuspended')}</option>
+                <option value="CANCELLED">{t('statusCancelled')}</option>
               </select>
             </div>
           </div>
 
           {/* Yenileme Ayarları */}
           <div className="border-t pt-4">
-            <h3 className="font-semibold mb-3">Yenileme Ayarları</h3>
+            <h3 className="font-semibold mb-3">{t('renewalSettingsTitle')}</h3>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="renewalType">Yenileme Tipi</Label>
+                <Label htmlFor="renewalType">{t('renewalTypeLabel')}</Label>
                 <select
                   id="renewalType"
                   {...register('renewalType')}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md"
                 >
-                  <option value="MANUAL">Manuel</option>
-                  <option value="AUTO">Otomatik</option>
-                  <option value="NONE">Yenileme Yok</option>
+                  <option value="MANUAL">{t('renewalTypeManual')}</option>
+                  <option value="AUTO">{t('renewalTypeAuto')}</option>
+                  <option value="NONE">{t('renewalTypeNone')}</option>
                 </select>
               </div>
 
               <div>
-                <Label htmlFor="renewalNoticeDays">Bildirim Süresi (Gün)</Label>
+                <Label htmlFor="renewalNoticeDays">{t('renewalNoticeDaysLabel')}</Label>
                 <Input
                   id="renewalNoticeDays"
                   type="number"
                   {...register('renewalNoticeDays', { valueAsNumber: true })}
-                  placeholder="30"
+                  placeholder={t('renewalNoticeDaysPlaceholder')}
                 />
+                {errors.renewalNoticeDays && (
+                  <p className="text-red-600 text-sm mt-1">{errors.renewalNoticeDays.message}</p>
+                )}
               </div>
             </div>
 
@@ -473,18 +544,18 @@ export default function ContractForm({
                 onCheckedChange={(checked) => setAutoRenew(checked as boolean)}
               />
               <Label htmlFor="autoRenewEnabled" className="cursor-pointer">
-                Otomatik yenileme aktif
+                {t('autoRenewEnabledLabel')}
               </Label>
             </div>
           </div>
 
           {/* Notlar */}
           <div>
-            <Label htmlFor="notes">Notlar</Label>
+            <Label htmlFor="notes">{t('notesLabel')}</Label>
             <Textarea
               id="notes"
               {...register('notes')}
-              placeholder="Ek notlar..."
+              placeholder={t('notesPlaceholder')}
               rows={3}
             />
           </div>
@@ -492,10 +563,10 @@ export default function ContractForm({
           {/* Actions */}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={onClose}>
-              İptal
+              {t('cancel')}
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? 'Kaydediliyor...' : contract ? 'Güncelle' : 'Oluştur'}
+              {loading ? t('saving') : contract ? t('update') : t('create')}
             </Button>
           </div>
         </form>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from '@/lib/toast'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye, Calendar, Building2, User, FileText, Download, FileSpreadsheet, FileText as FileTextIcon, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -87,6 +87,8 @@ interface Meeting {
 
 export default function MeetingList() {
   const locale = useLocale()
+  const t = useTranslations('meetings')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const { data: session } = useSession()
   const [search, setSearch] = useState('')
@@ -215,7 +217,7 @@ export default function MeetingList() {
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
     } catch (error) {
-      toast.warning('Dışa aktarılamadı')
+      toast.warning(t('exportFailed'))
     }
   }
 
@@ -227,22 +229,22 @@ export default function MeetingList() {
     <div className="space-y-6">
       {/* Otomasyon Bilgileri */}
       <AutomationInfo
-        title="Görüşmeler Modülü Otomasyonları"
+        title={t('automationTitle')}
         automations={[
           {
-            action: 'Görüşme oluşturulduğunda',
-            result: 'Hatırlatıcı bildirimi ayarlanır',
+            action: t('automationCreated'),
+            result: t('automationCreatedResult'),
             details: [
-              'Görüşme tarihinden 1 gün önce sistem içi kullanıcılara (Admin, Sales) bildirim gönderilir',
-              '"Aktiviteler" sayfasında görüşme kaydı görünür',
+              t('automationCreatedDetails1'),
+              t('automationCreatedDetails2'),
             ],
           },
           {
-            action: 'Görüşme tamamlandığında',
-            result: 'Görüşme kaydı oluşturulur',
+            action: t('automationCompleted'),
+            result: t('automationCompletedResult'),
             details: [
-              '"Aktiviteler" sayfasında tamamlanma kaydı görünür',
-              'İlgili modüle (Deal, Customer) bağlıysa bilgilendirme yapılır',
+              t('automationCompletedDetails1'),
+              t('automationCompletedDetails2'),
             ],
           },
         ]}
@@ -251,9 +253,9 @@ export default function MeetingList() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Görüşmeler</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
           <p className="mt-2 text-gray-600">
-            Toplam {meetings.length} görüşme
+            {t('totalMeetings', { count: meetings.length })}
           </p>
         </div>
         <div className="flex gap-2">
@@ -262,7 +264,7 @@ export default function MeetingList() {
             className="bg-gradient-primary text-white"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Yeni Görüşme
+            {t('newMeeting')}
           </Button>
           <Button
             variant="outline"
@@ -285,7 +287,7 @@ export default function MeetingList() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="lg:col-span-2">
           <Input
-            placeholder="Görüşme başlığı veya açıklama ara..."
+            placeholder={t('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full"
@@ -293,24 +295,24 @@ export default function MeetingList() {
         </div>
         <Select value={status} onValueChange={setStatus}>
           <SelectTrigger>
-            <SelectValue placeholder="Durum" />
+            <SelectValue placeholder={t('selectStatus')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tümü</SelectItem>
-            <SelectItem value="PLANNED">Planlandı</SelectItem>
-            <SelectItem value="DONE">Tamamlandı</SelectItem>
-            <SelectItem value="CANCELLED">İptal Edildi</SelectItem>
+            <SelectItem value="all">{t('allStatuses')}</SelectItem>
+            <SelectItem value="PLANNED">{t('statusPlanned')}</SelectItem>
+            <SelectItem value="DONE">{t('statusDone')}</SelectItem>
+            <SelectItem value="CANCELLED">{t('statusCancelled')}</SelectItem>
           </SelectContent>
         </Select>
         <Input
           type="date"
-          placeholder="Başlangıç"
+          placeholder={t('startDate')}
           value={dateFrom}
           onChange={(e) => setDateFrom(e.target.value)}
         />
         <Input
           type="date"
-          placeholder="Bitiş"
+          placeholder={t('endDate')}
           value={dateTo}
           onChange={(e) => setDateTo(e.target.value)}
         />
@@ -319,13 +321,13 @@ export default function MeetingList() {
       {/* Admin: Kullanıcı Filtresi */}
       {(session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPER_ADMIN') && (
         <div className="flex items-center gap-2">
-          <label className="text-sm font-medium">Kullanıcı:</label>
+          <label className="text-sm font-medium">{t('user')}:</label>
           <Select value={userId} onValueChange={setUserId}>
             <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Tüm kullanıcılar" />
+              <SelectValue placeholder={t('allUsers')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Tüm kullanıcılar</SelectItem>
+              <SelectItem value="all">{t('allUsers')}</SelectItem>
               {users.map((user: any) => (
                 <SelectItem key={user.id} value={user.id}>
                   {user.name}
@@ -341,14 +343,14 @@ export default function MeetingList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Tarih</TableHead>
-              <TableHead>Başlık</TableHead>
-              <TableHead>Firma</TableHead>
-              <TableHead>Müşteri</TableHead>
-              <TableHead>Durum</TableHead>
-              <TableHead>Gider</TableHead>
-              <TableHead>Kim Yazdı</TableHead>
-              <TableHead className="text-right">İşlemler</TableHead>
+              <TableHead>{t('tableHeaders.date')}</TableHead>
+              <TableHead>{t('tableHeaders.title')}</TableHead>
+              <TableHead>{t('tableHeaders.company')}</TableHead>
+              <TableHead>{t('tableHeaders.customer')}</TableHead>
+              <TableHead>{t('tableHeaders.status')}</TableHead>
+              <TableHead>{t('tableHeaders.expense')}</TableHead>
+              <TableHead>{t('tableHeaders.createdBy')}</TableHead>
+              <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -364,7 +366,7 @@ export default function MeetingList() {
             ) : meetings.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                  Görüşme bulunamadı
+                  {t('noMeetingsFound')}
                 </TableCell>
               </TableRow>
             ) : (

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabase } from '@/lib/supabase'
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
+import { hasPermission, buildPermissionDeniedResponse } from '@/lib/permissions'
+import { approvalRejectSchema } from '@/lib/validations/approvals'
 
 // Dynamic route - build-time'da çalışmasın
 export const dynamic = 'force-dynamic'
@@ -17,17 +19,29 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await request.json()
-    const { reason } = body
+    // Permission check
+    const canUpdate = await hasPermission('approvals', 'update', session.user.id)
+    if (!canUpdate) {
+      return buildPermissionDeniedResponse()
+    }
 
-    if (!reason || reason.trim() === '') {
+    const body = await request.json()
+
+    // Zod validation
+    const validationResult = approvalRejectSchema.safeParse(body)
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: 'Red sebebi zorunludur' },
+        { 
+          error: 'Validation error',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        },
         { status: 400 }
       )
     }
 
-    const supabase = getSupabase()
+    const { reason } = validationResult.data
+
+    const supabase = getSupabaseWithServiceRole()
     const { id: approvalId } = await params
 
     // Approval bilgisini getir
@@ -68,9 +82,9 @@ export async function POST(
       .from('ApprovalRequest')
       .update({
         status: 'REJECTED',
-        approvedBy: session.user.id,
+        rejectedBy: session.user.id,
         rejectionReason: reason,
-        approvedAt: new Date().toISOString(),
+        rejectedAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       })
       .eq('id', approvalId)
@@ -99,6 +113,29 @@ export async function POST(
       console.error('ActivityLog error:', logError)
     }
 
+    // Entity güncellemesi (trigger'a ek olarak manuel güncelleme - güvenlik için)
+    try {
+      if (approval.relatedTo === 'Quote') {
+        await supabase
+          .from('Quote')
+          .update({ status: 'REJECTED' })
+          .eq('id', approval.relatedId)
+          .eq('companyId', session.user.companyId)
+      } else if (approval.relatedTo === 'Deal') {
+        await supabase
+          .from('Deal')
+          .update({ 
+            stage: 'LOST',
+            lostReason: `Onay reddedildi: ${reason}`,
+          })
+          .eq('id', approval.relatedId)
+          .eq('companyId', session.user.companyId)
+      }
+    } catch (entityUpdateError) {
+      console.error('Entity update error:', entityUpdateError)
+      // Hata olsa bile devam et - trigger zaten güncellemiş olabilir
+    }
+
     // Notification oluştur (talep edene)
     try {
       await supabase.from('Notification').insert({
@@ -113,6 +150,44 @@ export async function POST(
       })
     } catch (notifError) {
       console.error('Notification error:', notifError)
+    }
+
+    // Email bildirimi gönder (talep edene)
+    try {
+      const { sendApprovalDecisionEmail } = await import('@/lib/email-helper')
+      
+      // Talep edenin bilgilerini al
+      const { data: requester } = await supabase
+        .from('User')
+        .select('name, email')
+        .eq('id', approval.requestedBy)
+        .maybeSingle()
+
+      // Reddedenin bilgilerini al
+      const { data: rejecter } = await supabase
+        .from('User')
+        .select('name')
+        .eq('id', session.user.id)
+        .maybeSingle()
+
+      if (requester?.email) {
+        await sendApprovalDecisionEmail({
+          requesterEmail: requester.email,
+          requesterName: requester.name || 'Kullanıcı',
+          approverName: rejecter?.name || session.user.name || 'Kullanıcı',
+          approvalTitle: approval.title,
+          decision: 'REJECTED',
+          reason,
+          relatedTo: approval.relatedTo,
+          relatedId: approval.relatedId,
+        }).catch((emailError) => {
+          console.error('Email gönderilemedi:', emailError)
+          // Email hatası ana işlemi engellemez
+        })
+      }
+    } catch (emailError) {
+      console.error('Email notification error:', emailError)
+      // Email hatası ana işlemi engellemez
     }
 
     return NextResponse.json({ success: true, message: 'Onay talebi reddedildi' })

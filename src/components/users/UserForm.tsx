@@ -8,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
+import { useTranslations } from 'next-intl'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -26,27 +27,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-// Schema'yı dinamik olarak oluştur (SuperAdmin kontrolü için)
-const createUserSchema = (isSuperAdmin: boolean) => {
-  if (isSuperAdmin) {
-    return z.object({
-      name: z.string().min(1, 'Ad soyad gereklidir'),
-      email: z.string().email('Geçerli bir email adresi giriniz'),
-      password: z.string().min(6, 'Şifre en az 6 karakter olmalıdır').optional(),
-      role: z.enum(['ADMIN', 'SALES', 'SUPER_ADMIN']).default('SALES'),
-      companyId: z.string().min(1, 'Kurum seçimi zorunludur'), // SuperAdmin için kurum seçimi zorunlu
-    })
-  } else {
-    return z.object({
-      name: z.string().min(1, 'Ad soyad gereklidir'),
-      email: z.string().email('Geçerli bir email adresi giriniz'),
-      password: z.string().min(6, 'Şifre en az 6 karakter olmalıdır').optional(),
-      role: z.enum(['ADMIN', 'SALES', 'SUPER_ADMIN']).default('SALES'),
-      companyId: z.string().optional(), // Normal admin için companyId session'dan gelir
-    })
-  }
-}
-
 interface UserFormProps {
   user?: any
   open: boolean
@@ -58,7 +38,10 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
   const router = useRouter()
   const queryClient = useQueryClient()
   const { data: session } = useSession()
+  const t = useTranslations('users')
+  const tCommon = useTranslations('common')
   const [loading, setLoading] = useState(false)
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null)
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
 
   // SuperAdmin için kurumları çek - her zaman çek (hem SuperAdmin hem de normal admin için)
@@ -69,10 +52,32 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
       if (!res.ok) throw new Error('Failed to fetch companies')
       return res.json()
     },
-    enabled: open,
+    enabled: open && isSuperAdmin,
   })
 
-  const userSchema = createUserSchema(isSuperAdmin)
+  // Schema'yı dinamik olarak oluştur (SuperAdmin kontrolü için)
+  // Validation mesajları locale'den alınıyor
+  const createUserSchema = () => {
+    if (isSuperAdmin) {
+      return z.object({
+        name: z.string().min(1, t('form.nameRequired')),
+        email: z.string().email(t('form.emailRequired')),
+        password: z.string().min(6, t('form.passwordMin')).optional(),
+        role: z.enum(['USER', 'ADMIN', 'SALES', 'SUPER_ADMIN']).default('USER'),
+        companyId: z.string().min(1, t('form.companyRequired')), // SuperAdmin için kurum seçimi zorunlu
+      })
+    } else {
+      return z.object({
+        name: z.string().min(1, t('form.nameRequired')),
+        email: z.string().email(t('form.emailRequired')),
+        password: z.string().min(6, t('form.passwordMin')).optional(),
+        role: z.enum(['USER', 'SALES']).default('USER'),
+        companyId: z.string().optional(), // Normal admin için companyId session'dan gelir
+      })
+    }
+  }
+
+  const userSchema = createUserSchema()
   type UserFormData = z.infer<typeof userSchema>
 
   const {
@@ -88,7 +93,7 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
       name: '',
       email: '',
       password: '',
-      role: 'SALES',
+      role: 'USER',
       companyId: '',
     },
   })
@@ -157,16 +162,39 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
       }
       reset()
       onClose()
+      if (generatedPassword) {
+        toast.success(t('form.userCreated'), t('form.tempPassword', { password: generatedPassword }))
+        setGeneratedPassword(null)
+      } else {
+        toast.success(user ? t('form.userUpdated') : t('form.userCreated'))
+      }
     },
     onError: (error: any) => {
       console.error('Error:', error)
-      toast.error('Kullanıcı kaydedilemedi', error.message)
+      toast.error(t('form.saveFailed'), error.message)
     },
   })
 
   const onSubmit = async (data: UserFormData) => {
     setLoading(true)
     try {
+      if (!user) {
+        const trimmedPassword = data.password?.trim()
+        if (!trimmedPassword) {
+          const generated = Math.random().toString(36).slice(-4) + Math.random().toString(36).slice(-6)
+          data.password = generated
+          setGeneratedPassword(generated)
+        } else {
+          data.password = trimmedPassword
+          setGeneratedPassword(null)
+        }
+      } else if (data.password && data.password.trim() !== '') {
+        setGeneratedPassword(null)
+        data.password = data.password.trim()
+      } else {
+        setGeneratedPassword(null)
+      }
+
       await mutation.mutateAsync(data)
     } finally {
       setLoading(false)
@@ -177,18 +205,18 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{user ? 'Kullanıcı Düzenle' : 'Yeni Kullanıcı'}</DialogTitle>
+          <DialogTitle>{user ? t('editUser') : t('newUser')}</DialogTitle>
           <DialogDescription>
-            {user ? 'Kullanıcı bilgilerini güncelleyin' : 'Yeni kullanıcı ekleyin'}
+            {user ? t('userDetails') : t('addUser')}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Ad Soyad *</label>
+            <label className="text-sm font-medium">{t('form.nameLabel')} *</label>
             <Input
               {...register('name')}
-              placeholder="Ad soyad"
+              placeholder={t('form.namePlaceholder')}
               disabled={loading}
             />
             {errors.name && (
@@ -197,29 +225,29 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">E-posta *</label>
+            <label className="text-sm font-medium">{t('form.emailLabel')} *</label>
             <Input
               type="email"
               {...register('email')}
-              placeholder="email@example.com"
+              placeholder={t('form.emailPlaceholder')}
               disabled={loading || !!user}
             />
             {errors.email && (
               <p className="text-sm text-red-600">{errors.email.message}</p>
             )}
             {user && (
-              <p className="text-xs text-gray-500">E-posta değiştirilemez</p>
+              <p className="text-xs text-gray-500">{t('form.emailCannotChange')}</p>
             )}
           </div>
 
           <div className="space-y-2">
             <label className="text-sm font-medium">
-              Şifre {user ? '(değiştirmek için doldurun)' : '*'}
+              {t('form.passwordLabel')} {user ? t('form.passwordChange') : '*'}
             </label>
             <Input
               type="password"
               {...register('password')}
-              placeholder={user ? 'Yeni şifre (opsiyonel)' : 'Şifre'}
+              placeholder={user ? t('form.newPasswordOptional') : t('form.passwordPlaceholder')}
               disabled={loading}
             />
             {errors.password && (
@@ -228,19 +256,22 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Rol *</label>
+            <label className="text-sm font-medium">{t('form.roleLabel')} *</label>
             <Select
               value={role}
               onValueChange={(value) => setValue('role', value as any)}
             >
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder={t('form.selectRole')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="SALES">Satış</SelectItem>
-                <SelectItem value="ADMIN">Admin</SelectItem>
+                <SelectItem value="USER">{t('form.standardUser')}</SelectItem>
+                <SelectItem value="SALES">{t('sales')}</SelectItem>
                 {isSuperAdmin && (
-                  <SelectItem value="SUPER_ADMIN">Süper Admin</SelectItem>
+                  <>
+                    <SelectItem value="ADMIN">{t('admin')}</SelectItem>
+                    <SelectItem value="SUPER_ADMIN">{t('superAdmin')}</SelectItem>
+                  </>
                 )}
               </SelectContent>
             </Select>
@@ -249,13 +280,13 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
           {/* SuperAdmin için kurum seçimi - ZORUNLU */}
           {isSuperAdmin && (
             <div className="space-y-2">
-              <label className="text-sm font-medium">Kurum *</label>
+              <label className="text-sm font-medium">{t('form.companyLabel')} *</label>
               <Select
                 value={companyId || ''}
                 onValueChange={(value) => setValue('companyId', value)}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Kurum seçin (zorunlu)" />
+                  <SelectValue placeholder={t('form.selectCompany')} />
                 </SelectTrigger>
                 <SelectContent>
                   {companies.map((company: any) => (
@@ -269,17 +300,17 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
                 <p className="text-sm text-red-600">{errors.companyId.message}</p>
               )}
               {!companyId && (
-                <p className="text-xs text-gray-500">SuperAdmin olarak kullanıcı eklerken kurum seçimi zorunludur</p>
+                <p className="text-xs text-gray-500">{t('superAdminNote')}</p>
               )}
             </div>
           )}
 
           <div className="flex justify-end gap-2 pt-4">
             <Button type="button" variant="outline" onClick={onClose} disabled={loading}>
-              İptal
+              {tCommon('cancel')}
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? 'Kaydediliyor...' : user ? 'Güncelle' : 'Oluştur'}
+              {loading ? t('saving') : user ? t('update') : t('create')}
             </Button>
           </div>
         </form>

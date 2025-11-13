@@ -203,10 +203,14 @@ export function isValidQuoteTransition(
 
 /**
  * Invoice status geçişinin geçerli olup olmadığını kontrol eder
+ * @param currentStatus - Mevcut durum
+ * @param newStatus - Yeni durum
+ * @param invoiceType - Fatura tipi (SALES, PURCHASE, SERVICE_SALES, SERVICE_PURCHASE)
  */
 export function isValidInvoiceTransition(
   currentStatus: string,
-  newStatus: string
+  newStatus: string,
+  invoiceType?: 'SALES' | 'PURCHASE' | 'SERVICE_SALES' | 'SERVICE_PURCHASE'
 ): { valid: boolean; error?: string; allowed?: string[] } {
   if (currentStatus === newStatus) {
     return { valid: true }
@@ -226,6 +230,55 @@ export function isValidInvoiceTransition(
     return {
       valid: false,
       error: `${current} durumundaki faturalar değiştirilemez`,
+    }
+  }
+
+  // Satış faturaları için: SENT'ten direkt PAID'e geçişi engelle (önce SHIPPED olmalı)
+  if (invoiceType === 'SALES' && current === 'SENT' && next === 'PAID') {
+    return {
+      valid: false,
+      error: 'Satış faturaları için önce "Sevkiyat Yapıldı" durumuna geçmelisiniz. Ürünler sevk edilmeden ödeme alınamaz.',
+      allowed: ['SHIPPED', 'OVERDUE', 'CANCELLED'],
+    }
+  }
+
+  // Alış faturaları için: SENT'ten direkt PAID'e geçişi engelle (önce RECEIVED olmalı)
+  if (invoiceType === 'PURCHASE' && current === 'SENT' && next === 'PAID') {
+    return {
+      valid: false,
+      error: 'Alış faturaları için önce "Mal Kabul Edildi" durumuna geçmelisiniz. Ürünler teslim alınmadan ödeme yapılamaz.',
+      allowed: ['RECEIVED', 'OVERDUE', 'CANCELLED'],
+    }
+  }
+
+  // Hizmet faturaları için SHIPPED/RECEIVED geçişlerini engelle
+  if (invoiceType === 'SERVICE_SALES' || invoiceType === 'SERVICE_PURCHASE') {
+    if (next === 'SHIPPED' || next === 'RECEIVED') {
+      return {
+        valid: false,
+        error: 'Hizmet faturaları için sevkiyat/mal kabul durumları geçerli değildir. Hizmet faturaları doğrudan "Ödendi" durumuna geçebilir.',
+        allowed: invoiceTransitions[current].filter(
+          status => status !== 'SHIPPED' && status !== 'RECEIVED'
+        ),
+      }
+    }
+  }
+
+  // Satış faturaları için RECEIVED geçişini engelle
+  if (invoiceType === 'SALES' && next === 'RECEIVED') {
+    return {
+      valid: false,
+      error: 'Satış faturaları için mal kabul durumu geçerli değildir. Satış faturaları için "Sevkiyat Yapıldı" durumunu kullanın.',
+      allowed: invoiceTransitions[current].filter(status => status !== 'RECEIVED'),
+    }
+  }
+
+  // Alış faturaları için SHIPPED geçişini engelle
+  if (invoiceType === 'PURCHASE' && next === 'SHIPPED') {
+    return {
+      valid: false,
+      error: 'Alış faturaları için sevkiyat durumu geçerli değildir. Alış faturaları için "Mal Kabul Edildi" durumunu kullanın.',
+      allowed: invoiceTransitions[current].filter(status => status !== 'SHIPPED'),
     }
   }
 

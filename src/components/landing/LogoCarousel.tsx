@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Image from 'next/image'
 import { motion } from 'framer-motion'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -67,10 +68,13 @@ export default function LogoCarousel({ logos, autoPlay = true, interval = 3000 }
             >
               <div className="bg-gray-800 rounded-lg p-8 w-full max-w-xs h-32 flex items-center justify-center">
                 {logo.image ? (
-                  <img
+                  <Image
                     src={logo.image}
                     alt={logo.alt || logo.name}
+                    width={80}
+                    height={80}
                     className="max-h-20 max-w-full object-contain filter brightness-0 invert"
+                    unoptimized={logo.image.startsWith('blob:') || logo.image.startsWith('data:')}
                   />
                 ) : (
                   <span className="text-white text-xl font-bold">{logo.name}</span>

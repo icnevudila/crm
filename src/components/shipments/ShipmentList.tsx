@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { toast } from '@/lib/toast'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { useSession } from 'next-auth/react'
 import { Plus, Search, Edit, Trash2, Eye, CheckCircle, MoreVertical, Calendar, FileText, Truck, BarChart3, X } from 'lucide-react'
 import { motion } from 'framer-motion'
@@ -139,15 +139,6 @@ const statusColors: Record<string, string> = {
   CANCELLED: 'bg-red-100 text-red-800 border-red-300',
 }
 
-const statusLabels: Record<string, string> = {
-  DRAFT: 'Taslak',
-  PENDING: 'Beklemede',
-  APPROVED: 'Onaylı',
-  IN_TRANSIT: 'Yolda',
-  DELIVERED: 'Teslim Edildi',
-  CANCELLED: 'İptal',
-}
-
 const statusRowColors: Record<string, string> = {
   DRAFT: 'bg-gray-50 border-l-4 border-gray-400',
   PENDING: 'bg-amber-50 border-l-4 border-amber-400',
@@ -159,7 +150,18 @@ const statusRowColors: Record<string, string> = {
 
 export default function ShipmentList() {
   const locale = useLocale()
+  const t = useTranslations('shipments')
+  const tCommon = useTranslations('common')
   const { data: session } = useSession()
+  
+  const statusLabels: Record<string, string> = {
+    DRAFT: t('statusDraft'),
+    PENDING: t('statusPending'),
+    APPROVED: t('statusApproved'),
+    IN_TRANSIT: t('statusInTransit'),
+    DELIVERED: t('statusDelivered'),
+    CANCELLED: t('statusCancelled'),
+  }
   
   // SuperAdmin kontrolü
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
@@ -242,8 +244,8 @@ export default function ShipmentList() {
     const currentShipment = shipments.find(s => s.id === id)
     if (currentShipment?.status?.toUpperCase() === 'APPROVED' && newStatus === 'CANCELLED') {
       toast.warning(
-        'Onaylı sevkiyat iptal edilemez',
-        'Bu sevkiyat onaylandı ve ürünler stoktan düşüldü. İptal etmek için önce sevkiyatı "Taslak" durumuna geri almanız ve stok işlemini geri almanız gerekir.'
+        t('cannotCancelApproved'),
+        t('cannotCancelApprovedMessage')
       )
       return
     }
@@ -258,7 +260,7 @@ export default function ShipmentList() {
 
       if (!res.ok) {
         const error = await res.json()
-        throw new Error(error.error || 'Durum güncellenemedi')
+        throw new Error(error.error || t('statusUpdateFailed'))
       }
 
       const result = await res.json()
@@ -406,13 +408,13 @@ export default function ShipmentList() {
     // Onaylı sevkiyatlar silinemez
     if (status?.toUpperCase() === 'APPROVED') {
       toast.warning(
-        'Onaylı sevkiyat silinemez',
-        'Bu sevkiyat onaylandı ve ürünler stoktan düşüldü. Silmek için önce sevkiyatı "Taslak" durumuna geri alın ve stok işlemini iptal edin.'
+        t('cannotDeleteApproved'),
+        t('cannotDeleteApprovedMessage')
       )
       return
     }
 
-    if (!confirm(`${tracking || 'Bu'} sevkiyatını silmek istediğinize emin misiniz?`)) {
+    if (!confirm(t('deleteConfirm', { tracking: tracking || t('thisShipment') }))) {
       return
     }
 
@@ -451,8 +453,8 @@ export default function ShipmentList() {
     } catch (error: any) {
         console.error('Delete error:', error)
       toast.error(
-        'Sevkiyat silinemedi',
-        error?.message || 'Sevkiyat kaydı silinirken bir hata oluştu. Lütfen tekrar deneyin.'
+        t('shipmentDeleteFailed'),
+        error?.message || t('shipmentDeleteFailedMessage')
       )
     }
   }, [shipments, mutateShipments, apiUrl])
@@ -466,8 +468,8 @@ export default function ShipmentList() {
     // Onaylı sevkiyatlar düzenlenemez
     if (shipment.status?.toUpperCase() === 'APPROVED') {
       toast.warning(
-        'Onaylı sevkiyat düzenlenemez',
-        'Bu sevkiyat onaylandı ve ürünler stoktan düşüldü. Düzenlemek için önce sevkiyatı "Taslak" durumuna geri alın.'
+        t('cannotEditApproved'),
+        t('cannotEditApprovedMessage')
       )
       return
     }
@@ -500,8 +502,8 @@ export default function ShipmentList() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Sevkiyatlar</h1>
-          <p className="mt-2 text-gray-600">Toplam {stats.total} sevkiyat</p>
+          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
+          <p className="mt-2 text-gray-600">{t('totalShipments', { count: stats.total })}</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -509,14 +511,14 @@ export default function ShipmentList() {
             onClick={() => setReportModalOpen(true)}
           >
             <BarChart3 className="mr-2 h-4 w-4" />
-            Sevkiyat Raporları
+            {t('reports')}
           </Button>
         <Button
           onClick={handleAdd}
           className="bg-gradient-primary text-white"
         >
           <Plus className="mr-2 h-4 w-4" />
-          Yeni Sevkiyat
+          {t('newShipment')}
         </Button>
         </div>
       </div>
@@ -532,7 +534,7 @@ export default function ShipmentList() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Toplam</p>
+              <p className="text-sm text-gray-600 mb-1">{t('total')}</p>
               <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
             </div>
             <Truck className="h-8 w-8 text-indigo-500" />
@@ -548,7 +550,7 @@ export default function ShipmentList() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Taslak</p>
+              <p className="text-sm text-gray-600 mb-1">{t('stats.draft')}</p>
               <p className="text-2xl font-bold text-gray-900">{stats.draft}</p>
             </div>
             <FileText className="h-8 w-8 text-gray-500" />
@@ -564,7 +566,7 @@ export default function ShipmentList() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Yolda</p>
+              <p className="text-sm text-gray-600 mb-1">{t('stats.inTransit')}</p>
               <p className="text-2xl font-bold text-blue-600">{stats.inTransit}</p>
             </div>
             <Truck className="h-8 w-8 text-blue-500" />
@@ -580,7 +582,7 @@ export default function ShipmentList() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Teslim</p>
+              <p className="text-sm text-gray-600 mb-1">{t('stats.delivered')}</p>
               <p className="text-2xl font-bold text-green-600">{stats.delivered}</p>
             </div>
             <CheckCircle className="h-8 w-8 text-green-500" />
@@ -596,7 +598,7 @@ export default function ShipmentList() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Onaylı</p>
+              <p className="text-sm text-gray-600 mb-1">{t('stats.approved')}</p>
               <p className="text-2xl font-bold text-green-600">{stats.approved}</p>
             </div>
             <CheckCircle className="h-8 w-8 text-green-500" />
@@ -612,7 +614,7 @@ export default function ShipmentList() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">İptal</p>
+              <p className="text-sm text-gray-600 mb-1">{t('stats.cancelled')}</p>
               <p className="text-2xl font-bold text-red-600">{stats.cancelled}</p>
             </div>
             <X className="h-8 w-8 text-red-500" />
@@ -622,31 +624,31 @@ export default function ShipmentList() {
 
       {/* Otomasyon Bilgileri */}
       <AutomationInfo
-        title="Sevkiyatlar Modülü Otomasyonları"
+        title={t('automationTitle')}
         automations={[
           {
-            action: 'Sevkiyatı "Onaylandı" yaparsan',
-            result: '"Ürünler" sayfasındaki ilgili ürünlerin stokları otomatik olarak rezerve edilir',
+            action: t('automationApproved'),
+            result: t('automationApprovedResult'),
             details: [
-              'Rezerve miktar artar (ürünler rezerve edilir)',
+              t('automationApprovedDetails'),
             ],
           },
           {
-            action: 'Sevkiyatı "Gönderildi" yaparsan',
-            result: '"Ürünler" sayfasındaki ilgili ürünlerin stokları otomatik olarak düşer',
+            action: t('automationShipped'),
+            result: t('automationShippedResult'),
             details: [
-              'Stok miktarı azalır (ürünler gönderildi)',
-              'Rezerve edilmiş stoklar otomatik olarak serbest bırakılır',
-              '"Aktiviteler" sayfasında gönderim kaydı görünür',
+              t('automationShippedDetails1'),
+              t('automationShippedDetails2'),
+              t('automationShippedDetails3'),
             ],
           },
           {
-            action: 'Sevkiyatı "Teslim Edildi" yaparsan',
-            result: 'Otomatik olarak müşteriye bildirim gönderilir',
+            action: t('automationDelivered'),
+            result: t('automationDeliveredResult'),
             details: [
-              'E-posta bildirimi gönderilir',
-              '"Aktiviteler" sayfasında teslimat kaydı görünür',
-              'Bildirim gönderilir (müşteriye ve ekibe)',
+              t('automationDeliveredDetails1'),
+              t('automationDeliveredDetails2'),
+              t('automationDeliveredDetails3'),
             ],
           },
         ]}
@@ -658,7 +660,7 @@ export default function ShipmentList() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             type="search"
-            placeholder="Takip numarası ara..."
+            placeholder={t('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -667,10 +669,10 @@ export default function ShipmentList() {
         {isSuperAdmin && (
           <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Firma Seç" />
+              <SelectValue placeholder={t('selectCompany')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Tüm Firmalar</SelectItem>
+              <SelectItem value="all">{t('allCompanies')}</SelectItem>
               {companies.map((company) => (
                 <SelectItem key={company.id} value={company.id}>
                   {company.name}
@@ -681,29 +683,29 @@ export default function ShipmentList() {
         )}
         <Select value={statusFilter || 'all'} onValueChange={(v) => setStatusFilter(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-48">
-            <SelectValue placeholder="Durum" />
+            <SelectValue placeholder={t('selectStatus')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tüm Durumlar</SelectItem>
-            <SelectItem value="DRAFT">Taslak</SelectItem>
-            <SelectItem value="PENDING">Beklemede</SelectItem>
-            <SelectItem value="APPROVED">Onaylı</SelectItem>
-            <SelectItem value="IN_TRANSIT">Yolda</SelectItem>
-            <SelectItem value="DELIVERED">Teslim Edildi</SelectItem>
-            <SelectItem value="CANCELLED">İptal</SelectItem>
+            <SelectItem value="all">{t('allStatuses')}</SelectItem>
+            <SelectItem value="DRAFT">{t('statusDraft')}</SelectItem>
+            <SelectItem value="PENDING">{t('statusPending')}</SelectItem>
+            <SelectItem value="APPROVED">{t('statusApproved')}</SelectItem>
+            <SelectItem value="IN_TRANSIT">{t('statusInTransit')}</SelectItem>
+            <SelectItem value="DELIVERED">{t('statusDelivered')}</SelectItem>
+            <SelectItem value="CANCELLED">{t('statusCancelled')}</SelectItem>
           </SelectContent>
         </Select>
         <div className="flex gap-2">
           <Input
             type="date"
-            placeholder="Başlangıç"
+            placeholder={t('startDate')}
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
             className="w-40"
           />
           <Input
             type="date"
-            placeholder="Bitiş"
+            placeholder={t('endDate')}
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
             className="w-40"
@@ -716,22 +718,22 @@ export default function ShipmentList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Sevkiyat İsmi</TableHead>
-              {isSuperAdmin && <TableHead>Firma</TableHead>}
-              <TableHead>Takip Numarası</TableHead>
-              <TableHead>Durum</TableHead>
-              <TableHead>Fatura</TableHead>
-              <TableHead>Müşteri</TableHead>
-              <TableHead>Tarih</TableHead>
-              <TableHead>Tahmini Teslim</TableHead>
-              <TableHead className="text-right">İşlemler</TableHead>
+              <TableHead>{t('tableHeaders.shipmentName')}</TableHead>
+              {isSuperAdmin && <TableHead>{t('tableHeaders.company')}</TableHead>}
+              <TableHead>{t('tableHeaders.tracking')}</TableHead>
+              <TableHead>{t('tableHeaders.status')}</TableHead>
+              <TableHead>{t('tableHeaders.invoice')}</TableHead>
+              <TableHead>{t('tableHeaders.customer')}</TableHead>
+              <TableHead>{t('tableHeaders.date')}</TableHead>
+              <TableHead>{t('tableHeaders.estimatedDelivery')}</TableHead>
+              <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {shipments.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-8 text-gray-500">
-                  Sevkiyat bulunamadı
+                  {t('noShipmentsFound')}
                 </TableCell>
               </TableRow>
             ) : (
@@ -794,12 +796,12 @@ export default function ShipmentList() {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="DRAFT">Taslak</SelectItem>
-                              <SelectItem value="PENDING">Beklemede</SelectItem>
-                              <SelectItem value="APPROVED">Onaylı</SelectItem>
-                              <SelectItem value="IN_TRANSIT">Yolda</SelectItem>
-                              <SelectItem value="DELIVERED">Teslim Edildi</SelectItem>
-                              <SelectItem value="CANCELLED">İptal</SelectItem>
+                              <SelectItem value="DRAFT">{t('statusDraft')}</SelectItem>
+                              <SelectItem value="PENDING">{t('statusPending')}</SelectItem>
+                              <SelectItem value="APPROVED">{t('statusApproved')}</SelectItem>
+                              <SelectItem value="IN_TRANSIT">{t('statusInTransit')}</SelectItem>
+                              <SelectItem value="DELIVERED">{t('statusDelivered')}</SelectItem>
+                              <SelectItem value="CANCELLED">{t('statusCancelled')}</SelectItem>
                             </SelectContent>
                           </Select>
                           {/* Onayla Butonu - Sadece DRAFT veya PENDING durumunda */}
@@ -812,7 +814,7 @@ export default function ShipmentList() {
                               className="bg-green-600 hover:bg-green-700 text-white text-xs h-8 px-3"
                             >
                               <CheckCircle className="mr-1 h-3 w-3" />
-                              Onayla
+                              {t('approveButton')}
                             </Button>
                           )}
                         </>

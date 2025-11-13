@@ -10,6 +10,9 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Eye } from 'lucide-react'
+import { toast } from '@/lib/toast'
 
 const campaignSchema = z.object({
   name: z.string().min(1, 'Kampanya adı gereklidir'),
@@ -36,6 +39,7 @@ export default function EmailCampaignForm({
 }: EmailCampaignFormProps) {
   const [loading, setLoading] = useState(false)
   const [segments, setSegments] = useState<Array<{ id: string; name: string; memberCount: number }>>([])
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   const {
     register,
@@ -162,20 +166,54 @@ export default function EmailCampaignForm({
             )}
           </div>
 
-          {/* Body */}
+          {/* Body - HTML Editor with Preview */}
           <div className="space-y-2">
-            <Label htmlFor="body">Email İçeriği *</Label>
-            <Textarea
-              id="body"
-              {...register('body')}
-              placeholder="Email içeriğini yazın..."
-              rows={10}
-            />
+            <div className="flex items-center justify-between">
+              <Label htmlFor="body">Email İçeriği *</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const bodyValue = watch('body')
+                  if (!bodyValue) {
+                    toast.warning('Önce içerik yazın')
+                    return
+                  }
+                  setPreviewOpen(true)
+                }}
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                Önizle
+              </Button>
+            </div>
+            <Tabs defaultValue="editor" className="w-full">
+              <TabsList>
+                <TabsTrigger value="editor">Düzenle</TabsTrigger>
+                <TabsTrigger value="html">HTML</TabsTrigger>
+              </TabsList>
+              <TabsContent value="editor" className="mt-2">
+                <Textarea
+                  id="body"
+                  {...register('body')}
+                  placeholder="Email içeriğini yazın... HTML kullanabilirsiniz."
+                  rows={12}
+                  className="font-mono text-sm"
+                />
+              </TabsContent>
+              <TabsContent value="html" className="mt-2">
+                <div className="border rounded-md p-4 bg-gray-50 min-h-[200px]">
+                  <pre className="text-xs whitespace-pre-wrap font-mono">
+                    {watch('body') || 'HTML içeriği burada görünecek...'}
+                  </pre>
+                </div>
+              </TabsContent>
+            </Tabs>
             {errors.body && (
               <p className="text-sm text-red-600">{errors.body.message}</p>
             )}
             <p className="text-xs text-gray-500">
-              HTML kullanabilirsiniz (örn: &lt;strong&gt;, &lt;a&gt;)
+              HTML kullanabilirsiniz (örn: &lt;strong&gt;, &lt;a href="#"&gt;, &lt;p&gt;)
             </p>
           </div>
 
@@ -238,6 +276,31 @@ export default function EmailCampaignForm({
           </div>
         </form>
       </DialogContent>
+
+      {/* Preview Modal */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Email Önizleme</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-sm font-medium text-gray-500">Konu:</Label>
+              <p className="mt-1 font-semibold">{watch('subject') || '(Konu yok)'}</p>
+            </div>
+            <div>
+              <Label className="text-sm font-medium text-gray-500">İçerik:</Label>
+              <div
+                className="mt-2 border rounded-md p-4 bg-white min-h-[300px]"
+                dangerouslySetInnerHTML={{ __html: watch('body') || '<p>İçerik yok</p>' }}
+              />
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={() => setPreviewOpen(false)}>Kapat</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   )
 }

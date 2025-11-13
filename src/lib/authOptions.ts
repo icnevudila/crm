@@ -146,5 +146,8 @@ export const authOptions: NextAuthOptions = {
   // NextAuth URL - CLIENT_FETCH_ERROR'u önlemek için
   trustHost: true, // Development'ta localhost için
   useSecureCookies: process.env.NODE_ENV === 'production',
+  // NEXTAUTH_URL - CLIENT_FETCH_ERROR'u önlemek için
+  // Eğer NEXTAUTH_URL yoksa, otomatik olarak tespit et
+  ...(process.env.NEXTAUTH_URL ? { url: process.env.NEXTAUTH_URL } : {}),
 }
 

@@ -7,6 +7,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { mutate } from 'swr'
 import { useQuery } from '@tanstack/react-query'
+import { Upload } from 'lucide-react'
+import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -39,6 +41,7 @@ const customerSchema = z.object({
   notes: z.string().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
   customerCompanyId: z.string().optional(),
+  logoUrl: z.string().url('Geçerli bir URL girin').optional().or(z.literal('')),
 })
 
 type CustomerFormData = z.infer<typeof customerSchema>
@@ -58,6 +61,7 @@ export default function CustomerForm({
 }: CustomerFormProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [logoPreview, setLogoPreview] = useState(customer?.logoUrl || '')
 
   // Müşteri firmalarını çek (müşteri hangi firmada çalışıyor)
   const { data: customerCompaniesData } = useQuery({
@@ -92,6 +96,7 @@ export default function CustomerForm({
       notes: '',
       status: 'ACTIVE',
       customerCompanyId: '',
+      logoUrl: '',
     },
   })
 
@@ -113,7 +118,9 @@ export default function CustomerForm({
           notes: customer.notes || '',
           status: customer.status || 'ACTIVE',
           customerCompanyId: customer.customerCompanyId || '',
+          logoUrl: customer.logoUrl || '',
         })
+        setLogoPreview(customer.logoUrl || '')
       } else {
         // Yeni kayıt modu - form'u temizle
         reset({
@@ -129,10 +136,27 @@ export default function CustomerForm({
           notes: '',
           status: 'ACTIVE',
           customerCompanyId: '',
+          logoUrl: '',
         })
+        setLogoPreview('')
       }
     }
   }, [customer, open, reset])
+
+  // Logo yükleme handler (gelecekte Supabase Storage'a yüklenecek)
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Geçici olarak base64 preview göster (gelecekte Supabase Storage'a yüklenecek)
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        const base64String = reader.result as string
+        setLogoPreview(base64String)
+        setValue('logoUrl', base64String)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
 
   const status = watch('status')
 
@@ -189,6 +213,51 @@ export default function CustomerForm({
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Logo Upload */}
+            <div className="space-y-2 md:col-span-2">
+              <label className="text-sm font-medium">Müşteri Logosu</label>
+              <div className="flex items-center gap-4">
+                {logoPreview && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="w-20 h-20 rounded-lg overflow-hidden border-2 border-gray-200"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={logoPreview}
+                      alt="Logo preview"
+                      className="w-full h-full object-cover"
+                    />
+                  </motion.div>
+                )}
+                <div className="flex-1">
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    disabled={loading}
+                    className="hidden"
+                    id="logo-upload"
+                  />
+                  <label htmlFor="logo-upload">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full cursor-pointer"
+                      disabled={loading}
+                      asChild
+                    >
+                      <span>
+                        <Upload className="mr-2 h-4 w-4" />
+                        Logo Yükle
+                      </span>
+                    </Button>
+                  </label>
+                </div>
+              </div>
+            </div>
+
             {/* Name */}
             <div className="space-y-2 md:col-span-2">
               <label className="text-sm font-medium">İsim *</label>

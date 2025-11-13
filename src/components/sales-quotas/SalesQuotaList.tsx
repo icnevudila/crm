@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
+import { toast } from '@/lib/toast'
 import { Plus, Edit, Trash2, Target } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,6 +29,9 @@ interface SalesQuota {
 }
 
 export default function SalesQuotaList() {
+  const locale = useLocale()
+  const t = useTranslations('salesQuotas')
+  const tCommon = useTranslations('common')
   const [search, setSearch] = useState('')
   const [period, setPeriod] = useState('')
   const [formOpen, setFormOpen] = useState(false)
@@ -48,7 +53,7 @@ export default function SalesQuotaList() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Bu kotayı silmek istediğinize emin misiniz?')) {
+    if (!confirm(t('deleteConfirm'))) {
       return
     }
 
@@ -71,7 +76,7 @@ export default function SalesQuotaList() {
       ])
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error('Silinemedi', error?.message)
+      toast.error(t('deleteFailed'), error?.message)
     }
   }
 
@@ -86,12 +91,12 @@ export default function SalesQuotaList() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Satış Kotaları</h1>
-          <p className="text-gray-500 mt-1">Hedef ve performans takibi</p>
+          <h1 className="text-3xl font-bold">{t('title')}</h1>
+          <p className="text-gray-500 mt-1">{t('description')}</p>
         </div>
         <Button onClick={() => setFormOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white">
           <Plus className="h-4 w-4 mr-2" />
-          Yeni Kota
+          {t('newQuota')}
         </Button>
       </div>
 
@@ -99,20 +104,20 @@ export default function SalesQuotaList() {
       <div className="flex gap-4">
         <div className="flex-1">
           <Input
-            placeholder="Kullanıcı ara..."
+            placeholder={t('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
         <Select value={period || 'all'} onValueChange={(value) => setPeriod(value === 'all' ? '' : value)}>
           <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Periyot" />
+            <SelectValue placeholder={t('selectPeriod')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tümü</SelectItem>
-            <SelectItem value="MONTHLY">Aylık</SelectItem>
-            <SelectItem value="QUARTERLY">Çeyreklik</SelectItem>
-            <SelectItem value="YEARLY">Yıllık</SelectItem>
+            <SelectItem value="all">{t('allPeriods')}</SelectItem>
+            <SelectItem value="MONTHLY">{t('periodMonthly')}</SelectItem>
+            <SelectItem value="QUARTERLY">{t('periodQuarterly')}</SelectItem>
+            <SelectItem value="YEARLY">{t('periodYearly')}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -122,20 +127,20 @@ export default function SalesQuotaList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Kullanıcı</TableHead>
-              <TableHead>Periyot</TableHead>
-              <TableHead>Hedef</TableHead>
-              <TableHead>Gerçekleşen</TableHead>
-              <TableHead>Başarı</TableHead>
-              <TableHead>Tarih Aralığı</TableHead>
-              <TableHead className="text-right">İşlemler</TableHead>
+              <TableHead>{t('tableHeaders.user')}</TableHead>
+              <TableHead>{t('tableHeaders.period')}</TableHead>
+              <TableHead>{t('tableHeaders.target')}</TableHead>
+              <TableHead>{t('tableHeaders.actual')}</TableHead>
+              <TableHead>{t('tableHeaders.achievement')}</TableHead>
+              <TableHead>{t('tableHeaders.dateRange')}</TableHead>
+              <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {quotas.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center text-gray-500 py-8">
-                  Kota bulunamadı
+                  {t('noQuotasFound')}
                 </TableCell>
               </TableRow>
             ) : (
@@ -146,8 +151,8 @@ export default function SalesQuotaList() {
                   </TableCell>
                   <TableCell>
                     <Badge className="bg-blue-100 text-blue-800 border-0">
-                      {quota.period === 'MONTHLY' ? 'Aylık' :
-                       quota.period === 'QUARTERLY' ? 'Çeyreklik' : 'Yıllık'}
+                      {quota.period === 'MONTHLY' ? t('periodMonthly') :
+                       quota.period === 'QUARTERLY' ? t('periodQuarterly') : t('periodYearly')}
                     </Badge>
                   </TableCell>
                   <TableCell>

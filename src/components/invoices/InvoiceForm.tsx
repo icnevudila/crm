@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
+import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -36,52 +37,14 @@ import {
 } from '@/components/ui/table'
 import { formatCurrency } from '@/lib/utils'
 
-const invoiceSchema = z.object({
-  title: z.string().min(1, 'Başlık gereklidir').max(200, 'Başlık en fazla 200 karakter olabilir'),
-  status: z.enum(['DRAFT', 'SENT', 'SHIPPED', 'RECEIVED', 'PAID', 'OVERDUE', 'CANCELLED']).default('DRAFT'),
-  total: z.number().min(0, 'Toplam 0\'dan büyük olmalı').max(999999999, 'Toplam çok büyük'),
-  invoiceType: z.enum(['SALES', 'PURCHASE', 'SERVICE_SALES', 'SERVICE_PURCHASE']).default('SALES'), // SALES (Satış), PURCHASE (Alış), SERVICE_SALES (Hizmet Satış), SERVICE_PURCHASE (Hizmet Alım)
-  serviceDescription: z.string().max(1000, 'Hizmet açıklaması en fazla 1000 karakter olabilir').optional(), // Hizmet faturaları için hizmet açıklaması
-  customerId: z.string().optional(),
-  quoteId: z.string().optional(),
-  vendorId: z.string().optional(),
-  customerCompanyId: z.string().optional(), // Firma bazlı ilişki
-  invoiceNumber: z.string().max(50, 'Fatura numarası en fazla 50 karakter olabilir').optional(),
-  dueDate: z.string().optional(),
-  paymentDate: z.string().optional(),
-  taxRate: z.number().min(0, 'KDV oranı 0-100 arası olmalı').max(100, 'KDV oranı 0-100 arası olmalı').optional(),
-  billingAddress: z.string().max(500, 'Adres en fazla 500 karakter olabilir').optional(),
-  billingCity: z.string().max(100, 'Şehir en fazla 100 karakter olabilir').optional(),
-  billingTaxNumber: z.string().max(50, 'Vergi numarası en fazla 50 karakter olabilir').optional(),
-  paymentMethod: z.enum(['CASH', 'BANK_TRANSFER', 'CHECK', 'CREDIT_CARD', 'OTHER']).optional(),
-  paymentNotes: z.string().max(500, 'Ödeme notları en fazla 500 karakter olabilir').optional(),
-  description: z.string().max(2000, 'Açıklama en fazla 2000 karakter olabilir').optional(),
-}).refine((data) => {
-  // SALES veya SERVICE_SALES faturası için müşteri zorunlu
-  if ((data.invoiceType === 'SALES' || data.invoiceType === 'SERVICE_SALES') && !data.customerId) {
-    return false
-  }
-  // PURCHASE veya SERVICE_PURCHASE faturası için tedarikçi zorunlu
-  if ((data.invoiceType === 'PURCHASE' || data.invoiceType === 'SERVICE_PURCHASE') && !data.vendorId) {
-    return false
-  }
-  // Hizmet faturaları için hizmet açıklaması zorunlu
-  if ((data.invoiceType === 'SERVICE_SALES' || data.invoiceType === 'SERVICE_PURCHASE') && (!data.serviceDescription || data.serviceDescription.trim() === '')) {
-    return false
-  }
-  return true
-}, {
-  message: 'Satış faturası için müşteri, alış faturası için tedarikçi, hizmet faturaları için hizmet açıklaması seçilmelidir',
-  path: ['customerId'], // Hata mesajı customerId alanında gösterilir
-})
-
-type InvoiceFormData = z.infer<typeof invoiceSchema>
-
 interface InvoiceFormProps {
   invoice?: any
   open: boolean
   onClose: () => void
   onSuccess?: (newInvoice: any) => void
+  customerCompanyId?: string
+  customerCompanyName?: string
+  customerId?: string
 }
 
 async function fetchCustomers() {
@@ -121,15 +84,82 @@ interface InvoiceItem {
   total: number
 }
 
-export default function InvoiceForm({ invoice, open, onClose, onSuccess }: InvoiceFormProps) {
+export default function InvoiceForm({
+  invoice,
+  open,
+  onClose,
+  onSuccess,
+  customerCompanyId: customerCompanyIdProp,
+  customerCompanyName,
+  customerId: customerIdProp,
+}: InvoiceFormProps) {
+  const t = useTranslations('invoices.form')
+  const tCommon = useTranslations('common.form')
   const router = useRouter()
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
-  const customerCompanyId = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
+  const searchCustomerCompanyId = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
+  const customerCompanyId = customerCompanyIdProp || searchCustomerCompanyId
   const [loading, setLoading] = useState(false)
   const [invoiceItems, setInvoiceItems] = useState<InvoiceItem[]>([])
   const [itemFormOpen, setItemFormOpen] = useState(false)
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null)
+  const [serviceSubtotal, setServiceSubtotal] = useState<number>(0) // Hizmet faturaları için KDV hariç tutar
+
+  // Schema'yı component içinde oluştur - locale desteği için
+  const invoiceSchema = z.object({
+    title: z.string().min(1, tCommon('titleRequired')).max(200, tCommon('titleMaxLength', { max: 200 })),
+    status: z.enum(['DRAFT', 'SENT', 'SHIPPED', 'RECEIVED', 'PAID', 'OVERDUE', 'CANCELLED']).default('DRAFT'),
+    total: z.number().min(0, t('totalMin')).max(999999999, tCommon('amountMax')),
+    invoiceType: z.enum(['SALES', 'PURCHASE', 'SERVICE_SALES', 'SERVICE_PURCHASE']).default('SALES'), // SALES (Satış), PURCHASE (Alış), SERVICE_SALES (Hizmet Satış), SERVICE_PURCHASE (Hizmet Alım)
+    serviceDescription: z.string().max(1000, t('serviceDescriptionMaxLength')).optional(), // Hizmet faturaları için hizmet açıklaması
+    customerId: z.string().optional(),
+    quoteId: z.string().optional(),
+    vendorId: z.string().optional(),
+    customerCompanyId: z.string().optional(), // Firma bazlı ilişki
+    invoiceNumber: z.string().max(50, t('invoiceNumberMaxLength')).optional(),
+    dueDate: z.string().optional(),
+    paymentDate: z.string().optional(),
+    taxRate: z.number().min(0, t('taxRateRange')).max(100, t('taxRateRange')).optional(),
+    billingAddress: z.string().max(500, t('billingAddressMaxLength')).optional(),
+    billingCity: z.string().max(100, t('billingCityMaxLength')).optional(),
+    billingTaxNumber: z.string().max(50, t('billingTaxNumberMaxLength')).optional(),
+    paymentMethod: z.enum(['CASH', 'BANK_TRANSFER', 'CHECK', 'CREDIT_CARD', 'OTHER']).optional(),
+    paymentNotes: z.string().max(500, t('paymentNotesMaxLength')).optional(),
+    description: z.string().max(2000, t('descriptionMaxLength')).optional(),
+  })
+    .refine((data) => {
+      // SALES veya SERVICE_SALES faturası için müşteri zorunlu
+      if ((data.invoiceType === 'SALES' || data.invoiceType === 'SERVICE_SALES') && !data.customerId) {
+        return false
+      }
+      return true
+    }, {
+      message: t('customerRequired'),
+      path: ['customerId'], // Hata mesajı customerId alanında gösterilir
+    })
+    .refine((data) => {
+      // PURCHASE veya SERVICE_PURCHASE faturası için tedarikçi zorunlu
+      if ((data.invoiceType === 'PURCHASE' || data.invoiceType === 'SERVICE_PURCHASE') && !data.vendorId) {
+        return false
+      }
+      return true
+    }, {
+      message: t('vendorRequired'),
+      path: ['vendorId'], // Hata mesajı vendorId alanında gösterilir
+    })
+    .refine((data) => {
+      // Hizmet faturaları için hizmet açıklaması zorunlu
+      if ((data.invoiceType === 'SERVICE_SALES' || data.invoiceType === 'SERVICE_PURCHASE') && (!data.serviceDescription || data.serviceDescription.trim() === '')) {
+        return false
+      }
+      return true
+    }, {
+      message: t('serviceDescriptionRequired'),
+      path: ['serviceDescription'], // Hata mesajı serviceDescription alanında gösterilir
+    })
+
+  type InvoiceFormData = z.infer<typeof invoiceSchema>
 
   const { data: quotesData } = useQuery({
     queryKey: ['quotes'],
@@ -158,6 +188,12 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
   // Güvenlik kontrolü - her zaman array olmalı
   const quotes = Array.isArray(quotesData) ? quotesData : []
   const customers = Array.isArray(customersData) ? customersData : []
+  const filteredCustomers = customerCompanyId
+    ? customers.filter((customer: any) => customer.customerCompanyId === customerCompanyId)
+    : customers
+  const filteredQuotes = customerCompanyId
+    ? quotes.filter((quote: any) => quote.customerCompanyId === customerCompanyId)
+    : quotes
   const vendors = Array.isArray(vendorsData) ? vendorsData : []
   const products = Array.isArray(productsData) ? productsData : []
 
@@ -174,6 +210,8 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
       title: '',
       status: 'DRAFT',
       total: 0,
+      invoiceType: 'SALES', // Varsayılan fatura tipi
+      serviceDescription: '',
       customerId: '',
       quoteId: '',
       vendorId: '',
@@ -187,6 +225,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
       paymentMethod: undefined,
       paymentNotes: '',
       description: '',
+      customerCompanyId: customerCompanyId || '',
     },
   })
 
@@ -194,6 +233,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
   const quoteId = watch('quoteId')
   const customerId = watch('customerId')
   const taxRate = watch('taxRate') || 18
+  const invoiceType = watch('invoiceType') || 'SALES'
   const selectedCustomer = customers.find((c: any) => c.id === customerId)
   
   // Durum bazlı koruma kontrolü - form alanlarını devre dışı bırakmak için
@@ -219,8 +259,8 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
       if (invoice && invoice.status === 'SHIPPED') {
         const statusName = translateStage(invoice.status, 'invoice')
         toast.warning(
-          `${statusName} durumundaki faturalar düzenlenemez`,
-          'Bu fatura için sevkiyat yapıldı ve stoktan düşüldü. Fatura bilgilerini değiştirmek için önce sevkiyatı iptal etmeniz ve stok işlemini geri almanız gerekir.'
+          t('cannotEditShipped'),
+          t('cannotEditShippedMessage')
         )
         onClose() // Modal'ı kapat
         return
@@ -230,8 +270,8 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
       if (invoice && invoice.status === 'RECEIVED') {
         const statusName = translateStage(invoice.status, 'invoice')
         toast.warning(
-          `${statusName} durumundaki faturalar düzenlenemez`,
-          'Bu fatura için mal kabul edildi ve stoğa girişi yapıldı. Fatura bilgilerini değiştirmek için önce mal kabul işlemini iptal etmeniz ve stok işlemini geri almanız gerekir.'
+          t('cannotEditReceived'),
+          t('cannotEditReceivedMessage')
         )
         onClose() // Modal'ı kapat
         return
@@ -239,7 +279,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
 
       // ÖNEMLİ: Quote'tan oluşturulan faturalar düzenlenemez
       if (invoice && invoice.quoteId) {
-        toast.warning('Tekliften oluşturulan faturalar değiştirilemez', 'Bu fatura tekliften otomatik olarak oluşturuldu. Fatura bilgilerini değiştirmek için önce teklifi reddetmeniz gerekir.')
+        toast.warning(t('cannotEditFromQuote'), t('cannotEditFromQuoteMessage'))
         onClose() // Modal'ı kapat
         return
       }
@@ -284,6 +324,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
           title: invoice.title || '',
           status: invoice.status || 'DRAFT',
           total: invoice.total || 0,
+          invoiceType: invoice.invoiceType || 'SALES',
           customerId: invoice.customerId || undefined,
           quoteId: invoice.quoteId || undefined,
           vendorId: invoice.vendorId || undefined,
@@ -297,7 +338,19 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
           paymentMethod: invoice.paymentMethod || undefined,
           paymentNotes: invoice.paymentNotes || '',
           description: invoice.description || '',
+          serviceDescription: invoice.serviceDescription || '',
+          customerCompanyId: invoice.customerCompanyId || customerCompanyId || '',
         })
+        
+        // Hizmet faturası ise serviceSubtotal'i hesapla
+        if (invoice.invoiceType === 'SERVICE_SALES' || invoice.invoiceType === 'SERVICE_PURCHASE') {
+          const total = invoice.total || 0
+          const taxRate = invoice.taxRate || 18
+          const subtotal = total / (1 + (taxRate / 100))
+          setServiceSubtotal(subtotal)
+        } else {
+          setServiceSubtotal(0)
+        }
       } else {
         // Yeni kayıt modu - form'u temizle
         reset({
@@ -305,7 +358,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
           status: 'DRAFT',
           total: 0,
           invoiceType: 'SALES', // Varsayılan: Satış faturası
-          customerId: '',
+          customerId: customerIdProp || '',
           quoteId: '',
           vendorId: '',
           invoiceNumber: '',
@@ -318,11 +371,17 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
           paymentMethod: undefined,
           paymentNotes: '',
           description: '',
+          serviceDescription: '',
+          customerCompanyId: customerCompanyId || '',
         })
         setInvoiceItems([])
+        setServiceSubtotal(0)
+        if (customerIdProp) {
+          setValue('customerId', customerIdProp)
+        }
       }
     }
-  }, [invoice, open, reset])
+  }, [invoice, open, reset, customerCompanyId, customerIdProp, setValue]) // onClose dependency'den çıkarıldı - stable değil
 
   // InvoiceItem ekleme/düzenleme fonksiyonları
   const handleAddItem = (item: InvoiceItem) => {
@@ -353,27 +412,55 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
 
   // Toplam tutarı güncelle (KDV dahil)
   const updateTotal = useCallback(() => {
+    const invoiceType = watch('invoiceType')
     const taxRate = watch('taxRate') || 18
-    const subtotal = invoiceItems.reduce((sum, item) => sum + (item.total || 0), 0)
-    const kdv = subtotal * (taxRate / 100)
-    const total = subtotal + kdv
-    setValue('total', total)
-  }, [invoiceItems, setValue, watch])
+    
+    // Hizmet faturaları için serviceSubtotal kullan
+    if (invoiceType === 'SERVICE_SALES' || invoiceType === 'SERVICE_PURCHASE') {
+      const kdv = serviceSubtotal * (taxRate / 100)
+      const total = serviceSubtotal + kdv
+      setValue('total', total)
+    } else {
+      // Ürünlü faturalar için invoiceItems kullan
+      const subtotal = invoiceItems.reduce((sum, item) => sum + (item.total || 0), 0)
+      const kdv = subtotal * (taxRate / 100)
+      const total = subtotal + kdv
+      setValue('total', total)
+    }
+  }, [invoiceItems, serviceSubtotal, setValue, watch])
 
   useEffect(() => {
     updateTotal()
   }, [updateTotal])
 
+  // Hizmet faturalarında subtotal veya KDV değişince total'i güncelle
+  useEffect(() => {
+    const invoiceType = watch('invoiceType')
+    if (invoiceType === 'SERVICE_SALES' || invoiceType === 'SERVICE_PURCHASE') {
+      updateTotal()
+    }
+  }, [serviceSubtotal, watch('taxRate'), watch('invoiceType'), updateTotal])
+
   // Müşteri seçilince otomatik doldur
   const handleCustomerChange = (customerId: string) => {
     setValue('customerId', customerId)
-    const customer = customers.find((c: any) => c.id === customerId)
+    const customer = filteredCustomers.find((c: any) => c.id === customerId)
     if (customer) {
       if (customer.address) setValue('billingAddress', customer.address)
       if (customer.city) setValue('billingCity', customer.city)
       if (customer.taxNumber) setValue('billingTaxNumber', customer.taxNumber)
     }
   }
+
+  useEffect(() => {
+    if (open && !invoice && filteredCustomers.length === 1 && !customerId) {
+      const customer = filteredCustomers[0]
+      setValue('customerId', customer.id)
+      if (customer.address) setValue('billingAddress', customer.address)
+      if (customer.city) setValue('billingCity', customer.city)
+      if (customer.taxNumber) setValue('billingTaxNumber', customer.taxNumber)
+    }
+  }, [open, invoice, filteredCustomers, customerId, setValue])
 
   const mutation = useMutation({
     mutationFn: async (data: InvoiceFormData) => {
@@ -444,8 +531,8 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
           console.error('InvoiceItem save error:', itemError)
           // InvoiceItem kaydetme hatası ana işlemi engellemez, sadece uyarı ver
           toast.warning(
-            'Fatura kaydedildi ancak bazı ürünler eklenemedi',
-            itemError?.message || 'Ürün listesi kaydetme hatası. Faturayı düzenleyerek tekrar deneyin.'
+            t('itemsSaveWarningTitle'),
+            itemError?.message || t('itemsSaveWarningMessage')
           )
         }
       }
@@ -453,6 +540,16 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
       return result
     },
     onSuccess: async (result) => {
+      // Toast mesajı göster
+      if (invoice) {
+        toast.success(t('invoiceUpdated'), t('invoiceUpdatedMessage', { title: result.title }))
+      } else {
+        const message = customerCompanyName 
+          ? t('invoiceCreatedMessageWithCompany', { company: customerCompanyName, title: result.title })
+          : t('invoiceCreatedMessage', { title: result.title })
+        toast.success(t('invoiceCreated'), message)
+      }
+      
       // Dashboard güncellemeleri - invoice-kanban ve kpis query'lerini invalidate et
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['invoices'] }),
@@ -472,11 +569,14 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
       ])
       
       // Parent component'e callback gönder - optimistic update için
+      // CRITICAL FIX: onSuccess'i önce çağır, sonra form'u kapat
+      // onSuccess içinde onClose çağrılmamalı - form zaten kendi içinde onClose çağırıyor
       if (onSuccess) {
         await onSuccess(result)
       }
       reset()
       setInvoiceItems([]) // InvoiceItem'ları temizle
+      // Form'u kapat - onSuccess callback'inden SONRA (sonsuz döngü önleme)
       onClose()
     },
   })
@@ -522,6 +622,8 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
         customerId: data.customerId && data.customerId !== '' ? data.customerId : undefined,
         quoteId: data.quoteId && data.quoteId !== '' ? data.quoteId : undefined,
         vendorId: data.vendorId && data.vendorId !== '' ? data.vendorId : undefined,
+        serviceDescription: data.serviceDescription && data.serviceDescription.trim() !== '' ? data.serviceDescription.trim() : undefined,
+        invoiceType: data.invoiceType, // invoiceType'ı açıkça ekle
       }
       await mutation.mutateAsync(cleanData)
     } catch (error: any) {
@@ -540,40 +642,53 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {invoice ? 'Fatura Düzenle' : 'Yeni Fatura'}
+            {invoice ? t('editTitle') : t('newTitle')}
           </DialogTitle>
           <DialogDescription>
-            {invoice ? 'Fatura bilgilerini güncelleyin' : 'Yeni fatura oluşturun'}
+            {invoice ? t('editDescription') : t('newDescription')}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {customerCompanyId && (
+            <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3 text-sm text-indigo-700">
+              <p className="font-semibold">
+                {t('companyLabel')}: {customerCompanyName || t('selectedCompany')}
+              </p>
+              <p>
+                {filteredCustomers.length > 0
+                  ? t('customersCount', { count: filteredCustomers.length })
+                  : t('noCustomersFoundMessage')}
+              </p>
+            </div>
+          )}
+          <input type="hidden" {...register('customerCompanyId')} />
           {/* ÖNEMLİ: Durum bazlı koruma bilgilendirmeleri */}
           {invoice && invoice.status === 'PAID' && (
             <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-4">
               <p className="text-sm text-blue-800 font-semibold">
-                🔒 Bu fatura ödendi ve finans kaydı oluşturuldu. Fatura bilgileri değiştirilemez veya silinemez.
+                {t('paidWarning')}
               </p>
             </div>
           )}
           {invoice && invoice.status === 'SHIPPED' && (
             <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-4">
               <p className="text-sm text-green-800 font-semibold">
-                🔒 Sevkiyatı yapıldı, stoktan düşüldü. Bu fatura değiştirilemez veya silinemez.
+                {t('shippedWarning')}
               </p>
             </div>
           )}
           {invoice && invoice.status === 'RECEIVED' && (
             <div className="bg-teal-50 border border-teal-200 rounded-md p-4 mb-4">
               <p className="text-sm text-teal-800 font-semibold">
-                🔒 Mal kabul edildi, stoğa girişi yapıldı. Bu fatura değiştirilemez veya silinemez.
+                {t('receivedWarning')}
               </p>
             </div>
           )}
           {invoice && invoice.quoteId && (
             <div className="bg-indigo-50 border border-indigo-200 rounded-md p-4 mb-4">
               <p className="text-sm text-indigo-800 font-semibold">
-                ℹ️ Bu fatura tekliften oluşturuldu. Değiştirilemez.
+                {t('fromQuoteWarning')}
               </p>
             </div>
           )}
@@ -582,18 +697,18 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
           {(invoice?.status === 'PAID' || invoice?.status === 'SHIPPED' || invoice?.status === 'RECEIVED' || invoice?.quoteId) && (
             <div className="bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
               <p className="text-xs text-gray-600">
-                ⚠️ Bu fatura korumalı durumda olduğu için form alanları düzenlenemez.
+                {t('protectedWarning')}
               </p>
             </div>
           )}
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Title */}
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">Başlık *</label>
+              <label className="text-sm font-medium">{t('titleLabel')} *</label>
               <Input
                 {...register('title')}
-                placeholder="Fatura başlığı"
+                placeholder={t('titlePlaceholder')}
                 disabled={loading || isProtected}
               />
               {errors.title && (
@@ -603,17 +718,20 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
 
             {/* Invoice Number */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Fatura Numarası</label>
+              <label className="text-sm font-medium">{t('invoiceNumberLabel')}</label>
               <Input
                 {...register('invoiceNumber')}
-                placeholder="FAT-2024-001"
+                placeholder={t('invoiceNumberPlaceholder')}
                 disabled={loading || isProtected}
               />
+              <p className="text-xs text-gray-500">
+                {t('invoiceNumberHint')}
+              </p>
             </div>
 
             {/* Invoice Type */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Fatura Tipi *</label>
+              <label className="text-sm font-medium">{t('invoiceTypeLabel')} *</label>
               <Select
                 value={watch('invoiceType') || 'SALES'}
                 onValueChange={(value) => {
@@ -624,42 +742,39 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                     setValue('customerId', undefined)
                     if (value === 'SERVICE_PURCHASE') {
                       setInvoiceItems([]) // Hizmet faturalarında ürün listesi temizlenir
+                      setServiceSubtotal(0) // Hizmet faturası değiştiğinde tutarı sıfırla
                     }
                   } else {
                     // Satış faturası - tedarikçi seçimini kaldır, müşteri seçimi aktif
                     setValue('vendorId', undefined)
                     if (value === 'SERVICE_SALES') {
                       setInvoiceItems([]) // Hizmet faturalarında ürün listesi temizlenir
+                      setServiceSubtotal(0) // Hizmet faturası değiştiğinde tutarı sıfırla
                     }
+                  }
+                  // Ürünlü faturaya geçildiğinde serviceSubtotal'i sıfırla
+                  if (value === 'SALES' || value === 'PURCHASE') {
+                    setServiceSubtotal(0)
                   }
                 }}
                 disabled={loading || isProtected}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Fatura tipi seçin" />
+                  <SelectValue placeholder={t('invoiceTypePlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="SALES">Satış Faturası (Stok Düşer)</SelectItem>
-                  <SelectItem value="PURCHASE">Alış Faturası (Stok Artar)</SelectItem>
-                  <SelectItem value="SERVICE_SALES">Hizmet Satış Faturası</SelectItem>
-                  <SelectItem value="SERVICE_PURCHASE">Hizmet Alım Faturası</SelectItem>
+                  <SelectItem value="SALES">{t('invoiceTypeSales')}</SelectItem>
+                  <SelectItem value="PURCHASE">{t('invoiceTypePurchase')}</SelectItem>
+                  <SelectItem value="SERVICE_SALES">{t('invoiceTypeServiceSales')}</SelectItem>
+                  <SelectItem value="SERVICE_PURCHASE">{t('invoiceTypeServicePurchase')}</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-gray-500">
-                {watch('invoiceType') === 'PURCHASE' 
-                  ? 'Tedarikçiden alış - stok artacak' 
-                  : watch('invoiceType') === 'SERVICE_SALES'
-                  ? 'Müşteriye hizmet satışı - ürün seçimi yok'
-                  : watch('invoiceType') === 'SERVICE_PURCHASE'
-                  ? 'Tedarikçiden hizmet alımı - ürün seçimi yok'
-                  : 'Müşteriye satış - stok düşecek'}
-              </p>
             </div>
 
-            {/* Customer (Sadece Satış Faturası için) */}
-            {watch('invoiceType') === 'SALES' && (
+            {/* Customer (Satış ve Hizmet Satış Faturaları için) */}
+            {(watch('invoiceType') === 'SALES' || watch('invoiceType') === 'SERVICE_SALES') && (
               <div className="space-y-2">
-                <label className="text-sm font-medium">Müşteri *</label>
+                <label className="text-sm font-medium">{t('customerLabel')} *</label>
                 <Select
                   value={customerId || 'none'}
                   onValueChange={(value) => {
@@ -669,18 +784,18 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                       handleCustomerChange(value)
                     }
                   }}
-                  disabled={loading || isProtected}
+                  disabled={loading || isProtected || filteredCustomers.length === 0}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Müşteri seçin" />
+                  <SelectTrigger className={errors.customerId ? 'border-red-500' : ''}>
+                    <SelectValue placeholder={t('customerPlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
-                    {customers.length === 0 ? (
-                      <SelectItem value="none" disabled>Müşteri bulunamadı</SelectItem>
+                    {filteredCustomers.length === 0 ? (
+                      <SelectItem value="none" disabled>{t('noCustomersFound')}</SelectItem>
                     ) : (
                       <>
-                        <SelectItem value="none">Müşteri Seçilmedi</SelectItem>
-                        {customers.map((customer: any) => (
+                        <SelectItem value="none">{tCommon('notSelected')}</SelectItem>
+                        {filteredCustomers.map((customer: any) => (
                           <SelectItem key={customer.id} value={customer.id}>
                             {customer.name} {customer.email && `(${customer.email})`}
                           </SelectItem>
@@ -689,23 +804,26 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                     )}
                   </SelectContent>
                 </Select>
+                {errors.customerId && (
+                  <p className="text-sm text-red-600">{errors.customerId.message}</p>
+                )}
               </div>
             )}
 
             {/* Quote */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Teklif</label>
+              <label className="text-sm font-medium">{t('quoteLabel')}</label>
               <Select
                 value={quoteId || 'none'}
                 onValueChange={(value) => setValue('quoteId', value === 'none' ? undefined : value)}
                 disabled={loading || isProtected}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Teklif seçin (Opsiyonel)" />
+                  <SelectValue placeholder={t('quotePlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Teklif Yok</SelectItem>
-                  {quotes
+                  <SelectItem value="none">{tCommon('none')}</SelectItem>
+                  {filteredQuotes
                     .filter((quote: any) => quote.status === 'ACCEPTED')
                     .map((quote: any) => (
                       <SelectItem key={quote.id} value={quote.id}>
@@ -716,20 +834,20 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
               </Select>
             </div>
 
-            {/* Vendor (Sadece Alış Faturası için) */}
-            {watch('invoiceType') === 'PURCHASE' && (
+            {/* Vendor (Alış ve Hizmet Alım Faturaları için) */}
+            {(watch('invoiceType') === 'PURCHASE' || watch('invoiceType') === 'SERVICE_PURCHASE') && (
               <div className="space-y-2">
-                <label className="text-sm font-medium">Tedarikçi *</label>
+                <label className="text-sm font-medium">{t('vendorLabel')} *</label>
                 <Select
                   value={watch('vendorId') || 'none'}
                   onValueChange={(value) => setValue('vendorId', value === 'none' ? undefined : value)}
                   disabled={loading || isProtected}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Tedarikçi seçin" />
+                  <SelectTrigger className={errors.vendorId ? 'border-red-500' : ''}>
+                    <SelectValue placeholder={t('vendorPlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Tedarikçi Seçilmedi</SelectItem>
+                    <SelectItem value="none">{tCommon('notSelected')}</SelectItem>
                     {vendors.map((vendor: any) => (
                       <SelectItem key={vendor.id} value={vendor.id}>
                         {vendor.name}
@@ -737,12 +855,35 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.vendorId && (
+                  <p className="text-sm text-red-600">{errors.vendorId.message}</p>
+                )}
+              </div>
+            )}
+
+            {/* Service Description (Hizmet Faturaları için) */}
+            {(watch('invoiceType') === 'SERVICE_SALES' || watch('invoiceType') === 'SERVICE_PURCHASE') && (
+              <div className="space-y-2 md:col-span-2">
+                <label className="text-sm font-medium">{t('serviceDescriptionLabel')} *</label>
+                <Textarea
+                  {...register('serviceDescription')}
+                  placeholder={t('serviceDescriptionPlaceholder')}
+                  rows={4}
+                  disabled={loading || isProtected}
+                  className={errors.serviceDescription ? 'border-red-500' : ''}
+                />
+                {errors.serviceDescription && (
+                  <p className="text-sm text-red-600">{errors.serviceDescription.message}</p>
+                )}
+                <p className="text-xs text-gray-500">
+                  {t('serviceDescriptionHint')}
+                </p>
               </div>
             )}
 
             {/* Tax Rate */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">KDV Oranı (%)</label>
+              <label className="text-sm font-medium">{t('taxRateLabel')}</label>
               <Input
                 type="number"
                 step="0.01"
@@ -752,35 +893,68 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                   valueAsNumber: true,
                   onChange: () => updateTotal() // KDV değişince toplamı güncelle
                 })}
-                placeholder="18"
+                placeholder={t('taxRatePlaceholder')}
                 disabled={loading || isProtected}
               />
             </div>
 
+            {/* Tutar (KDV Hariç) - Sadece Hizmet Faturaları için */}
+            {(watch('invoiceType') === 'SERVICE_SALES' || watch('invoiceType') === 'SERVICE_PURCHASE') && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">{t('subtotalLabel')} *</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={serviceSubtotal}
+                  onChange={(e) => {
+                    const value = parseFloat(e.target.value) || 0
+                    setServiceSubtotal(value)
+                  }}
+                  placeholder={t('subtotalPlaceholder')}
+                  disabled={loading || isProtected}
+                />
+              </div>
+            )}
+
             {/* Total (KDV Dahil) */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Toplam (₺) *</label>
+              <label className="text-sm font-medium">{t('totalLabel')} *</label>
               <Input
                 type="number"
                 step="0.01"
                 {...register('total', { valueAsNumber: true })}
-                placeholder="0.00"
+                placeholder={t('totalPlaceholder')}
                 disabled={loading || isProtected}
-                readOnly // Otomatik hesaplanıyor
+                readOnly // Her zaman otomatik hesaplanıyor
               />
               {errors.total && (
                 <p className="text-sm text-red-600">{errors.total.message}</p>
               )}
-              <p className="text-xs text-gray-500">
-                KDV Hariç: {formatCurrency(invoiceItems.reduce((sum, item) => sum + (item.total || 0), 0))} + 
-                KDV (%{watch('taxRate') || 18}): {formatCurrency(invoiceItems.reduce((sum, item) => sum + (item.total || 0), 0) * ((watch('taxRate') || 18) / 100))} = 
-                KDV Dahil: {formatCurrency((invoiceItems.reduce((sum, item) => sum + (item.total || 0), 0) * (1 + ((watch('taxRate') || 18) / 100))))}
-              </p>
+              {(watch('invoiceType') === 'SALES' || watch('invoiceType') === 'PURCHASE') ? (
+                <p className="text-xs text-gray-500">
+                  KDV Hariç: {formatCurrency(invoiceItems.reduce((sum, item) => sum + (item.total || 0), 0))} + 
+                  KDV (%{watch('taxRate') || 18}): {formatCurrency(invoiceItems.reduce((sum, item) => sum + (item.total || 0), 0) * ((watch('taxRate') || 18) / 100))} = 
+                  KDV Dahil: {formatCurrency((invoiceItems.reduce((sum, item) => sum + (item.total || 0), 0) * (1 + ((watch('taxRate') || 18) / 100))))}
+                </p>
+              ) : (watch('invoiceType') === 'SERVICE_SALES' || watch('invoiceType') === 'SERVICE_PURCHASE') ? (
+                <p className="text-xs text-gray-500">
+                  {serviceSubtotal > 0 ? (
+                    <>
+                      KDV Hariç: {formatCurrency(serviceSubtotal)} + 
+                      KDV (%{watch('taxRate') || 18}): {formatCurrency(serviceSubtotal * ((watch('taxRate') || 18) / 100))} = 
+                      KDV Dahil: {formatCurrency(serviceSubtotal * (1 + ((watch('taxRate') || 18) / 100)))}
+                    </>
+                  ) : (
+                    'Tutar (KDV hariç) girin, toplam otomatik hesaplanacaktır.'
+                  )}
+                </p>
+              ) : null}
             </div>
 
             {/* Due Date */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Vade Tarihi</label>
+              <label className="text-sm font-medium">{t('dueDateLabel')}</label>
               <Input
                 type="date"
                 {...register('dueDate')}
@@ -791,7 +965,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
             {/* Payment Date */}
             {status === 'PAID' && (
               <div className="space-y-2">
-                <label className="text-sm font-medium">Ödeme Tarihi</label>
+                <label className="text-sm font-medium">{t('paymentDateLabel')}</label>
                 <Input
                   type="date"
                   {...register('paymentDate')}
@@ -802,7 +976,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
 
             {/* Status */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Durum</label>
+              <label className="text-sm font-medium">{t('statusLabel')}</label>
               <Select
                 value={status}
                 onValueChange={(value) =>
@@ -814,23 +988,23 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="DRAFT">Taslak</SelectItem>
-                  <SelectItem value="SENT">Gönderildi</SelectItem>
-                  <SelectItem value="SHIPPED">Sevkiyatı Yapıldı</SelectItem>
-                  <SelectItem value="RECEIVED">Mal Kabul Edildi</SelectItem>
-                  <SelectItem value="PAID">Ödendi</SelectItem>
-                  <SelectItem value="OVERDUE">Vadesi Geçmiş</SelectItem>
-                  <SelectItem value="CANCELLED">İptal</SelectItem>
+                  <SelectItem value="DRAFT">{tCommon('statusDraft')}</SelectItem>
+                  <SelectItem value="SENT">{tCommon('statusSent')}</SelectItem>
+                  <SelectItem value="SHIPPED">{tCommon('statusShipped')}</SelectItem>
+                  <SelectItem value="RECEIVED">{tCommon('statusReceived')}</SelectItem>
+                  <SelectItem value="PAID">{tCommon('statusPaid')}</SelectItem>
+                  <SelectItem value="OVERDUE">{tCommon('statusOverdue')}</SelectItem>
+                  <SelectItem value="CANCELLED">{tCommon('statusCancelled')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {/* Billing Address */}
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">Fatura Adresi</label>
+              <label className="text-sm font-medium">{t('billingAddressLabel')}</label>
               <Textarea
                 {...register('billingAddress')}
-                placeholder="Fatura gönderim adresi"
+                placeholder={t('billingAddressPlaceholder')}
                 rows={2}
                 disabled={loading || isProtected}
               />
@@ -838,20 +1012,20 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
 
             {/* Billing City */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Fatura Şehri</label>
+              <label className="text-sm font-medium">{t('billingCityLabel')}</label>
               <Input
                 {...register('billingCity')}
-                placeholder="Şehir"
+                placeholder={t('billingCityPlaceholder')}
                 disabled={loading || isProtected}
               />
             </div>
 
             {/* Billing Tax Number */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Vergi Numarası</label>
+              <label className="text-sm font-medium">{t('billingTaxNumberLabel')}</label>
               <Input
                 {...register('billingTaxNumber')}
-                placeholder="Vergi numarası"
+                placeholder={t('billingTaxNumberPlaceholder')}
                 disabled={loading || isProtected}
               />
             </div>
@@ -859,22 +1033,22 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
             {/* Payment Method */}
             {status === 'PAID' && (
               <div className="space-y-2">
-                <label className="text-sm font-medium">Ödeme Yöntemi</label>
+                <label className="text-sm font-medium">{t('paymentMethodLabel')}</label>
                 <Select
                   value={watch('paymentMethod') || 'none'}
                   onValueChange={(value) => setValue('paymentMethod', value === 'none' ? undefined : value as any)}
                   disabled={loading || isProtected}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Ödeme yöntemi seçin" />
+                    <SelectValue placeholder={t('paymentMethodPlaceholder')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Seçilmedi</SelectItem>
-                    <SelectItem value="CASH">Nakit</SelectItem>
-                    <SelectItem value="BANK_TRANSFER">Banka Transferi</SelectItem>
-                    <SelectItem value="CHECK">Çek</SelectItem>
-                    <SelectItem value="CREDIT_CARD">Kredi Kartı</SelectItem>
-                    <SelectItem value="OTHER">Diğer</SelectItem>
+                    <SelectItem value="none">{tCommon('notSelected')}</SelectItem>
+                    <SelectItem value="CASH">{t('paymentMethodCash')}</SelectItem>
+                    <SelectItem value="BANK_TRANSFER">{t('paymentMethodBankTransfer')}</SelectItem>
+                    <SelectItem value="CHECK">{t('paymentMethodCheck')}</SelectItem>
+                    <SelectItem value="CREDIT_CARD">{t('paymentMethodCreditCard')}</SelectItem>
+                    <SelectItem value="OTHER">{t('paymentMethodOther')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -883,10 +1057,10 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
             {/* Payment Notes */}
             {status === 'PAID' && (
               <div className="space-y-2">
-                <label className="text-sm font-medium">Ödeme Notları</label>
+                <label className="text-sm font-medium">{t('paymentNotesLabel')}</label>
                 <Input
                   {...register('paymentNotes')}
-                  placeholder="Ödeme notları"
+                  placeholder={t('paymentNotesPlaceholder')}
                   disabled={loading || isProtected}
                 />
               </div>
@@ -894,22 +1068,26 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
 
             {/* Description */}
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">Açıklama</label>
+              <label className="text-sm font-medium">{t('descriptionLabel')}</label>
               <Textarea
                 {...register('description')}
-                placeholder="Fatura açıklaması ve notlar"
+                placeholder={t('descriptionPlaceholder')}
                 rows={3}
                 disabled={loading || isProtected}
               />
             </div>
           </div>
 
-          {/* Invoice Items Section */}
+          {/* Invoice Items Section - Sadece Ürünlü Faturalar için */}
+          {(watch('invoiceType') === 'SALES' || watch('invoiceType') === 'PURCHASE') && (
           <div className="space-y-4 border-t pt-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold flex items-center gap-2">
                 <Package className="h-5 w-5" />
-                Fatura Kalemleri
+                {t('itemsSectionTitle')}
+                {(watch('invoiceType') === 'SALES' || watch('invoiceType') === 'PURCHASE') && (
+                  <span className="text-red-500">*</span>
+                )}
               </h3>
               <Button
                 type="button"
@@ -922,7 +1100,7 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                 disabled={loading || isProtected}
               >
                 <Plus className="mr-2 h-4 w-4" />
-                Ürün Ekle
+                {t('addProduct')}
               </Button>
             </div>
 
@@ -935,9 +1113,26 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                   </svg>
                 </div>
                 <div className="flex-1">
-                  <h4 className="text-sm font-semibold text-amber-800 mb-1">Malzeme Gerekli</h4>
+                  <h4 className="text-sm font-semibold text-amber-800 mb-1">{t('productRequiredTitle')}</h4>
                   <p className="text-sm text-amber-700">
-                    Lütfen satın alınan ürünleri ekleyin. Malzeme eklemeden alış faturası oluşturulamaz ve mal kabul kaydı açılamaz.
+                    {t('purchaseProductRequiredMessage')}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* ÖNEMLİ: Satış faturası için malzeme uyarısı */}
+            {watch('invoiceType') === 'SALES' && invoiceItems.length === 0 && !invoice && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+                <div className="flex-shrink-0 mt-0.5">
+                  <svg className="h-5 w-5 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <h4 className="text-sm font-semibold text-amber-800 mb-1">{t('productRequiredTitle')}</h4>
+                  <p className="text-sm text-amber-700">
+                    {t('salesProductRequiredMessage')}
                   </p>
                 </div>
               </div>
@@ -948,18 +1143,18 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Ürün</TableHead>
-                      <TableHead>Miktar</TableHead>
-                      <TableHead>Birim Fiyat</TableHead>
-                      <TableHead className="text-right">Toplam</TableHead>
-                      <TableHead className="text-right">İşlemler</TableHead>
+                      <TableHead>{t('tableProduct')}</TableHead>
+                      <TableHead>{t('tableQuantity')}</TableHead>
+                      <TableHead>{t('tableUnitPrice')}</TableHead>
+                      <TableHead className="text-right">{t('tableTotal')}</TableHead>
+                      <TableHead className="text-right">{t('tableActions')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {invoiceItems.map((item, index) => (
                       <TableRow key={index}>
                         <TableCell className="font-medium">
-                          {item.productName || products.find((p: any) => p.id === item.productId)?.name || 'Ürün bulunamadı'}
+                          {item.productName || products.find((p: any) => p.id === item.productId)?.name || t('productNotFound')}
                         </TableCell>
                         <TableCell>{item.quantity}</TableCell>
                         <TableCell>{formatCurrency(item.unitPrice)}</TableCell>
@@ -993,11 +1188,33 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                     ))}
                   </TableBody>
                 </Table>
+                <div className="p-4 bg-gray-50 border-t">
+                  <div className="flex justify-end gap-6">
+                    <div className="text-right">
+                      <p className="text-sm text-gray-600">{t('itemsSubtotal')}</p>
+                      <p className="text-lg font-semibold">
+                        {formatCurrency(invoiceItems.reduce((sum, item) => sum + (item.total || 0), 0))}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-gray-600">{t('itemsTax')} (%{taxRate})</p>
+                      <p className="text-lg font-semibold">
+                        {formatCurrency(invoiceItems.reduce((sum, item) => sum + (item.total || 0), 0) * (taxRate / 100))}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-gray-600">{t('itemsTotal')}</p>
+                      <p className="text-xl font-bold">
+                        {formatCurrency(invoiceItems.reduce((sum, item) => sum + (item.total || 0), 0) * (1 + (taxRate / 100)))}
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="text-center py-8 text-gray-500 border rounded-lg">
                 <Package className="h-12 w-12 mx-auto mb-2 text-gray-400" />
-                <p>Henüz ürün eklenmemiş</p>
+                <p>{tCommon('noData')}</p>
                 <Button
                   type="button"
                   variant="outline"
@@ -1010,11 +1227,12 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
                   className="mt-4"
                 >
                   <Plus className="mr-2 h-4 w-4" />
-                  İlk Ürünü Ekle
+                  {t('addProduct')}
                 </Button>
               </div>
             )}
           </div>
+          )}
 
           {/* Buttons */}
           <div className="flex justify-end gap-2 pt-4">
@@ -1024,14 +1242,14 @@ export default function InvoiceForm({ invoice, open, onClose, onSuccess }: Invoi
               onClick={onClose}
               disabled={loading}
             >
-              İptal
+              {t('cancel')}
             </Button>
             <Button
               type="submit"
               className="bg-gradient-primary text-white"
               disabled={loading || isProtected}
             >
-              {loading ? 'Kaydediliyor...' : invoice ? (isProtected ? 'Değiştirilemez' : 'Güncelle') : 'Kaydet'}
+              {loading ? t('saving') : invoice ? (isProtected ? t('cannotEdit') : t('update')) : t('save')}
             </Button>
           </div>
         </form>
@@ -1064,6 +1282,8 @@ interface InvoiceItemFormModalProps {
 }
 
 function InvoiceItemFormModal({ products, item, open, onClose, onSuccess }: InvoiceItemFormModalProps) {
+  const t = useTranslations('invoices.form')
+  const tCommon = useTranslations('common.form')
   const [productId, setProductId] = useState(item?.productId || '')
   const [quantity, setQuantity] = useState(item?.quantity || 1)
   const [unitPrice, setUnitPrice] = useState(item?.unitPrice || 0)
@@ -1093,8 +1313,8 @@ function InvoiceItemFormModal({ products, item, open, onClose, onSuccess }: Invo
     e.preventDefault()
     if (!productId || quantity <= 0 || unitPrice < 0) {
       toast.warning(
-        'Ürün bilgilerini eksiksiz doldurun',
-        'Ürün seçmelisiniz, miktar 0\'dan büyük olmalı ve birim fiyat eksi olamaz.'
+        t('itemFormValidationTitle'),
+        t('itemFormValidationMessage')
       )
       return
     }
@@ -1113,19 +1333,19 @@ function InvoiceItemFormModal({ products, item, open, onClose, onSuccess }: Invo
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{item ? 'Ürün Düzenle' : 'Ürün Ekle'}</DialogTitle>
+          <DialogTitle>{item ? t('itemEditTitle') : t('itemNewTitle')}</DialogTitle>
           <DialogDescription>
-            Faturaya ürün ekleyin. Stok otomatik güncellenecektir.
+            {t('itemDescription')}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Ürün Seçimi */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Ürün *</label>
+            <label className="text-sm font-medium">{t('productLabel')} *</label>
             <Select value={productId} onValueChange={setProductId}>
               <SelectTrigger>
-                <SelectValue placeholder="Ürün seçin" />
+                <SelectValue placeholder={t('productPlaceholder')} />
               </SelectTrigger>
               <SelectContent>
                 {products.map((product: any) => (
@@ -1139,34 +1359,34 @@ function InvoiceItemFormModal({ products, item, open, onClose, onSuccess }: Invo
 
           {/* Miktar */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Miktar *</label>
+            <label className="text-sm font-medium">{t('quantityLabel')} *</label>
             <Input
               type="number"
               step="0.01"
               min="0.01"
               value={quantity}
               onChange={(e) => setQuantity(parseFloat(e.target.value) || 0)}
-              placeholder="1"
+              placeholder={t('quantityPlaceholder')}
             />
           </div>
 
           {/* Birim Fiyat */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Birim Fiyat (₺) *</label>
+            <label className="text-sm font-medium">{t('priceLabel')} *</label>
             <Input
               type="number"
               step="0.01"
               min="0"
               value={unitPrice}
               onChange={(e) => setUnitPrice(parseFloat(e.target.value) || 0)}
-              placeholder="0.00"
+              placeholder={t('pricePlaceholder')}
             />
           </div>
 
           {/* Toplam */}
           <div className="bg-gray-50 rounded-lg p-4">
             <div className="flex justify-between items-center">
-              <span className="text-sm font-medium text-gray-600">Toplam</span>
+              <span className="text-sm font-medium text-gray-600">{t('totalDisplay')}</span>
               <span className="text-xl font-bold text-gray-900">
                 {formatCurrency(total)}
               </span>
@@ -1176,10 +1396,10 @@ function InvoiceItemFormModal({ products, item, open, onClose, onSuccess }: Invo
           {/* Buttons */}
           <div className="flex justify-end gap-2 pt-4">
             <Button type="button" variant="outline" onClick={onClose}>
-              İptal
+              {t('cancel')}
             </Button>
             <Button type="submit" className="bg-gradient-primary text-white">
-              {item ? 'Güncelle' : 'Ekle'}
+              {item ? t('update') : tCommon('add')}
             </Button>
           </div>
         </form>

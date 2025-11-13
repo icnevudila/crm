@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
+import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -25,26 +26,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-const dealSchema = z.object({
-  title: z.string().min(1, 'Başlık gereklidir').max(200, 'Başlık en fazla 200 karakter olabilir'),
-  stage: z.enum(['LEAD', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST']).default('LEAD'),
-  status: z.enum(['OPEN', 'CLOSED']).default('OPEN'),
-  value: z.number().min(0, 'Değer 0\'dan büyük olmalı').max(999999999, 'Değer çok büyük'),
-  customerId: z.string().optional(),
-  description: z.string().max(2000, 'Açıklama en fazla 2000 karakter olabilir').optional(),
-  winProbability: z.number().min(0, 'Kazanma olasılığı 0-100 arası olmalı').max(100, 'Kazanma olasılığı 0-100 arası olmalı').optional(),
-  expectedCloseDate: z.string().optional(),
-  leadSource: z.enum(['WEB', 'EMAIL', 'PHONE', 'REFERRAL', 'SOCIAL', 'OTHER']).optional(), // Lead source tracking (migration 025)
-  competitorId: z.string().optional(), // Competitor tracking
-})
-
-type DealFormData = z.infer<typeof dealSchema>
-
 interface DealFormProps {
   deal?: any
   open: boolean
   onClose: () => void
   onSuccess?: (savedDeal: any) => void // Cache güncelleme için callback
+  customerCompanyId?: string
+  customerCompanyName?: string
+  customerId?: string
 }
 
 async function fetchCustomers() {
@@ -62,12 +51,40 @@ async function fetchCompetitors() {
   return Array.isArray(data) ? data : []
 }
 
-export default function DealForm({ deal, open, onClose, onSuccess }: DealFormProps) {
+export default function DealForm({
+  deal,
+  open,
+  onClose,
+  onSuccess,
+  customerCompanyId: customerCompanyIdProp,
+  customerCompanyName,
+  customerId: customerIdProp,
+}: DealFormProps) {
+  const t = useTranslations('deals.form')
+  const tCommon = useTranslations('common.form')
   const router = useRouter()
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
-  const customerCompanyId = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
+  const searchCustomerCompanyId = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
+  const customerCompanyId = customerCompanyIdProp || searchCustomerCompanyId
   const [loading, setLoading] = useState(false)
+
+  // Schema'yı component içinde oluştur - locale desteği için
+  const dealSchema = z.object({
+    title: z.string().min(1, tCommon('titleRequired')).max(200, tCommon('titleMaxLength', { max: 200 })),
+    stage: z.enum(['LEAD', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST']).default('LEAD'),
+    status: z.enum(['OPEN', 'CLOSED']).default('OPEN'),
+    value: z.number().min(0, t('valueMin')).max(999999999, tCommon('amountMax')),
+    customerId: z.string().optional(),
+    description: z.string().max(2000, t('descriptionMaxLength')).optional(),
+    winProbability: z.number().min(0, t('winProbabilityRange')).max(100, t('winProbabilityRange')).optional(),
+    expectedCloseDate: z.string().optional(),
+    leadSource: z.enum(['WEB', 'EMAIL', 'PHONE', 'REFERRAL', 'SOCIAL', 'OTHER']).optional(), // Lead source tracking (migration 025)
+    competitorId: z.string().optional(), // Competitor tracking
+    customerCompanyId: z.string().optional(),
+  })
+
+  type DealFormData = z.infer<typeof dealSchema>
 
   const { data: customersData } = useQuery({
     queryKey: ['customers'],
@@ -83,6 +100,9 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
 
   // Güvenlik kontrolü - customers her zaman array olmalı
   const customers = Array.isArray(customersData) ? customersData : []
+  const filteredCustomers = customerCompanyId
+    ? customers.filter((customer: any) => customer.customerCompanyId === customerCompanyId)
+    : customers
   const competitors = Array.isArray(competitorsData) ? competitorsData : []
 
   const {
@@ -103,6 +123,7 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
       description: '',
       winProbability: 50,
       expectedCloseDate: '',
+      customerCompanyId: customerCompanyId || '',
     },
   })
 
@@ -140,6 +161,7 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
           winProbability: deal.winProbability ?? 50,
           expectedCloseDate: formattedDate,
           leadSource: deal.leadSource || undefined, // Lead source tracking (migration 025)
+          customerCompanyId: deal.customerCompanyId || customerCompanyId || '',
         })
       } else {
         // Yeni deal için formu sıfırla
@@ -148,15 +170,19 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
           stage: 'LEAD',
           status: 'OPEN',
           value: 0,
-          customerId: '',
+          customerId: customerIdProp || '',
           description: '',
           winProbability: 50,
           expectedCloseDate: '',
           leadSource: undefined, // Lead source tracking (migration 025)
+          customerCompanyId: customerCompanyId || '',
         })
+        if (customerIdProp) {
+          setValue('customerId', customerIdProp)
+        }
       }
     }
-  }, [deal, open, reset])
+  }, [deal, open, reset, customerCompanyId, customerIdProp, setValue])
 
   const mutation = useMutation({
     mutationFn: async (data: DealFormData) => {
@@ -164,9 +190,9 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
       const method = deal ? 'PUT' : 'POST'
 
       // customerCompanyId'yi payload'a ekle
-      const payload = {
+      const payload: Record<string, unknown> = {
         ...data,
-        customerCompanyId: customerCompanyId || data.customerCompanyId || null,
+        customerCompanyId: customerCompanyId || (data as any).customerCompanyId || null,
       }
 
       const res = await fetch(url, {
@@ -176,13 +202,34 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
       })
 
       if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.error || 'Failed to save deal')
+        let message = 'Failed to save deal'
+        try {
+          const error = await res.json()
+          message = error?.error || message
+        } catch {
+          // ignore json parse errors
+        }
+
+        if (res.status === 403) {
+          message = 'Yetkiniz yoktur.'
+        }
+
+        throw new Error(message)
       }
 
       return res.json()
     },
     onSuccess: async (savedDeal) => {
+      // Toast mesajı göster
+      if (deal) {
+        toast.success(t('dealUpdated'), t('dealUpdatedMessage', { title: savedDeal.title }))
+      } else {
+        const message = customerCompanyName 
+          ? t('dealCreatedMessageWithCompany', { company: customerCompanyName, title: savedDeal.title })
+          : t('dealCreatedMessage', { title: savedDeal.title })
+        toast.success(t('dealCreated'), message)
+      }
+      
       // Query cache'ini invalidate et - fresh data çek
       // ÖNEMLİ: Dashboard'daki tüm ilgili query'leri invalidate et (ana sayfada güncellensin)
       await Promise.all([
@@ -203,10 +250,13 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
       ])
       
       // Parent component'e callback gönder - optimistic update için
+      // CRITICAL FIX: onSuccess'i önce çağır, sonra form'u kapat
+      // onSuccess içinde onClose çağrılmamalı - form zaten kendi içinde onClose çağırıyor
       if (onSuccess) {
         await onSuccess(savedDeal)
       }
       reset()
+      // Form'u kapat - onSuccess callback'inden SONRA (sonsuz döngü önleme)
       onClose()
     },
   })
@@ -229,13 +279,20 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
         competitorId: data.competitorId && data.competitorId !== '' 
           ? data.competitorId 
           : undefined,
+        customerCompanyId: data.customerCompanyId && data.customerCompanyId !== '' 
+          ? data.customerCompanyId 
+          : customerCompanyId || undefined,
         // WinProbability sıfırsa undefined yap
         winProbability: data.winProbability || undefined,
       }
       await mutation.mutateAsync(cleanData)
     } catch (error: any) {
       console.error('Deal save error:', error)
-      toast.error('Kaydedilemedi', error.message)
+        const message =
+        error.message === 'Yetkiniz yoktur.'
+          ? t('unauthorized')
+          : error.message
+      toast.error(t('saveFailed'), message)
     } finally {
       setLoading(false)
     }
@@ -246,26 +303,39 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {deal ? 'Fırsat Düzenle' : 'Yeni Fırsat'}
+            {deal ? t('editTitle') : t('newTitle')}
           </DialogTitle>
           <DialogDescription>
-            {deal ? 'Fırsat bilgilerini güncelleyin' : 'Yeni fırsat oluşturun'}
+            {deal ? t('editDescription') : t('newDescription')}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {customerCompanyId && (
+            <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3 text-sm text-indigo-700">
+              <p className="font-semibold">
+                {t('companyLabel')}: {customerCompanyName || t('selectedCompany')}
+              </p>
+              <p>
+                {filteredCustomers.length > 0
+                  ? t('customersCount', { count: filteredCustomers.length })
+                  : t('noCustomersFound')}
+              </p>
+            </div>
+          )}
+          <input type="hidden" {...register('customerCompanyId')} />
           {/* ÖNEMLİ: Durum bazlı koruma bilgilendirmeleri */}
           {deal && deal.stage === 'WON' && (
             <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-4">
               <p className="text-sm text-green-800 font-semibold">
-                🔒 Bu fırsat kazanıldı. Temel bilgiler (başlık, değer, aşama, durum) değiştirilemez. Sadece açıklama ve notlar gibi alanlar değiştirilebilir.
+                {t('wonWarning')}
               </p>
             </div>
           )}
           {deal && deal.status === 'CLOSED' && (
             <div className="bg-gray-50 border border-gray-200 rounded-md p-4 mb-4">
               <p className="text-sm text-gray-800 font-semibold">
-                🔒 Bu fırsat kapatıldı. Fırsat bilgileri değiştirilemez veya silinemez.
+                {t('closedWarning')}
               </p>
             </div>
           )}
@@ -274,7 +344,7 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
           {isProtected && (
             <div className="bg-gray-50 border border-gray-200 rounded-md p-3 mb-4">
               <p className="text-xs text-gray-600">
-                ⚠️ Bu fırsat korumalı durumda olduğu için form alanları düzenlenemez.
+                {t('protectedWarning')}
               </p>
             </div>
           )}
@@ -282,10 +352,10 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Title */}
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">Başlık *</label>
+              <label className="text-sm font-medium">{t('titleLabel')} *</label>
               <Input
                 {...register('title')}
-                placeholder="Fırsat başlığı"
+                placeholder={t('titlePlaceholder')}
                 disabled={loading || isProtected}
               />
               {errors.title && (
@@ -295,17 +365,22 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
 
             {/* Customer */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Müşteri</label>
+              <label className="text-sm font-medium">{t('customerLabel')}</label>
               <Select
                 value={customerId || ''}
                 onValueChange={(value) => setValue('customerId', value)}
-                disabled={loading || isProtected}
+                disabled={loading || isProtected || filteredCustomers.length === 0}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Müşteri seçin" />
+                  <SelectValue placeholder={t('customerPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {customers.map((customer: any) => (
+                  {filteredCustomers.length === 0 && (
+                    <SelectItem disabled value="none">
+                      {t('noCustomersForCompany')}
+                    </SelectItem>
+                  )}
+                  {filteredCustomers.map((customer: any) => (
                     <SelectItem key={customer.id} value={customer.id}>
                       {customer.name}
                     </SelectItem>
@@ -316,7 +391,7 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
 
             {/* Competitor */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Rakip (opsiyonel)</label>
+              <label className="text-sm font-medium">{t('competitorLabel')}</label>
               <Select
                 value={watch('competitorId') || 'NONE'}
                 onValueChange={(value) =>
@@ -325,10 +400,10 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
                 disabled={loading || isProtected}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Rakip seçin" />
+                  <SelectValue placeholder={t('competitorPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="NONE">Yok</SelectItem>
+                  <SelectItem value="NONE">{t('competitorNone')}</SelectItem>
                   {competitors.map((competitor: any) => (
                     <SelectItem key={competitor.id} value={competitor.id}>
                       {competitor.name}
@@ -340,12 +415,12 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
 
             {/* Value */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Değer (₺) *</label>
+              <label className="text-sm font-medium">{t('valueLabel')} *</label>
               <Input
                 type="number"
                 step="0.01"
                 {...register('value', { valueAsNumber: true })}
-                placeholder="0.00"
+                placeholder={t('valuePlaceholder')}
                 disabled={loading || isProtected}
               />
               {errors.value && (
@@ -355,7 +430,7 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
 
             {/* Stage */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Aşama</label>
+              <label className="text-sm font-medium">{t('stageLabel')}</label>
               <Select
                 value={stage}
                 onValueChange={(value) =>
@@ -367,25 +442,25 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="LEAD">Potansiyel</SelectItem>
-                  <SelectItem value="CONTACTED">İletişimde</SelectItem>
-                  <SelectItem value="PROPOSAL">Teklif</SelectItem>
-                  <SelectItem value="NEGOTIATION">Pazarlık</SelectItem>
-                  <SelectItem value="WON">Kazanıldı</SelectItem>
-                  <SelectItem value="LOST">Kaybedildi</SelectItem>
+                  <SelectItem value="LEAD">{t('stageLead')}</SelectItem>
+                  <SelectItem value="CONTACTED">{t('stageContacted')}</SelectItem>
+                  <SelectItem value="PROPOSAL">{t('stageProposal')}</SelectItem>
+                  <SelectItem value="NEGOTIATION">{t('stageNegotiation')}</SelectItem>
+                  <SelectItem value="WON">{t('stageWon')}</SelectItem>
+                  <SelectItem value="LOST">{t('stageLost')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {/* Win Probability */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Kazanma Olasılığı (%)</label>
+              <label className="text-sm font-medium">{t('winProbabilityLabel')}</label>
               <Input
                 type="number"
                 min="0"
                 max="100"
                 {...register('winProbability', { valueAsNumber: true })}
-                placeholder="50"
+                placeholder={t('winProbabilityPlaceholder')}
                 disabled={loading || isProtected}
               />
               <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
@@ -394,12 +469,12 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
                   style={{ width: `${winProbability}%` }}
                 />
               </div>
-              <p className="text-xs text-gray-500">{winProbability}% kazanma şansı</p>
+              <p className="text-xs text-gray-500">{t('winProbabilityDisplay', { percent: winProbability })}</p>
             </div>
 
             {/* Expected Close Date */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Beklenen Kapanış Tarihi</label>
+              <label className="text-sm font-medium">{t('expectedCloseDateLabel')}</label>
               <Input
                 type="date"
                 {...register('expectedCloseDate')}
@@ -409,29 +484,29 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
 
             {/* Lead Source */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Potansiyel Müşteri Kaynağı</label>
+              <label className="text-sm font-medium">{t('leadSourceLabel')}</label>
               <Select
                 value={watch('leadSource') || ''}
                 onValueChange={(value) => setValue('leadSource', value as DealFormData['leadSource'])}
                 disabled={loading || isProtected}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Kaynak seçin" />
+                  <SelectValue placeholder={t('leadSourcePlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="WEB">Web Sitesi</SelectItem>
-                  <SelectItem value="EMAIL">E-posta</SelectItem>
-                  <SelectItem value="PHONE">Telefon</SelectItem>
-                  <SelectItem value="REFERRAL">Referans</SelectItem>
-                  <SelectItem value="SOCIAL">Sosyal Medya</SelectItem>
-                  <SelectItem value="OTHER">Diğer</SelectItem>
+                  <SelectItem value="WEB">{t('leadSourceWeb')}</SelectItem>
+                  <SelectItem value="EMAIL">{t('leadSourceEmail')}</SelectItem>
+                  <SelectItem value="PHONE">{t('leadSourcePhone')}</SelectItem>
+                  <SelectItem value="REFERRAL">{t('leadSourceReferral')}</SelectItem>
+                  <SelectItem value="SOCIAL">{t('leadSourceSocial')}</SelectItem>
+                  <SelectItem value="OTHER">{t('leadSourceOther')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {/* Status */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Durum</label>
+              <label className="text-sm font-medium">{t('statusLabel')}</label>
               <Select
                 value={status}
                 onValueChange={(value) =>
@@ -443,18 +518,18 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="OPEN">Açık</SelectItem>
-                  <SelectItem value="CLOSED">Kapalı</SelectItem>
+                  <SelectItem value="OPEN">{t('statusOpen')}</SelectItem>
+                  <SelectItem value="CLOSED">{t('statusClosed')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {/* Description */}
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">Açıklama</label>
+              <label className="text-sm font-medium">{t('descriptionLabel')}</label>
               <Textarea
                 {...register('description')}
-                placeholder="Fırsat açıklaması ve notlar"
+                placeholder={t('descriptionPlaceholder')}
                 rows={4}
                 disabled={loading || isProtected}
               />
@@ -469,14 +544,14 @@ export default function DealForm({ deal, open, onClose, onSuccess }: DealFormPro
               onClick={onClose}
               disabled={loading || isProtected}
             >
-              İptal
+              {t('cancel')}
             </Button>
             <Button
               type="submit"
               className="bg-gradient-primary text-white"
               disabled={loading || isProtected}
             >
-              {loading ? 'Kaydediliyor...' : deal ? (isProtected ? 'Değiştirilemez' : 'Güncelle') : 'Kaydet'}
+              {loading ? t('saving') : deal ? (isProtected ? t('cannotEdit') : t('update')) : t('save')}
             </Button>
           </div>
         </form>

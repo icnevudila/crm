@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useState, useEffect, memo, useCallback } from 'react'
-import { signIn } from 'next-auth/react'
+import { signIn, useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { useLocale, useTranslations } from 'next-intl'
 import { motion } from 'framer-motion'
 import {
   Mail,
@@ -41,7 +42,10 @@ function AnimatedTitle({ text }: { text: string }) {
 }
 
 function LoginPage() {
+  const locale = useLocale()
+  const t = useTranslations('login')
   const router = useRouter()
+  const { data: session, status } = useSession()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -49,13 +53,20 @@ function LoginPage() {
   const [error, setError] = useState('')
   const [mounted, setMounted] = useState(false)
 
+  // Zaten login olmuş kullanıcıları dashboard'a yönlendir
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user) {
+      router.replace(`/${locale}/dashboard`)
+    }
+  }, [status, session, router, locale])
+
   useEffect(() => {
     setMounted(true)
     // Agresif prefetch - dashboard ve diğer sayfalar
-    router.prefetch('/tr/dashboard')
-    router.prefetch('/tr/customers')
-    router.prefetch('/tr/deals')
-  }, [router])
+    router.prefetch(`/${locale}/dashboard`)
+    router.prefetch(`/${locale}/customers`)
+    router.prefetch(`/${locale}/deals`)
+  }, [router, locale])
 
   const handleSubmit = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -77,17 +88,17 @@ function LoginPage() {
 
       if (result?.ok) {
         // Başarılı giriş - window.location kullan (daha hızlı)
-        router.prefetch('/tr/dashboard')
-        window.location.href = '/tr/dashboard'
+        router.prefetch(`/${locale}/dashboard`)
+        window.location.href = `/${locale}/dashboard`
       } else {
-        setError('Giriş başarısız oldu')
+        setError(t('loginFailed'))
         setLoading(false)
       }
     } catch (err) {
-      setError('Giriş yapılırken bir hata oluştu')
+      setError(t('loginError'))
       setLoading(false)
     }
-  }, [email, password, router])
+  }, [email, password, router, locale, t])
 
   // Animation variants - optimize edilmiş
   const containerVariants = {
@@ -267,7 +278,7 @@ function LoginPage() {
                   <AnimatedTitle text="CRM Enterprise V3" />
                 </CardTitle>
                 <CardDescription className="text-base text-gray-600 font-medium">
-                  Hesabınıza giriş yapın ve işinizi yönetmeye başlayın
+                  {t('description')}
                 </CardDescription>
               </CardHeader>
             <CardContent>
@@ -276,13 +287,13 @@ function LoginPage() {
                 <motion.div variants={itemVariants} className="space-y-2">
                   <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                     <Mail className="h-4 w-4 text-primary-600" />
-                    E-posta
+                    {t('email')}
                   </label>
                   <div className="relative group">
                     <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-600 transition-colors z-10" />
                     <Input
                       type="email"
-                      placeholder="ornek@email.com"
+                      placeholder={t('emailPlaceholder')}
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       disabled={loading}
@@ -301,7 +312,7 @@ function LoginPage() {
                 <motion.div variants={itemVariants} className="space-y-2">
                   <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
                     <Lock className="h-4 w-4 text-primary-600" />
-                    Şifre
+                    {t('password')}
                   </label>
                   <div className="relative group">
                     <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-600 transition-colors z-10" />
@@ -324,7 +335,7 @@ function LoginPage() {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary-600 focus:outline-none transition-colors z-10"
                       disabled={loading}
-                      aria-label={showPassword ? 'Şifreyi gizle' : 'Şifreyi göster'}
+                      aria-label={showPassword ? t('hidePassword') : t('showPassword')}
                       style={{ transform: 'translate3d(0, -50%, 0)' }}
                     >
                       {showPassword ? (
@@ -389,11 +400,11 @@ function LoginPage() {
                         {loading ? (
                           <>
                             <Loader2 className="h-5 w-5 animate-spin" />
-                            Giriş yapılıyor...
+                            {t('loggingIn')}
                           </>
                         ) : (
                           <>
-                            Giriş Yap
+                            {t('login')}
                             <ArrowRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
                           </>
                         )}
@@ -412,9 +423,9 @@ function LoginPage() {
                   <div className="flex items-start gap-2">
                     <Zap className="h-4 w-4 mt-0.5 flex-shrink-0" />
                     <div>
-                      <p className="font-semibold mb-1">Demo Girişi:</p>
+                      <p className="font-semibold mb-1">{t('demoLogin')}:</p>
                       <p>
-                        Seed&apos;den oluşturulan kullanıcılar için şifre:{' '}
+                        {t('demoPassword')}:{' '}
                         <code className="font-mono bg-white px-2 py-1 rounded border">demo123</code>
                       </p>
                     </div>
@@ -453,7 +464,7 @@ function LoginPage() {
                 style={{ transform: 'translate3d(0, 0, 0)' }}
               >
                 <Zap className="h-7 w-7 text-primary-600 mx-auto mb-3 drop-shadow-lg" />
-                <p className="text-sm font-bold text-gray-800">Hızlı</p>
+                <p className="text-sm font-bold text-gray-800">{t('features.fast')}</p>
                 <p className="text-xs text-gray-600 mt-1 font-medium">&lt;300ms</p>
               </motion.div>
             </motion.div>
@@ -477,7 +488,7 @@ function LoginPage() {
                 style={{ transform: 'translate3d(0, 0, 0)' }}
               >
                 <Shield className="h-7 w-7 text-secondary-600 mx-auto mb-3 drop-shadow-lg" />
-                <p className="text-sm font-bold text-gray-800">Güvenli</p>
+                <p className="text-sm font-bold text-gray-800">{t('features.secure')}</p>
                 <p className="text-xs text-gray-600 mt-1 font-medium">Enterprise</p>
               </motion.div>
             </motion.div>
@@ -501,7 +512,7 @@ function LoginPage() {
                 style={{ transform: 'translate3d(0, 0, 0)' }}
               >
                 <TrendingUp className="h-7 w-7 text-accent-600 mx-auto mb-3 drop-shadow-lg" />
-                <p className="text-sm font-bold text-gray-800">Güvenilir</p>
+                <p className="text-sm font-bold text-gray-800">{t('features.reliable')}</p>
                 <p className="text-xs text-gray-600 mt-1 font-medium">%99.9</p>
               </motion.div>
             </motion.div>

@@ -515,6 +515,7 @@ export default function CompanyForm({
                     animate={{ opacity: 1, scale: 1 }}
                     className="w-20 h-20 rounded-lg overflow-hidden border-2 border-gray-200"
                   >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={logoPreview}
                       alt="Logo preview"

@@ -129,7 +129,7 @@ export async function GET(request: Request) {
         CreatedBy:User!Meeting_createdBy_fkey(id, name, email)
       `)
       .order('meetingDate', { ascending: false })
-      .limit(1000)
+      .limit(100) // Dengeli limit - 100 kayıt (performans + veri dengesi)
 
     // CompanyId filtresi (SuperAdmin hariç)
     if (!isSuperAdmin) {

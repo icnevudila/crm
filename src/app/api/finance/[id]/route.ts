@@ -18,7 +18,7 @@ export async function GET(
         console.error('Finance [id] GET API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -28,13 +28,10 @@ export async function GET(
     }
 
     // Permission check - canRead kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canRead = await hasPermission('finance', 'read', session.user.id)
     if (!canRead) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Finans görüntüleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
@@ -92,10 +89,10 @@ export async function GET(
     })
   } catch (error: any) {
     if (error.message.includes('not found') || error.message.includes('No rows')) {
-      return NextResponse.json({ error: 'Finance record not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Finans kaydı bulunamadı' }, { status: 404 })
     }
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch finance record' },
+      { error: error.message || 'Finans kaydı getirilemedi' },
       { status: 500 }
     )
   }
@@ -115,7 +112,7 @@ export async function PUT(
         console.error('Finance [id] PUT API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -125,13 +122,10 @@ export async function PUT(
     }
 
     // Permission check - canUpdate kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canUpdate = await hasPermission('finance', 'update', session.user.id)
     if (!canUpdate) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Finans kaydı güncelleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const { id } = await params
@@ -143,7 +137,7 @@ export async function PUT(
     return NextResponse.json(data)
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to update finance record' },
+      { error: error.message || 'Finans kaydı güncellenemedi' },
       { status: 500 }
     )
   }
@@ -163,7 +157,7 @@ export async function DELETE(
         console.error('Finance [id] DELETE API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -173,13 +167,10 @@ export async function DELETE(
     }
 
     // Permission check - canDelete kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canDelete = await hasPermission('finance', 'delete', session.user.id)
     if (!canDelete) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Finans kaydı silme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const { id } = await params
@@ -267,7 +258,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to delete finance record' },
+      { error: error.message || 'Finans kaydı silinemedi' },
       { status: 500 }
     )
   }

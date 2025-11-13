@@ -7,11 +7,12 @@ export default function SessionProvider({
 }: {
   children: React.ReactNode
 }) {
-  // NextAuth basePath sorununu önlemek için basePath ekle
+  // NextAuth basePath - Next.js 15 App Router için
   // basePath sadece path olmalı, full URL değil
+  // NextAuth otomatik olarak /api/auth path'ini kullanır
   return (
     <NextAuthSessionProvider
-      basePath="/api/auth" // Sadece path - NextAuth otomatik olarak domain'i ekler
+      basePath="/api/auth"
       refetchInterval={5 * 60} // 5 dakikada bir session'ı yenile
       refetchOnWindowFocus={false} // Focus'ta refetch yapma - performans için
     >

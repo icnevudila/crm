@@ -36,14 +36,14 @@ export async function GET(request: Request) {
     if (findError) {
       console.error('Check Overdue Tasks - Find Error:', findError)
       return NextResponse.json(
-        { error: 'Failed to find overdue tasks', details: findError.message },
+        { error: 'Geciken görevler alınamadı', details: findError.message },
         { status: 500 }
       )
     }
 
     if (!overdueTasks || overdueTasks.length === 0) {
       return NextResponse.json({
-        message: 'No overdue tasks found',
+        message: 'Gecikmiş görev bulunamadı',
         count: 0,
         date: today,
       })
@@ -109,7 +109,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      message: 'Overdue tasks checked',
+      message: 'Gecikmiş görevler kontrol edildi',
       totalTasks: overdueTasks.length,
       notificationsSent: notificationCount,
       date: today,
@@ -117,7 +117,7 @@ export async function GET(request: Request) {
   } catch (error: any) {
     console.error('Check Overdue Tasks - Error:', error)
     return NextResponse.json(
-      { error: error?.message || 'Failed to check overdue tasks' },
+      { error: error?.message || 'Geciken görevler kontrol edilemedi' },
       { status: 500 }
     )
   }

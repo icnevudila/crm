@@ -430,7 +430,7 @@ BEGIN
           "companyId"
         ) VALUES (
           'INCOME',
-          NEW.total,
+          NEW."totalAmount",
           'SALES',
           'Invoice Payment: ' || NEW."invoiceNumber",
           COALESCE(NEW."paidAt", NOW()),
@@ -453,12 +453,14 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger oluştur
+-- NOT: Bu trigger 045 migration'ında daha kapsamlı bir versiyonla değiştirildi
+-- (trigger_invoice_paid_finance_entry). Bu trigger'ı kaldırıyoruz çift çalışmayı önlemek için.
 DROP TRIGGER IF EXISTS invoice_paid_finance_integration ON "Invoice";
-CREATE TRIGGER invoice_paid_finance_integration
-  AFTER UPDATE OF status
-  ON "Invoice"
-  FOR EACH ROW
-  EXECUTE FUNCTION handle_invoice_status_change();
+-- CREATE TRIGGER invoice_paid_finance_integration
+--   AFTER UPDATE OF status
+--   ON "Invoice"
+--   FOR EACH ROW
+--   EXECUTE FUNCTION handle_invoice_status_change();
 
 -- ============================================
 -- PART 8: NOTIFICATION HELPER (Gelecek için)

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useLocale } from 'next-intl'
+import { useState, useMemo } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { toast } from '@/lib/toast'
 import { Plus, Search, Edit, Trash2, Users, Eye } from 'lucide-react'
@@ -14,6 +14,10 @@ import SkeletonList from '@/components/skeletons/SkeletonList'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 
+interface SegmentListProps {
+  isOpen?: boolean
+}
+
 interface Segment {
   id: string
   name: string
@@ -25,13 +29,26 @@ interface Segment {
   createdAt: string
 }
 
-export default function SegmentList() {
+export default function SegmentList({ isOpen = true }: SegmentListProps) {
+  const locale = useLocale()
+  const t = useTranslations('segments')
+  const tCommon = useTranslations('common')
   const [search, setSearch] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [selectedSegment, setSelectedSegment] = useState<Segment | null>(null)
 
-  const apiUrl = `/api/segments${search ? `?search=${search}` : ''}`
-  const { data: segments = [], isLoading, mutate: mutateSegments } = useData<Segment[]>(apiUrl)
+  const apiUrl = useMemo(() => {
+    if (!isOpen) return null
+    return `/api/segments${search ? `?search=${search}` : ''}`
+  }, [isOpen, search])
+
+  const { data: segments = [], isLoading, mutate: mutateSegments } = useData<Segment[]>(
+    apiUrl,
+    {
+      dedupingInterval: 5000,
+      revalidateOnFocus: true,
+    }
+  )
 
   const handleNew = () => {
     setSelectedSegment(null)
@@ -44,7 +61,7 @@ export default function SegmentList() {
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`${name} segmentini silmek istediğinize emin misiniz?`)) return
+    if (!confirm(t('deleteConfirm', { name }))) return
 
     try {
       const res = await fetch(`/api/segments/${id}`, { method: 'DELETE' })
@@ -53,9 +70,16 @@ export default function SegmentList() {
       const updated = segments.filter((item) => item.id !== id)
       await mutateSegments(updated, { revalidate: false })
       await mutate('/api/segments', updated, { revalidate: false })
+      if (apiUrl) {
+        await mutate(apiUrl, updated, { revalidate: false })
+      }
     } catch (error) {
-      toast.warning('Silinemedi')
+      toast.warning(t('deleteFailed'))
     }
+  }
+
+  if (!isOpen) {
+    return null
   }
 
   if (isLoading) return <SkeletonList />
@@ -64,19 +88,19 @@ export default function SegmentList() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Müşteri Segmentleri</h1>
-          <p className="text-gray-500 mt-1">Müşterileri gruplandırın ve hedefleyin</p>
+          <h1 className="text-3xl font-bold">{t('title')}</h1>
+          <p className="text-gray-500 mt-1">{t('description')}</p>
         </div>
         <Button onClick={handleNew}>
           <Plus className="h-4 w-4 mr-2" />
-          Yeni Segment
+          {t('newSegment')}
         </Button>
       </div>
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
         <Input
-          placeholder="Segment ara..."
+          placeholder={t('searchPlaceholder')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="pl-10"
@@ -87,18 +111,18 @@ export default function SegmentList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Segment Adı</TableHead>
-              <TableHead>Açıklama</TableHead>
-              <TableHead>Otomatik Atama</TableHead>
-              <TableHead>Üye Sayısı</TableHead>
-              <TableHead className="text-right">İşlemler</TableHead>
+              <TableHead>{t('tableHeaders.name')}</TableHead>
+              <TableHead>{t('tableHeaders.description')}</TableHead>
+              <TableHead>{t('tableHeaders.autoAssign')}</TableHead>
+              <TableHead>{t('tableHeaders.memberCount')}</TableHead>
+              <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {segments.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-gray-500 py-8">
-                  Henüz segment eklenmemiş
+                  {t('noSegmentsFound')}
                 </TableCell>
               </TableRow>
             ) : (

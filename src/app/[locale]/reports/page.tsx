@@ -1,108 +1,103 @@
 'use client'
 
 import { useState } from 'react'
+import type { ComponentType } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Card } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { 
-  TrendingUp, 
-  Users, 
-  Briefcase, 
-  FileText, 
-  Receipt, 
-  Package, 
+import {
+  TrendingUp,
+  Users,
+  Briefcase,
+  FileText,
+  Receipt,
+  Package,
   DollarSign,
-  BarChart3,
-  PieChart,
-  LineChart,
   Activity,
   Building2,
   Calendar,
   Target,
-  ArrowRight
 } from 'lucide-react'
-import Link from 'next/link'
-import { useLocale } from 'next-intl'
 import dynamic from 'next/dynamic'
 import SkeletonList from '@/components/skeletons/SkeletonList'
 
-// Lazy load rapor componentleri - güvenli import ile
-const SalesReports = dynamic(
+import type { ReportSectionProps } from '@/components/reports/types'
+
+const SalesReports = dynamic<ReportSectionProps>(
   () => import('@/components/reports/SalesReports').then((mod) => mod.default || mod),
-  { 
+  {
     ssr: false,
     loading: () => <SkeletonList />,
   }
 )
 
-const CustomerReports = dynamic(
+const CustomerReports = dynamic<ReportSectionProps>(
   () => import('@/components/reports/CustomerReports').then((mod) => mod.default || mod),
-  { 
+  {
     ssr: false,
     loading: () => <SkeletonList />,
   }
 )
 
-const DealReports = dynamic(
+const DealReports = dynamic<ReportSectionProps>(
   () => import('@/components/reports/DealReports').then((mod) => mod.default || mod),
-  { 
+  {
     ssr: false,
     loading: () => <SkeletonList />,
   }
 )
 
-const QuoteReports = dynamic(
+const QuoteReports = dynamic<ReportSectionProps>(
   () => import('@/components/reports/QuoteReports').then((mod) => mod.default || mod),
-  { 
+  {
     ssr: false,
     loading: () => <SkeletonList />,
   }
 )
 
-const InvoiceReports = dynamic(
+const InvoiceReports = dynamic<ReportSectionProps>(
   () => import('@/components/reports/InvoiceReports').then((mod) => mod.default || mod),
-  { 
+  {
     ssr: false,
     loading: () => <SkeletonList />,
   }
 )
 
-const ProductReports = dynamic(
+const ProductReports = dynamic<ReportSectionProps>(
   () => import('@/components/reports/ProductReports').then((mod) => mod.default || mod),
-  { 
+  {
     ssr: false,
     loading: () => <SkeletonList />,
   }
 )
 
-const FinancialReports = dynamic(
+const FinancialReports = dynamic<ReportSectionProps>(
   () => import('@/components/reports/FinancialReports').then((mod) => mod.default || mod),
-  { 
+  {
     ssr: false,
     loading: () => <SkeletonList />,
   }
 )
 
-const PerformanceReports = dynamic(
+const PerformanceReports = dynamic<ReportSectionProps>(
   () => import('@/components/reports/PerformanceReports').then((mod) => mod.default || mod),
-  { 
+  {
     ssr: false,
     loading: () => <SkeletonList />,
   }
 )
 
-const TimeBasedReports = dynamic(
+const TimeBasedReports = dynamic<ReportSectionProps>(
   () => import('@/components/reports/TimeBasedReports').then((mod) => mod.default || mod),
-  { 
+  {
     ssr: false,
     loading: () => <SkeletonList />,
   }
 )
 
-const SectorReports = dynamic(
+const SectorReports = dynamic<ReportSectionProps>(
   () => import('@/components/reports/SectorReports').then((mod) => mod.default || mod),
-  { 
+  {
     ssr: false,
     loading: () => <SkeletonList />,
   }
@@ -116,8 +111,7 @@ interface ReportCategory {
   count: number
 }
 
-// Icon mapping
-const iconMap: Record<string, any> = {
+const iconMap: Record<string, ComponentType<{ className?: string }>> = {
   sales: TrendingUp,
   customers: Users,
   deals: Briefcase,
@@ -139,8 +133,14 @@ async function fetchReportCategories() {
   return res.json()
 }
 
+interface ReportTab {
+  id: string
+  label: string
+  icon: ComponentType<{ className?: string }>
+  Component: ComponentType<ReportSectionProps>
+}
+
 export default function ReportsPage() {
-  const locale = useLocale()
   const [activeTab, setActiveTab] = useState('sales')
 
   const { data: categories, isLoading } = useQuery({
@@ -150,44 +150,40 @@ export default function ReportsPage() {
     refetchOnMount: true,
   })
 
-  const reportTabs = [
-    { id: 'sales', label: 'Satış Raporları', component: SalesReports },
-    { id: 'customers', label: 'Müşteri Raporları', component: CustomerReports },
-    { id: 'deals', label: 'Fırsat Raporları', component: DealReports },
-    { id: 'quotes', label: 'Teklif Raporları', component: QuoteReports },
-    { id: 'invoices', label: 'Fatura Raporları', component: InvoiceReports },
-    { id: 'products', label: 'Ürün Raporları', component: ProductReports },
-    { id: 'financial', label: 'Finansal Raporlar', component: FinancialReports },
-    { id: 'performance', label: 'Performans Raporları', component: PerformanceReports },
-    { id: 'time', label: 'Zaman Bazlı Raporlar', component: TimeBasedReports },
-    { id: 'sector', label: 'Sektör Raporları', component: SectorReports },
+  const reportTabs: ReportTab[] = [
+    { id: 'sales', label: 'Satış Raporları', icon: TrendingUp, Component: SalesReports },
+    { id: 'customers', label: 'Müşteri Raporları', icon: Users, Component: CustomerReports },
+    { id: 'deals', label: 'Fırsat Raporları', icon: Briefcase, Component: DealReports },
+    { id: 'quotes', label: 'Teklif Raporları', icon: FileText, Component: QuoteReports },
+    { id: 'invoices', label: 'Fatura Raporları', icon: Receipt, Component: InvoiceReports },
+    { id: 'products', label: 'Ürün Raporları', icon: Package, Component: ProductReports },
+    { id: 'financial', label: 'Finansal Raporlar', icon: DollarSign, Component: FinancialReports },
+    { id: 'performance', label: 'Performans Raporları', icon: Target, Component: PerformanceReports },
+    { id: 'time', label: 'Zaman Bazlı Raporlar', icon: Calendar, Component: TimeBasedReports },
+    { id: 'sector', label: 'Sektör Raporları', icon: Building2, Component: SectorReports },
   ]
 
   return (
     <div className="space-y-6 p-6">
-      {/* Header */}
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Raporlar</h1>
-        <p className="mt-2 text-gray-600">
-          Detaylı analiz ve raporlar - Anlık veri ile güncel bilgiler
-        </p>
+        <p className="mt-2 text-gray-600">Detaylı analiz ve raporlar - Anlık veri ile güncel bilgiler</p>
       </div>
 
-      {/* Kategori Özeti */}
       {isLoading ? (
         <SkeletonList />
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5">
           {categories?.map((category: ReportCategory) => {
             const IconComponent = category.iconId ? iconMap[category.iconId] : Activity
             return (
-              <Card key={category.id} className="p-4 hover:shadow-md transition-shadow cursor-pointer">
+              <Card key={category.id} className="cursor-pointer p-4 transition-shadow hover:shadow-md">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-primary-50">
+                  <div className="rounded-lg bg-primary-50 p-2">
                     {IconComponent && <IconComponent className="h-5 w-5 text-primary-600" />}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{category.name}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-gray-900">{category.name}</p>
                     <p className="text-xs text-gray-500">{category.count} rapor</p>
                   </div>
                 </div>
@@ -197,10 +193,9 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Rapor Kategorileri - Tabs */}
       <Card className="p-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 lg:grid-cols-10 mb-6">
+          <TabsList className="mb-6 grid w-full grid-cols-2 md:grid-cols-5 lg:grid-cols-10">
             {reportTabs.map((tab) => (
               <TabsTrigger key={tab.id} value={tab.id} className="text-xs">
                 {tab.label}
@@ -208,22 +203,11 @@ export default function ReportsPage() {
             ))}
           </TabsList>
 
-          {reportTabs.map((tab) => {
-            const TabComponent = tab.component
-            // Component'in yüklenip yüklenmediğini kontrol et
-            if (!TabComponent) {
-              return (
-                <TabsContent key={tab.id} value={tab.id} className="mt-0">
-                  <div className="p-4 text-red-600">Rapor bileşeni yüklenemedi</div>
-                </TabsContent>
-              )
-            }
-            return (
-              <TabsContent key={tab.id} value={tab.id} className="mt-0">
-                <TabComponent />
-              </TabsContent>
-            )
-          })}
+          {reportTabs.map(({ id, Component }) => (
+            <TabsContent key={id} value={id} className="mt-0">
+              <Component isActive={activeTab === id} />
+            </TabsContent>
+          ))}
         </Tabs>
       </Card>
     </div>

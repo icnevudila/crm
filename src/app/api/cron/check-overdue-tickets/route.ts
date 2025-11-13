@@ -38,14 +38,14 @@ export async function GET(request: Request) {
     if (findError) {
       console.error('Check Overdue Tickets - Find Error:', findError)
       return NextResponse.json(
-        { error: 'Failed to find overdue tickets', details: findError.message },
+        { error: 'Geciken destek talepleri alınamadı', details: findError.message },
         { status: 500 }
       )
     }
 
     if (!overdueTickets || overdueTickets.length === 0) {
       return NextResponse.json({
-        message: 'No overdue tickets found',
+        message: 'Geciken destek talebi bulunamadı',
         count: 0,
         date: today.toISOString().split('T')[0],
       })
@@ -115,7 +115,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      message: 'Overdue tickets checked',
+      message: 'Geciken destek talepleri kontrol edildi',
       totalTickets: overdueTickets.length,
       notificationsSent: notificationCount,
       date: today.toISOString().split('T')[0],
@@ -123,7 +123,7 @@ export async function GET(request: Request) {
   } catch (error: any) {
     console.error('Check Overdue Tickets - Error:', error)
     return NextResponse.json(
-      { error: error?.message || 'Failed to check overdue tickets' },
+      { error: error?.message || 'Geciken destek talepleri kontrol edilemedi' },
       { status: 500 }
     )
   }

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getSupabase } from '@/lib/supabase'
 import bcrypt from 'bcryptjs'
+import { buildPermissionDeniedResponse } from '@/lib/permissions'
 
 export async function PUT(
   request: Request,
@@ -20,7 +21,7 @@ export async function PUT(
 
     // Sadece kendi şifresini değiştirebilir
     if (session.user.id !== id) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Sadece kendi şifrenizi değiştirebilirsiniz.')
     }
 
     if (!currentPassword || !newPassword) {
@@ -96,7 +97,7 @@ export async function PUT(
     return NextResponse.json({ success: true, message: 'Şifre başarıyla değiştirildi' })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to change password' },
+      { error: error.message || 'Şifre değiştirilemedi' },
       { status: 500 }
     )
   }

@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { getCacheScope, getReportCache, setReportCache } from '@/lib/cache/report-cache'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getServerSession(authOptions)
     if (!session?.user?.companyId) {
@@ -15,6 +16,22 @@ export async function GET() {
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     const companyId = session.user.companyId
     const supabase = getSupabaseWithServiceRole()
+    const scope = getCacheScope(isSuperAdmin, companyId)
+    const forceRefresh = new URL(request.url).searchParams.get('refresh') === '1'
+
+    const cached = await getReportCache({
+      supabase,
+      reportType: 'sector',
+      scope,
+      ttlMinutes: 120,
+      forceRefresh,
+    })
+
+    if (cached) {
+      return NextResponse.json(cached.payload, {
+        headers: { 'Cache-Control': 'no-store, must-revalidate', 'x-cache-hit': 'report-cache' },
+      })
+    }
 
     // Son 12 ayın verilerini çek
     const twelveMonthsAgo = new Date()
@@ -233,27 +250,33 @@ export async function GET() {
       })
       .filter((item) => item.trend.length > 0)
 
-    return NextResponse.json(
-      {
-        sectorSales: sectorSales.map((s) => ({
-          sector: s.sector,
-          sales: s.sales,
-          customers: s.customers,
-          deals: s.deals,
-        })),
-        sectorProfitability: sectorProfitability.map((s) => ({
-          sector: s.sector,
-          profitability: s.profitability,
-          sales: s.sales,
-          averageOrderValue: s.averageOrderValue,
-        })),
-        sectorCustomerDistribution,
-        sectorTrend: sectorTrendData,
-      },
-      {
-        headers: { 'Cache-Control': 'no-store, must-revalidate' },
-      }
-    )
+    const payload = {
+      sectorSales: sectorSales.map((s) => ({
+        sector: s.sector,
+        sales: s.sales,
+        customers: s.customers,
+        deals: s.deals,
+      })),
+      sectorProfitability: sectorProfitability.map((s) => ({
+        sector: s.sector,
+        profitability: s.profitability,
+        sales: s.sales,
+        averageOrderValue: s.averageOrderValue,
+      })),
+      sectorCustomerDistribution,
+      sectorTrend: sectorTrendData,
+    }
+
+    await setReportCache({
+      supabase,
+      reportType: 'sector',
+      scope,
+      payload,
+    })
+
+    return NextResponse.json(payload, {
+      headers: { 'Cache-Control': 'no-store, must-revalidate', 'x-cache-hit': 'miss' },
+    })
   } catch (error: any) {
     console.error('Error fetching sector reports:', error)
     return NextResponse.json(

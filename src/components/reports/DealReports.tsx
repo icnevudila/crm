@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card'
 import { Briefcase, Target, TrendingUp } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import { ReportSectionProps } from './types'
 
 const DealStageAreaChart = dynamic(() => import('@/components/reports/charts/DealStageAreaChart'), {
   ssr: false,
@@ -25,14 +26,16 @@ async function fetchDealReports() {
   return res.json()
 }
 
-export default function DealReports() {
+export default function DealReports({ isActive }: ReportSectionProps) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['deal-reports'],
     queryFn: fetchDealReports,
     staleTime: 5 * 60 * 1000,
     refetchOnMount: true,
+    enabled: isActive,
   })
 
+  if (!isActive) return null
   if (isLoading) return <SkeletonList />
   if (error) return <div className="text-red-600">Rapor yüklenirken hata oluştu</div>
 
@@ -44,8 +47,7 @@ export default function DealReports() {
           <div>
             <h3 className="font-semibold text-gray-900 mb-1">Fırsat Raporları</h3>
             <p className="text-sm text-gray-600">
-              Fırsat bazlı detaylı analizler. Aşama dağılımı, değer trendleri ve 
-              kazanma/kaybetme oranlarını görüntüleyin. Tüm veriler anlık olarak güncellenir.
+              Fırsat bazlı detaylı analizler. Aşama dağılımı, değer trendleri ve kazanma/kaybetme oranlarını görüntüleyin.
             </p>
           </div>
         </div>
@@ -61,10 +63,6 @@ export default function DealReports() {
             <Target className="h-5 w-5 text-primary-600" />
           </div>
           <DealStageAreaChart data={data?.stageDistribution || []} />
-          <div className="mt-4 p-3 bg-gray-50 rounded text-xs text-gray-600">
-            <strong>Açıklama:</strong> Fırsatların aşama bazlı dağılımı. 
-            Hangi aşamada kaç fırsat olduğunu görüntüleyin.
-          </div>
         </Card>
 
         <Card className="p-6">
@@ -76,10 +74,6 @@ export default function DealReports() {
             <TrendingUp className="h-5 w-5 text-primary-600" />
           </div>
           <DealValueComposedChart data={data?.valueTrend || []} />
-          <div className="mt-4 p-3 bg-gray-50 rounded text-xs text-gray-600">
-            <strong>Açıklama:</strong> Aylık bazda fırsat değer ve sayı trendi. 
-            Hem değer hem sayı trendini birlikte görüntüleyin.
-          </div>
         </Card>
       </div>
     </div>

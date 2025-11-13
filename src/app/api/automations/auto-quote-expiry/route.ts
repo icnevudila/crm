@@ -33,14 +33,14 @@ export async function POST() {
     if (findError) {
       console.error('AutoQuoteExpiry find error:', findError)
       return NextResponse.json(
-        { error: 'Failed to find expired quotes' },
+        { error: 'Süresi dolan teklifler alınamadı' },
         { status: 500 }
       )
     }
 
     if (!expiredQuotes || expiredQuotes.length === 0) {
       return NextResponse.json({
-        message: 'No expired quotes found',
+        message: 'Süresi dolan teklif bulunamadı',
         count: 0,
       })
     }
@@ -57,7 +57,7 @@ export async function POST() {
     if (updateError) {
       console.error('AutoQuoteExpiry update error:', updateError)
       return NextResponse.json(
-        { error: 'Failed to update expired quotes' },
+        { error: 'Süresi dolan teklifler güncellenemedi' },
         { status: 500 }
       )
     }
@@ -82,18 +82,23 @@ export async function POST() {
     await supabase.from('ActivityLog').insert(activityLogs)
 
     return NextResponse.json({
-      message: 'Expired quotes updated successfully',
+      message: 'Süresi dolan teklifler güncellendi',
       count: expiredQuotes.length,
       quotes: expiredQuotes.map((q: any) => ({ id: q.id, title: q.title })),
     })
   } catch (error: any) {
     console.error('AutoQuoteExpiry error:', error)
     return NextResponse.json(
-      { error: error?.message || 'Failed to process expired quotes' },
+      { error: error?.message || 'Süresi dolan teklifler işlenemedi' },
       { status: 500 }
     )
   }
 }
+
+
+
+
+
 
 
 

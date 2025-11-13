@@ -18,7 +18,7 @@ export async function GET(request: Request) {
         console.error('Finance GET API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -28,13 +28,10 @@ export async function GET(request: Request) {
     }
 
     // Permission check - canRead kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canRead = await hasPermission('finance', 'read', session.user.id)
     if (!canRead) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Finans görüntüleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
@@ -117,7 +114,7 @@ export async function GET(request: Request) {
         console.error('Finance API error:', error)
       }
       return NextResponse.json(
-        { error: error.message || 'Failed to fetch finance records' },
+        { error: error.message || 'Finans kayıtları getirilemedi' },
         { status: 500 }
       )
     }
@@ -132,7 +129,7 @@ export async function GET(request: Request) {
     })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch finance records' },
+      { error: error.message || 'Finans kayıtları getirilemedi' },
       { status: 500 }
     )
   }
@@ -149,7 +146,7 @@ export async function POST(request: Request) {
         console.error('Finance POST API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -159,13 +156,10 @@ export async function POST(request: Request) {
     }
 
     // Permission check - canCreate kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canCreate = await hasPermission('finance', 'create', session.user.id)
     if (!canCreate) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Finans kaydı oluşturma yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const body = await request.json()
@@ -187,7 +181,7 @@ export async function POST(request: Request) {
     return NextResponse.json(data, { status: 201 })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to create finance record' },
+      { error: error.message || 'Finans kaydı oluşturulamadı' },
       { status: 500 }
     )
   }

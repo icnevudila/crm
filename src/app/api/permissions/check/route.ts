@@ -23,14 +23,14 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url)
-    const module = searchParams.get('module')
+    const moduleName = searchParams.get('module')
 
-    if (!module) {
+    if (!moduleName) {
       return NextResponse.json({ error: 'Module parameter is required' }, { status: 400 })
     }
 
     // checkUserPermission fonksiyonu UserPermission tablosunu da kontrol ediyor
-    const permissions = await checkUserPermission(module)
+    const permissions = await checkUserPermission(moduleName)
 
     return NextResponse.json(permissions, {
       headers: {

@@ -39,7 +39,7 @@ export async function GET(
       .single()
 
     if (!segment) {
-      return NextResponse.json({ error: 'Segment not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Segment bulunamadı' }, { status: 404 })
     }
 
     // Segment üyelerini çek
@@ -66,7 +66,7 @@ export async function GET(
   } catch (error: any) {
     console.error('Segment members fetch error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch segment members' },
+      { error: error.message || 'Segment üyeleri getirilemedi' },
       { status: 500 }
     )
   }
@@ -94,7 +94,7 @@ export async function POST(
 
     if (!customerId) {
       return NextResponse.json(
-        { error: 'customerId is required' },
+        { error: 'customerId alanı zorunludur' },
         { status: 400 }
       )
     }
@@ -123,7 +123,7 @@ export async function POST(
       .single()
 
     if (!customer) {
-      return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Müşteri bulunamadı' }, { status: 404 })
     }
 
     // Zaten üye mi kontrol et
@@ -136,7 +136,7 @@ export async function POST(
 
     if (existingMember) {
       return NextResponse.json(
-        { error: 'Customer is already a member of this segment' },
+        { error: 'Bu müşteri segmentte zaten kayıtlı' },
         { status: 400 }
       )
     }
@@ -173,7 +173,7 @@ export async function POST(
   } catch (error: any) {
     console.error('Segment member add error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to add segment member' },
+      { error: error.message || 'Segment üyesi eklenemedi' },
       { status: 500 }
     )
   }
@@ -201,7 +201,7 @@ export async function DELETE(
 
     if (!customerId) {
       return NextResponse.json(
-        { error: 'customerId query parameter is required' },
+        { error: 'customerId sorgu parametresi zorunludur' },
         { status: 400 }
       )
     }
@@ -218,7 +218,7 @@ export async function DELETE(
       .single()
 
     if (!segment) {
-      return NextResponse.json({ error: 'Segment not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Segment bulunamadı' }, { status: 404 })
     }
 
     const { data: customer } = await supabase
@@ -229,7 +229,7 @@ export async function DELETE(
       .single()
 
     if (!customer) {
-      return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Müşteri bulunamadı' }, { status: 404 })
     }
 
     // Üyeyi çıkar
@@ -260,7 +260,7 @@ export async function DELETE(
   } catch (error: any) {
     console.error('Segment member remove error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to remove segment member' },
+      { error: error.message || 'Segment üyesi çıkarılamadı' },
       { status: 500 }
     )
   }

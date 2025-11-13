@@ -24,13 +24,10 @@ export async function GET(
     }
 
     // Permission check - canRead kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canRead = await hasPermission('competitor', 'read', session.user.id)
     if (!canRead) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Rakip görüntüleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const supabase = getSupabaseWithServiceRole()
@@ -109,7 +106,7 @@ export async function GET(
   } catch (error: any) {
     console.error('Competitor stats fetch error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch competitor stats' },
+      { error: error.message || 'Rakip istatistikleri getirilemedi' },
       { status: 500 }
     )
   }

@@ -18,13 +18,10 @@ export async function GET(
     }
 
     // Permission check - canRead kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canRead = await hasPermission('competitor', 'read', session.user.id)
     if (!canRead) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Rakip görüntüleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const supabase = getSupabaseWithServiceRole()
@@ -44,7 +41,7 @@ export async function GET(
   } catch (error: any) {
     console.error('Competitor fetch error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch competitor' },
+      { error: error.message || 'Rakip bilgisi getirilemedi' },
       { status: 500 }
     )
   }
@@ -61,13 +58,10 @@ export async function PUT(
     }
 
     // Permission check - canUpdate kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canUpdate = await hasPermission('competitor', 'update', session.user.id)
     if (!canUpdate) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Rakip güncelleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const body = await request.json()
@@ -97,7 +91,7 @@ export async function PUT(
   } catch (error: any) {
     console.error('Competitor update error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to update competitor' },
+      { error: error.message || 'Rakip güncellenemedi' },
       { status: 500 }
     )
   }
@@ -114,13 +108,10 @@ export async function DELETE(
     }
 
     // Permission check - canDelete kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canDelete = await hasPermission('competitor', 'delete', session.user.id)
     if (!canDelete) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Rakip silme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const { id } = await params
@@ -146,7 +137,7 @@ export async function DELETE(
   } catch (error: any) {
     console.error('Competitor delete error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to delete competitor' },
+      { error: error.message || 'Rakip silinemedi' },
       { status: 500 }
     )
   }

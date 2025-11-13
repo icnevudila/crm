@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 // Agresif cache - 30 dakika cache (aktivite logları için yeterli)
 export const revalidate = 1800
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     // Session kontrolü - hata yakalama ile
     const { session, error: sessionError } = await getSafeSession(request)

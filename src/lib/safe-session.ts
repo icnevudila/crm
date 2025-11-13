@@ -53,13 +53,25 @@ export async function getSafeSession(request?: Request): Promise<SafeSessionResu
   const cached = sessionCache.get(cacheKey)
   if (cached && cached.expires > Date.now()) {
     // Cache hit - anında dön
-    if (!cached.session?.user?.companyId) {
+    const cachedSession = cached.session
+    const role = cachedSession?.user?.role
+    const hasCompanyAccess = Boolean(cachedSession?.user?.companyId)
+
+    if (!cachedSession?.user) {
       return {
         session: null,
         error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
       }
     }
-    return { session: cached.session }
+
+    if (!hasCompanyAccess && role !== 'SUPER_ADMIN') {
+      return {
+        session: null,
+        error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+      }
+    }
+
+    return { session: cachedSession }
   }
   
   // Cache miss - getServerSession çağır
@@ -72,7 +84,17 @@ export async function getSafeSession(request?: Request): Promise<SafeSessionResu
       expires: Date.now() + SESSION_CACHE_TTL,
     })
     
-    if (!session?.user?.companyId) {
+    const role = session?.user?.role
+    const hasCompanyAccess = Boolean(session?.user?.companyId)
+
+    if (!session?.user) {
+      return {
+        session: null,
+        error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+      }
+    }
+
+    if (!hasCompanyAccess && role !== 'SUPER_ADMIN') {
       return {
         session: null,
         error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),

@@ -2,7 +2,7 @@
 
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { ArrowRight, FileText, Calendar, CheckCircle, XCircle, Send, Package } from 'lucide-react'
+import { ArrowRight, FileText, Calendar, CheckCircle, XCircle, Send, Package, Truck } from 'lucide-react'
 import { translateStage } from '@/lib/stageTranslations'
 import { isValidDealTransition, isValidQuoteTransition, isValidInvoiceTransition } from '@/lib/stageValidation'
 

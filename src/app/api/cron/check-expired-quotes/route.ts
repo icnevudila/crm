@@ -36,14 +36,14 @@ export async function GET(request: Request) {
     if (findError) {
       console.error('Check Expired Quotes - Find Error:', findError)
       return NextResponse.json(
-        { error: 'Failed to find expired quotes', details: findError.message },
+        { error: 'Süresi dolan teklifler alınamadı', details: findError.message },
         { status: 500 }
       )
     }
 
     if (!expiredQuotes || expiredQuotes.length === 0) {
       return NextResponse.json({
-        message: 'No expired quotes found',
+        message: 'Süresi dolan teklif bulunamadı',
         count: 0,
         date: today,
       })
@@ -104,7 +104,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      message: 'Expired quotes checked',
+      message: 'Süresi dolan teklifler kontrol edildi',
       totalQuotes: expiredQuotes.length,
       updatedCount,
       notificationsSent: notificationCount,
@@ -113,7 +113,7 @@ export async function GET(request: Request) {
   } catch (error: any) {
     console.error('Check Expired Quotes - Error:', error)
     return NextResponse.json(
-      { error: error?.message || 'Failed to check expired quotes' },
+      { error: error?.message || 'Süresi dolan teklifler kontrol edilemedi' },
       { status: 500 }
     )
   }

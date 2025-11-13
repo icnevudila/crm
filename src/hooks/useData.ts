@@ -8,7 +8,10 @@ import { fetchData } from '@/lib/api'
 
 export interface UseDataOptions {
   revalidateOnFocus?: boolean
+  revalidateOnReconnect?: boolean
+  revalidateIfStale?: boolean
   dedupingInterval?: number
+  focusThrottleInterval?: number
   errorRetryInterval?: number
   suspense?: boolean
   refreshInterval?: number
@@ -25,7 +28,10 @@ export function useData<T = any>(
 ) {
   const {
     revalidateOnFocus = false, // Focus'ta revalidate YOK - instant navigation için
-    dedupingInterval = 5000, // AGRESİF: 5 SANİYE - Daha sık fresh data (optimistic update'ler zaten var)
+    revalidateOnReconnect = false, // Mobil ağ değişimlerinde gereksiz refetch yapma
+    revalidateIfStale = false, // Cache'deki veri sıcaksa kullan
+    dedupingInterval = 60000, // 60 SANİYE - Dengeli cache (performans + veri güncelliği dengesi)
+    focusThrottleInterval = 15000, // Arka arkaya focus event'lerini 15sn throttle et
     errorRetryInterval = 1000, // Exponential backoff: 1s (çok hızlı retry)
     suspense = false, // Suspense boundaries manuel olarak ekleniyor
     refreshInterval,
@@ -36,7 +42,10 @@ export function useData<T = any>(
     fetchData,
     {
       revalidateOnFocus,
+      revalidateOnReconnect,
+      revalidateIfStale,
       dedupingInterval,
+      focusThrottleInterval,
       errorRetryInterval,
       suspense, // Manuel Suspense boundaries kullanıyoruz
       refreshInterval,

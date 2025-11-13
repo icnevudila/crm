@@ -17,7 +17,7 @@ export async function GET(request: Request) {
         console.error('Tickets GET API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -27,13 +27,10 @@ export async function GET(request: Request) {
     }
 
     // Permission check - canRead kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canRead = await hasPermission('ticket', 'read', session.user.id)
     if (!canRead) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Destek talebi görüntüleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
@@ -68,7 +65,7 @@ export async function GET(request: Request) {
     })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch tickets' },
+      { error: error.message || 'Destek talepleri getirilemedi' },
       { status: 500 }
     )
   }
@@ -85,7 +82,7 @@ export async function POST(request: Request) {
         console.error('Tickets POST API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -95,13 +92,10 @@ export async function POST(request: Request) {
     }
 
     // Permission check - canCreate kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canCreate = await hasPermission('ticket', 'create', session.user.id)
     if (!canCreate) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Destek talebi oluşturma yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     // Body parse - hata yakalama ile
@@ -113,7 +107,7 @@ export async function POST(request: Request) {
         console.error('Tickets POST API JSON parse error:', jsonError)
       }
       return NextResponse.json(
-        { error: 'Invalid JSON body', message: jsonError?.message || 'Failed to parse request body' },
+        { error: 'Geçersiz JSON', message: jsonError?.message || 'İstek gövdesi çözümlenemedi' },
         { status: 400 }
       )
     }
@@ -217,7 +211,7 @@ export async function POST(request: Request) {
       console.error('Tickets POST API error:', error)
     }
     return NextResponse.json(
-      { error: error?.message || 'Failed to create ticket' },
+      { error: error?.message || 'Destek talebi oluşturulamadı' },
       { status: 500 }
     )
   }

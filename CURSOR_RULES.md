@@ -49,3 +49,7 @@ Bu doküman, Cursor ortamında çalışan tüm agentların uyması gereken ortak
 Bu kurallar tüm agentlar için bağlayıcıdır. Yeni bir vaka ortaya çıkarsa dokümanı güncelle ve takıma haber ver. Kriz anında bile önce kuralları kontrol et; hızlı ama kontrolsüz değişiklik yapma.
 
 
+
+
+
+

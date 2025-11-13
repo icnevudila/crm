@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
-// Dynamic route - POST sonrası fresh data için cache'i kapat
-export const dynamic = 'force-dynamic'
+// Dengeli cache - 60 saniye revalidate (performans + veri güncelliği dengesi)
+export const revalidate = 60
 
 export async function GET(request: Request) {
   try {
@@ -38,72 +38,85 @@ export async function GET(request: Request) {
     const customerCompanyId = searchParams.get('customerCompanyId') || ''
     const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
 
+    // Pagination parametreleri
+    const all = searchParams.get('all') === 'true' // Raporlama için tüm veriler
+    const page = parseInt(searchParams.get('page') || '1', 10)
+    const pageSize = parseInt(searchParams.get('pageSize') || '20', 10) // Default 20 kayıt/sayfa
+
     // OPTİMİZE: Sadece gerekli kolonları seç - performans için
     // SuperAdmin için Company bilgisi ekle
-    // DÜZELTME: Pagination ekle - Supabase varsayılan limiti 1000, tüm kayıtları çekmek için pagination yap
-    let allQuotes: any[] = []
-    let from = 0
-    const pageSize = 1000
-    let hasMore = true
-
-    while (hasMore) {
-      let query = supabase
-        .from('Quote')
-        .select(`
-          id, title, status, totalAmount, dealId, createdAt, companyId,
-          Company:companyId (
-            id,
-            name
-          )
-        `)
-        .order('createdAt', { ascending: false })
-        .range(from, from + pageSize - 1)
-      
-      // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
-      if (!isSuperAdmin) {
-        query = query.eq('companyId', companyId)
-      } else if (filterCompanyId) {
-        // SuperAdmin firma filtresi seçtiyse sadece o firmayı göster
-        query = query.eq('companyId', filterCompanyId)
-      }
-      // SuperAdmin ve firma filtresi yoksa tüm firmaları göster
-
-      if (search) {
-        query = query.or(`title.ilike.%${search}%`)
-      }
-
-      if (status) {
-        query = query.eq('status', status)
-      }
-
-      const { data, error } = await query
-
-      if (error) {
-        // Production'da console.error kaldırıldı
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Quotes API error:', error)
-        }
-        return NextResponse.json(
-          { error: error.message || 'Failed to fetch quotes' },
-          { status: 500 }
+    let query = supabase
+      .from('Quote')
+      .select(`
+        id, title, status, totalAmount, dealId, createdAt, companyId, customerCompanyId,
+        Company:companyId (
+          id,
+          name
         )
-      }
+      `, { count: 'exact' })
+      .order('createdAt', { ascending: false })
+    
+    // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
+    if (!isSuperAdmin) {
+      query = query.eq('companyId', companyId)
+    } else if (filterCompanyId) {
+      // SuperAdmin firma filtresi seçtiyse sadece o firmayı göster
+      query = query.eq('companyId', filterCompanyId)
+    }
+    // SuperAdmin ve firma filtresi yoksa tüm firmaları göster
 
-      if (data && data.length > 0) {
-        allQuotes = [...allQuotes, ...data]
-        from += pageSize
-        hasMore = data.length === pageSize // Eğer tam sayfa geldiyse devam et
-      } else {
-        hasMore = false
-      }
+    if (search) {
+      query = query.or(`title.ilike.%${search}%`)
     }
 
-    const data = allQuotes
+    if (status) {
+      query = query.eq('status', status)
+    }
 
-    // ULTRA AGRESİF cache headers - 30 dakika cache (tek tıkla açılmalı)
-    return NextResponse.json(data || [], {
+    if (customerCompanyId) {
+      query = query.eq('customerCompanyId', customerCompanyId)
+    }
+
+    // Raporlama için tüm veriler çek (all=true), liste için pagination
+    if (!all) {
+      query = query.range((page - 1) * pageSize, page * pageSize - 1)
+    }
+
+    const { data, error, count } = await query
+
+    if (error) {
+      // Production'da console.error kaldırıldı
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Quotes API error:', error)
+      }
+      return NextResponse.json(
+        { error: error.message || 'Failed to fetch quotes' },
+        { status: 500 }
+      )
+    }
+
+    const totalPages = all ? 1 : Math.ceil((count || (data?.length || 0)) / pageSize)
+
+    // Dengeli cache - 60 saniye (performans + veri güncelliği dengesi)
+    // stale-while-revalidate: Eski veri gösterilirken arka planda yenilenir (kullanıcı beklemez)
+    return NextResponse.json(
+      all
+        ? data || [] // Raporlama için direkt array
+        : {
+            // Liste için pagination ile
+            data: data || [],
+            pagination: {
+              page,
+              pageSize,
+              totalItems: count || 0,
+              totalPages,
+            },
+          },
+      {
       headers: {
-        'Cache-Control': 'no-store, must-revalidate', // POST/PUT sonrası fresh data için cache'i kapat
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120, max-age=30',
+        'CDN-Cache-Control': 'public, s-maxage=60',
+        'Vercel-CDN-Cache-Control': 'public, s-maxage=60',
       },
     })
   } catch (error: any) {
@@ -198,7 +211,6 @@ export async function POST(request: Request) {
     // schema.sql: title, status, total, dealId, companyId
     // schema-extension.sql: description, validUntil, discount, taxRate (migration çalıştırılmamış olabilir - GÖNDERME!)
     // schema-vendor.sql: vendorId (migration çalıştırılmamış olabilir - GÖNDERME!)
-    // NOT: customerCompanyId kolonu Quote tablosunda yok - GÖNDERME!
     const quoteData: any = {
       title: quoteTitle, // Otomatik numara ile birlikte
       status: body.status || 'DRAFT',
@@ -208,7 +220,7 @@ export async function POST(request: Request) {
 
     // Sadece schema.sql'de olan alanlar
     if (body.dealId) quoteData.dealId = body.dealId
-    // NOT: customerCompanyId kolonu Quote tablosunda yok - GÖNDERME!
+    if (body.customerCompanyId) quoteData.customerCompanyId = body.customerCompanyId
     // NOT: description, vendorId, validUntil, discount, taxRate schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
     // @ts-ignore - Supabase type inference issue with Quote table
@@ -229,18 +241,9 @@ export async function POST(request: Request) {
       )
     }
 
-    // ActivityLog kaydı
-    // @ts-ignore - Supabase database type tanımları eksik, insert metodu dinamik tip bekliyor
-    await supabase.from('ActivityLog').insert([
-      {
-        entity: 'Quote',
-        action: 'CREATE',
-        description: `Yeni teklif oluşturuldu: ${body.title}`,
-        meta: { entity: 'Quote', action: 'create', id: (data as any).id },
-        userId: session.user.id,
-        companyId: session.user.companyId,
-      },
-    ])
+    // ActivityLog KALDIRILDI - Sadece kritik işlemler için ActivityLog tutulacak
+    // (Performans optimizasyonu: Gereksiz log'lar veritabanını yavaşlatıyor)
+    // Quote ACCEPTED/REJECTED durumlarında ActivityLog tutulacak (quotes/[id]/route.ts'de)
 
     // Deal stage'ini PROPOSAL'a taşı (eğer dealId varsa ve deal CONTACTED veya LEAD aşamasındaysa)
     let dealStageUpdated = false
@@ -434,17 +437,66 @@ export async function POST(request: Request) {
     // Bildirim: Teklif oluşturuldu
     try {
       const { createNotificationForRole } = await import('@/lib/notification-helper')
-      await createNotificationForRole({
+      
+      // Firma bilgisini çek (eğer customerCompanyId varsa)
+      let companyName = ''
+      if (body.customerCompanyId) {
+        const { data: companyData } = await supabase
+          .from('CustomerCompany')
+          .select('name')
+          .eq('id', body.customerCompanyId)
+          .single()
+        if (companyData) {
+          companyName = companyData.name
+        }
+      }
+      
+      // Deal bilgisini çek (eğer dealId varsa)
+      let dealTitle = ''
+      if (body.dealId) {
+        const { data: dealData } = await supabase
+          .from('Deal')
+          .select('title')
+          .eq('id', body.dealId)
+          .single()
+        if (dealData) {
+          dealTitle = dealData.title
+        }
+      }
+      
+      // Bildirim mesajını oluştur
+      let notificationMessage = `"${(data as any).title}" teklifi oluşturuldu.`
+      if (companyName) {
+        notificationMessage = `${companyName} firması için "${(data as any).title}" teklifi oluşturuldu.`
+      } else if (dealTitle) {
+        notificationMessage = `"${dealTitle}" fırsatı için "${(data as any).title}" teklifi oluşturuldu.`
+      }
+      
+      const notificationResult = await createNotificationForRole({
         companyId: session.user.companyId,
         role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
         title: 'Yeni Teklif Oluşturuldu',
-        message: `Yeni bir teklif oluşturuldu. Detayları görmek ister misiniz?`,
+        message: notificationMessage,
         type: 'info',
         relatedTo: 'Quote',
         relatedId: (data as any).id,
       })
-    } catch (notificationError) {
-      // Bildirim hatası ana işlemi engellemez
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Quote notification sent:', {
+          quoteId: (data as any).id,
+          quoteTitle: (data as any).title,
+          companyId: session.user.companyId,
+          notificationResult,
+        })
+      }
+    } catch (notificationError: any) {
+      // Bildirim hatası ana işlemi engellemez ama logla
+      console.error('Quote notification error:', {
+        error: notificationError?.message || notificationError,
+        quoteId: (data as any)?.id,
+        companyId: session.user.companyId,
+      })
     }
 
     // Response'a stage güncelleme bilgisini ekle

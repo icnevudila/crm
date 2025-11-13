@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
-// Dynamic route - POST sonrası fresh data için cache'i kapat
-export const dynamic = 'force-dynamic'
+// Dengeli cache - 60 saniye revalidate (performans + veri güncelliği dengesi)
+export const revalidate = 60
 
 export async function GET(request: Request) {
   try {
@@ -43,7 +43,11 @@ export async function GET(request: Request) {
     // SuperAdmin için firma filtresi
     const filterCompanyId = searchParams.get('filterCompanyId') || ''
     
-    // OPTİMİZE: Sadece gerekli alanlar ve limit
+    // Pagination parametreleri
+    const page = parseInt(searchParams.get('page') || '1', 10)
+    const pageSize = parseInt(searchParams.get('pageSize') || '20', 10) // Default 20 kayıt/sayfa
+    
+    // OPTİMİZE: Sadece gerekli alanlar ve pagination
     // migration 020: priorityScore, isPriority (lead scoring)
     // migration 025: leadSource (lead source tracking)
     // migration 033: LeadScore JOIN (score, temperature) - OPSIYONEL (tablo yoksa hata vermez)
@@ -51,14 +55,13 @@ export async function GET(request: Request) {
     let query = supabase
       .from('Deal')
       .select(`
-        id, title, stage, value, status, customerId, priorityScore, isPriority, leadSource, createdAt, companyId,
+        id, title, stage, value, status, customerId, customerCompanyId, priorityScore, isPriority, leadSource, createdAt, companyId,
         Company:companyId (
           id,
           name
         )
       `, { count: 'exact' })
       .order('createdAt', { ascending: false })
-      .limit(100) // ULTRA AGRESİF limit - sadece 100 kayıt (instant load)
     
     // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
@@ -107,6 +110,9 @@ export async function GET(request: Request) {
       query = query.lte('createdAt', endDate)
     }
 
+    // Pagination uygula - EN SON (filtrelerden sonra)
+    query = query.range((page - 1) * pageSize, page * pageSize - 1)
+
     const { data, error, count } = await query
 
     if (error) {
@@ -117,14 +123,28 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Cache headers - POST sonrası fresh data için cache'i kapat
-    // NOT: dynamic = 'force-dynamic' ile cache zaten kapalı
-    return NextResponse.json(data || [], {
-      headers: {
-        'Cache-Control': 'no-store, must-revalidate', // POST sonrası fresh data için cache'i kapat
-        'X-Total-Count': String(count || (data?.length || 0)),
+    const totalPages = Math.ceil((count || 0) / pageSize)
+
+    // Dengeli cache - 60 saniye (performans + veri güncelliği dengesi)
+    // stale-while-revalidate: Eski veri gösterilirken arka planda yenilenir (kullanıcı beklemez)
+    return NextResponse.json(
+      {
+        data: data || [],
+        pagination: {
+          page,
+          pageSize,
+          totalItems: count || 0,
+          totalPages,
+        },
       },
-    })
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120, max-age=30',
+          'CDN-Cache-Control': 'public, s-maxage=60',
+          'Vercel-CDN-Cache-Control': 'public, s-maxage=60',
+        },
+      }
+    )
   } catch (error) {
     return NextResponse.json(
       { error: 'Failed to fetch deals' },
@@ -214,25 +234,9 @@ export async function POST(request: Request) {
       )
     }
 
-    // ActivityLog kaydı - hata olsa bile ana işlem başarılı
-    try {
-      // @ts-ignore - Supabase database type tanımları eksik, insert metodu dinamik tip bekliyor
-      await supabase.from('ActivityLog').insert([
-        {
-          entity: 'Deal',
-          action: 'CREATE',
-          description: `Yeni fırsat oluşturuldu: ${body.title}`,
-          meta: { entity: 'Deal', action: 'create', id: (data as any)?.id },
-          userId: session.user.id,
-          companyId: session.user.companyId,
-        },
-      ])
-    } catch (logError) {
-      // ActivityLog hatası ana işlemi etkilemez
-      if (process.env.NODE_ENV === 'development') {
-        console.error('ActivityLog insert error:', logError)
-      }
-    }
+    // ActivityLog KALDIRILDI - Sadece kritik işlemler için ActivityLog tutulacak
+    // (Performans optimizasyonu: Gereksiz log'lar veritabanını yavaşlatıyor)
+    // Deal WON/LOST/CLOSED durumlarında ActivityLog tutulacak (deals/[id]/route.ts'de)
 
     // Bildirim: Fırsat oluşturuldu
     try {

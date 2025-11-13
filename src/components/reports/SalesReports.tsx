@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { BarChart3, TrendingUp, DollarSign, Calendar } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import { ReportSectionProps } from './types'
 
 // Lazy load grafik componentleri
 const MonthlySalesBarChart = dynamic(() => import('@/components/reports/charts/MonthlySalesBarChart'), {
@@ -27,14 +28,16 @@ async function fetchSalesReports() {
   return res.json()
 }
 
-export default function SalesReports() {
+export default function SalesReports({ isActive }: ReportSectionProps) {
   const { data, isLoading, error } = useQuery({
     queryKey: ['sales-reports'],
     queryFn: fetchSalesReports,
     staleTime: 5 * 60 * 1000,
     refetchOnMount: true,
+    enabled: isActive,
   })
 
+  if (!isActive) return null
   if (isLoading) return <SkeletonList />
   if (error) return <div className="text-red-600">Rapor yüklenirken hata oluştu</div>
 

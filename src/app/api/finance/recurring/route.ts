@@ -42,7 +42,7 @@ export async function POST(request: Request) {
 
     if (recurringError) {
       return NextResponse.json(
-        { error: recurringError.message || 'Failed to fetch recurring expenses' },
+        { error: recurringError.message || 'Tekrarlayan giderler getirilemedi' },
         { status: 500 }
       )
     }
@@ -62,14 +62,14 @@ export async function POST(request: Request) {
 
     if (allRecurringError) {
       return NextResponse.json(
-        { error: allRecurringError.message || 'Failed to fetch all recurring expenses' },
+        { error: allRecurringError.message || 'Tüm tekrarlayan giderler getirilemedi' },
         { status: 500 }
       )
     }
 
     if (!allRecurring || allRecurring.length === 0) {
       return NextResponse.json({
-        message: 'No recurring expenses found',
+        message: 'Tekrarlayan gider bulunamadı',
         created: 0,
         skipped: 0,
       })
@@ -105,7 +105,7 @@ export async function POST(request: Request) {
 
       if (createError) {
         return NextResponse.json(
-          { error: createError.message || 'Failed to create recurring expenses' },
+          { error: createError.message || 'Tekrarlayan giderler oluşturulamadı' },
           { status: 500 }
         )
       }
@@ -134,14 +134,14 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      message: 'Recurring expenses processed',
+      message: 'Tekrarlayan giderler işlendi',
       totalRecurring: allRecurring.length,
       created: createdCount,
       skipped: allRecurring.length - createdCount,
     })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to process recurring expenses' },
+      { error: error.message || 'Tekrarlayan giderler işlenemedi' },
       { status: 500 }
     )
   }

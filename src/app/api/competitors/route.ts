@@ -15,13 +15,10 @@ export async function GET(request: NextRequest) {
     }
 
     // Permission check - canRead kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canRead = await hasPermission('competitor', 'read', session.user.id)
     if (!canRead) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Rakip görüntüleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const supabase = getSupabaseWithServiceRole()
@@ -36,7 +33,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Competitors fetch error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch competitors' },
+      { error: error.message || 'Rakip listesi getirilemedi' },
       { status: 500 }
     )
   }
@@ -50,20 +47,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Permission check - canCreate kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canCreate = await hasPermission('competitor', 'create', session.user.id)
     if (!canCreate) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Rakip oluşturma yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const body = await request.json()
 
     if (!body.name) {
       return NextResponse.json(
-        { error: 'Name is required' },
+        { error: 'İsim alanı zorunludur' },
         { status: 400 }
       )
     }
@@ -86,14 +80,14 @@ export async function POST(request: NextRequest) {
       entityId: data.id,
       userId: session.user.id,
       companyId: session.user.companyId,
-      description: `Added competitor: ${data.name}`,
+      description: `Rakip eklendi: ${data.name}`,
     })
 
     return NextResponse.json(data, { status: 201 })
   } catch (error: any) {
     console.error('Competitor create error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to create competitor' },
+      { error: error.message || 'Rakip oluşturulamadı' },
       { status: 500 }
     )
   }

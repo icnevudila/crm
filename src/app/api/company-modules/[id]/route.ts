@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
-import { PERMISSION_DENIED_MESSAGE } from '@/lib/permissions'
+import { buildPermissionDeniedResponse } from '@/lib/permissions'
 
 export async function PUT(
   request: Request,
@@ -18,10 +18,7 @@ export async function PUT(
 
     // Sadece SuperAdmin güncelleyebilir
     if (session.user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json(
-        { error: 'Forbidden', message: PERMISSION_DENIED_MESSAGE },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse('Sadece SuperAdmin modül izinlerini güncelleyebilir.')
     }
 
     const { id } = await params
@@ -49,7 +46,7 @@ export async function PUT(
     return NextResponse.json(data)
   } catch (error: any) {
     return NextResponse.json(
-      { error: 'Failed to update company module' },
+      { error: 'Modül güncellenemedi' },
       { status: 500 }
     )
   }
@@ -70,10 +67,7 @@ export async function DELETE(
 
     // Sadece SuperAdmin silebilir
     if (session.user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json(
-        { error: 'Forbidden', message: PERMISSION_DENIED_MESSAGE },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse('Sadece SuperAdmin modül izinlerini silebilir.')
     }
 
     const { id } = await params
@@ -93,7 +87,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error: any) {
     return NextResponse.json(
-      { error: 'Failed to delete company module' },
+      { error: 'Modül silinemedi' },
       { status: 500 }
     )
   }

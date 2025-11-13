@@ -3,6 +3,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { captureException } from '@/lib/sentry'
 
 interface Props {
   children: ReactNode
@@ -25,7 +26,13 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Production'da console.error kaldırıldı
+    // Sentry'ye gönder
+    captureException(error, {
+      errorInfo,
+      componentStack: errorInfo.componentStack,
+    })
+
+    // Development'da console'a yazdır
     if (process.env.NODE_ENV === 'development') {
       console.error('ErrorBoundary caught an error:', error, errorInfo)
     }

@@ -27,10 +27,11 @@ async function fetchWithRetry(
   } = fetchOptions
 
   const method = (rawMethod ?? 'GET').toString().toUpperCase()
+  // PERFORMANCE FIX: GET request'lerde cache kullan (SWR zaten cache yönetiyor)
   const resolvedCache =
-    rawCache ?? (method === 'GET' ? 'force-cache' : 'no-store')
+    rawCache ?? (method === 'GET' ? 'default' : 'no-store') // GET'lerde cache kullan
   const resolvedNext =
-    rawNext ?? (method === 'GET' ? undefined : { revalidate: 0 })
+    rawNext ?? (method === 'GET' ? { revalidate: 60 } : { revalidate: 0 }) // GET'lerde 60s revalidate
 
   let lastError: Error | null = null
 

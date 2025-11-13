@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { toast } from '@/lib/toast'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { Plus, Search, Edit, Trash2, Eye, Package, AlertTriangle, TrendingUp, TrendingDown, Clock } from 'lucide-react'
@@ -27,12 +27,26 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import ProductForm from './ProductForm'
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import ModuleStats from '@/components/stats/ModuleStats'
 import { AutomationInfo } from '@/components/automation/AutomationInfo'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
+import dynamic from 'next/dynamic'
+
+// Lazy load ProductForm ve ProductDetailModal - performans için
+const ProductForm = dynamic(() => import('./ProductForm'), {
+  ssr: false,
+  loading: () => null,
+})
+const ProductDetailModal = dynamic(() => import('./ProductDetailModal'), {
+  ssr: false,
+  loading: () => null,
+})
+
+interface ProductListProps {
+  isOpen?: boolean
+}
 
 interface Product {
   id: string
@@ -57,8 +71,10 @@ interface Product {
   updatedAt?: string
 }
 
-export default function ProductList() {
+export default function ProductList({ isOpen = true }: ProductListProps) {
   const locale = useLocale()
+  const t = useTranslations('products')
+  const tCommon = useTranslations('common')
   const searchParams = useSearchParams()
   const { data: session } = useSession()
   
@@ -75,17 +91,20 @@ export default function ProductList() {
     if (searchFromUrl && searchFromUrl !== search) {
       setSearch(searchFromUrl)
     }
-  }, [searchFromUrl])
+  }, [searchFromUrl, search])
   const [stockFilter, setStockFilter] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin için firma filtresi
   const [formOpen, setFormOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
+  const [selectedProductData, setSelectedProductData] = useState<Product | null>(null)
   
   // SuperAdmin için firmaları çek
   const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
-    isSuperAdmin ? '/api/superadmin/companies' : null,
+    isOpen && isSuperAdmin ? '/api/superadmin/companies' : null,
     { dedupingInterval: 60000, revalidateOnFocus: false }
   )
   // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
@@ -105,18 +124,33 @@ export default function ProductList() {
   }, [search])
 
   // SWR ile veri çekme (CustomerList pattern'i)
-  const params = new URLSearchParams()
-  if (debouncedSearch) params.append('search', debouncedSearch)
-  if (stockFilter) params.append('stock', stockFilter)
-  if (categoryFilter) params.append('category', categoryFilter)
-  if (statusFilter) params.append('status', statusFilter)
-  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId) // SuperAdmin için firma filtresi
-  
-  const apiUrl = `/api/products?${params.toString()}`
-  const { data: productsData, isLoading, error, mutate: mutateProducts } = useData<Product[]>(apiUrl, {
-    dedupingInterval: 5000,
-    revalidateOnFocus: false,
-  })
+  const apiUrl = useMemo(() => {
+    if (!isOpen) return null
+
+    const params = new URLSearchParams()
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    if (stockFilter) params.append('stock', stockFilter)
+    if (categoryFilter) params.append('category', categoryFilter)
+    if (statusFilter) params.append('status', statusFilter)
+    if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+    return `/api/products?${params.toString()}`
+  }, [
+    isOpen,
+    debouncedSearch,
+    stockFilter,
+    categoryFilter,
+    statusFilter,
+    isSuperAdmin,
+    filterCompanyId,
+  ])
+
+  const { data: productsData, isLoading, error, mutate: mutateProducts } = useData<Product[]>(
+    apiUrl,
+    {
+      dedupingInterval: 5000,
+      revalidateOnFocus: false,
+    }
+  )
 
   // API'den dönen veriyi parse et - array olarak bekliyoruz (useMemo ile memoize)
   const products = useMemo(() => {
@@ -144,7 +178,7 @@ export default function ProductList() {
   }, [])
 
   const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!confirm(`${name} ürününü silmek istediğinize emin misiniz?`)) {
+    if (!confirm(t('deleteConfirm', { name }))) {
       return
     }
 
@@ -168,16 +202,16 @@ export default function ProductList() {
       await Promise.all([
         mutate('/api/products', updatedProducts, { revalidate: false }),
         mutate('/api/products?', updatedProducts, { revalidate: false }),
-        mutate(apiUrl, updatedProducts, { revalidate: false }),
+        apiUrl ? mutate(apiUrl, updatedProducts, { revalidate: false }) : Promise.resolve(),
       ])
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error('Silinemedi', error?.message)
+      toast.error(tCommon('error'), error?.message)
     }
-  }, [products, mutateProducts, apiUrl])
+  }, [products, mutateProducts, apiUrl, t, tCommon])
 
   const handleAdd = useCallback(() => {
     setSelectedProduct(null)
@@ -190,20 +224,23 @@ export default function ProductList() {
   }, [])
 
   // Stats verisini çek - toplam sayı için
-  const { data: stats } = useData<any>('/api/stats/products', {
-    dedupingInterval: 5000,
-    revalidateOnFocus: false,
-  })
+  const { data: stats } = useData<any>(
+    isOpen ? '/api/stats/products' : null,
+    {
+      dedupingInterval: 5000,
+      revalidateOnFocus: false,
+    }
+  )
 
   const getStockBadge = (stock: number, minStock?: number) => {
     if (stock === 0) {
-      return <Badge className="bg-red-100 text-red-800">Stokta Yok</Badge>
+      return <Badge className="bg-red-100 text-red-800">{t('stockStatus.outOfStock')}</Badge>
     } else if (minStock && stock <= minStock) {
-      return <Badge className="bg-red-100 text-red-800">Kritik Stok</Badge>
+      return <Badge className="bg-red-100 text-red-800">{t('stockStatus.critical')}</Badge>
     } else if (stock <= 10) {
-      return <Badge className="bg-yellow-100 text-yellow-800">Düşük Stok</Badge>
+      return <Badge className="bg-yellow-100 text-yellow-800">{t('stockStatus.low')}</Badge>
     } else {
-      return <Badge className="bg-green-100 text-green-800">Stokta Var</Badge>
+      return <Badge className="bg-green-100 text-green-800">{t('stockStatus.inStock')}</Badge>
     }
   }
 
@@ -228,6 +265,10 @@ export default function ProductList() {
     }
   }, [products])
 
+  if (!isOpen) {
+    return null
+  }
+
   if (isLoading) {
     return <SkeletonList />
   }
@@ -238,13 +279,13 @@ export default function ProductList() {
       <div className="space-y-6">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-800">
-            Ürünler yüklenirken bir hata oluştu. 
+            {t('errorLoadingProducts')} 
             {error?.message?.includes('incomingQuantity') || error?.message?.includes('reservedQuantity') ? (
               <span className="block mt-2 text-sm">
-                Veritabanı migration&apos;ı eksik olabilir. Lütfen migration dosyalarını çalıştırın.
+                {t('migrationMissing')}
               </span>
             ) : (
-              <span className="block mt-2 text-sm">{error?.message || 'Bilinmeyen hata'}</span>
+              <span className="block mt-2 text-sm">{error?.message || tCommon('unknownError')}</span>
             )}
           </p>
         </div>
@@ -262,38 +303,38 @@ export default function ProductList() {
 
       {/* Otomasyon Bilgileri */}
       <AutomationInfo
-        title="Ürünler Modülü Otomasyonları"
+        title={t('automationTitle')}
         automations={[
           {
-            action: 'Teklif "Kabul Edildi" yapıldığında (otomatik)',
-            result: '"Ürünler" sayfasındaki ilgili ürünlerin stokları rezerve edilir',
+            action: t('automationQuoteAccepted'),
+            result: t('automationQuoteAcceptedResult'),
             details: [
-              'Rezerve miktar artar (ürünler rezerve edilir)',
-              'Stok miktarı değişmez, sadece rezerve miktar artar',
+              t('automationQuoteAcceptedDetails1'),
+              t('automationQuoteAcceptedDetails2'),
             ],
           },
           {
-            action: 'Fatura "Ödendi" yapıldığında (otomatik)',
-            result: '"Ürünler" sayfasındaki ilgili ürünlerin stokları düşer',
+            action: t('automationInvoicePaid'),
+            result: t('automationInvoicePaidResult'),
             details: [
-              'Stok miktarı azalır (ürünler satıldı)',
-              'Rezerve edilmiş stoklar otomatik olarak serbest bırakılır',
+              t('automationInvoicePaidDetails1'),
+              t('automationInvoicePaidDetails2'),
             ],
           },
           {
-            action: 'Sevkiyat "Gönderildi" yapıldığında (otomatik)',
-            result: '"Ürünler" sayfasındaki ilgili ürünlerin stokları düşer',
+            action: t('automationShipmentShipped'),
+            result: t('automationShipmentShippedResult'),
             details: [
-              'Stok miktarı azalır (ürünler gönderildi)',
-              'Rezerve edilmiş stoklar otomatik olarak serbest bırakılır',
+              t('automationShipmentShippedDetails1'),
+              t('automationShipmentShippedDetails2'),
             ],
           },
           {
-            action: 'Stok kritik seviyeye düştüğünde (otomatik)',
-            result: 'Sistem içi kullanıcılara (Admin, Sales) bildirim gönderilir',
+            action: t('automationStockCritical'),
+            result: t('automationStockCriticalResult'),
             details: [
-              'Minimum stok seviyesinin altına düşen ürünler için uyarı',
-              '"Aktiviteler" sayfasında stok uyarısı kaydı görünür',
+              t('automationStockCriticalDetails1'),
+              t('automationStockCriticalDetails2'),
             ],
           },
         ]}
@@ -309,7 +350,7 @@ export default function ProductList() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Toplam Ürün</p>
+              <p className="text-sm text-gray-600 mb-1">{t('stats.totalProducts')}</p>
               <p className="text-2xl font-bold text-gray-900">{products.length}</p>
             </div>
             <Package className="h-8 w-8 text-indigo-500" />
@@ -324,7 +365,7 @@ export default function ProductList() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Kritik Stok</p>
+              <p className="text-sm text-gray-600 mb-1">{t('stats.criticalStock')}</p>
               <p className="text-2xl font-bold text-red-600">{stockStats.critical}</p>
             </div>
             <AlertTriangle className="h-8 w-8 text-red-500" />
@@ -339,10 +380,10 @@ export default function ProductList() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Son Giriş</p>
+              <p className="text-sm text-gray-600 mb-1">{t('stats.lastEntry')}</p>
               <p className="text-sm font-semibold text-gray-900">
                 {stockStats.lastUpdate 
-                  ? new Date(stockStats.lastUpdate).toLocaleDateString('tr-TR')
+                  ? new Date(stockStats.lastUpdate).toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US')
                   : '-'}
               </p>
             </div>
@@ -358,10 +399,10 @@ export default function ProductList() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Son Çıkış</p>
+              <p className="text-sm text-gray-600 mb-1">{t('stats.lastExit')}</p>
               <p className="text-sm font-semibold text-gray-900">
                 {stockStats.lastUpdate 
-                  ? new Date(stockStats.lastUpdate).toLocaleDateString('tr-TR')
+                  ? new Date(stockStats.lastUpdate).toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US')
                   : '-'}
               </p>
             </div>
@@ -373,15 +414,15 @@ export default function ProductList() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Ürünler</h1>
-          <p className="mt-2 text-gray-600">Toplam {totalProducts} ürün</p>
+          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
+          <p className="mt-2 text-gray-600">{t('totalProducts', { count: totalProducts })}</p>
         </div>
         <Button
           onClick={handleAdd}
           className="bg-gradient-primary text-white"
         >
           <Plus className="mr-2 h-4 w-4" />
-          Yeni Ürün
+          {t('newProduct')}
         </Button>
       </div>
 
@@ -391,7 +432,7 @@ export default function ProductList() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             type="search"
-            placeholder="İsim, SKU veya Barkod ile ara..."
+            placeholder={t('searchPlaceholderDetailed')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -400,10 +441,10 @@ export default function ProductList() {
         {isSuperAdmin && (
           <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Firma Seç" />
+              <SelectValue placeholder={t('selectCompany')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Tüm Firmalar</SelectItem>
+              <SelectItem value="all">{t('allCompanies')}</SelectItem>
               {companies.map((company) => (
                 <SelectItem key={company.id} value={company.id}>
                   {company.name}
@@ -414,21 +455,21 @@ export default function ProductList() {
         )}
         <Select value={stockFilter || 'all'} onValueChange={(v) => setStockFilter(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-48">
-            <SelectValue placeholder="Stok Durumu" />
+            <SelectValue placeholder={t('selectStockStatus')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tümü</SelectItem>
-            <SelectItem value="inStock">Stokta Var</SelectItem>
-            <SelectItem value="lowStock">Düşük Stok</SelectItem>
-            <SelectItem value="outOfStock">Stokta Yok</SelectItem>
+            <SelectItem value="all">{t('allStock')}</SelectItem>
+            <SelectItem value="inStock">{t('stockStatus.inStock')}</SelectItem>
+            <SelectItem value="lowStock">{t('stockStatus.low')}</SelectItem>
+            <SelectItem value="outOfStock">{t('stockStatus.outOfStock')}</SelectItem>
           </SelectContent>
         </Select>
         <Select value={categoryFilter || 'all'} onValueChange={(v) => setCategoryFilter(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-48">
-            <SelectValue placeholder="Kategori" />
+            <SelectValue placeholder={t('selectCategory')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tüm Kategoriler</SelectItem>
+            <SelectItem value="all">{t('allCategories')}</SelectItem>
             {categories.map((cat) => (
               <SelectItem key={cat} value={cat}>{cat}</SelectItem>
             ))}
@@ -436,13 +477,13 @@ export default function ProductList() {
         </Select>
         <Select value={statusFilter || 'all'} onValueChange={(v) => setStatusFilter(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-48">
-            <SelectValue placeholder="Durum" />
+            <SelectValue placeholder={t('selectStatus')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tüm Durumlar</SelectItem>
-            <SelectItem value="ACTIVE">Aktif</SelectItem>
-            <SelectItem value="INACTIVE">Pasif</SelectItem>
-            <SelectItem value="DISCONTINUED">Üretimden Kalktı</SelectItem>
+            <SelectItem value="all">{t('allStatuses')}</SelectItem>
+            <SelectItem value="ACTIVE">{tCommon('active')}</SelectItem>
+            <SelectItem value="INACTIVE">{tCommon('inactive')}</SelectItem>
+            <SelectItem value="DISCONTINUED">{t('discontinued')}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -452,22 +493,22 @@ export default function ProductList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Ürün Adı</TableHead>
-              {isSuperAdmin && <TableHead>Firma</TableHead>}
-              <TableHead>Kategori</TableHead>
-              <TableHead>SKU/Barkod</TableHead>
-              <TableHead>Fiyat</TableHead>
-              <TableHead>Stok</TableHead>
-              <TableHead>Durum</TableHead>
-              <TableHead>Tarih</TableHead>
-              <TableHead className="text-right">İşlemler</TableHead>
+              <TableHead>{t('tableHeaders.name')}</TableHead>
+              {isSuperAdmin && <TableHead>{t('company')}</TableHead>}
+              <TableHead>{t('tableHeaders.category')}</TableHead>
+              <TableHead>{t('tableHeaders.sku')}/{t('barcode')}</TableHead>
+              <TableHead>{t('tableHeaders.price')}</TableHead>
+              <TableHead>{t('tableHeaders.stock')}</TableHead>
+              <TableHead>{t('tableHeaders.status')}</TableHead>
+              <TableHead>{t('tableHeaders.date')}</TableHead>
+              <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {products.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-8 text-gray-500">
-                  Ürün bulunamadı
+                  {t('noProductsFound')}
                 </TableCell>
               </TableRow>
             ) : (
@@ -484,7 +525,7 @@ export default function ProductList() {
                       <div>{product.name}</div>
                       {product.status && product.status !== 'ACTIVE' && (
                         <Badge variant="outline" className="mt-1 text-xs">
-                          {product.status === 'INACTIVE' ? 'Pasif' : 'Üretimden Kalktı'}
+                          {product.status === 'INACTIVE' ? tCommon('inactive') : t('discontinued')}
                         </Badge>
                       )}
                     </div>
@@ -525,13 +566,13 @@ export default function ProductList() {
                         <div className="font-medium">{product.stock || 0} {product.unit || 'ADET'}</div>
                         {product.minStock && (
                           <div className="text-xs text-gray-500 mt-0.5">
-                            Min: {product.minStock} {product.maxStock ? `| Max: ${product.maxStock}` : ''}
+                            {t('min')}: {product.minStock} {product.maxStock ? `| ${t('max')}: ${product.maxStock}` : ''}
                           </div>
                         )}
                         {product.updatedAt && (
                           <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
                             <Clock className="h-3 w-3" />
-                            {new Date(product.updatedAt).toLocaleDateString('tr-TR')}
+                            {new Date(product.updatedAt).toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US')}
                           </div>
                         )}
                       </div>
@@ -539,7 +580,7 @@ export default function ProductList() {
                         <div className="relative group">
                           <AlertTriangle className="h-5 w-5 text-red-500" />
                           <div className="absolute left-0 top-6 hidden group-hover:block z-10 bg-red-600 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
-                            Kritik stok seviyesi
+                            {t('stockStatus.critical')}
                           </div>
                         </div>
                       )}
@@ -550,26 +591,33 @@ export default function ProductList() {
                       {getStockBadge(product.stock || 0, product.minStock)}
                       {(product as any).reservedQuantity > 0 && (
                         <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">
-                          Rezerve: {(product as any).reservedQuantity}
+                          {t('reserved')}: {(product as any).reservedQuantity}
                         </Badge>
                       )}
                     </div>
                   </TableCell>
                   <TableCell>
-                    {new Date(product.createdAt).toLocaleDateString('tr-TR')}
+                    {new Date(product.createdAt).toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US')}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Link href={`/${locale}/products/${product.id}`} prefetch={true}>
-                        <Button variant="ghost" size="icon" aria-label={`${product.name} ürününü görüntüle`}>
-                          <Eye className="h-4 w-4 text-gray-600" />
-                        </Button>
-                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setSelectedProductId(product.id)
+                          setSelectedProductData(product) // Liste sayfasındaki veriyi hemen göster (hızlı açılış)
+                          setDetailModalOpen(true)
+                        }}
+                        aria-label={t('viewProduct', { name: product.name })}
+                      >
+                        <Eye className="h-4 w-4 text-gray-600" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => handleEdit(product)}
-                        aria-label={`${product.name} ürününü düzenle`}
+                        aria-label={t('editProduct', { name: product.name })}
                       >
                         <Edit className="h-4 w-4 text-gray-600" />
                       </Button>
@@ -578,7 +626,7 @@ export default function ProductList() {
                         size="icon"
                         onClick={() => handleDelete(product.id, product.name)}
                         className="text-red-600 hover:text-red-700"
-                        aria-label={`${product.name} ürününü sil`}
+                        aria-label={t('deleteProduct', { name: product.name })}
                       >
                         <Trash2 className="h-4 w-4 text-red-600" />
                       </Button>
@@ -590,6 +638,18 @@ export default function ProductList() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Detail Modal */}
+      <ProductDetailModal
+        productId={selectedProductId}
+        open={detailModalOpen}
+        onClose={() => {
+          setDetailModalOpen(false)
+          setSelectedProductId(null)
+          setSelectedProductData(null)
+        }}
+        initialData={selectedProductData || undefined}
+      />
 
       {/* Form Modal */}
       <ProductForm
@@ -619,7 +679,7 @@ export default function ProductList() {
           await Promise.all([
             mutate('/api/products', updatedProducts, { revalidate: true }),
             mutate('/api/products?', updatedProducts, { revalidate: true }),
-            mutate(apiUrl, updatedProducts, { revalidate: true }),
+            apiUrl ? mutate(apiUrl, updatedProducts, { revalidate: true }) : Promise.resolve(),
           ])
           
           // Form'u kapat ve seçili ürünü temizle

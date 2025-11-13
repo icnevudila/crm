@@ -640,13 +640,16 @@ BEGIN
       -- Müşteri adını al
       SELECT name INTO customer_name FROM "Customer" WHERE id = NEW."customerId";
       
-      -- Zaten Finance kaydı var mı
+      -- Zaten Finance kaydı var mı (hem eski hem yeni kolon adlarını kontrol et)
       IF NOT EXISTS (
         SELECT 1 FROM "Finance"
-        WHERE "relatedTo" = 'Invoice' AND "relatedId" = NEW.id
+        WHERE (
+          ("relatedEntityType" = 'Invoice' AND "relatedEntityId" = NEW.id)
+          OR ("relatedTo" = 'Invoice' AND "relatedId" = NEW.id)
+        )
       ) THEN
         
-        -- Finance kaydı oluştur (INCOME)
+        -- Finance kaydı oluştur (INCOME) - En güncel kolon adlarını kullan
         INSERT INTO "Finance" (
           type,
           category,
@@ -656,8 +659,8 @@ BEGIN
           "transactionDate",
           "paymentMethod",
           status,
-          "relatedTo",
-          "relatedId",
+          "relatedEntityType",
+          "relatedEntityId",
           "companyId",
           "createdBy"
         )

@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
-// Dynamic route - her zaman fresh data
-export const dynamic = 'force-dynamic'
+// Dengeli cache - 60 saniye revalidate (performans + veri güncelliği dengesi)
+export const revalidate = 60
 
 export async function GET(request: Request) {
   try {
@@ -109,10 +109,13 @@ export async function GET(request: Request) {
       )
     }
 
-    // Cache strategy - no-store (fresh data)
+    // Dengeli cache - 60 saniye (performans + veri güncelliği dengesi)
+    // stale-while-revalidate: Eski veri gösterilirken arka planda yenilenir (kullanıcı beklemez)
     return NextResponse.json(data || [], {
       headers: {
-        'Cache-Control': 'no-store, must-revalidate',
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120, max-age=30',
+        'CDN-Cache-Control': 'public, s-maxage=60',
+        'Vercel-CDN-Cache-Control': 'public, s-maxage=60',
       },
     })
   } catch (error: any) {
@@ -244,25 +247,8 @@ export async function POST(request: Request) {
     // .single() yerine array'in ilk elemanını al
     const data = Array.isArray(insertData) && insertData.length > 0 ? insertData[0] : insertData
 
-    // ActivityLog kaydı (hata olsa bile devam et)
-    try {
-      // @ts-expect-error - Supabase database type tanımları eksik
-      await supabase.from('ActivityLog').insert([
-      {
-        entity: 'Product',
-        action: 'CREATE',
-        description: `Yeni ürün oluşturuldu: ${body.name}`,
-        meta: { entity: 'Product', action: 'create', id: (data as any)?.id },
-        userId: session.user.id,
-        companyId: session.user.companyId,
-      },
-    ])
-    } catch (activityError) {
-      // ActivityLog hatası ana işlemi engellemez
-      if (process.env.NODE_ENV === 'development') {
-        console.error('ActivityLog error:', activityError)
-      }
-    }
+    // ActivityLog KALDIRILDI - Sadece kritik işlemler için ActivityLog tutulacak
+    // (Performans optimizasyonu: Gereksiz log'lar veritabanını yavaşlatıyor)
 
     return NextResponse.json(data, { status: 201 })
   } catch (error: any) {

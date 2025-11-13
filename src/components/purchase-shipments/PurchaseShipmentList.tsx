@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye, CheckCircle, MoreVertical, Calendar, FileText, PackageCheck, BarChart3, X } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -102,11 +102,7 @@ const statusColors: Record<string, string> = {
   CANCELLED: 'bg-red-100 text-red-800 border-red-300',
 }
 
-const statusLabels: Record<string, string> = {
-  DRAFT: 'Taslak',
-  APPROVED: 'Onaylı',
-  CANCELLED: 'İptal',
-}
+// statusLabels will be defined inside component to use translations
 
 const statusRowColors: Record<string, string> = {
   DRAFT: 'bg-gray-50/50 border-l-4 border-gray-400',
@@ -116,7 +112,15 @@ const statusRowColors: Record<string, string> = {
 
 export default function PurchaseShipmentList() {
   const locale = useLocale()
+  const t = useTranslations('purchaseShipments')
+  const tCommon = useTranslations('common')
   const [search, setSearch] = useState('')
+  
+  const statusLabels: Record<string, string> = {
+    DRAFT: t('statusDraft'),
+    APPROVED: t('statusApproved'),
+    CANCELLED: t('statusCancelled'),
+  }
   const [statusFilter, setStatusFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -177,7 +181,7 @@ export default function PurchaseShipmentList() {
 
       if (!res.ok) {
         const error = await res.json()
-        throw new Error(error.error || 'Onaylama başarısız')
+        throw new Error(error.error || t('approveFailed'))
       }
 
       const result = await res.json()
@@ -216,14 +220,14 @@ export default function PurchaseShipmentList() {
       }, 500) // 500ms sonra revalidate (optimistic update görünür, sonra fresh data çekilir)
 
       toast.success(
-        'Mal kabul tamamlandı!',
-        result.message || `Mal kabul #${id.substring(0, 8)} başarıyla onaylandı. Ürünler stoğa eklendi ve faturaya "Mal Kabul Edildi" bildirimi gönderildi.`
+        t('approveSuccess'),
+        result.message || t('approveSuccessMessage', { id: id.substring(0, 8) })
       )
     } catch (error: any) {
       console.error('Approve error:', error)
       toast.error(
-        'Mal kabul onaylanamadı',
-        error?.message || 'Mal kabul işlemi sırasında bir hata oluştu. Lütfen tekrar deneyin.'
+        t('approveFailed'),
+        error?.message || t('approveFailedMessage')
       )
     } finally {
       setApprovingId(null)
@@ -234,21 +238,21 @@ export default function PurchaseShipmentList() {
   const handleViewDetail = useCallback(async (purchaseShipment: PurchaseShipment) => {
     try {
       const res = await fetch(`/api/purchase-shipments/${purchaseShipment.id}`)
-      if (!res.ok) throw new Error('Bilgiler yüklenemedi')
+      if (!res.ok) throw new Error(t('errorLoadingDetails'))
       const detail = await res.json()
       setDetailPurchaseShipment(detail)
       setDetailModalOpen(true)
     } catch (error: any) {
       console.error('Detail fetch error:', error)
       toast.error(
-        'Mal kabul bilgileri yüklenemedi',
-        error?.message || 'Mal kabul detayları getirilirken bir hata oluştu. Lütfen sayfayı yenileyin.'
+        t('errorLoadingDetails'),
+        error?.message || t('errorLoadingDetailsMessage')
       )
     }
   }, [])
 
   const handleDelete = useCallback(async (id: string) => {
-    if (!confirm('Bu mal kabul kaydını silmek istediğinize emin misiniz?')) {
+    if (!confirm(t('deleteConfirm'))) {
       return
     }
 
@@ -272,8 +276,8 @@ export default function PurchaseShipmentList() {
     } catch (error: any) {
       console.error('Delete error:', error)
       toast.error(
-        'Mal kabul kaydı silinemedi',
-        error?.message || 'Mal kabul kaydı silinirken bir hata oluştu. Lütfen tekrar deneyin.'
+        t('deleteFailed'),
+        error?.message || t('deleteFailedMessage')
       )
     }
   }, [purchaseShipments, mutatePurchaseShipments, apiUrl])
@@ -292,15 +296,15 @@ export default function PurchaseShipmentList() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Mal Kabul</h1>
-          <p className="mt-2 text-gray-600">Toplam {stats.total} kayıt</p>
+          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
+          <p className="mt-2 text-gray-600">{t('totalRecords', { count: stats.total })}</p>
         </div>
         <Button
           variant="outline"
           onClick={() => {}}
         >
           <BarChart3 className="mr-2 h-4 w-4" />
-          Raporlar
+          {t('reports')}
         </Button>
       </div>
 
@@ -315,7 +319,7 @@ export default function PurchaseShipmentList() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Toplam</p>
+              <p className="text-sm text-gray-600 mb-1">{t('stats.total')}</p>
               <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
             </div>
             <PackageCheck className="h-8 w-8 text-indigo-500" />
@@ -331,7 +335,7 @@ export default function PurchaseShipmentList() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Taslak</p>
+              <p className="text-sm text-gray-600 mb-1">{t('stats.draft')}</p>
               <p className="text-2xl font-bold text-gray-900">{stats.draft}</p>
             </div>
             <FileText className="h-8 w-8 text-gray-500" />
@@ -347,7 +351,7 @@ export default function PurchaseShipmentList() {
         >
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Onaylı</p>
+              <p className="text-sm text-gray-600 mb-1">{t('stats.approved')}</p>
               <p className="text-2xl font-bold text-green-600">{stats.approved}</p>
             </div>
             <CheckCircle className="h-8 w-8 text-green-500" />
@@ -361,7 +365,7 @@ export default function PurchaseShipmentList() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             type="search"
-            placeholder="Fatura numarası ara..."
+            placeholder={t('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -369,26 +373,26 @@ export default function PurchaseShipmentList() {
         </div>
         <Select value={statusFilter || 'all'} onValueChange={(v) => setStatusFilter(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-48">
-            <SelectValue placeholder="Durum" />
+            <SelectValue placeholder={t('selectStatus')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tüm Durumlar</SelectItem>
-            <SelectItem value="DRAFT">Taslak</SelectItem>
-            <SelectItem value="APPROVED">Onaylı</SelectItem>
-            <SelectItem value="CANCELLED">İptal</SelectItem>
+            <SelectItem value="all">{t('allStatuses')}</SelectItem>
+            <SelectItem value="DRAFT">{t('statusDraft')}</SelectItem>
+            <SelectItem value="APPROVED">{t('statusApproved')}</SelectItem>
+            <SelectItem value="CANCELLED">{t('statusCancelled')}</SelectItem>
           </SelectContent>
         </Select>
         <div className="flex gap-2">
           <Input
             type="date"
-            placeholder="Başlangıç"
+            placeholder={t('startDate')}
             value={dateFrom}
             onChange={(e) => setDateFrom(e.target.value)}
             className="w-40"
           />
           <Input
             type="date"
-            placeholder="Bitiş"
+            placeholder={t('endDate')}
             value={dateTo}
             onChange={(e) => setDateTo(e.target.value)}
             className="w-40"
@@ -401,19 +405,19 @@ export default function PurchaseShipmentList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>ID</TableHead>
-              <TableHead>Durum</TableHead>
-              <TableHead>Fatura</TableHead>
-              <TableHead>Tedarikçi</TableHead>
-              <TableHead>Tarih</TableHead>
-              <TableHead className="text-right">İşlemler</TableHead>
+              <TableHead>{t('tableHeaders.id')}</TableHead>
+              <TableHead>{t('tableHeaders.status')}</TableHead>
+              <TableHead>{t('tableHeaders.invoice')}</TableHead>
+              <TableHead>{t('tableHeaders.vendor')}</TableHead>
+              <TableHead>{t('tableHeaders.date')}</TableHead>
+              <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {purchaseShipments.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                  Mal kabul kaydı bulunamadı
+                  {t('noRecordsFound')}
                 </TableCell>
               </TableRow>
             ) : (
@@ -448,11 +452,11 @@ export default function PurchaseShipmentList() {
                           </TooltipTrigger>
                           <TooltipContent className="bg-gray-900 text-white p-3">
                             <div className="space-y-1 text-sm">
-                              <p><strong>Fatura No:</strong> {purchaseShipment.Invoice.invoiceNumber || purchaseShipment.invoiceId.substring(0, 8)}</p>
-                              <p><strong>Başlık:</strong> {purchaseShipment.Invoice.title || '-'}</p>
-                              <p><strong>Tedarikçi:</strong> {getVendorName(purchaseShipment)}</p>
-                              <p><strong>Toplam:</strong> {formatCurrency(purchaseShipment.Invoice.totalAmount || 0)}</p>
-                              <p><strong>Tarih:</strong> {new Date(purchaseShipment.Invoice.createdAt).toLocaleDateString('tr-TR')}</p>
+                              <p><strong>{t('tooltip.invoiceNumber')}:</strong> {purchaseShipment.Invoice.invoiceNumber || purchaseShipment.invoiceId.substring(0, 8)}</p>
+                              <p><strong>{t('tooltip.title')}:</strong> {purchaseShipment.Invoice.title || '-'}</p>
+                              <p><strong>{t('tooltip.vendor')}:</strong> {getVendorName(purchaseShipment)}</p>
+                              <p><strong>{t('tooltip.total')}:</strong> {formatCurrency(purchaseShipment.Invoice.totalAmount || 0)}</p>
+                              <p><strong>{t('tooltip.date')}:</strong> {new Date(purchaseShipment.Invoice.createdAt).toLocaleDateString('tr-TR')}</p>
                             </div>
                           </TooltipContent>
                         </Tooltip>
@@ -473,7 +477,7 @@ export default function PurchaseShipmentList() {
                         variant="ghost"
                         size="icon"
                         onClick={() => handleViewDetail(purchaseShipment)}
-                        aria-label="Detayları görüntüle"
+                          aria-label={t('viewDetails')}
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
@@ -485,7 +489,7 @@ export default function PurchaseShipmentList() {
                           onClick={() => handleApprove(purchaseShipment.id)}
                           disabled={approvingId === purchaseShipment.id}
                           className="text-green-600 hover:text-green-700"
-                          aria-label="Onayla"
+                          aria-label={t('approve')}
                         >
                           <CheckCircle className="h-4 w-4" />
                         </Button>
@@ -498,17 +502,17 @@ export default function PurchaseShipmentList() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>İşlemler</DropdownMenuLabel>
+                          <DropdownMenuLabel>{t('actions')}</DropdownMenuLabel>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => handleViewDetail(purchaseShipment)}>
                             <Eye className="mr-2 h-4 w-4" />
-                            Görüntüle
+                            {t('view')}
                           </DropdownMenuItem>
                           {purchaseShipment.invoiceId && (
                             <DropdownMenuItem asChild>
                               <Link href={`/${locale}/invoices/${purchaseShipment.invoiceId}`} className="flex items-center">
                                 <FileText className="mr-2 h-4 w-4" />
-                                Faturaya Git
+                                {t('goToInvoice')}
                               </Link>
                             </DropdownMenuItem>
                           )}
@@ -518,7 +522,7 @@ export default function PurchaseShipmentList() {
                               className="text-green-600"
                             >
                               <CheckCircle className="mr-2 h-4 w-4" />
-                              Onayla
+                              {t('approve')}
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem
@@ -526,7 +530,7 @@ export default function PurchaseShipmentList() {
                             className="text-red-600"
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
-                            Sil
+                            {t('delete')}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -544,10 +548,10 @@ export default function PurchaseShipmentList() {
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              Mal Kabul #{detailPurchaseShipment?.id.substring(0, 8)}
+              {t('modal.title', { id: detailPurchaseShipment?.id.substring(0, 8) })}
             </DialogTitle>
             <DialogDescription>
-              Mal kabul detayları, ürün listesi ve stok hareketleri
+              {t('modal.description')}
             </DialogDescription>
           </DialogHeader>
           
@@ -555,16 +559,16 @@ export default function PurchaseShipmentList() {
             <div className="space-y-6">
               {/* Mal Kabul Bilgileri */}
               <Card className="p-4">
-                <h3 className="font-semibold mb-3">Mal Kabul Bilgileri</h3>
+                <h3 className="font-semibold mb-3">{t('modal.infoTitle')}</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm text-gray-600">Durum</p>
+                    <p className="text-sm text-gray-600">{t('modal.status')}</p>
                     <Badge className={statusColors[detailPurchaseShipment.status] || 'bg-gray-100'}>
                       {statusLabels[detailPurchaseShipment.status] || detailPurchaseShipment.status}
                     </Badge>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Oluşturulma Tarihi</p>
+                    <p className="text-sm text-gray-600">{t('modal.createdAt')}</p>
                     <p>{new Date(detailPurchaseShipment.createdAt).toLocaleString('tr-TR')}</p>
                   </div>
                 </div>
@@ -573,7 +577,7 @@ export default function PurchaseShipmentList() {
               {/* Fatura Bilgisi */}
               {detailPurchaseShipment.Invoice && (
                 <Card className="p-4">
-                  <h3 className="font-semibold mb-3">İlgili Fatura</h3>
+                  <h3 className="font-semibold mb-3">{t('modal.relatedInvoice')}</h3>
                   <Link
                     href={`/${locale}/invoices/${detailPurchaseShipment.Invoice.id}`}
                     className="text-indigo-600 hover:underline"
@@ -586,17 +590,17 @@ export default function PurchaseShipmentList() {
               {/* Ürün Listesi */}
               {detailPurchaseShipment.invoiceItems && detailPurchaseShipment.invoiceItems.length > 0 ? (
                 <Card className="p-4">
-                  <h3 className="font-semibold mb-3">Mal Kabul İçeriği</h3>
+                  <h3 className="font-semibold mb-3">{t('modal.contentTitle')}</h3>
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Ürün</TableHead>
-                          <TableHead>SKU/Barkod</TableHead>
-                          <TableHead>Miktar</TableHead>
-                          <TableHead>Birim Fiyat</TableHead>
-                          <TableHead>Toplam</TableHead>
-                          <TableHead>Beklenen Giriş</TableHead>
+                          <TableHead>{t('modal.product')}</TableHead>
+                          <TableHead>{t('modal.skuBarcode')}</TableHead>
+                          <TableHead>{t('modal.quantity')}</TableHead>
+                          <TableHead>{t('modal.unitPrice')}</TableHead>
+                          <TableHead>{t('modal.total')}</TableHead>
+                          <TableHead>{t('modal.expectedIncoming')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -625,22 +629,22 @@ export default function PurchaseShipmentList() {
                 </Card>
               ) : (
                 <Card className="p-4">
-                  <h3 className="font-semibold mb-3">Mal Kabul İçeriği</h3>
-                  <p className="text-sm text-gray-500">Henüz ürün eklenmemiş</p>
+                  <h3 className="font-semibold mb-3">{t('modal.contentTitle')}</h3>
+                  <p className="text-sm text-gray-500">{t('modal.noProducts')}</p>
                 </Card>
               )}
 
               {/* Stok Hareketleri */}
               {detailPurchaseShipment.stockMovements && detailPurchaseShipment.stockMovements.length > 0 ? (
                 <Card className="p-4">
-                  <h3 className="font-semibold mb-3">Stok Hareketleri</h3>
+                  <h3 className="font-semibold mb-3">{t('modal.stockMovements')}</h3>
                   <div className="space-y-2">
                     {detailPurchaseShipment.stockMovements.map((movement: any) => (
                       <div key={movement.id} className="flex items-center justify-between p-2 border rounded">
                         <div>
                           <p className="font-medium">{movement.Product?.name || '-'}</p>
                           <p className="text-xs text-gray-500">
-                            {movement.type === 'IN' ? 'Giriş' : 'Çıkış'} - {movement.reason || '-'}
+                            {movement.type === 'IN' ? t('modal.stockIn') : t('modal.stockOut')} - {movement.reason || '-'}
                           </p>
                         </div>
                         <div className="text-right">
@@ -657,8 +661,8 @@ export default function PurchaseShipmentList() {
                 </Card>
               ) : (
                 <Card className="p-4">
-                  <h3 className="font-semibold mb-3">Stok Hareketleri</h3>
-                  <p className="text-sm text-gray-500">Henüz stok hareketi yok</p>
+                  <h3 className="font-semibold mb-3">{t('modal.stockMovements')}</h3>
+                  <p className="text-sm text-gray-500">{t('modal.noStockMovements')}</p>
                 </Card>
               )}
             </div>

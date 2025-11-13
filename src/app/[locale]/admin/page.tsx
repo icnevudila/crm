@@ -227,6 +227,25 @@ export default function AdminPage() {
     }))
   }
 
+  const handleFullAccess = (module: string) => {
+    setPermissions((prev) => ({
+      ...prev,
+      [module]: {
+        ...prev[module],
+        module,
+        canRead: true,
+        canCreate: true,
+        canUpdate: true,
+        canDelete: true,
+      },
+    }))
+
+    setModuleVisibility((prev) => ({
+      ...prev,
+      [module]: true,
+    }))
+  }
+
   const handleSavePermissions = async () => {
     if (!selectedUser) return
 
@@ -444,16 +463,18 @@ export default function AdminPage() {
                       : 'Şirketinizdeki tüm kullanıcıları görüntüleyin ve yönetin'}
                   </CardDescription>
                 </div>
-                <Button
-                  onClick={() => {
-                    setEditingUser(null)
-                    setFormOpen(true)
-                  }}
-                  className="bg-gradient-primary text-white"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Yeni Kullanıcı
-                </Button>
+                {isSuperAdmin && (
+                  <Button
+                    onClick={() => {
+                      setEditingUser(null)
+                      setFormOpen(true)
+                    }}
+                    className="bg-gradient-primary text-white"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Yeni Kullanıcı
+                  </Button>
+                )}
               </div>
             </CardHeader>
             <CardContent>
@@ -464,9 +485,9 @@ export default function AdminPage() {
                     Kurum Seçin
                   </label>
                   <Select
-                    value={selectedCompanyId || ''}
+                    value={selectedCompanyId || 'all'}
                     onValueChange={(value) => {
-                      setSelectedCompanyId(value)
+                      setSelectedCompanyId(value === 'all' ? '' : value)
                       setSelectedUser(null) // Kurum değiştiğinde seçili kullanıcıyı temizle
                     }}
                   >
@@ -474,7 +495,7 @@ export default function AdminPage() {
                       <SelectValue placeholder="Tüm kurumları görmek için bir kurum seçin" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Tüm Kurumlar</SelectItem>
+                      <SelectItem value="all">Tüm Kurumlar</SelectItem>
                       {companies.map((company: any) => (
                         <SelectItem key={company.id} value={company.id}>
                           {company.name} {company.city ? `(${company.city})` : ''}
@@ -522,18 +543,20 @@ export default function AdminPage() {
                           <TableCell>
                             <Badge
                               variant={
-                                user.role === 'ADMIN'
+                                user.role === 'ADMIN' || user.role === 'SUPER_ADMIN'
                                   ? 'default'
-                                  : user.role === 'SUPER_ADMIN'
-                                  ? 'default'
-                                  : 'secondary'
+                                  : user.role === 'SALES'
+                                  ? 'secondary'
+                                  : 'outline'
                               }
                             >
                               {user.role === 'ADMIN'
                                 ? 'Admin'
                                 : user.role === 'SUPER_ADMIN'
                                 ? 'Süper Admin'
-                                : 'Satış'}
+                                : user.role === 'SALES'
+                                ? 'Satış'
+                                : 'Kullanıcı'}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-right">
@@ -543,52 +566,56 @@ export default function AdminPage() {
                                   <Eye className="h-4 w-4" />
                                 </Button>
                               </Link>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                  setEditingUser(user)
-                                  setFormOpen(true)
-                                }}
-                                title="Düzenle"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={async () => {
-                                  if (!confirm(`${user.name} kullanıcısını silmek istediğinize emin misiniz?`)) {
-                                    return
-                                  }
-                                  
-                                  try {
-                                    const res = await fetch(`/api/users/${user.id}`, {
-                                      method: 'DELETE',
-                                    })
-                                    
-                                    if (!res.ok) {
-                                      const errorData = await res.json().catch(() => ({}))
-                                      throw new Error(errorData.error || 'Failed to delete user')
-                                    }
-                                    
-                                    // Optimistic update
-                                    const updatedUsers = users.filter((u) => u.id !== user.id)
-                                    await mutateUsers(updatedUsers, { revalidate: false })
-                                    await Promise.all([
-                                      mutate('/api/users', updatedUsers, { revalidate: false }),
-                                      mutate('/api/users?', updatedUsers, { revalidate: false }),
-                                    ])
-                                  } catch (error: any) {
-                                    console.error('Delete error:', error)
-                                    alert(error?.message || 'Silme işlemi başarısız oldu')
-                                  }
-                                }}
-                                className="text-red-600 hover:text-red-700"
-                                title="Sil"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              {isSuperAdmin && (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => {
+                                      setEditingUser(user)
+                                      setFormOpen(true)
+                                    }}
+                                    title="Düzenle"
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={async () => {
+                                      if (!confirm(`${user.name} kullanıcısını silmek istediğinize emin misiniz?`)) {
+                                        return
+                                      }
+                                      
+                                      try {
+                                        const res = await fetch(`/api/users/${user.id}`, {
+                                          method: 'DELETE',
+                                        })
+                                        
+                                        if (!res.ok) {
+                                          const errorData = await res.json().catch(() => ({}))
+                                          throw new Error(errorData.error || 'Failed to delete user')
+                                        }
+                                        
+                                        // Optimistic update
+                                        const updatedUsers = users.filter((u) => u.id !== user.id)
+                                        await mutateUsers(updatedUsers, { revalidate: false })
+                                        await Promise.all([
+                                          mutate('/api/users', updatedUsers, { revalidate: false }),
+                                          mutate('/api/users?', updatedUsers, { revalidate: false }),
+                                        ])
+                                      } catch (error: any) {
+                                        console.error('Delete error:', error)
+                                        alert(error?.message || 'Silme işlemi başarısız oldu')
+                                      }
+                                    }}
+                                    className="text-red-600 hover:text-red-700"
+                                    title="Sil"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              )}
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -616,35 +643,37 @@ export default function AdminPage() {
           </Card>
           
           {/* User Form Modal */}
-          <UserForm
-            user={editingUser || undefined}
-            open={formOpen}
-            onClose={() => {
-              setFormOpen(false)
-              setEditingUser(null)
-            }}
-            onSuccess={async (savedUser: User) => {
-              // Optimistic update
-              let updatedUsers: User[]
-              
-              if (editingUser) {
-                updatedUsers = users.map((u) =>
-                  u.id === savedUser.id ? savedUser : u
-                )
-              } else {
-                updatedUsers = [savedUser, ...users]
-              }
-              
-              await mutateUsers(updatedUsers, { revalidate: false })
-              await Promise.all([
-                mutate('/api/users', updatedUsers, { revalidate: false }),
-                mutate('/api/users?', updatedUsers, { revalidate: false }),
-              ])
-              
-              setFormOpen(false)
-              setEditingUser(null)
-            }}
-          />
+          {isSuperAdmin && (
+            <UserForm
+              user={editingUser || undefined}
+              open={formOpen}
+              onClose={() => {
+                setFormOpen(false)
+                setEditingUser(null)
+              }}
+              onSuccess={async (savedUser: User) => {
+                // Optimistic update
+                let updatedUsers: User[]
+                
+                if (editingUser) {
+                  updatedUsers = users.map((u) =>
+                    u.id === savedUser.id ? savedUser : u
+                  )
+                } else {
+                  updatedUsers = [savedUser, ...users]
+                }
+                
+                await mutateUsers(updatedUsers, { revalidate: false })
+                await Promise.all([
+                  mutate('/api/users', updatedUsers, { revalidate: false }),
+                  mutate('/api/users?', updatedUsers, { revalidate: false }),
+                ])
+                
+                setFormOpen(false)
+                setEditingUser(null)
+              }}
+            />
+          )}
         </TabsContent>
 
         {/* Yetki Yönetimi Tab */}
@@ -728,21 +757,21 @@ export default function AdminPage() {
                                     <TableRow key={module.value}>
                                       <TableCell className="font-medium">{module.label}</TableCell>
                                       <TableCell className="text-center">
-                                        <Button
-                                          variant={isVisible ? 'default' : 'outline'}
-                                          size="icon"
-                                          onClick={() =>
-                                            handleModuleVisibilityChange(module.value, !isVisible)
+                                        <Select
+                                          value={isVisible ? 'visible' : 'hidden'}
+                                          onValueChange={(value) =>
+                                            handleModuleVisibilityChange(module.value, value === 'visible')
                                           }
-                                          className={isVisible ? 'bg-indigo-600 hover:bg-indigo-700' : ''}
-                                          disabled={!isVisible && !perm.canRead}
+                                          disabled={permissionsLoading}
                                         >
-                                          {isVisible ? (
-                                            <Check className="h-4 w-4 text-white" />
-                                          ) : (
-                                            <X className="h-4 w-4 text-gray-500" />
-                                          )}
-                                        </Button>
+                                          <SelectTrigger className="w-32 justify-center">
+                                            <SelectValue placeholder="Seçin" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            <SelectItem value="visible">Erişim Var</SelectItem>
+                                            <SelectItem value="hidden">Erişim Yok</SelectItem>
+                                          </SelectContent>
+                                        </Select>
                                       </TableCell>
                                       <TableCell className="text-center">
                                         <div className="flex justify-center gap-2">
@@ -754,6 +783,14 @@ export default function AdminPage() {
                                             disabled={!isVisible}
                                           >
                                             {isViewOnly ? '✓ View Only' : 'View Only'}
+                                          </Button>
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => handleFullAccess(module.value)}
+                                            disabled={!isVisible}
+                                          >
+                                            Full Access
                                           </Button>
                                         </div>
                                       </TableCell>

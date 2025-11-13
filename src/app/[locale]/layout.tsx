@@ -4,12 +4,15 @@ import { notFound } from 'next/navigation'
 import { locales } from '@/lib/i18n'
 import SessionProvider from '@/components/providers/SessionProvider'
 import QueryProvider from '@/components/providers/QueryProvider'
+import { NavigationProvider } from '@/components/providers/NavigationProvider'
 import ConditionalLayout from '@/components/layout/ConditionalLayout'
 import { Toaster } from 'sonner'
 
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
-export const fetchCache = 'force-no-store'
+// CRITICAL FIX: force-dynamic cache'i tamamen kapatıyor - performans için kaldırıldı
+// Session kontrolü için sadece gerekli yerlerde dynamic yapılacak
+// export const dynamic = 'force-dynamic' // KALDIRILDI - cache performansı için
+export const revalidate = 60 // 60 saniye revalidate (performans için)
+// export const fetchCache = 'force-no-store' // KALDIRILDI - cache performansı için
 
 interface LocaleLayoutProps {
   children: React.ReactNode
@@ -27,30 +30,32 @@ export default async function LocaleLayout({
     notFound()
   }
 
-  // getMessages() timeout ile - çok yavaş olursa default messages kullan
+  // PERFORMANCE FIX: getMessages() timeout'u azaltıldı - 5s → 1s (daha hızlı sayfa yükleme)
+  // ÖNEMLİ: locale parametresini geçiyoruz - yoksa her zaman defaultLocale kullanır
   let messages
   try {
     messages = await Promise.race([
-      getMessages(),
+      getMessages({ locale }),
       new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('getMessages timeout')), 5000)
+        setTimeout(() => reject(new Error('getMessages timeout')), 1000) // 1 saniye timeout (5s'den düşürüldü)
       ),
     ]) as any
   } catch (error) {
-    // Timeout durumunda - default messages kullan (boş obje)
+    // Timeout durumunda - default messages kullan (boş obje) - sayfa hızlı yüklensin
     if (process.env.NODE_ENV === 'development') {
       console.warn('getMessages timeout or error:', error)
     }
-    messages = {}
+    messages = {} // Boş messages ile devam et - sayfa yüklensin
   }
 
   return (
-    <NextIntlClientProvider messages={messages}>
+    <NextIntlClientProvider locale={locale} messages={messages}>
       <SessionProvider>
         <QueryProvider>
-          <ConditionalLayout>
-            {children}
-          </ConditionalLayout>
+          <NavigationProvider>
+            <ConditionalLayout>
+              {children}
+            </ConditionalLayout>
           <Toaster 
             position="top-right" 
             expand={false}
@@ -77,6 +82,7 @@ export default async function LocaleLayout({
               }
             }}
           />
+          </NavigationProvider>
         </QueryProvider>
       </SessionProvider>
     </NextIntlClientProvider>

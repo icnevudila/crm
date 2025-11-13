@@ -37,7 +37,7 @@ export async function GET(request: Request) {
 
     if (expenseError) {
       return NextResponse.json(
-        { error: expenseError.message || 'Failed to fetch expenses' },
+        { error: expenseError.message || 'Gider kayıtları getirilemedi' },
         { status: 500 }
       )
     }
@@ -121,7 +121,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      message: 'Budget check completed',
+      message: 'Bütçe kontrolü tamamlandı',
       totalExpense,
       budgetLimit: budgetLimits.TOTAL,
       percentage: ((totalExpense / budgetLimits.TOTAL) * 100).toFixed(1),
@@ -131,7 +131,7 @@ export async function GET(request: Request) {
     })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to check budget' },
+      { error: error.message || 'Bütçe kontrolü gerçekleştirilemedi' },
       { status: 500 }
     )
   }

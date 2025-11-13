@@ -1,62 +1,141 @@
 'use client'
 
-import { useParams } from 'next/navigation'
-import { ArrowLeft, Users, Send, Clock, TrendingUp, Mail } from 'lucide-react'
-import Link from 'next/link'
+import { useState } from 'react'
 import { useLocale } from 'next-intl'
+import { useParams, useRouter } from 'next/navigation'
+import { ArrowLeft, Send, Mail, Eye, MousePointerClick, AlertCircle, Calendar, User, CheckCircle, XCircle, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import SkeletonList from '@/components/skeletons/SkeletonList'
 import { useData } from '@/hooks/useData'
 import { format } from 'date-fns'
+import { tr } from 'date-fns/locale'
+import { toast, confirm } from '@/lib/toast'
+import Link from 'next/link'
 
-interface EmailCampaign {
+interface EmailCampaignDetail {
   id: string
   name: string
   subject: string
-  content: string
-  status: string
-  segmentId?: string
-  segment?: {
-    name: string
-  }
-  scheduledFor?: string
-  sentCount: number
-  openCount: number
-  clickCount: number
+  body: string
+  status: 'DRAFT' | 'SCHEDULED' | 'SENDING' | 'SENT' | 'FAILED'
+  targetSegment: string | null
+  scheduledAt: string | null
+  sentAt: string | null
+  totalSent: number
+  totalOpened: number
+  totalClicked: number
+  totalBounced: number
   createdAt: string
-}
-
-const statusLabels: Record<string, string> = {
-  DRAFT: 'Taslak',
-  SCHEDULED: 'Zamanlandı',
-  SENDING: 'Gönderiliyor',
-  SENT: 'Gönderildi',
-  FAILED: 'Başarısız',
+  createdBy?: { name: string; email: string }
+  segment?: { name: string }
 }
 
 export default function EmailCampaignDetailPage() {
-  const params = useParams()
   const locale = useLocale()
+  const params = useParams()
+  const router = useRouter()
   const campaignId = params.id as string
 
-  const { data: campaign, isLoading } = useData<EmailCampaign>(`/api/email-campaigns/${campaignId}`)
+  const { data: campaign, isLoading, error, mutate } = useData<EmailCampaignDetail>(
+    `/api/email-campaigns/${campaignId}`
+  )
 
-  if (isLoading) {
+  const { data: logsData, isLoading: logsLoading } = useData<{
+    data: Array<{
+      id: string
+      recipientEmail: string
+      recipientName: string | null
+      status: 'DELIVERED' | 'FAILED' | 'BOUNCED' | 'OPENED' | 'CLICKED'
+      sentAt: string
+      openedAt: string | null
+      clickedAt: string | null
+    }>
+    pagination: {
+      page: number
+      limit: number
+      total: number
+      pages: number
+    }
+  }>(campaign?.status === 'SENT' ? `/api/email-campaigns/${campaignId}/logs` : null)
+
+  const emailLogs = logsData?.data || []
+
+  const handleSend = async () => {
+    const confirmed = await confirm('Bu kampanyayı göndermek istediğinize emin misiniz?')
+    if (!confirmed) return
+
+    const toastId = toast.loading('Gönderiliyor...')
+    try {
+      const res = await fetch(`/api/email-campaigns/${campaignId}/send`, { method: 'POST' })
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Gönderme işlemi başarısız')
+      }
+
+      await mutate()
+      toast.dismiss(toastId)
+      toast.success('Gönderildi', 'Kampanya başarıyla gönderildi.')
+    } catch (error: any) {
+      console.error('Send error:', error)
+      toast.dismiss(toastId)
+      toast.error('Gönderme başarısız', error?.message || 'Gönderme işlemi sırasında bir hata oluştu.')
+    }
+  }
+
+  const getStatusBadge = (status: string) => {
+    const statusMap = {
+      DRAFT: { label: 'Taslak', className: 'bg-gray-200 text-gray-800 border-0' },
+      SCHEDULED: { label: 'Zamanlandı', className: 'bg-blue-100 text-blue-800 border-0' },
+      SENDING: { label: 'Gönderiliyor', className: 'bg-yellow-100 text-yellow-800 border-0' },
+      SENT: { label: 'Gönderildi', className: 'bg-green-100 text-green-800 border-0' },
+      FAILED: { label: 'Başarısız', className: 'bg-red-100 text-red-800 border-0' },
+    }
+    const config = statusMap[status as keyof typeof statusMap] || statusMap.DRAFT
+    return <Badge className={config.className}>{config.label}</Badge>
+  }
+
+  const getOpenRate = () => {
+    if (!campaign?.totalSent) return '0%'
+    return ((campaign.totalOpened / campaign.totalSent) * 100).toFixed(1) + '%'
+  }
+
+  const getClickRate = () => {
+    if (!campaign?.totalOpened) return '0%'
+    return ((campaign.totalClicked / campaign.totalOpened) * 100).toFixed(1) + '%'
+  }
+
+  const getBounceRate = () => {
+    if (!campaign?.totalSent) return '0%'
+    return ((campaign.totalBounced / campaign.totalSent) * 100).toFixed(1) + '%'
+  }
+
+  if (isLoading) return <SkeletonList />
+
+  if (error || !campaign) {
     return (
-      <div className="animate-pulse space-y-4">
-        <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-        <div className="h-64 bg-gray-200 rounded"></div>
+      <div className="space-y-6">
+        <Link href={`/${locale}/email-campaigns`}>
+          <Button variant="ghost" size="sm">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Geri Dön
+          </Button>
+        </Link>
+        <Alert className="border-red-200 bg-red-50">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertTitle className="text-red-800">Hata</AlertTitle>
+          <AlertDescription className="text-red-700">
+            Kampanya yüklenirken bir hata oluştu. Lütfen sayfayı yenileyin.
+          </AlertDescription>
+        </Alert>
       </div>
     )
   }
-
-  if (!campaign) {
-    return <div>Kampanya bulunamadı</div>
-  }
-
-  const openRate = campaign.sentCount > 0 ? ((campaign.openCount / campaign.sentCount) * 100).toFixed(1) : '0'
-  const clickRate = campaign.sentCount > 0 ? ((campaign.clickCount / campaign.sentCount) * 100).toFixed(1) : '0'
 
   return (
     <div className="space-y-6">
@@ -70,124 +149,247 @@ export default function EmailCampaignDetailPage() {
           </Link>
           <div>
             <h1 className="text-3xl font-bold">{campaign.name}</h1>
-            <p className="text-gray-600">
-              #{campaignId.substring(0, 8)} • {format(new Date(campaign.createdAt), 'dd.MM.yyyy')}
-            </p>
+            <p className="text-gray-500 mt-1">Email Kampanya Detayları</p>
           </div>
         </div>
-        <Badge className={
-          campaign.status === 'SENT' ? 'bg-green-100 text-green-800 border-0' :
-          campaign.status === 'FAILED' ? 'bg-red-100 text-red-800 border-0' :
-          campaign.status === 'SENDING' ? 'bg-blue-100 text-blue-800 border-0' :
-          campaign.status === 'SCHEDULED' ? 'bg-purple-100 text-purple-800 border-0' :
-          'bg-gray-100 text-gray-700 border-0'
-        }>
-          {statusLabels[campaign.status] || campaign.status}
-        </Badge>
+        {campaign.status === 'DRAFT' && (
+          <Button
+            onClick={handleSend}
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
+            <Send className="h-4 w-4 mr-2" />
+            Gönder
+          </Button>
+        )}
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-2 text-gray-600 mb-2">
-            <Send className="h-4 w-4" />
-            <span className="text-sm">Gönderilen</span>
-          </div>
-          <p className="text-2xl font-bold">{campaign.sentCount}</p>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-2 text-gray-600 mb-2">
-            <Mail className="h-4 w-4" />
-            <span className="text-sm">Açılan</span>
-          </div>
-          <p className="text-2xl font-bold">{campaign.openCount}</p>
-          <p className="text-sm text-gray-500">{openRate}% açılma oranı</p>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-2 text-gray-600 mb-2">
-            <TrendingUp className="h-4 w-4" />
-            <span className="text-sm">Tıklanan</span>
-          </div>
-          <p className="text-2xl font-bold">{campaign.clickCount}</p>
-          <p className="text-sm text-gray-500">{clickRate}% tıklama oranı</p>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-2 text-gray-600 mb-2">
-            <Users className="h-4 w-4" />
-            <span className="text-sm">Segment</span>
-          </div>
-          <p className="text-lg font-medium">{campaign.segment?.name || 'Tüm Liste'}</p>
-        </Card>
-      </div>
-
-      {/* Campaign Details */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="p-6">
-          <h3 className="font-semibold mb-4">Kampanya Bilgileri</h3>
-          <div className="space-y-3">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Konu</p>
-              <p className="text-gray-900">{campaign.subject}</p>
-            </div>
-            {campaign.scheduledFor && (
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Content */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Email Preview */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Email Önizleme</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Zamanlanan Tarih</p>
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-gray-500" />
-                  <span>{format(new Date(campaign.scheduledFor), 'dd.MM.yyyy HH:mm')}</span>
+                <label className="text-sm font-medium text-gray-500">Konu:</label>
+                <p className="mt-1 font-semibold">{campaign.subject}</p>
+              </div>
+              <Separator />
+              <div>
+                <label className="text-sm font-medium text-gray-500">İçerik:</label>
+                <div
+                  className="mt-2 border rounded-md p-4 bg-white min-h-[300px]"
+                  dangerouslySetInnerHTML={{ __html: campaign.body || '<p>İçerik yok</p>' }}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Statistics */}
+          {campaign.status === 'SENT' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>İstatistikler</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="text-center p-4 bg-blue-50 rounded-lg">
+                    <Mail className="h-6 w-6 mx-auto text-blue-600 mb-2" />
+                    <div className="text-2xl font-bold">{campaign.totalSent.toLocaleString()}</div>
+                    <div className="text-sm text-gray-600">Gönderilen</div>
+                  </div>
+                  <div className="text-center p-4 bg-green-50 rounded-lg">
+                    <Eye className="h-6 w-6 mx-auto text-green-600 mb-2" />
+                    <div className="text-2xl font-bold">{campaign.totalOpened.toLocaleString()}</div>
+                    <div className="text-sm text-gray-600">Açılan ({getOpenRate()})</div>
+                  </div>
+                  <div className="text-center p-4 bg-purple-50 rounded-lg">
+                    <MousePointerClick className="h-6 w-6 mx-auto text-purple-600 mb-2" />
+                    <div className="text-2xl font-bold">{campaign.totalClicked.toLocaleString()}</div>
+                    <div className="text-sm text-gray-600">Tıklanan ({getClickRate()})</div>
+                  </div>
+                  <div className="text-center p-4 bg-red-50 rounded-lg">
+                    <AlertCircle className="h-6 w-6 mx-auto text-red-600 mb-2" />
+                    <div className="text-2xl font-bold">{campaign.totalBounced.toLocaleString()}</div>
+                    <div className="text-sm text-gray-600">Bounce ({getBounceRate()})</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Email Logs */}
+          {campaign.status === 'SENT' && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Email Gönderim Logları</CardTitle>
+                <CardDescription>Kampanyaya gönderilen tüm emaillerin detayları</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {logsLoading ? (
+                  <SkeletonList />
+                ) : emailLogs.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    Henüz email log kaydı yok
+                  </div>
+                ) : (
+                  <div className="border rounded-lg overflow-hidden">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Alıcı</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Durum</TableHead>
+                          <TableHead>Gönderilme</TableHead>
+                          <TableHead>Açılma</TableHead>
+                          <TableHead>Tıklama</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {emailLogs.map((log) => (
+                          <TableRow key={log.id}>
+                            <TableCell className="font-medium">
+                              {log.recipientName || '-'}
+                            </TableCell>
+                            <TableCell className="text-sm text-gray-600">
+                              {log.recipientEmail}
+                            </TableCell>
+                            <TableCell>
+                              {log.status === 'DELIVERED' && (
+                                <Badge className="bg-green-100 text-green-800 border-0">
+                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                  Teslim Edildi
+                                </Badge>
+                              )}
+                              {log.status === 'FAILED' && (
+                                <Badge className="bg-red-100 text-red-800 border-0">
+                                  <XCircle className="h-3 w-3 mr-1" />
+                                  Başarısız
+                                </Badge>
+                              )}
+                              {log.status === 'BOUNCED' && (
+                                <Badge className="bg-orange-100 text-orange-800 border-0">
+                                  <AlertCircle className="h-3 w-3 mr-1" />
+                                  Bounce
+                                </Badge>
+                              )}
+                              {log.status === 'OPENED' && (
+                                <Badge className="bg-blue-100 text-blue-800 border-0">
+                                  <Eye className="h-3 w-3 mr-1" />
+                                  Açıldı
+                                </Badge>
+                              )}
+                              {log.status === 'CLICKED' && (
+                                <Badge className="bg-purple-100 text-purple-800 border-0">
+                                  <MousePointerClick className="h-3 w-3 mr-1" />
+                                  Tıklandı
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-sm text-gray-600">
+                              {log.sentAt
+                                ? format(new Date(log.sentAt), 'dd MMM yyyy, HH:mm', { locale: tr })
+                                : '-'}
+                            </TableCell>
+                            <TableCell className="text-sm text-gray-600">
+                              {log.openedAt
+                                ? format(new Date(log.openedAt), 'dd MMM yyyy, HH:mm', { locale: tr })
+                                : '-'}
+                            </TableCell>
+                            <TableCell className="text-sm text-gray-600">
+                              {log.clickedAt
+                                ? format(new Date(log.clickedAt), 'dd MMM yyyy, HH:mm', { locale: tr })
+                                : '-'}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Status Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Durum Bilgisi</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-gray-500">Durum</label>
+                <div className="mt-1">{getStatusBadge(campaign.status)}</div>
+              </div>
+              <Separator />
+              <div>
+                <label className="text-sm font-medium text-gray-500">Oluşturan</label>
+                <div className="mt-1 flex items-center gap-2">
+                  <User className="h-4 w-4 text-gray-400" />
+                  <span className="text-sm">{campaign.createdBy?.name || '-'}</span>
                 </div>
               </div>
-            )}
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Oluşturulma Tarihi</p>
-              <p className="text-gray-900">{format(new Date(campaign.createdAt), 'dd.MM.yyyy HH:mm')}</p>
-            </div>
-          </div>
-        </Card>
+              <Separator />
+              <div>
+                <label className="text-sm font-medium text-gray-500">Oluşturulma Tarihi</label>
+                <div className="mt-1 flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-gray-400" />
+                  <span className="text-sm">
+                    {format(new Date(campaign.createdAt), 'dd MMMM yyyy, HH:mm', { locale: tr })}
+                  </span>
+                </div>
+              </div>
+              {campaign.scheduledAt && (
+                <>
+                  <Separator />
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Planlanan Tarih</label>
+                    <div className="mt-1 flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-blue-400" />
+                      <span className="text-sm">
+                        {format(new Date(campaign.scheduledAt), 'dd MMMM yyyy, HH:mm', { locale: tr })}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+              {campaign.sentAt && (
+                <>
+                  <Separator />
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Gönderilme Tarihi</label>
+                    <div className="mt-1 flex items-center gap-2">
+                      <Send className="h-4 w-4 text-green-500" />
+                      <span className="text-sm">
+                        {format(new Date(campaign.sentAt), 'dd MMMM yyyy, HH:mm', { locale: tr })}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
 
-        <Card className="p-6">
-          <h3 className="font-semibold mb-4">Performans Özeti</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Gönderim Başarısı:</span>
-              <Badge className="bg-green-100 text-green-800 border-0">
-                {campaign.status === 'SENT' ? 'Başarılı' : campaign.status}
-              </Badge>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Açılma Oranı:</span>
-              <span className="font-semibold">{openRate}%</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Tıklama Oranı:</span>
-              <span className="font-semibold">{clickRate}%</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-gray-600">Engagement:</span>
-              <span className="font-semibold">
-                {campaign.sentCount > 0 ? (((campaign.openCount + campaign.clickCount) / campaign.sentCount) * 100).toFixed(1) : '0'}%
-              </span>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Content Preview */}
-      <Card className="p-6">
-        <h3 className="font-semibold mb-4">İçerik Önizleme</h3>
-        <div className="prose max-w-none">
-          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-            <p className="text-sm text-gray-600 mb-2">Konu:</p>
-            <p className="font-semibold mb-4">{campaign.subject}</p>
-            <hr className="my-4" />
-            <div
-              dangerouslySetInnerHTML={{ __html: campaign.content }}
-              className="text-sm text-gray-800"
-            />
-          </div>
+          {/* Target Segment */}
+          {campaign.targetSegment && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Hedef Kitle</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Badge variant="outline" className="text-sm">
+                  {campaign.segment?.name || campaign.targetSegment}
+                </Badge>
+              </CardContent>
+            </Card>
+          )}
         </div>
-      </Card>
+      </div>
     </div>
   )
 }
-

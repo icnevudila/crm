@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabase } from '@/lib/supabase'
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
+
+export const dynamic = 'force-dynamic'
 
 // GET /api/contracts - Liste
 export async function GET(request: NextRequest) {
@@ -12,16 +14,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Permission check - canRead kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canRead = await hasPermission('contract', 'read', session.user.id)
     if (!canRead) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Sözleşme görüntüleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
-    const supabase = getSupabase()
+    const supabase = getSupabaseWithServiceRole()
     const { searchParams } = new URL(request.url)
 
     // Filters
@@ -71,15 +70,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({
-      data,
-      pagination: {
-        page,
-        limit,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / limit),
+    return NextResponse.json(
+      {
+        data,
+        pagination: {
+          page,
+          limit,
+          total: count || 0,
+          totalPages: Math.ceil((count || 0) / limit),
+        },
       },
-    })
+      {
+        headers: {
+          'Cache-Control': 'no-store, must-revalidate',
+        },
+      }
+    )
   } catch (error: any) {
     console.error('Contract list error:', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
@@ -95,16 +101,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Permission check - canCreate kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canCreate = await hasPermission('contract', 'create', session.user.id)
     if (!canCreate) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Sözleşme oluşturma yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
-    const supabase = getSupabase()
+    const supabase = getSupabaseWithServiceRole()
     const body = await request.json()
 
     // Validation

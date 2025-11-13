@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import { Plus, Search, Edit, Trash2, Eye, LayoutGrid, Table as TableIcon, Filter } from 'lucide-react'
@@ -42,6 +42,7 @@ import ModuleStats from '@/components/stats/ModuleStats'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
 import dynamic from 'next/dynamic'
+import { AutomationInfo } from '@/components/automation/AutomationInfo'
 
 // Lazy load büyük componentler - performans için
 const DealForm = dynamic(() => import('./DealForm'), {
@@ -53,6 +54,15 @@ const DealKanbanChart = dynamic(() => import('@/components/charts/DealKanbanChar
   ssr: false,
   loading: () => <div className="h-[400px] animate-pulse bg-gray-100 rounded" />,
 })
+
+const DealDetailModal = dynamic(() => import('./DealDetailModal'), {
+  ssr: false,
+  loading: () => null,
+})
+
+interface DealListProps {
+  isOpen?: boolean
+}
 
 interface Deal {
   id: string
@@ -106,7 +116,9 @@ async function fetchDeals(
     },
   })
   if (!res.ok) throw new Error('Failed to fetch deals')
-  return res.json()
+  const data = await res.json()
+  // Pagination format desteği: { data: [...], pagination: {...} } veya direkt array
+  return Array.isArray(data) ? data : (data?.data || [])
 }
 
 async function fetchKanbanDeals(
@@ -183,8 +195,10 @@ const stageLabels: Record<string, string> = {
   LOST: 'Kaybedildi',
 }
 
-export default function DealList() {
+export default function DealList({ isOpen = true }: DealListProps) {
   const locale = useLocale()
+  const t = useTranslations('deals')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const searchParams = useSearchParams()
   const { data: session } = useSession()
@@ -202,9 +216,13 @@ export default function DealList() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin için firma filtresi
+  const [leadSourceFilter, setLeadSourceFilter] = useState('')
   const [showFilters, setShowFilters] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [selectedDealId, setSelectedDealId] = useState<string | null>(null)
+  const [selectedDealData, setSelectedDealData] = useState<Deal | null>(null)
   const [lostDialogOpen, setLostDialogOpen] = useState(false)
   const [losingDealId, setLosingDealId] = useState<string | null>(null)
   const [lostReason, setLostReason] = useState('')
@@ -228,24 +246,28 @@ export default function DealList() {
     return () => clearTimeout(timer)
   }, [search])
 
-  // URL parametrelerinden filtreleri oku
-  const leadSourceFilter = searchParams.get('leadSource') || ''
-  const stageFromUrl = searchParams.get('stage') || ''
-  
-  // URL'den gelen stage parametresini state'e set et
   useEffect(() => {
+    if (!isOpen) return
+    // URL parametrelerinden filtreleri oku
+    const leadSourceFromUrl = searchParams.get('leadSource') || ''
+    const stageFromUrl = searchParams.get('stage') || ''
+    
+    // URL'den gelen stage parametresini state'e set et
     if (stageFromUrl && stageFromUrl !== stage) {
       setStage(stageFromUrl)
     }
-  }, [stageFromUrl])
-  
+    if (leadSourceFromUrl !== leadSourceFilter) {
+      setLeadSourceFilter(leadSourceFromUrl)
+    }
+  }, [isOpen, searchParams, stage, leadSourceFilter])
+
   // OPTİMİZE: Agresif cache + placeholder data (veri çekme mantığı aynı)
   // Her zaman veri çek - viewMode değiştiğinde de veri hazır olsun
   // DÜZELTME: Liste'de stage filtresi yoksa tüm stage'ler gösterilmeli (kanban ile aynı)
   // DÜZELTME: enabled kaldırıldı - her zaman veri çek (viewMode değiştiğinde anında göster)
   // DÜZELTME: refetchOnMount: true - sayfa yüklendiğinde veri çek (table view için)
   // OPTİMİZE: debouncedSearch kullan - her harfte arama yapılmaz
-  const { data: deals = [], isLoading } = useQuery({
+  const dealsQuery = useQuery({
     queryKey: ['deals', stage, customerId, debouncedSearch, minValue, maxValue, startDate, endDate, leadSourceFilter, filterCompanyId],
     queryFn: () => fetchDeals(stage || '', customerId, debouncedSearch, minValue, maxValue, startDate, endDate, leadSourceFilter, filterCompanyId || undefined), // debouncedSearch kullan
     staleTime: 5 * 60 * 1000, // 5 dakika cache
@@ -256,7 +278,7 @@ export default function DealList() {
     // enabled kaldırıldı - her zaman veri çek (viewMode değiştiğinde anında göster)
   })
 
-  const { data: kanbanData = [], isLoading: isLoadingKanban } = useQuery({
+  const kanbanQuery = useQuery({
     queryKey: ['kanban-deals', customerId, debouncedSearch, minValue, maxValue, startDate, endDate],
     queryFn: () => fetchKanbanDeals(customerId, debouncedSearch, minValue, maxValue, startDate, endDate), // debouncedSearch kullan
     staleTime: 60 * 1000, // 60 saniye cache (repo kurallarına uygun - API ile aynı)
@@ -264,21 +286,22 @@ export default function DealList() {
     refetchOnWindowFocus: false, // Focus'ta refetch yapma - cache kullan
     refetchOnMount: false, // Mount'ta refetch yapma - cache kullan
     placeholderData: (previousData) => previousData, // Optimistic update
-    enabled: viewMode === 'kanban', // Sadece kanban view'da çalış
+    enabled: isOpen && viewMode === 'kanban', // Sadece kanban view'da çalış
   })
 
-  const { data: customersData } = useQuery({
-    queryKey: ['customers'],
+  const { data: customers } = useQuery({
+    queryKey: ['customers', { scope: 'deals' }],
     queryFn: fetchCustomers,
     staleTime: 5 * 60 * 1000, // 5 dakika cache
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     placeholderData: (previousData) => previousData,
+    enabled: isOpen,
   })
 
   // customers'ı array olarak garanti et
-  const customers = Array.isArray(customersData) ? customersData : []
+  const customersArray = Array.isArray(customers) ? customers : []
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -318,7 +341,7 @@ export default function DealList() {
   }, [])
 
   const handleDelete = async (id: string, title: string) => {
-    if (!confirm(`${title} fırsatını silmek istediğinize emin misiniz?`)) {
+    if (!confirm(t('deleteConfirm', { title }))) {
       return
     }
 
@@ -327,8 +350,8 @@ export default function DealList() {
       
       // Başarı bildirimi
       toast.success(
-        'Fırsat silindi!',
-        `${title} başarıyla silindi.`
+        t('dealDeleted'),
+        t('dealDeletedMessage', { title })
       )
       
       // Kanban ve table view için query'leri invalidate et
@@ -345,7 +368,7 @@ export default function DealList() {
       queryClient.refetchQueries({ queryKey: ['deal-kanban'] }) // Dashboard'daki kanban chart'ı refetch et
       queryClient.refetchQueries({ queryKey: ['kpis'] }) // Dashboard'daki KPIs refetch et (toplam değer, ortalama vs.)
     } catch (error: any) {
-      toast.error('Silinemedi', error?.message)
+      toast.error(tCommon('error'), error?.message)
     }
   }
 
@@ -363,25 +386,25 @@ export default function DealList() {
     refetchOnWindowFocus: false,
   })
 
-  // ModuleStats'ten gelen total değerini kullan - dashboard ile tutarlı olması için
-  // DÜZELTME: Kanban view'daki toplam sayıyı doğru hesapla (tüm stage'lerin count'larını topla)
-  // OPTİMİZE: useMemo ile hesaplamaları optimize et
-  // ÖNEMLİ: Hook'lar if statement'tan ÖNCE çağrılmalı (React Rules of Hooks)
-  // ÖNEMLİ: kanbanData her zaman array olmalı (undefined kontrolü)
+  const tableDeals = dealsQuery.data ?? []
+
   const kanbanTotal = useMemo(() => {
-    if (!Array.isArray(kanbanData) || kanbanData.length === 0) return 0
-    return kanbanData.reduce((sum: number, col: any) => sum + (col.count || 0), 0)
-  }, [kanbanData])
+    if (!Array.isArray(kanbanQuery.data) || kanbanQuery.data.length === 0) return 0
+    return kanbanQuery.data.reduce((sum: number, col: any) => sum + (col.count || 0), 0)
+  }, [kanbanQuery.data])
 
   const totalDeals = useMemo(() => {
-    return stats?.total || (viewMode === 'table' ? deals.length : kanbanTotal)
-  }, [stats?.total, viewMode, deals.length, kanbanTotal])
+    return stats?.total || (viewMode === 'table' ? tableDeals.length : kanbanTotal)
+  }, [stats?.total, viewMode, tableDeals.length, kanbanTotal])
 
   // Skeleton göster - hook'lardan SONRA (early return)
   // ÖNEMLİ: kanbanData her zaman array olmalı (undefined kontrolü)
-  const hasKanbanData = Array.isArray(kanbanData) && kanbanData.length > 0
-  if (((isLoading && viewMode === 'table' && !deals.length) || 
-      (isLoadingKanban && viewMode === 'kanban' && !hasKanbanData))) {
+  const hasKanbanData = Array.isArray(kanbanQuery.data) && kanbanQuery.data.length > 0
+  if (!isOpen) {
+    return null
+  }
+
+  if (dealsQuery.isLoading && viewMode === 'table') {
     return <SkeletonList />
   }
 
@@ -390,11 +413,41 @@ export default function DealList() {
       {/* İstatistikler */}
       <ModuleStats module="deals" statsUrl="/api/stats/deals" />
 
+      <AutomationInfo
+        title={t('automationTitle')}
+        automations={[
+          {
+            action: t('automationWon'),
+            result: t('automationWonResult'),
+            details: [
+              t('automationWonDetails1'),
+              t('automationWonDetails2'),
+            ],
+          },
+          {
+            action: t('automationLost'),
+            result: t('automationLostResult'),
+            details: [
+              t('automationLostDetails1'),
+              t('automationLostDetails2'),
+            ],
+          },
+          {
+            action: t('automationNegotiation'),
+            result: t('automationNegotiationResult'),
+            details: [
+              t('automationNegotiationDetails1'),
+              t('automationNegotiationDetails2'),
+            ],
+          },
+        ]}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Fırsatlar</h1>
-          <p className="mt-2 text-gray-600">Toplam {totalDeals} fırsat</p>
+          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
+          <p className="mt-2 text-gray-600">{t('totalDeals', { count: totalDeals })}</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -427,7 +480,7 @@ export default function DealList() {
             className="bg-gradient-primary text-white"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Yeni Fırsat
+            {t('newDeal')}
           </Button>
         </div>
       </div>
@@ -441,7 +494,7 @@ export default function DealList() {
             onClick={() => setShowFilters(!showFilters)}
           >
             <Filter className="mr-2 h-4 w-4" />
-            Filtreler
+            {t('filters')}
           </Button>
         </div>
 
@@ -450,12 +503,12 @@ export default function DealList() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Search */}
               <div className="space-y-2">
-                <label className="text-sm font-medium">Ara</label>
+                <label className="text-sm font-medium">{t('searchLabel')}</label>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   <Input
                     type="search"
-                    placeholder="Başlık veya açıklama..."
+                    placeholder={t('searchPlaceholder')}
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     className="pl-10"
@@ -466,13 +519,13 @@ export default function DealList() {
               {/* SuperAdmin Firma Filtresi */}
               {isSuperAdmin && (
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Firma</label>
+                  <label className="text-sm font-medium">{t('companyLabel')}</label>
                   <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Tüm Firmalar" />
+                      <SelectValue placeholder={t('allCompanies')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Tüm Firmalar</SelectItem>
+                      <SelectItem value="all">{t('allCompanies')}</SelectItem>
                       {companies.map((company) => (
                         <SelectItem key={company.id} value={company.id}>
                           {company.name}
@@ -485,14 +538,14 @@ export default function DealList() {
 
               {/* Customer */}
               <div className="space-y-2">
-                <label className="text-sm font-medium">Müşteri</label>
+                <label className="text-sm font-medium">{t('customerLabel')}</label>
                 <Select value={customerId || 'all'} onValueChange={(v) => setCustomerId(v === 'all' ? '' : v)}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Tümü" />
+                    <SelectValue placeholder={tCommon('filters.all')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Tümü</SelectItem>
-                    {customers.map((customer: any) => (
+                    <SelectItem value="all">{tCommon('filters.all')}</SelectItem>
+                    {customersArray.map((customer: any) => (
                       <SelectItem key={customer.id} value={customer.id}>
                         {customer.name}
                       </SelectItem>
@@ -504,10 +557,10 @@ export default function DealList() {
               {/* Stage (sadece table view için) */}
               {viewMode === 'table' && (
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Aşama</label>
+                  <label className="text-sm font-medium">{t('stageLabel')}</label>
                   <Select value={stage || 'all'} onValueChange={(v) => setStage(v === 'all' ? '' : v)}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Tümü" />
+                      <SelectValue placeholder={t('allStages')} />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Tümü</SelectItem>
@@ -530,8 +583,10 @@ export default function DealList() {
                     const params = new URLSearchParams(searchParams.toString())
                     if (v === 'all') {
                       params.delete('leadSource')
+                      setLeadSourceFilter('')
                     } else {
                       params.set('leadSource', v)
+                      setLeadSourceFilter(v)
                     }
                     router.push(`?${params.toString()}`)
                   }}>
@@ -575,7 +630,7 @@ export default function DealList() {
 
               {/* Start Date */}
               <div className="space-y-2">
-                <label className="text-sm font-medium">Başlangıç Tarihi</label>
+                <label className="text-sm font-medium">{t('startDateLabel')}</label>
                 <Input
                   type="date"
                   value={startDate}
@@ -585,7 +640,7 @@ export default function DealList() {
 
               {/* End Date */}
               <div className="space-y-2">
-                <label className="text-sm font-medium">Bitiş Tarihi</label>
+                <label className="text-sm font-medium">{t('endDateLabel')}</label>
                 <Input
                   type="date"
                   value={endDate}
@@ -623,7 +678,7 @@ export default function DealList() {
       {/* Content */}
       {viewMode === 'kanban' ? (
         <DealKanbanChart 
-          data={kanbanData} 
+          data={kanbanQuery.data} 
           onEdit={handleEdit}
           onDelete={handleDelete}
           onStageChange={async (dealId: string, newStage: string) => {
@@ -646,6 +701,54 @@ export default function DealList() {
               if (!res.ok) {
                 const error = await res.json().catch(() => ({}))
                 throw new Error(error.error || 'Failed to update deal stage')
+              }
+
+              const responseData = await res.json()
+              const automation = responseData?.automation || {}
+              
+              // Fırsat başlığını al
+              const dealTitle = responseData?.title || 'Fırsat'
+              
+              // Detaylı toast mesajları oluştur
+              let toastTitle = ''
+              let toastDescription = ''
+              let toastType: 'success' | 'warning' | 'info' = 'success'
+              
+              switch (newStage) {
+                case 'WON':
+                  toastTitle = `Fırsat kazanıldı: "${dealTitle}"`
+                  toastDescription = `Fırsat "Kazanıldı" aşamasına taşındı.`
+                  
+                  if (automation.quoteCreated && automation.quoteId) {
+                    toastDescription += `\n\nOtomatik işlemler:\n• Teklif oluşturuldu (ID: ${automation.quoteId.substring(0, 8)}...)\n• Teklif başlığı: ${automation.quoteTitle || 'Otomatik oluşturuldu'}\n• E-posta gönderildi\n• Bildirim gönderildi`
+                  }
+                  break
+                  
+                case 'LOST':
+                  toastTitle = `Fırsat kaybedildi: "${dealTitle}"`
+                  toastDescription = `Fırsat "Kaybedildi" aşamasına taşındı.`
+                  
+                  if (automation.taskCreated && automation.taskId) {
+                    toastDescription += `\n\nOtomatik işlemler:\n• Analiz görevi oluşturuldu (ID: ${automation.taskId.substring(0, 8)}...)\n• Bildirim gönderildi`
+                  } else {
+                    toastDescription += `\n\nBildirim gönderildi`
+                  }
+                  
+                  toastType = 'warning'
+                  break
+                  
+                default:
+                  const currentStageName = stageLabels[newStage] || newStage
+                  toastTitle = `Fırsat aşaması güncellendi: "${dealTitle}"`
+                  toastDescription = `Fırsat "${currentStageName}" aşamasına taşındı.`
+              }
+
+              if (toastType === 'success') {
+                toast.success(toastTitle, toastDescription)
+              } else if (toastType === 'warning') {
+                toast.warning(toastTitle, toastDescription)
+              } else {
+                toast.success(toastTitle, toastDescription)
               }
 
               // Cache'i invalidate et - fresh data çek (hem table hem kanban hem stats)
@@ -677,27 +780,27 @@ export default function DealList() {
           <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Başlık</TableHead>
-              {isSuperAdmin && <TableHead>Firma</TableHead>}
-              <TableHead>Aşama</TableHead>
-              <TableHead>Değer</TableHead>
-              <TableHead>Müşteri</TableHead>
-              <TableHead>Durum</TableHead>
+              <TableHead>{t('tableHeaders.title')}</TableHead>
+              {isSuperAdmin && <TableHead>{t('tableHeaders.company')}</TableHead>}
+              <TableHead>{t('tableHeaders.stage')}</TableHead>
+              <TableHead>{t('tableHeaders.value')}</TableHead>
+              <TableHead>{t('tableHeaders.customer')}</TableHead>
+              <TableHead>{t('tableHeaders.status')}</TableHead>
               <TableHead>Lead Score</TableHead>
               <TableHead>Kaynak</TableHead>
-              <TableHead>Tarih</TableHead>
-              <TableHead className="text-right">İşlemler</TableHead>
+              <TableHead>{t('tableHeaders.date')}</TableHead>
+              <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {deals.length === 0 ? (
+            {tableDeals.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={isSuperAdmin ? 10 : 9} className="text-center py-8 text-gray-500">
-                  Fırsat bulunamadı
+                  {t('noDealsFound')}
                 </TableCell>
               </TableRow>
             ) : (
-              deals.map((deal) => (
+              tableDeals.map((deal) => (
                 <TableRow key={deal.id}>
                   <TableCell className="font-medium">{deal.title}</TableCell>
                   {isSuperAdmin && (
@@ -722,7 +825,7 @@ export default function DealList() {
                         className="text-primary-600 hover:underline"
                         prefetch={true}
                       >
-                        Müşteri #{deal.customerId.substring(0, 8)}
+                        {t('customerPrefix')}{deal.customerId.substring(0, 8)}
                       </Link>
                     ) : (
                       '-'
@@ -779,16 +882,23 @@ export default function DealList() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Link href={`/${locale}/deals/${deal.id}`} prefetch={true}>
-                        <Button variant="ghost" size="icon" aria-label={`${deal.title} fırsatını görüntüle`}>
-                          <Eye className="h-4 w-4 text-gray-600" />
-                        </Button>
-                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setSelectedDealId(deal.id)
+                          setSelectedDealData(deal)
+                          setDetailModalOpen(true)
+                        }}
+                        aria-label={t('viewDeal', { title: deal.title })}
+                      >
+                        <Eye className="h-4 w-4 text-gray-600" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => handleEdit(deal)}
-                        aria-label={`${deal.title} fırsatını düzenle`}
+                        aria-label={t('editDealAction', { title: deal.title })}
                       >
                         <Edit className="h-4 w-4 text-gray-600" />
                       </Button>
@@ -797,22 +907,22 @@ export default function DealList() {
                         size="icon"
                         onClick={() => {
                           if (deal.stage === 'WON') {
-                            toast.warning('Bu fırsat kazanıldığı için silemezsiniz', 'Bu fırsat kazanıldı. Kazanılmış fırsatları silmek mümkün değildir.')
+                            toast.warning(t('cannotDeleteWon'), t('cannotDeleteWonMessage'))
                             return
                           }
                           if (deal.status === 'CLOSED') {
-                            toast.warning('Bu fırsat kapandığı için silemezsiniz', 'Bu fırsat kapatıldı. Kapatılmış fırsatları silmek mümkün değildir.')
+                            toast.warning(t('cannotDeleteClosed'), t('cannotDeleteClosedMessage'))
                             return
                           }
                           handleDelete(deal.id, deal.title)
                         }}
                         disabled={deal.stage === 'WON' || deal.status === 'CLOSED'}
                         className="text-red-600 hover:text-red-700 disabled:opacity-50"
-                        aria-label={`${deal.title} fırsatını sil`}
+                        aria-label={t('deleteDealAction', { title: deal.title })}
                         title={
-                          deal.stage === 'WON' ? 'Bu fırsat kazanıldığı için silemezsiniz' :
-                          deal.status === 'CLOSED' ? 'Bu fırsat kapandığı için silemezsiniz' :
-                          'Sil'
+                          deal.stage === 'WON' ? t('cannotDeleteWon') :
+                          deal.status === 'CLOSED' ? t('cannotDeleteClosed') :
+                          tCommon('delete')
                         }
                       >
                         <Trash2 className="h-4 w-4 text-red-600" />
@@ -826,6 +936,18 @@ export default function DealList() {
         </Table>
         </div>
       )}
+
+      {/* Detail Modal */}
+      <DealDetailModal
+        dealId={selectedDealId}
+        open={detailModalOpen}
+        onClose={() => {
+          setDetailModalOpen(false)
+          setSelectedDealId(null)
+          setSelectedDealData(null)
+        }}
+        initialData={selectedDealData || undefined}
+      />
 
       {/* Form Modal */}
       <DealForm
@@ -853,12 +975,12 @@ export default function DealList() {
             
             if (selectedDeal) {
               // UPDATE: Mevcut kaydı güncelle
-              updatedDeals = deals.map((d) =>
+              updatedDeals = dealsQuery.data.map((d) =>
                 d.id === savedDeal.id ? savedDeal : d
               )
             } else {
               // CREATE: Yeni kaydı listenin başına ekle
-              updatedDeals = [savedDeal, ...deals]
+              updatedDeals = [savedDeal, ...dealsQuery.data]
             }
             
             // React Query cache'ini güncelle
@@ -885,18 +1007,18 @@ export default function DealList() {
       <Dialog open={lostDialogOpen} onOpenChange={setLostDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
-            <DialogTitle>Fırsatı Kaybedildi Olarak İşaretle</DialogTitle>
+            <DialogTitle>{t('lostDialog.title')}</DialogTitle>
             <DialogDescription>
-              Fırsatı kaybedildi olarak işaretlemek için lütfen sebep belirtin. Bu sebep fırsat detay sayfasında not olarak görünecektir ve analiz görevi oluşturulacaktır.
+              {t('lostDialog.description')}
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="lostReason">Kayıp Sebebi *</Label>
+              <Label htmlFor="lostReason">{t('lostDialog.reasonLabel')} *</Label>
               <Textarea
                 id="lostReason"
-                placeholder="Örn: Fiyat uygun değil, Müşteri ihtiyacı değişti, Teknik uyumsuzluk, Rakipler daha avantajlı..."
+                placeholder={t('lostDialog.reasonPlaceholder')}
                 value={lostReason}
                 onChange={(e) => setLostReason(e.target.value)}
                 rows={4}
@@ -914,18 +1036,18 @@ export default function DealList() {
                 setLosingDealId(null)
               }}
             >
-              İptal
+              {t('lostDialog.cancel')}
             </Button>
             <Button
               variant="destructive"
               onClick={async () => {
                 if (!lostReason.trim()) {
-                  toast.error('Sebep gerekli', 'Lütfen kayıp sebebini belirtin.')
+                  toast.error(t('lostDialog.reasonRequired'), t('lostDialog.reasonRequiredMessage'))
                   return
                 }
 
                 if (!losingDealId) {
-                  toast.error('Hata', 'Fırsat ID bulunamadı.')
+                  toast.error(tCommon('error'), t('lostDialog.error'))
                   setLostDialogOpen(false)
                   return
                 }
@@ -957,10 +1079,10 @@ export default function DealList() {
                   
                   // Toast mesajı - analiz görevi oluşturulduğunu bildir
                   toast.success(
-                    'Fırsat kaybedildi olarak işaretlendi',
-                    'Fırsat kaybedildi. Analiz görevi otomatik olarak oluşturuldu. Görevler sayfasından kontrol edebilirsiniz.',
+                    t('lostDialog.dealMarkedAsLost'),
+                    t('lostDialog.dealMarkedAsLostMessage'),
                     {
-                      label: 'Görevler Sayfasına Git',
+                      label: t('lostDialog.goToTasksPage'),
                       onClick: () => window.location.href = `/${locale}/tasks`,
                     }
                   )
@@ -984,12 +1106,12 @@ export default function DealList() {
                   ])
                 } catch (error: any) {
                   console.error('Lost error:', error)
-                  toast.error('Kayıp işaretleme başarısız', error?.message || 'Fırsat kaybedildi olarak işaretlenemedi.')
+                  toast.error(t('lostDialog.markAsLostFailed'), error?.message || t('lostDialog.markAsLostFailedMessage'))
                 }
               }}
               disabled={!lostReason.trim()}
             >
-              Kaybedildi Olarak İşaretle
+              {t('lostDialog.markAsLost')}
             </Button>
           </DialogFooter>
         </DialogContent>

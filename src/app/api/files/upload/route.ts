@@ -12,16 +12,15 @@ export async function POST(request: Request) {
 
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const entityType = formData.get('entityType') as string // 'Customer', 'Deal', 'Quote', etc.
-    const entityId = formData.get('entityId') as string
+    const entityType = formData.get('entityType') as string | null // 'Customer', 'Deal', 'Quote', etc. (opsiyonel)
+    const entityId = formData.get('entityId') as string | null
 
     if (!file) {
       return NextResponse.json({ error: 'No file provided' }, { status: 400 })
     }
 
-    if (!entityType || !entityId) {
-      return NextResponse.json({ error: 'Entity type and ID required' }, { status: 400 })
-    }
+    // Entity type ve ID opsiyonel (Documents modülü için)
+    // Eğer verilmişse kullan, yoksa genel documents klasörüne yükle
 
     // Dosya boyutu kontrolü (10MB max)
     const maxSize = 10 * 1024 * 1024 // 10MB
@@ -31,15 +30,27 @@ export async function POST(request: Request) {
 
     const supabase = getSupabase()
 
-    // Dosya adını oluştur (companyId/entityType/entityId/timestamp-filename)
+    // Dosya adını oluştur
     const timestamp = Date.now()
-    const fileName = `${session.user.companyId}/${entityType}/${entityId}/${timestamp}-${file.name}`
-    const filePath = `attachments/${fileName}`
+    let fileName: string
+    let filePath: string
+    
+    if (entityType && entityId) {
+      // Entity'ye bağlı dosya: companyId/entityType/entityId/timestamp-filename
+      fileName = `${session.user.companyId}/${entityType}/${entityId}/${timestamp}-${file.name}`
+      filePath = `attachments/${fileName}`
+    } else {
+      // Genel documents klasörüne: companyId/documents/timestamp-filename
+      fileName = `${session.user.companyId}/documents/${timestamp}-${file.name}`
+      filePath = `documents/${fileName}`
+    }
 
-    // Supabase Storage'a yükle
+    // Supabase Storage'a yükle (documents bucket kullan)
     const fileBuffer = Buffer.from(await file.arrayBuffer())
+    const bucketName = entityType && entityId ? 'crm-files' : 'documents' // Documents modülü için 'documents' bucket
+    
     const { data: uploadData, error: uploadError } = await supabase.storage
-      .from('crm-files')
+      .from(bucketName)
       .upload(filePath, fileBuffer, {
         contentType: file.type,
         upsert: false,
@@ -51,34 +62,36 @@ export async function POST(request: Request) {
 
     // Public URL oluştur
     const { data: urlData } = supabase.storage
-      .from('crm-files')
+      .from(bucketName)
       .getPublicUrl(filePath)
 
-    // ActivityLog kaydı
-    try {
-      await supabase.from('ActivityLog').insert([
-        {
-          entity: entityType,
-          action: 'FILE_UPLOAD',
-          description: `Dosya yüklendi: ${file.name}`,
-          meta: {
+    // ActivityLog kaydı (entityType varsa)
+    if (entityType && entityId) {
+      try {
+        await supabase.from('ActivityLog').insert([
+          {
             entity: entityType,
-            action: 'file_upload',
-            entityId,
-            fileName: file.name,
-            filePath,
-            fileSize: file.size,
-            fileType: file.type,
-            url: urlData.publicUrl,
+            action: 'FILE_UPLOAD',
+            description: `Dosya yüklendi: ${file.name}`,
+            meta: {
+              entity: entityType,
+              action: 'file_upload',
+              entityId,
+              fileName: file.name,
+              filePath,
+              fileSize: file.size,
+              fileType: file.type,
+              url: urlData.publicUrl,
+            },
+            userId: session.user.id,
+            companyId: session.user.companyId,
           },
-          userId: session.user.id,
-          companyId: session.user.companyId,
-        },
-      ] as any)
-    } catch (activityError) {
-      // ActivityLog hatası ana işlemi engellemez
-      if (process.env.NODE_ENV === 'development') {
-        console.error('ActivityLog error:', activityError)
+        ] as any)
+      } catch (activityError) {
+        // ActivityLog hatası ana işlemi engellemez
+        if (process.env.NODE_ENV === 'development') {
+          console.error('ActivityLog error:', activityError)
+        }
       }
     }
 

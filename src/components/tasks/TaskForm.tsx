@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { toast } from '@/lib/toast'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -25,22 +26,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-const taskSchema = z.object({
-  title: z.string().min(1, 'Başlık gereklidir').max(200, 'Başlık en fazla 200 karakter olabilir'),
-  status: z.enum(['TODO', 'IN_PROGRESS', 'DONE', 'CANCELLED']).default('TODO'),
-  assignedTo: z.string().optional(),
-  description: z.string().max(2000, 'Açıklama en fazla 2000 karakter olabilir').optional(),
-  dueDate: z.string().optional(),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
-})
-
-type TaskFormData = z.infer<typeof taskSchema>
-
 interface TaskFormProps {
   task?: any
   open: boolean
   onClose: () => void
   onSuccess?: (savedTask: any) => void | Promise<void>
+  defaultTitle?: string
+  defaultDescription?: string
+  customerName?: string
+  customerCompanyName?: string
 }
 
 async function fetchUsers() {
@@ -49,10 +43,24 @@ async function fetchUsers() {
   return res.json()
 }
 
-export default function TaskForm({ task, open, onClose, onSuccess }: TaskFormProps) {
+export default function TaskForm({ task, open, onClose, onSuccess, defaultTitle, defaultDescription, customerName, customerCompanyName }: TaskFormProps) {
+  const t = useTranslations('tasks.form')
+  const tCommon = useTranslations('common.form')
   const router = useRouter()
   const queryClient = useQueryClient()
   const [loading, setLoading] = useState(false)
+
+  // Schema'yı component içinde oluştur - locale desteği için
+  const taskSchema = z.object({
+    title: z.string().min(1, t('titleRequired')).max(200, t('titleMaxLength')),
+    status: z.enum(['TODO', 'IN_PROGRESS', 'DONE', 'CANCELLED']).default('TODO'),
+    assignedTo: z.string().optional(),
+    description: z.string().max(2000, t('descriptionMaxLength')).optional(),
+    dueDate: z.string().optional(),
+    priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
+  })
+
+  type TaskFormData = z.infer<typeof taskSchema>
 
   const { data: users = [] } = useQuery({
     queryKey: ['users'],
@@ -70,10 +78,10 @@ export default function TaskForm({ task, open, onClose, onSuccess }: TaskFormPro
   } = useForm<TaskFormData>({
     resolver: zodResolver(taskSchema),
     defaultValues: task || {
-      title: '',
+      title: defaultTitle || '',
       status: 'TODO',
       assignedTo: '',
-      description: '',
+      description: defaultDescription || '',
       dueDate: '',
       priority: 'MEDIUM',
     },
@@ -108,16 +116,16 @@ export default function TaskForm({ task, open, onClose, onSuccess }: TaskFormPro
       } else {
         // Yeni kayıt modu - form'u temizle
         reset({
-          title: '',
+          title: defaultTitle || '',
           status: 'TODO',
           assignedTo: '',
-          description: '',
+          description: defaultDescription || '',
           dueDate: '',
           priority: 'MEDIUM',
         })
       }
     }
-  }, [task, open, reset])
+  }, [task, open, reset, defaultTitle, defaultDescription])
 
   const mutation = useMutation({
     mutationFn: async (data: TaskFormData) => {
@@ -138,6 +146,19 @@ export default function TaskForm({ task, open, onClose, onSuccess }: TaskFormPro
       return res.json()
     },
     onSuccess: (savedTask) => {
+      // Toast mesajı göster
+      if (task) {
+        toast.success(t('taskUpdated'), t('taskUpdatedMessage', { title: savedTask.title }))
+      } else {
+        let successMessage = t('taskCreatedMessage', { title: savedTask.title })
+        if (customerName) {
+          successMessage = t('taskCreatedWithCustomer', { customer: customerName, title: savedTask.title })
+        } else if (customerCompanyName) {
+          successMessage = t('taskCreatedWithCompany', { company: customerCompanyName, title: savedTask.title })
+        }
+        toast.success(t('taskCreated'), successMessage)
+      }
+      
       // onSuccess callback'i çağır - optimistic update için
       if (onSuccess) {
         onSuccess(savedTask)
@@ -153,7 +174,7 @@ export default function TaskForm({ task, open, onClose, onSuccess }: TaskFormPro
       await mutation.mutateAsync(data)
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error('Kaydedilemedi', error?.message)
+      toast.error(t('saveFailed'), error?.message)
     } finally {
       setLoading(false)
     }
@@ -164,21 +185,32 @@ export default function TaskForm({ task, open, onClose, onSuccess }: TaskFormPro
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {task ? 'Görev Düzenle' : 'Yeni Görev'}
+            {task ? t('editTitle') : t('newTitle')}
           </DialogTitle>
           <DialogDescription>
-            {task ? 'Görev bilgilerini güncelleyin' : 'Yeni görev oluşturun'}
+            {task ? t('editDescription') : t('newDescription')}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {(customerName || customerCompanyName) && (
+            <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3 text-sm text-indigo-700">
+              {customerName && (
+                <p className="font-semibold">{t('customerLabel')}: {customerName}</p>
+              )}
+              {customerCompanyName && (
+                <p>{t('companyLabel')}: {customerCompanyName}</p>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Title */}
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">Görev Başlığı *</label>
+              <label className="text-sm font-medium">{t('titleLabel')} *</label>
               <Input
                 {...register('title')}
-                placeholder="Görev başlığı"
+                placeholder={t('titlePlaceholder')}
                 disabled={loading}
               />
               {errors.title && (
@@ -188,14 +220,14 @@ export default function TaskForm({ task, open, onClose, onSuccess }: TaskFormPro
 
             {/* Assigned To */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Atanan Kişi</label>
+              <label className="text-sm font-medium">{t('assignedToLabel')}</label>
               <Select
                 value={assignedTo || ''}
                 onValueChange={(value) => setValue('assignedTo', value)}
                 disabled={loading}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Kullanıcı seçin" />
+                  <SelectValue placeholder={t('assignedToPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
                   {users.map((user: any) => (
@@ -209,7 +241,7 @@ export default function TaskForm({ task, open, onClose, onSuccess }: TaskFormPro
 
             {/* Status */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Durum</label>
+              <label className="text-sm font-medium">{t('statusLabel')}</label>
               <Select
                 value={status}
                 onValueChange={(value) =>
@@ -221,17 +253,17 @@ export default function TaskForm({ task, open, onClose, onSuccess }: TaskFormPro
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="TODO">Yapılacak</SelectItem>
-                  <SelectItem value="IN_PROGRESS">Devam Ediyor</SelectItem>
-                  <SelectItem value="DONE">Tamamlandı</SelectItem>
-                  <SelectItem value="CANCELLED">İptal Edildi</SelectItem>
+                  <SelectItem value="TODO">{t('statusTodo')}</SelectItem>
+                  <SelectItem value="IN_PROGRESS">{t('statusInProgress')}</SelectItem>
+                  <SelectItem value="DONE">{t('statusDone')}</SelectItem>
+                  <SelectItem value="CANCELLED">{t('statusCancelled')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {/* Priority */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Öncelik</label>
+              <label className="text-sm font-medium">{t('priorityLabel')}</label>
               <Select
                 value={priority || 'MEDIUM'}
                 onValueChange={(value) =>
@@ -243,16 +275,16 @@ export default function TaskForm({ task, open, onClose, onSuccess }: TaskFormPro
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="LOW">Düşük</SelectItem>
-                  <SelectItem value="MEDIUM">Orta</SelectItem>
-                  <SelectItem value="HIGH">Yüksek</SelectItem>
+                  <SelectItem value="LOW">{t('priorityLow')}</SelectItem>
+                  <SelectItem value="MEDIUM">{t('priorityMedium')}</SelectItem>
+                  <SelectItem value="HIGH">{t('priorityHigh')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {/* Due Date */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Son Tarih</label>
+              <label className="text-sm font-medium">{t('dueDateLabel')}</label>
               <Input
                 type="date"
                 {...register('dueDate')}
@@ -262,13 +294,16 @@ export default function TaskForm({ task, open, onClose, onSuccess }: TaskFormPro
 
             {/* Description */}
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">Açıklama</label>
+              <label className="text-sm font-medium">{t('descriptionLabel')}</label>
               <Textarea
                 {...register('description')}
-                placeholder="Görev açıklaması ve detaylar"
+                placeholder={t('descriptionPlaceholder')}
                 rows={4}
                 disabled={loading}
               />
+              {errors.description && (
+                <p className="text-sm text-red-600">{errors.description.message}</p>
+              )}
             </div>
           </div>
 
@@ -280,14 +315,14 @@ export default function TaskForm({ task, open, onClose, onSuccess }: TaskFormPro
               onClick={onClose}
               disabled={loading}
             >
-              İptal
+              {t('cancel')}
             </Button>
             <Button
               type="submit"
               className="bg-gradient-primary text-white"
               disabled={loading}
             >
-              {loading ? 'Kaydediliyor...' : task ? 'Güncelle' : 'Kaydet'}
+              {loading ? t('saving') : task ? t('update') : t('save')}
             </Button>
           </div>
         </form>

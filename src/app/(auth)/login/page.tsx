@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, memo, useCallback } from 'react'
-import { signIn } from 'next-auth/react'
+import { signIn, useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
@@ -29,7 +29,7 @@ function AnimatedTitle({ text }: { text: string }) {
     <span
       className="bg-clip-text text-transparent"
       style={{
-        backgroundImage: 'linear-gradient(to right, #00AEEF, #1890FF, #1B263B)',
+        backgroundImage: 'linear-gradient(to right, #6366f1, #8b5cf6, #ec4899)',
         animation: 'color-shift 4s ease-in-out infinite',
         backgroundSize: '200% 100%',
         willChange: 'background-position',
@@ -42,12 +42,20 @@ function AnimatedTitle({ text }: { text: string }) {
 
 function LoginPage() {
   const router = useRouter()
+  const { data: session, status } = useSession()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [mounted, setMounted] = useState(false)
+
+  // Zaten login olmuş kullanıcıları dashboard'a yönlendir
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user) {
+      router.replace('/tr/dashboard')
+    }
+  }, [status, session, router])
 
   useEffect(() => {
     setMounted(true)
@@ -114,7 +122,7 @@ function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50 p-4 relative overflow-hidden">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-indigo-50 p-4 relative overflow-hidden">
       {/* Premium Animated Background - Premium Güven Veren Mavi Tema */}
       <div 
         className="absolute inset-0 overflow-hidden pointer-events-none" 
@@ -124,11 +132,11 @@ function LoginPage() {
           isolation: 'isolate',
         }}
       >
-        {/* Premium Animated gradient blobs - Sky Blue & Deep Space Blue */}
+        {/* Premium Animated gradient blobs - Premium Indigo & Orchid */}
         <div 
           className="absolute -top-40 -right-40 w-[500px] h-[500px] rounded-full mix-blend-multiply filter blur-3xl opacity-20"
           style={{
-            background: 'linear-gradient(135deg, #00AEEF, #1890FF)',
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
             animation: 'blob-premium 20s ease-in-out infinite',
             transform: 'translate3d(0, 0, 0)',
             willChange: 'transform',
@@ -138,7 +146,7 @@ function LoginPage() {
         <div 
           className="absolute -bottom-40 -left-40 w-[600px] h-[600px] rounded-full mix-blend-multiply filter blur-3xl opacity-20"
           style={{
-            background: 'linear-gradient(135deg, #1890FF, #1B263B)',
+            background: 'linear-gradient(135deg, #8b5cf6, #312e81)',
             animation: 'blob-premium 25s ease-in-out infinite 2s',
             transform: 'translate3d(0, 0, 0)',
             willChange: 'transform',
@@ -148,7 +156,7 @@ function LoginPage() {
         <div 
           className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] rounded-full mix-blend-multiply filter blur-3xl opacity-15"
           style={{
-            background: 'linear-gradient(135deg, #1B263B, #00AEEF)',
+            background: 'linear-gradient(135deg, #312e81, #6366f1)',
             animation: 'blob-premium 30s ease-in-out infinite 4s',
             transform: 'translate3d(0, 0, 0)',
             willChange: 'transform',
@@ -159,7 +167,7 @@ function LoginPage() {
         <div 
           className="absolute top-1/4 left-1/4 w-2 h-2 rounded-full opacity-30 blur-sm"
           style={{
-            background: '#00AEEF',
+            background: '#6366f1',
             animation: 'blob-premium 15s ease-in-out infinite 1s',
             transform: 'translate3d(0, 0, 0)',
             willChange: 'transform',
@@ -168,7 +176,7 @@ function LoginPage() {
         <div 
           className="absolute bottom-1/4 right-1/4 w-3 h-3 rounded-full opacity-25 blur-sm"
           style={{
-            background: '#1890FF',
+            background: '#8b5cf6',
             animation: 'blob-premium 18s ease-in-out infinite 3s',
             transform: 'translate3d(0, 0, 0)',
             willChange: 'transform',
@@ -177,7 +185,7 @@ function LoginPage() {
         <div 
           className="absolute top-1/2 right-1/3 w-1.5 h-1.5 rounded-full opacity-30 blur-sm"
           style={{
-            background: '#1B263B',
+            background: '#312e81',
             animation: 'blob-premium 22s ease-in-out infinite 5s',
             transform: 'translate3d(0, 0, 0)',
             willChange: 'transform',
@@ -207,7 +215,7 @@ function LoginPage() {
             <div 
               className="absolute -inset-1 rounded-2xl blur-2xl opacity-20 group-hover:opacity-30 transition-opacity duration-500"
               style={{
-                background: 'linear-gradient(to right, #00AEEF, #1890FF, #1B263B)',
+                background: 'linear-gradient(to right, #6366f1, #8b5cf6, #ec4899)',
                 transform: 'translate3d(0, 0, 0)',
                 willChange: 'opacity',
                 isolation: 'isolate',
@@ -253,14 +261,14 @@ function LoginPage() {
                   <div 
                     className="absolute inset-0 bg-[length:200%_100%]"
                     style={{
-                      background: 'linear-gradient(to right, #00AEEF, #1890FF, #096DD9)',
+                      background: 'linear-gradient(to right, #6366f1, #8b5cf6, #ec4899)',
                       animation: 'gradient-shift 5s ease-in-out infinite',
                       transform: 'translate3d(0, 0, 0)',
                       willChange: 'background-position',
                     }}
                   />
                   {/* Glow effect - Premium Sky Blue */}
-                  <div className="absolute inset-0 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{ background: 'linear-gradient(to right, rgba(0, 174, 239, 0.5), rgba(24, 144, 255, 0.5), rgba(9, 109, 217, 0.5))' }} />
+                  <div className="absolute inset-0 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{ background: 'linear-gradient(to right, rgba(99, 102, 241, 0.5), rgba(139, 92, 246, 0.5), rgba(236, 72, 153, 0.5))' }} />
                   <Sparkles className="relative z-10 h-10 w-10 text-white drop-shadow-lg" />
                 </motion.div>
                 <CardTitle className="text-4xl font-extrabold tracking-tight">
@@ -274,26 +282,26 @@ function LoginPage() {
               <form onSubmit={handleSubmit} className="space-y-5">
                 {/* Email - Premium Input */}
                 <motion.div variants={itemVariants} className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-primary-600" />
+                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <Mail className="h-4 w-4 text-indigo-500" />
                     E-posta
                   </label>
                   <div className="relative group">
-                    <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-600 transition-colors z-10" />
+                    <Mail className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-indigo-500 z-10" />
                     <Input
                       type="email"
                       placeholder="ornek@email.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       disabled={loading}
-                      className="pl-10 h-12 border-2 border-gray-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all duration-300 hover:border-primary-400 bg-white/80 backdrop-blur-sm"
+                      className="h-12 rounded-xl border-2 border-gray-200 bg-white/80 pl-10 text-sm font-medium text-slate-700 shadow-inner transition-all duration-300 hover:border-indigo-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 backdrop-blur-sm"
                       required
                     />
                     {/* Focus glow effect - Premium Sky Blue */}
                     <div 
                       className="absolute inset-0 rounded-md opacity-0 focus-within:opacity-100 transition-opacity duration-300 pointer-events-none"
                       style={{ 
-                        background: 'linear-gradient(to right, rgba(0, 174, 239, 0), rgba(0, 174, 239, 0.1), rgba(0, 174, 239, 0))',
+                        background: 'linear-gradient(to right, rgba(99, 102, 241, 0), rgba(99, 102, 241, 0.12), rgba(99, 102, 241, 0))',
                         transform: 'translate3d(0, 0, 0)' 
                       }}
                     />
@@ -302,33 +310,33 @@ function LoginPage() {
 
                 {/* Password - Premium Input */}
                 <motion.div variants={itemVariants} className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                    <Lock className="h-4 w-4 text-primary-600" />
+                  <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <Lock className="h-4 w-4 text-indigo-500" />
                     Şifre
                   </label>
                   <div className="relative group">
-                    <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 group-focus-within:text-primary-600 transition-colors z-10" />
+                    <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-indigo-500 z-10" />
                     <Input
                       type={showPassword ? 'text' : 'password'}
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       disabled={loading}
-                      className="pl-10 pr-10 h-12 border-2 border-gray-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all duration-300 hover:border-primary-400 bg-white/80 backdrop-blur-sm"
+                      className="h-12 rounded-xl border-2 border-gray-200 bg-white/80 pl-10 pr-10 text-sm font-medium text-slate-700 shadow-inner transition-all duration-300 hover:border-indigo-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 backdrop-blur-sm"
                       required
                     />
                     {/* Focus glow effect - Premium Sky Blue */}
                     <div 
                       className="absolute inset-0 rounded-md opacity-0 focus-within:opacity-100 transition-opacity duration-300 pointer-events-none"
                       style={{ 
-                        background: 'linear-gradient(to right, rgba(0, 174, 239, 0), rgba(0, 174, 239, 0.1), rgba(0, 174, 239, 0))',
+                        background: 'linear-gradient(to right, rgba(99, 102, 241, 0), rgba(99, 102, 241, 0.12), rgba(99, 102, 241, 0))',
                         transform: 'translate3d(0, 0, 0)' 
                       }}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-primary-600 focus:outline-none transition-colors z-10"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 transition-colors hover:text-indigo-500 focus:outline-none z-10"
                       disabled={loading}
                       aria-label={showPassword ? 'Şifreyi gizle' : 'Şifreyi göster'}
                       style={{ transform: 'translate3d(0, -50%, 0)' }}
@@ -361,17 +369,17 @@ function LoginPage() {
                     <div 
                       className="absolute -inset-1 rounded-lg blur-lg opacity-30 group-hover:opacity-50 transition-opacity duration-500"
                       style={{
-                        background: 'linear-gradient(to right, #00AEEF, #1890FF, #096DD9)',
+                        background: 'linear-gradient(to right, #6366f1, #8b5cf6, #ec4899)',
                         transform: 'translate3d(0, 0, 0)',
                         willChange: 'opacity',
                       }}
                     />
                     <Button
                       type="submit"
-                      className="relative w-full h-14 text-white font-bold text-base shadow-2xl hover:shadow-primary-500/50 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 overflow-hidden"
+                      className="relative w-full h-14 text-white font-bold text-base shadow-2xl hover:shadow-indigo-500/50 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 overflow-hidden"
                       disabled={loading}
                       style={{
-                        background: 'linear-gradient(to right, #00AEEF, #1890FF, #096DD9)',
+                        background: 'linear-gradient(to right, #6366f1, #8b5cf6, #ec4899)',
                         transform: 'translate3d(0, 0, 0)',
                         willChange: 'transform',
                       }}
@@ -380,7 +388,7 @@ function LoginPage() {
                       <div 
                         className="absolute inset-0 bg-[length:200%_100%] opacity-0 group-hover:opacity-100 transition-opacity duration-500"
                         style={{
-                          background: 'linear-gradient(to right, #00AEEF, #1890FF, #096DD9, #00AEEF)',
+                          background: 'linear-gradient(to right, #6366f1, #8b5cf6, #ec4899, #6366f1)',
                           animation: 'gradient-shift 3s ease-in-out infinite',
                           transform: 'translate3d(0, 0, 0)',
                           willChange: 'background-position',
@@ -416,7 +424,7 @@ function LoginPage() {
                   initial={{ opacity: 0 }}
                   animate={mounted ? { opacity: 1 } : { opacity: 0 }}
                   transition={{ delay: 0.5 }}
-                  className="rounded-lg bg-gradient-to-r from-blue-50 to-primary-50 border border-blue-200 p-4 text-xs text-blue-700"
+                  className="rounded-lg bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border border-indigo-100 p-4 text-xs text-indigo-700"
                 >
                   <div className="flex items-start gap-2">
                     <Zap className="h-4 w-4 mt-0.5 flex-shrink-0" />
@@ -454,14 +462,14 @@ function LoginPage() {
               <div 
                 className="absolute inset-0 transition-all duration-500"
                 style={{ 
-                  background: 'linear-gradient(to bottom right, rgba(0, 174, 239, 0), rgba(24, 144, 255, 0))',
+                  background: 'linear-gradient(to bottom right, rgba(99, 102, 241, 0), rgba(139, 92, 246, 0))',
                   transform: 'translate3d(0, 0, 0)' 
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(0, 174, 239, 0.1), rgba(24, 144, 255, 0.1))'
+                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(99, 102, 241, 0.12), rgba(139, 92, 246, 0.12))'
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(0, 174, 239, 0), rgba(24, 144, 255, 0))'
+                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(99, 102, 241, 0), rgba(139, 92, 246, 0))'
                 }}
               />
               <motion.div
@@ -470,7 +478,7 @@ function LoginPage() {
                 className="relative z-10"
                 style={{ transform: 'translate3d(0, 0, 0)' }}
               >
-                <Zap className="h-7 w-7 text-primary-600 mx-auto mb-3 drop-shadow-lg" />
+                    <Zap className="h-7 w-7 text-indigo-500 mx-auto mb-3 drop-shadow-lg" />
                 <p className="text-sm font-bold text-gray-800">Hızlı</p>
                 <p className="text-xs text-gray-600 mt-1 font-medium">&lt;300ms</p>
               </motion.div>
@@ -503,7 +511,7 @@ function LoginPage() {
                 className="relative z-10"
                 style={{ transform: 'translate3d(0, 0, 0)' }}
               >
-                <Shield className="h-7 w-7 text-primary-500 mx-auto mb-3 drop-shadow-lg" />
+                <Shield className="h-7 w-7 text-indigo-500 mx-auto mb-3 drop-shadow-lg" />
                 <p className="text-sm font-bold text-gray-800">Güvenli</p>
                 <p className="text-xs text-gray-600 mt-1 font-medium">Enterprise</p>
               </motion.div>
@@ -520,14 +528,14 @@ function LoginPage() {
               <div 
                 className="absolute inset-0 transition-all duration-500"
                 style={{ 
-                  background: 'linear-gradient(to bottom right, rgba(27, 38, 59, 0), rgba(0, 174, 239, 0))',
+                  background: 'linear-gradient(to bottom right, rgba(49, 46, 129, 0), rgba(99, 102, 241, 0))',
                   transform: 'translate3d(0, 0, 0)' 
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(27, 38, 59, 0.1), rgba(0, 174, 239, 0.1))'
+                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(49, 46, 129, 0.12), rgba(99, 102, 241, 0.12))'
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(27, 38, 59, 0), rgba(0, 174, 239, 0))'
+                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(49, 46, 129, 0), rgba(99, 102, 241, 0))'
                 }}
               />
               <motion.div
@@ -536,7 +544,7 @@ function LoginPage() {
                 className="relative z-10"
                 style={{ transform: 'translate3d(0, 0, 0)' }}
               >
-                <TrendingUp className="h-7 w-7 text-primary-500 mx-auto mb-3 drop-shadow-lg" />
+                <TrendingUp className="h-7 w-7 text-indigo-500 mx-auto mb-3 drop-shadow-lg" />
                 <p className="text-sm font-bold text-gray-800">Güvenilir</p>
                 <p className="text-xs text-gray-600 mt-1 font-medium">%99.9</p>
               </motion.div>

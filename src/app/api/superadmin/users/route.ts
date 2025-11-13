@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { buildPermissionDeniedResponse } from '@/lib/permissions'
 
 // Tüm kullanıcıları listele (sadece SUPER_ADMIN)
 export async function GET() {
@@ -14,7 +15,7 @@ export async function GET() {
 
     // Sadece SUPER_ADMIN erişebilir
     if (session.user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Bu endpoint sadece SuperAdmin tarafından kullanılabilir.')
     }
 
     const supabase = getSupabaseWithServiceRole()
@@ -73,7 +74,7 @@ export async function GET() {
     })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch users' },
+      { error: error.message || 'Kullanıcı listesi getirilemedi' },
       { status: 500 }
     )
   }
@@ -90,7 +91,7 @@ export async function PUT(request: Request) {
 
     // Sadece SUPER_ADMIN erişebilir
     if (session.user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Bu endpoint sadece SuperAdmin tarafından kullanılabilir.')
     }
 
     const body = await request.json()
@@ -135,7 +136,7 @@ export async function PUT(request: Request) {
     return NextResponse.json({ success: true })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to update user' },
+      { error: error.message || 'Kullanıcı güncellenemedi' },
       { status: 500 }
     )
   }

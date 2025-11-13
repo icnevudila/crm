@@ -11,7 +11,7 @@ export async function GET() {
     
     if (error) {
       return NextResponse.json(
-        { status: 'error', message: 'Database connection failed', error: error.message },
+        { status: 'error', message: 'Veritabanı bağlantısı başarısız oldu', error: error.message },
         { status: 503 }
       )
     }
@@ -23,7 +23,7 @@ export async function GET() {
     })
   } catch (error) {
     return NextResponse.json(
-      { status: 'error', message: 'Health check failed', error: String(error) },
+      { status: 'error', message: 'Sağlık kontrolü başarısız oldu', error: String(error) },
       { status: 503 }
     )
   }

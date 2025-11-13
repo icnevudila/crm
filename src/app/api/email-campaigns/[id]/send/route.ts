@@ -10,28 +10,45 @@ const supabase = createClient(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.companyId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    // Internal cron call kontrolü (service role key ile)
+    const authHeader = request.headers.get('authorization')
+    const isInternalCall = authHeader === `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`
+    
+    let session: any = null
+    let campaignId: string
+    
+    // Internal call değilse normal auth kontrolü yap
+    if (!isInternalCall) {
+      session = await getServerSession(authOptions)
+      if (!session?.user?.companyId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      }
 
-    // Permission check - canUpdate kontrolü (send işlemi update sayılır)
-    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
-    const canUpdate = await hasPermission('email-campaign', 'update', session.user.id)
-    if (!canUpdate) {
-      return buildPermissionDeniedResponse()
+      // Permission check - canUpdate kontrolü (send işlemi update sayılır)
+      const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
+      const canUpdate = await hasPermission('email-campaign', 'update', session.user.id)
+      if (!canUpdate) {
+        return buildPermissionDeniedResponse()
+      }
     }
+    
+    const { id } = await params
+    campaignId = id
 
     // Get campaign
-    const { data: campaign, error: fetchError } = await supabase
+    let campaignQuery = supabase
       .from('EmailCampaign')
       .select('*')
-      .eq('id', params.id)
-      .eq('companyId', session.user.companyId)
-      .single()
+      .eq('id', campaignId)
+    
+    if (!isInternalCall) {
+      campaignQuery = campaignQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { data: campaign, error: fetchError } = await campaignQuery.single()
 
     if (fetchError || !campaign) {
       return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
@@ -60,12 +77,18 @@ export async function POST(
       })) || []
     } else {
       // Tüm müşterilere gönder
-      const { data } = await supabase
+      let customerQuery = supabase
         .from('Customer')
         .select('email, name')
-        .eq('companyId', session.user.companyId)
         .not('email', 'is', null)
-
+      
+      if (!isInternalCall && session?.user?.companyId) {
+        customerQuery = customerQuery.eq('companyId', session.user.companyId)
+      } else if (campaign?.companyId) {
+        customerQuery = customerQuery.eq('companyId', campaign.companyId)
+      }
+      
+      const { data } = await customerQuery
       customers = data || []
     }
 
@@ -83,10 +106,13 @@ export async function POST(
         status: 'SENDING',
         sentAt: new Date().toISOString(),
       })
-      .eq('id', params.id)
+      .eq('id', campaignId)
 
     // Send emails (MOCK - gerçek email service entegrasyonu lazım)
     // TODO: SendGrid, AWS SES, veya Resend kullan
+    let successCount = 0
+    let failCount = 0
+    
     for (const customer of customers) {
       if (!customer.email) continue
 
@@ -94,49 +120,59 @@ export async function POST(
         // Email gönder (mock)
         console.log(`Sending email to ${customer.email}`)
         
-        // Email log oluştur
+        // Email log oluştur (trigger stats'ı otomatik güncelleyecek)
         await supabase.from('EmailLog').insert({
-          campaignId: params.id,
+          campaignId: campaignId,
           recipientEmail: customer.email,
           recipientName: customer.name,
-          status: 'DELIVERED', // Mock: başarılı
+          status: 'SENT', // Trigger 'SENT' status'ünü bekliyor
           sentAt: new Date().toISOString(),
-          companyId: session.user.companyId,
+          companyId: campaign.companyId,
         })
+        
+        successCount++
       } catch (emailError) {
         console.error(`Failed to send to ${customer.email}:`, emailError)
         
         // Hata logu
         await supabase.from('EmailLog').insert({
-          campaignId: params.id,
+          campaignId: campaignId,
           recipientEmail: customer.email,
           recipientName: customer.name,
           status: 'FAILED',
           sentAt: new Date().toISOString(),
-          companyId: session.user.companyId,
+          companyId: campaign.companyId,
         })
+        
+        failCount++
       }
     }
 
-    // Campaign'i SENT olarak işaretle
+    // Campaign'i SENT olarak işaretle ve istatistikleri güncelle
     await supabase
       .from('EmailCampaign')
-      .update({ status: 'SENT' })
-      .eq('id', params.id)
+      .update({ 
+        status: 'SENT',
+        totalSent: successCount,
+      })
+      .eq('id', campaignId)
 
-    // Activity log
-    await supabase.from('ActivityLog').insert({
-      action: 'SEND',
-      entityType: 'EmailCampaign',
-      entityId: params.id,
-      userId: session.user.id,
-      companyId: session.user.companyId,
-      description: `Sent email campaign to ${customers.length} customers`,
-      meta: {
-        campaignName: campaign.name,
-        recipientCount: customers.length,
-      },
-    })
+    // Activity log (sadece manuel gönderimlerde - cron call'da userId yok)
+    if (session?.user?.id) {
+      await supabase.from('ActivityLog').insert({
+        action: 'SEND',
+        entityType: 'EmailCampaign',
+        entityId: campaignId,
+        userId: session.user.id,
+        companyId: campaign.companyId,
+        description: `Sent email campaign to ${successCount} customers`,
+        meta: {
+          campaignName: campaign.name,
+          recipientCount: successCount,
+          failedCount: failCount,
+        },
+      })
+    }
 
     return NextResponse.json({
       success: true,
@@ -147,10 +183,11 @@ export async function POST(
     console.error('Campaign send error:', error)
 
     // Hata durumunda FAILED olarak işaretle
+    const { id: failedCampaignId } = await params
     await supabase
       .from('EmailCampaign')
       .update({ status: 'FAILED' })
-      .eq('id', params.id)
+      .eq('id', failedCampaignId)
 
     return NextResponse.json(
       { error: error.message || 'Failed to send campaign' },

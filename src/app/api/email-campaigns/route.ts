@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { emailCampaignCreateSchema } from '@/lib/validations/email-campaigns'
 
 // Dynamic route - build-time'da çalışmasın
 export const dynamic = 'force-dynamic'
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Email campaigns fetch error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch email campaigns' },
+      { error: error.message || 'E-posta kampanyaları getirilemedi' },
       { status: 500 }
     )
   }
@@ -69,21 +70,32 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseWithServiceRole()
     const body = await request.json()
 
-    // Validation
-    if (!body.name || !body.subject || !body.body) {
+    // Zod validation
+    const validationResult = emailCampaignCreateSchema.safeParse(body)
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: 'Name, subject, and body are required' },
+        { 
+          error: 'Validation error',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        },
         { status: 400 }
       )
     }
 
+    const validatedData = validationResult.data
+
+    // scheduledAt varsa SCHEDULED, yoksa DRAFT
+    const status = validatedData.scheduledAt && new Date(validatedData.scheduledAt) > new Date()
+      ? 'SCHEDULED'
+      : 'DRAFT'
+
     const { data, error } = await supabase
       .from('EmailCampaign')
       .insert({
-        ...body,
+        ...validatedData,
         createdBy: session.user.id,
         companyId: session.user.companyId,
-        status: 'DRAFT',
+        status, // scheduledAt varsa SCHEDULED, yoksa DRAFT
       })
       .select()
       .single()
@@ -97,7 +109,7 @@ export async function POST(request: NextRequest) {
       entityId: data.id,
       userId: session.user.id,
       companyId: session.user.companyId,
-      description: `Created email campaign: ${data.name}`,
+      description: `E-posta kampanyası oluşturuldu: ${data.name}`,
       meta: { campaignId: data.id },
     })
 
@@ -105,7 +117,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Email campaign create error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to create email campaign' },
+      { error: error.message || 'E-posta kampanyası oluşturulamadı' },
       { status: 500 }
     )
   }

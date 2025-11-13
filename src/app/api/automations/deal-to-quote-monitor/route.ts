@@ -48,14 +48,14 @@ export async function GET() {
     if (dealsError) {
       console.error('Deal-to-Quote Monitor error:', dealsError)
       return NextResponse.json(
-        { error: 'Failed to find deals' },
+        { error: 'Fırsatlar getirilemedi' },
         { status: 500 }
       )
     }
 
     if (!allDeals || allDeals.length === 0) {
       return NextResponse.json({
-        message: 'No deals found',
+        message: 'Fırsat bulunamadı',
         warnings: [],
       })
     }
@@ -91,16 +91,26 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      message: warnings.length > 0 ? 'Deals without quotes found' : 'All deals have quotes',
+      message: warnings.length > 0 ? 'Teklifi olmayan fırsatlar bulundu' : 'Tüm fırsatların teklifi hazır',
       warnings,
       count: warnings.length,
     })
   } catch (error: any) {
     console.error('Deal-to-Quote Monitor error:', error)
     return NextResponse.json(
-      { error: error?.message || 'Failed to monitor deals' },
+      { error: error?.message || 'Fırsatlar izlenemedi' },
       { status: 500 }
     )
   }
 }
+
+
+
+
+
+
+
+
+
+
 

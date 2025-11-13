@@ -1,15 +1,26 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Search, Send, Eye, Mail } from 'lucide-react'
+import { Plus, Search, Send, Eye, Mail, Edit, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import EmailCampaignForm from '@/components/email-campaigns/EmailCampaignForm'
 import { useData } from '@/hooks/useData'
 import { format } from 'date-fns'
 import { tr } from 'date-fns/locale'
+import { useLocale } from 'next-intl'
+import Link from 'next/link'
+import { toast, confirm } from '@/lib/toast'
+import { mutate } from 'swr'
+import dynamic from 'next/dynamic'
+
+const EmailCampaignDetailModal = dynamic(() => import('@/components/email-campaigns/EmailCampaignDetailModal'), {
+  ssr: false,
+  loading: () => null,
+})
 
 interface Campaign {
   id: string
@@ -27,10 +38,44 @@ interface Campaign {
 }
 
 export default function EmailCampaignsPage() {
+  const locale = useLocale()
   const [search, setSearch] = useState('')
+  const [formOpen, setFormOpen] = useState(false)
+  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null)
+  const [selectedCampaignData, setSelectedCampaignData] = useState<Campaign | null>(null)
 
   const apiUrl = `/api/email-campaigns${search ? `?search=${search}` : ''}`
-  const { data: campaigns = [], isLoading } = useData<Campaign[]>(apiUrl)
+  const { data: campaigns = [], isLoading, mutate: mutateCampaigns } = useData<Campaign[]>(apiUrl)
+
+  const handleEdit = (campaign: Campaign) => {
+    setSelectedCampaign(campaign)
+    setFormOpen(true)
+  }
+
+  const handleDelete = async (id: string, name: string) => {
+    const confirmed = await confirm(`${name} kampanyasını silmek istediğinize emin misiniz?`)
+    if (!confirmed) return
+
+    const toastId = toast.loading('Siliniyor...')
+    try {
+      const res = await fetch(`/api/email-campaigns/${id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Silme işlemi başarısız')
+      }
+
+      await mutateCampaigns()
+      await mutate(apiUrl)
+      toast.dismiss(toastId)
+      toast.success('Silindi', 'Kampanya başarıyla silindi.')
+    } catch (error: any) {
+      console.error('Delete error:', error)
+      toast.dismiss(toastId)
+      toast.error('Silme başarısız', error?.message || 'Silme işlemi sırasında bir hata oluştu.')
+    }
+  }
 
   const getStatusBadge = (status: string) => {
     const statusMap = {
@@ -63,7 +108,10 @@ export default function EmailCampaignsPage() {
           <h1 className="text-3xl font-bold">Email Kampanyaları</h1>
           <p className="text-gray-500 mt-1">Toplu email gönderimi ve kampanya yönetimi</p>
         </div>
-        <Button>
+        <Button onClick={() => {
+          setSelectedCampaign(null)
+          setFormOpen(true)
+        }} className="bg-indigo-600 hover:bg-indigo-700 text-white">
           <Plus className="h-4 w-4 mr-2" />
           Yeni Kampanya
         </Button>
@@ -118,6 +166,7 @@ export default function EmailCampaignsPage() {
               <TableHead>Açılma</TableHead>
               <TableHead>Tıklama</TableHead>
               <TableHead>Tarih</TableHead>
+              <TableHead className="text-right">İşlemler</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -162,12 +211,70 @@ export default function EmailCampaignsPage() {
                       ? `Planlandı: ${format(new Date(campaign.scheduledAt), 'dd MMM', { locale: tr })}`
                       : format(new Date(campaign.createdAt), 'dd MMM yyyy', { locale: tr })}
                   </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setSelectedCampaignId(campaign.id)
+                          setSelectedCampaignData(campaign)
+                          setDetailModalOpen(true)
+                        }}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(campaign)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleDelete(campaign.id, campaign.name)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
       </div>
+
+      {/* Detail Modal */}
+      <EmailCampaignDetailModal
+        campaignId={selectedCampaignId}
+        open={detailModalOpen}
+        onClose={() => {
+          setDetailModalOpen(false)
+          setSelectedCampaignId(null)
+          setSelectedCampaignData(null)
+        }}
+        initialData={selectedCampaignData || undefined}
+      />
+
+      {/* Campaign Form Modal */}
+      <EmailCampaignForm
+        campaign={selectedCampaign || undefined}
+        open={formOpen}
+        onClose={() => {
+          setFormOpen(false)
+          setSelectedCampaign(null)
+        }}
+        onSuccess={async (savedCampaign) => {
+          await mutateCampaigns()
+          await mutate(apiUrl)
+          setFormOpen(false)
+          setSelectedCampaign(null)
+        }}
+      />
     </div>
   )
 }

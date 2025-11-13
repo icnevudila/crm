@@ -15,6 +15,13 @@ import { format } from 'date-fns'
 import { tr } from 'date-fns/locale'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
+import { toast, confirm } from '@/lib/toast'
+import dynamic from 'next/dynamic'
+
+const ApprovalDetailModal = dynamic(() => import('@/components/approvals/ApprovalDetailModal'), {
+  ssr: false,
+  loading: () => null,
+})
 
 interface Approval {
   id: string
@@ -35,15 +42,20 @@ export default function ApprovalsPage() {
   const [search, setSearch] = useState('')
   const [activeTab, setActiveTab] = useState('all')
   const [formOpen, setFormOpen] = useState(false)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [selectedApprovalId, setSelectedApprovalId] = useState<string | null>(null)
+  const [selectedApprovalData, setSelectedApprovalData] = useState<Approval | null>(null)
 
   const apiUrl = `/api/approvals${activeTab === 'mine' ? '?myApprovals=true' : ''}`
   const { data: approvals = [], isLoading, error, mutate: mutateApprovals } = useData<Approval[]>(apiUrl)
 
   const handleApprove = async (id: string) => {
-    if (!confirm('Bu onay talebini onaylamak istediğinize emin misiniz?')) {
+    const confirmed = await confirm('Bu onay talebini onaylamak istediğinize emin misiniz?')
+    if (!confirmed) {
       return
     }
 
+    const toastId = toast.loading('Onaylanıyor...')
     try {
       const res = await fetch(`/api/approvals/${id}/approve`, { method: 'POST' })
       if (!res.ok) {
@@ -52,10 +64,23 @@ export default function ApprovalsPage() {
       }
       
       await mutateApprovals()
-      alert('✅ Onay talebi başarıyla onaylandı!')
+      toast.dismiss(toastId)
+      toast.success('Onaylandı', 'Onay talebi başarıyla onaylandı.')
     } catch (error: any) {
       console.error('Approve error:', error)
-      alert(error?.message || 'Onaylama işlemi başarısız oldu')
+      toast.dismiss(toastId)
+      toast.error('Onaylama başarısız', error?.message || 'Onaylama işlemi sırasında bir hata oluştu.')
+    }
+  }
+
+  const getRowClasses = (status: string) => {
+    switch (status) {
+      case 'APPROVED':
+        return 'bg-emerald-50/80 border-l-4 border-emerald-400'
+      case 'REJECTED':
+        return 'bg-rose-50/80 border-l-4 border-rose-400'
+      default:
+        return ''
     }
   }
 
@@ -66,10 +91,12 @@ export default function ApprovalsPage() {
       return
     }
 
-    if (!confirm('Bu onay talebini reddetmek istediğinize emin misiniz?')) {
+    const confirmed = await confirm('Bu onay talebini reddetmek istediğinize emin misiniz?')
+    if (!confirmed) {
       return
     }
 
+    const toastId = toast.loading('Reddediliyor...')
     try {
       const res = await fetch(`/api/approvals/${id}/reject`, {
         method: 'POST',
@@ -83,10 +110,12 @@ export default function ApprovalsPage() {
       }
       
       await mutateApprovals()
-      alert('✅ Onay talebi reddedildi')
+      toast.dismiss(toastId)
+      toast.success('Reddedildi', 'Onay talebi reddedildi.')
     } catch (error: any) {
       console.error('Reject error:', error)
-      alert(error?.message || 'Reddetme işlemi başarısız oldu')
+      toast.dismiss(toastId)
+      toast.error('Reddetme başarısız', error?.message || 'Reddetme işlemi sırasında bir hata oluştu.')
     }
   }
 
@@ -204,7 +233,7 @@ export default function ApprovalsPage() {
                   </TableRow>
                 ) : (
                   filteredApprovals.map((approval) => (
-                    <TableRow key={approval.id}>
+                  <TableRow key={approval.id} className={getRowClasses(approval.status)}>
                       <TableCell>
                         <div>
                           <Link 
@@ -263,11 +292,19 @@ export default function ApprovalsPage() {
                               )}
                             </div>
                           )}
-                          <Link href={`/${locale}/approvals/${approval.id}`} prefetch={true}>
-                            <Button size="sm" variant="ghost" className="ml-2" title="Detayları Görüntüle">
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                          </Link>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="ml-2"
+                            title="Detayları Görüntüle"
+                            onClick={() => {
+                              setSelectedApprovalId(approval.id)
+                              setSelectedApprovalData(approval)
+                              setDetailModalOpen(true)
+                            }}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -278,6 +315,18 @@ export default function ApprovalsPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Detail Modal */}
+      <ApprovalDetailModal
+        approvalId={selectedApprovalId}
+        open={detailModalOpen}
+        onClose={() => {
+          setDetailModalOpen(false)
+          setSelectedApprovalId(null)
+          setSelectedApprovalData(null)
+        }}
+        initialData={selectedApprovalData || undefined}
+      />
 
       {/* Approval Form Modal */}
       <ApprovalForm

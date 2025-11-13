@@ -4,8 +4,8 @@ import { getRecords, createRecord } from '@/lib/crud'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { hasPermission, buildPermissionDeniedResponse } from '@/lib/permissions'
 
-// Cache'i kapat - POST işleminden sonra fresh data gelsin
-export const dynamic = 'force-dynamic'
+// Dengeli cache - 60 saniye revalidate (performans + veri güncelliği dengesi)
+export const revalidate = 60
 
 export async function GET(request: Request) {
   try {
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     const customerCompanyId = searchParams.get('customerCompanyId') || '' // Müşteri firması filtresi
     const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
     const page = parseInt(searchParams.get('page') || '1', 10)
-    const pageSize = parseInt(searchParams.get('pageSize') || '20', 10)
+    const pageSize = parseInt(searchParams.get('pageSize') || '10', 10) // Default 10 kayıt (performans için)
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
@@ -89,6 +89,7 @@ export async function GET(request: Request) {
         createdAt,
         companyId,
         customerCompanyId,
+        logoUrl,
         Company:companyId (
           id,
           name
@@ -164,7 +165,8 @@ export async function GET(request: Request) {
       })
     }
 
-    // Cache'i kapat - POST işleminden sonra fresh data gelsin
+    // Dengeli cache - 60 saniye (performans + veri güncelliği dengesi)
+    // stale-while-revalidate: Eski veri gösterilirken arka planda yenilenir (kullanıcı beklemez)
     return NextResponse.json(
       {
         data: data || [],
@@ -177,7 +179,9 @@ export async function GET(request: Request) {
       },
       {
         headers: {
-          'Cache-Control': 'no-store, must-revalidate',
+          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120, max-age=30',
+          'CDN-Cache-Control': 'public, s-maxage=60',
+          'Vercel-CDN-Cache-Control': 'public, s-maxage=60',
         },
       }
     )
@@ -259,6 +263,10 @@ export async function POST(request: Request) {
     // customerCompanyId - müşteri hangi firmada çalışıyor (migration 004'te eklendi)
     if (body.customerCompanyId !== undefined && body.customerCompanyId !== null && body.customerCompanyId !== '') {
       customerData.customerCompanyId = body.customerCompanyId
+    }
+    // logoUrl - müşteri logosu (migration 070'te eklendi)
+    if (body.logoUrl !== undefined && body.logoUrl !== null && body.logoUrl !== '') {
+      customerData.logoUrl = body.logoUrl
     }
     // NOT: address, sector, website, taxNumber, fax, notes schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 

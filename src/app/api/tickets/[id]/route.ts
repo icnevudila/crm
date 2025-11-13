@@ -18,7 +18,7 @@ export async function GET(
         console.error('Tickets [id] GET API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -28,13 +28,10 @@ export async function GET(
     }
 
     // Permission check - canRead kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canRead = await hasPermission('ticket', 'read', session.user.id)
     if (!canRead) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Destek talebi görüntüleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
@@ -92,10 +89,10 @@ export async function GET(
     })
   } catch (error: any) {
     if (error.message.includes('not found') || error.message.includes('No rows')) {
-      return NextResponse.json({ error: 'Ticket not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Destek talebi bulunamadı' }, { status: 404 })
     }
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch ticket' },
+      { error: error.message || 'Destek talebi getirilemedi' },
       { status: 500 }
     )
   }
@@ -115,7 +112,7 @@ export async function PUT(
         console.error('Tickets [id] PUT API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -125,13 +122,10 @@ export async function PUT(
     }
 
     // Permission check - canUpdate kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canUpdate = await hasPermission('ticket', 'update', session.user.id)
     if (!canUpdate) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Destek talebi güncelleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const { id } = await params
@@ -336,7 +330,7 @@ export async function PUT(
     return NextResponse.json(data)
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to update ticket' },
+      { error: error.message || 'Destek talebi güncellenemedi' },
       { status: 500 }
     )
   }
@@ -356,7 +350,7 @@ export async function DELETE(
         console.error('Tickets [id] DELETE API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -366,13 +360,10 @@ export async function DELETE(
     }
 
     // Permission check - canDelete kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canDelete = await hasPermission('ticket', 'delete', session.user.id)
     if (!canDelete) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Destek talebi silme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const { id } = await params
@@ -411,7 +402,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to delete ticket' },
+      { error: error.message || 'Destek talebi silinemedi' },
       { status: 500 }
     )
   }

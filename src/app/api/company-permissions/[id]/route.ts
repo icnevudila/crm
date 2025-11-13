@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabase } from '@/lib/supabase'
 import { updateRecord } from '@/lib/crud'
+import { buildPermissionDeniedResponse } from '@/lib/permissions'
 
 export async function GET(
   request: Request,
@@ -20,7 +21,7 @@ export async function GET(
 
     // Sadece SuperAdmin görebilir
     if (session.user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Sadece SuperAdmin şirket izinlerini görüntüleyebilir.')
     }
 
     const { id } = await params
@@ -39,7 +40,7 @@ export async function GET(
     return NextResponse.json(permission)
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch company permission' },
+      { error: error.message || 'Kurum yetkisi getirilemedi' },
       { status: 500 }
     )
   }
@@ -62,7 +63,7 @@ export async function PUT(
 
     // Sadece SuperAdmin güncelleyebilir
     if (session.user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Sadece SuperAdmin şirket izinlerini güncelleyebilir.')
     }
 
     const { id } = await params
@@ -88,7 +89,7 @@ export async function PUT(
     return NextResponse.json(permission)
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to update company permission' },
+      { error: error.message || 'Kurum yetkisi güncellenemedi' },
       { status: 500 }
     )
   }
@@ -109,7 +110,7 @@ export async function DELETE(
 
     // Sadece SuperAdmin silebilir
     if (session.user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Sadece SuperAdmin şirket izinlerini silebilir.')
     }
 
     const { id } = await params
@@ -148,7 +149,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to delete company permission' },
+      { error: error.message || 'Kurum yetkisi silinemedi' },
       { status: 500 }
     )
   }

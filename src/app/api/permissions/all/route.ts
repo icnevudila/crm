@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabase } from '@/lib/supabase'
+
+// PERFORMANCE FIX: Cache ekle - permissions sık değişmez
+export const revalidate = 60
 
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
+    // PERFORMANCE FIX: getSafeSession kullan (cache var) - getServerSession yerine
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
+    }
     
     // Session yoksa veya companyId yoksa boş obje döndür (401 yerine)
     // Sidebar'da session yüklenene kadar bekleyecek
@@ -21,8 +27,8 @@ export async function GET(request: Request) {
     const companyId = session.user.companyId
     const userId = session.user.id
 
-    // SUPER_ADMIN ve ADMIN her zaman tüm yetkilere sahip
-    if (session.user.role === 'SUPER_ADMIN' || session.user.role === 'ADMIN') {
+    // SUPER_ADMIN her zaman tüm yetkilere sahip
+    if (session.user.role === 'SUPER_ADMIN') {
       // Tüm modüller için true döndür
       const allModules = [
         'dashboard',
@@ -78,9 +84,12 @@ export async function GET(request: Request) {
       })
     }
 
+    // PERFORMANCE FIX: Cache ekle - permissions sık değişmez, 60 saniye cache yeterli
     return NextResponse.json(permissions, {
       headers: {
-        'Cache-Control': 'no-store, must-revalidate', // Gerçek zamanlı kontrol için cache yok
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120, max-age=30', // 60 saniye cache (performans için)
+        'CDN-Cache-Control': 'public, s-maxage=60',
+        'Vercel-CDN-Cache-Control': 'public, s-maxage=60',
       },
     })
   } catch (error: any) {

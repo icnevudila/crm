@@ -175,15 +175,8 @@ export async function createRecord(table: string, data: any, logDescription?: st
     throw new Error(error.message)
   }
 
-  // ActivityLog kaydı
-  await logAction({
-    entity: table,
-    action: 'CREATE',
-    description: logDescription || `${table} kaydı oluşturuldu: ${(created as any)?.id || 'unknown'}`,
-    meta: { entity: table, action: 'create', id: (created as any)?.id || 'unknown', ...data },
-    userId: session.user.id,
-    companyId: session.user.companyId,
-  })
+  // ActivityLog kaydı KALDIRILDI - Sadece kritik işlemler için ActivityLog tutulacak
+  // (Performans optimizasyonu: Gereksiz log'lar veritabanını yavaşlatıyor)
 
   return created
 }

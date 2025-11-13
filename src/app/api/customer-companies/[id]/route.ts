@@ -1,25 +1,29 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
-// Dynamic route - cache'i kapat
-export const dynamic = 'force-dynamic'
+const DUPLICATE_TAX_MESSAGE =
+  'Bu vergi dairesi ve vergi numarası kombinasyonu zaten kayıtlı. Lütfen mevcut kaydı güncelleyin.'
+
+// PERFORMANCE FIX: force-dynamic cache'i tamamen kapatıyor - kaldırıldı
+// export const dynamic = 'force-dynamic' // KALDIRILDI - cache performansı için
+export const revalidate = 60 // 60 saniye revalidate (performans için)
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions)
-    if (!session?.user?.companyId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // PERFORMANCE FIX: getSafeSession kullan (cache var) - getServerSession yerine
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
+    
+    const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
 
-    // SUPER_ADMIN bu sayfayı kullanmaz
-    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
-    if (isSuperAdmin) {
-      return NextResponse.json({ error: 'Forbidden', message: 'SuperAdmin bu sayfayı kullanamaz' }, { status: 403 })
+    if (!session?.user?.companyId && !isSuperAdmin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id } = await params
@@ -28,12 +32,18 @@ export async function GET(
     // Müşteri firmasını ilişkili verilerle çek
     // ÖNEMLİ: customerCompanyId ile ilişkili verileri ayrı query'lerle çek (performans için)
     // NOT: district kolonu veritabanında yok, bu yüzden select'te belirtiyoruz
-    const { data: company, error } = await supabase
+    let companyQuery = supabase
       .from('CustomerCompany')
-      .select('id, name, sector, city, status, taxOffice, taxNumber, lastMeetingDate, createdAt, updatedAt, contactPerson, phone, countryCode, logoUrl, address, email, website, description, companyId')
+      .select(
+        'id, name, sector, city, status, taxOffice, taxNumber, lastMeetingDate, createdAt, updatedAt, contactPerson, phone, countryCode, logoUrl, address, email, website, description, companyId'
+      )
       .eq('id', id)
-      .eq('companyId', session.user.companyId) // Sadece kendi şirketinin müşteri firmaları
-      .maybeSingle() // .single() yerine .maybeSingle() kullan - hata vermez, sadece null döner
+
+    if (!isSuperAdmin) {
+      companyQuery = companyQuery.eq('companyId', session.user.companyId) // Sadece kendi şirketinin müşteri firmaları
+    }
+
+    const { data: company, error } = await companyQuery.maybeSingle() // .single() yerine .maybeSingle() kullan - hata vermez, sadece null döner
 
     if (error || !company) {
       return NextResponse.json(
@@ -127,10 +137,16 @@ export async function GET(
       ...relatedData,
     }
 
-    return NextResponse.json(response)
+    return NextResponse.json(response, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120, max-age=30', // PERFORMANCE FIX: Cache headers eklendi
+        'CDN-Cache-Control': 'public, s-maxage=60',
+        'Vercel-CDN-Cache-Control': 'public, s-maxage=60',
+      },
+    })
   } catch (error: any) {
     return NextResponse.json(
-      { error: 'Failed to fetch customer company', message: error?.message },
+      { error: 'Müşteri firması getirilemedi', message: error?.message },
       { status: 500 }
     )
   }
@@ -142,14 +158,10 @@ export async function PUT(
 ) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.companyId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
 
-    // SUPER_ADMIN bu sayfayı kullanmaz
-    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
-    if (isSuperAdmin) {
-      return NextResponse.json({ error: 'Forbidden', message: 'SuperAdmin bu sayfayı kullanamaz' }, { status: 403 })
+    if (!session?.user?.companyId && !isSuperAdmin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id } = await params
@@ -158,8 +170,7 @@ export async function PUT(
 
     // Müşteri firmasını güncelle
     // @ts-ignore - Supabase type inference issue with dynamic table names
-    const { data: company, error } = await (supabase
-      .from('CustomerCompany') as any)
+    let updateQuery = (supabase.from('CustomerCompany') as any)
       .update({
         name: body.name,
         contactPerson: body.contactPerson || null,
@@ -179,11 +190,22 @@ export async function PUT(
         updatedAt: new Date().toISOString(),
       })
       .eq('id', id)
-      .eq('companyId', session.user.companyId) // Sadece kendi şirketinin müşteri firmaları
-      .select('id, name, sector, city, status, taxOffice, taxNumber, lastMeetingDate, createdAt, updatedAt, contactPerson, phone, countryCode, logoUrl, address, email, website, description, companyId')
+
+    if (!isSuperAdmin) {
+      updateQuery = updateQuery.eq('companyId', session.user.companyId)
+    }
+
+    const { data: company, error } = await updateQuery
+      .select(
+        'id, name, sector, city, status, taxOffice, taxNumber, lastMeetingDate, createdAt, updatedAt, contactPerson, phone, countryCode, logoUrl, address, email, website, description, companyId'
+      )
       .single()
 
     if (error) {
+      if (error.code === '23505') {
+        return NextResponse.json({ error: DUPLICATE_TAX_MESSAGE }, { status: 409 })
+      }
+
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
@@ -196,7 +218,7 @@ export async function PUT(
         description: `Müşteri firması bilgileri güncellendi: ${body.name}`,
         meta: { entity: 'CustomerCompany', action: 'update', id, ...(body as any) },
         userId: session.user.id,
-        companyId: session.user.companyId,
+        companyId: company.companyId,
       },
     ])
 
@@ -206,7 +228,7 @@ export async function PUT(
     return NextResponse.json(company)
   } catch (error: any) {
     return NextResponse.json(
-      { error: 'Failed to update customer company', message: error?.message },
+      { error: 'Müşteri firması güncellenemedi', message: error?.message },
       { status: 500 }
     )
   }
@@ -218,14 +240,10 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user?.companyId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
 
-    // SUPER_ADMIN bu sayfayı kullanmaz
-    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
-    if (isSuperAdmin) {
-      return NextResponse.json({ error: 'Forbidden', message: 'SuperAdmin bu sayfayı kullanamaz' }, { status: 403 })
+    if (!session?.user?.companyId && !isSuperAdmin) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id } = await params
@@ -233,23 +251,31 @@ export async function DELETE(
 
     // Önce müşteri firmasını çek (ActivityLog için)
     // @ts-ignore - Supabase type inference issue with dynamic table names
-    const { data: company } = await (supabase
-      .from('CustomerCompany') as any)
-      .select('name')
+    let companyQuery = (supabase.from('CustomerCompany') as any)
+      .select('name, companyId')
       .eq('id', id)
-      .eq('companyId', session.user.companyId)
-      .single()
+
+    if (!isSuperAdmin) {
+      companyQuery = companyQuery.eq('companyId', session.user.companyId)
+    }
+
+    const { data: company } = await companyQuery.single()
 
     if (!company) {
       return NextResponse.json({ error: 'Customer company not found' }, { status: 404 })
     }
 
     // Müşteri firmasını sil
-    const { error } = await supabase
+    let deleteQuery = supabase
       .from('CustomerCompany')
       .delete()
       .eq('id', id)
-      .eq('companyId', session.user.companyId)
+
+    if (!isSuperAdmin) {
+      deleteQuery = deleteQuery.eq('companyId', session.user.companyId)
+    }
+
+    const { error } = await deleteQuery
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
@@ -264,7 +290,7 @@ export async function DELETE(
         description: `Müşteri firması silindi: ${company.name}`,
         meta: { entity: 'CustomerCompany', action: 'delete', id },
         userId: session.user.id,
-        companyId: session.user.companyId,
+        companyId: company.companyId,
       },
     ])
 
@@ -274,7 +300,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error: any) {
     return NextResponse.json(
-      { error: 'Failed to delete customer company', message: error?.message },
+      { error: 'Müşteri firması silinemedi', message: error?.message },
       { status: 500 }
     )
   }

@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/authOptions'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { logAction } from '@/lib/logger'
 import bcrypt from 'bcryptjs'
+import { buildPermissionDeniedResponse } from '@/lib/permissions'
 
 export async function GET(
   request: Request,
@@ -19,7 +20,7 @@ export async function GET(
         console.error('Users [id] GET API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -86,7 +87,7 @@ export async function GET(
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch user' },
+      { error: error.message || 'Kullanıcı bilgileri getirilemedi' },
       { status: 500 }
     )
   }
@@ -106,7 +107,7 @@ export async function PUT(
         console.error('Users [id] PUT API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -122,7 +123,7 @@ export async function PUT(
     const canUpdate = session.user.id === id || session.user.role === 'SUPER_ADMIN'
 
     if (!canUpdate) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Sadece kendi profilinizi güncelleyebilirsiniz veya SuperAdmin olmalısınız.')
     }
 
     const supabase = getSupabaseWithServiceRole()
@@ -135,12 +136,12 @@ export async function PUT(
       .single()
 
     if (userError || !existingUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return NextResponse.json({ error: 'Kullanıcı bulunamadı' }, { status: 404 })
     }
 
     // Kullanıcı sadece kendi şirketindeki kullanıcıları güncelleyebilir (SUPER_ADMIN hariç)
     if (session.user.role !== 'SUPER_ADMIN' && (existingUser as any)?.companyId !== session.user.companyId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Kendi şirketiniz dışındaki bir kullanıcıyı güncelleyemezsiniz.')
     }
 
     // Şifre varsa hash'le (ama profil güncellemelerinde şifre göndermeyelim, ayrı endpoint var)
@@ -175,7 +176,7 @@ export async function PUT(
 
     if (updateError) {
       return NextResponse.json(
-        { error: updateError.message || 'Failed to update user' },
+        { error: updateError.message || 'Kullanıcı güncellenemedi' },
         { status: 500 }
       )
     }
@@ -193,7 +194,7 @@ export async function PUT(
     return NextResponse.json(updatedUser)
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to update user' },
+      { error: error.message || 'Kullanıcı güncellenemedi' },
       { status: 500 }
     )
   }
@@ -213,7 +214,7 @@ export async function DELETE(
         console.error('Users [id] DELETE API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -243,7 +244,7 @@ export async function DELETE(
 
     if (deleteError) {
       return NextResponse.json(
-        { error: deleteError.message || 'Failed to delete user' },
+        { error: deleteError.message || 'Kullanıcı silinemedi' },
         { status: 500 }
       )
     }
@@ -261,7 +262,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to delete user' },
+      { error: error.message || 'Kullanıcı silinemedi' },
       { status: 500 }
     )
   }

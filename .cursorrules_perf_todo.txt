@@ -1,0 +1,149 @@
+## 🚀 PERFORMANS OPTİMİZASYON TODO LİSTESİ (KRİTİK - DEĞİŞTİRİLEMEZ!)
+
+**ÖNEMLİ**: Bu bölüm performans optimizasyonları için kritik TODO listesidir. **HİÇBİR AGENT BU BÖLÜMÜ DEĞİŞTİREMEZ VEYA SİLEMEZ!** Sadece tamamlanan görevler `✅` ile işaretlenebilir.
+
+### ⚠️ KRİTİK KURAL: Veri Çekimini Engelleme
+**TÜM OPTİMİZASYONLAR VERİ ÇEKİMİNİ ENGELLEMEMELİ!** Optimizasyonlar sadece:
+- ✅ Cache kullanımını artırmalı
+- ✅ Gereksiz re-render'ları önlemeli
+- ✅ Bundle size'ı küçültmeli
+- ✅ Network request'lerini optimize etmeli
+- ✅ Database query'lerini hızlandırmalı
+
+**AMA ASLA:**
+- ❌ Veri çekimini tamamen engellememeli
+- ❌ Cache'i veri çekimini engelleyecek şekilde kullanmamalı
+- ❌ Lazy loading'i veri çekimini engelleyecek şekilde yapmamalı
+
+### 📋 PERFORMANS OPTİMİZASYON TODO LİSTESİ
+
+#### 1. API Response Time Optimizasyonu
+- [ ] **Hedef**: Tüm API endpoint'lerinde response time < 500ms (cache hit durumunda < 100ms)
+- [ ] **Yapılacaklar**:
+  - [ ] Tüm API route'larında cache headers kontrolü (`Cache-Control`, `s-maxage`, `stale-while-revalidate`)
+  - [ ] ISR (Incremental Static Regeneration) kullanımını optimize et
+  - [ ] Edge Runtime kullanımını artır (mümkün olan yerlerde)
+  - [ ] Response compression kontrolü (Gzip/Brotli)
+- [ ] **Dosyalar**: `src/app/api/**/route.ts`
+- [ ] **Öncelik**: 🔴 YÜKSEK
+
+#### 2. Database Query Optimizasyonu
+- [ ] **Hedef**: Tüm database query'lerinde response time < 300ms
+- [ ] **Yapılacaklar**:
+  - [ ] N+1 query problemlerini tespit et ve düzelt
+  - [ ] Composite index'leri kontrol et ve eksikleri ekle (`companyId + status`, `companyId + createdAt`, vb.)
+  - [ ] Query'leri `Promise.all` ile paralel çalıştır (mümkün olan yerlerde)
+  - [ ] Gereksiz `select('*')` kullanımlarını spesifik kolonlara çevir
+- [ ] **Dosyalar**: `src/app/api/**/route.ts`, `supabase/migrations/*.sql`
+- [ ] **Öncelik**: 🔴 YÜKSEK
+
+#### 3. SWR Cache Stratejisi İyileştirme
+- [ ] **Hedef**: Cache hit rate > 80%, sekme geçişlerinde instant render
+- [ ] **Yapılacaklar**:
+  - [ ] `dedupingInterval` ayarlarını optimize et (şu an 5s - gerekirse artır)
+  - [ ] `revalidateOnFocus: false` kontrolü (tüm `useData` kullanımlarında)
+  - [ ] `refreshInterval` kullanımını optimize et (sadece gerekli yerlerde)
+  - [ ] `keepPreviousData: true` kontrolü (smooth transitions için)
+- [ ] **Dosyalar**: `src/hooks/useData.ts`, `src/components/**/*.tsx`
+- [ ] **Öncelik**: 🟡 ORTA
+
+#### 4. Route Prefetching Agresifleştirme
+- [ ] **Hedef**: Sidebar hover'da ve viewport entry'de prefetch aktif
+- [ ] **Yapılacaklar**:
+  - [ ] Sidebar link'lerinde `prefetch={true}` kontrolü
+  - [ ] `useHoverPrefetch` hook'unu tüm sidebar link'lerinde kullan
+  - [ ] `useViewportPrefetch` hook'unu liste sayfalarında kullan
+  - [ ] `startTransition` kullanımını route geçişlerinde aktif et
+- [ ] **Dosyalar**: `src/components/layout/Sidebar.tsx`, `src/components/optimized/PrefetchLink.tsx`
+- [ ] **Öncelik**: 🟡 ORTA
+
+#### 5. Component Lazy Loading Genişletme
+- [ ] **Hedef**: İlk bundle size < 200KB, route bazlı code splitting
+- [ ] **Yapılacaklar**:
+  - [ ] Tüm büyük component'leri `dynamic import` ile yükle (grafikler, modals, forms)
+  - [ ] `Suspense` boundaries ekle (lazy loaded component'ler için)
+  - [ ] Route bazlı code splitting kontrolü (`next/dynamic` ile)
+- [ ] **Dosyalar**: `src/app/**/page.tsx`, `src/components/**/*.tsx`
+- [ ] **Öncelik**: 🟢 DÜŞÜK
+
+#### 6. Bundle Size Optimizasyonu
+- [ ] **Hedef**: Total bundle size < 500KB (gzipped)
+- [ ] **Yapılacaklar**:
+  - [ ] Webpack bundle analyzer ile büyük paketleri tespit et (`npm run analyze-bundle`)
+  - [ ] Gereksiz import'ları kaldır (tree-shaking kontrolü)
+  - [ ] Büyük kütüphaneleri lazy load et (recharts, framer-motion, vb.)
+  - [ ] Code splitting uygula (route bazlı)
+- [ ] **Dosyalar**: `package.json`, `next.config.js`, `src/**/*.tsx`
+- [ ] **Öncelik**: 🟢 DÜŞÜK
+
+#### 7. Image Optimization Kontrolü
+- [ ] **Hedef**: Tüm görseller `next/image` ile optimize edilmiş
+- [ ] **Yapılacaklar**:
+  - [ ] Tüm `<img>` taglarını `next/image` ile değiştir
+  - [ ] Lazy loading ekle (`loading="lazy"`)
+  - [ ] `width` ve `height` prop'larını ekle (layout shift önleme)
+  - [ ] `priority` prop'unu sadece LCP elementlerinde kullan
+- [ ] **Dosyalar**: `src/components/**/*.tsx`
+- [ ] **Öncelik**: 🟡 ORTA
+
+#### 8. API Route Caching
+- [ ] **Hedef**: Cache hit rate > 70%, stale-while-revalidate aktif
+- [ ] **Yapılacaklar**:
+  - [ ] ISR (Incremental Static Regeneration) kullanımını optimize et
+  - [ ] Edge Runtime kullanımını artır (mümkün olan yerlerde)
+  - [ ] `stale-while-revalidate` stratejisini tüm API route'larında kullan
+  - [ ] Cache headers kontrolü (`Cache-Control`, `s-maxage`, `max-age`)
+- [ ] **Dosyalar**: `src/app/api/**/route.ts`
+- [ ] **Öncelik**: 🔴 YÜKSEK
+
+#### 9. Client-Side Rendering Optimizasyonu
+- [ ] **Hedef**: Gereksiz re-render'ları önle, React DevTools Profiler ile kontrol
+- [ ] **Yapılacaklar**:
+  - [ ] `React.memo` kullanımını optimize et (büyük liste component'lerinde)
+  - [ ] `useMemo` ve `useCallback` kullanımını kontrol et (gereksiz dependency'leri kaldır)
+  - [ ] React DevTools Profiler ile re-render'ları tespit et
+  - [ ] Context API kullanımını optimize et (gereksiz re-render'ları önle)
+- [ ] **Dosyalar**: `src/components/**/*.tsx`
+- [ ] **Öncelik**: 🟡 ORTA
+
+#### 10. Network Request Batching
+- [ ] **Hedef**: Paralel API çağrılarını batch'le, Promise.all kullanımını artır
+- [ ] **Yapılacaklar**:
+  - [ ] Dashboard API çağrılarını `Promise.all` ile batch'le
+  - [ ] Liste sayfalarındaki paralel query'leri optimize et
+  - [ ] Gereksiz sequential request'leri paralel hale getir
+- [ ] **Dosyalar**: `src/app/api/**/route.ts`, `src/components/**/*.tsx`
+- [ ] **Öncelik**: 🟡 ORTA
+
+### 📊 PERFORMANS METRİKLERİ (HEDEF)
+
+| Metrik | Mevcut | Hedef | Öncelik |
+|--------|--------|-------|---------|
+| Sekme geçişi | ? | <300ms | 🔴 YÜKSEK |
+| Dashboard ilk render | ? | <500ms | 🔴 YÜKSEK |
+| API response (cache hit) | ? | <100ms | 🔴 YÜKSEK |
+| API response (cache miss) | ? | <500ms | 🔴 YÜKSEK |
+| Database query time | ? | <300ms | 🔴 YÜKSEK |
+| Bundle size (gzipped) | ? | <500KB | 🟡 ORTA |
+| Lighthouse Performance | ? | >95 | 🟡 ORTA |
+| Cache hit rate | ? | >80% | 🟡 ORTA |
+
+### ✅ TAMAMLANAN OPTİMİZASYONLAR
+
+- ✅ Lazy loading (ModuleSection ile collapsible sections)
+- ✅ SWR cache kullanımı (`useData` hook)
+- ✅ Optimistic updates (CRUD işlemlerinde)
+- ✅ Debounced search (300ms)
+- ✅ Image optimization (`next/image` kullanımı)
+- ✅ React Hook dependencies düzeltmeleri
+- ✅ Navigation optimization (`startTransition`, prefetching)
+
+### 🔄 DEVAM EDEN OPTİMİZASYONLAR
+
+- 🔄 API response time optimizasyonu
+- 🔄 Database query optimizasyonu
+- 🔄 Bundle size optimizasyonu
+
+---
+
+

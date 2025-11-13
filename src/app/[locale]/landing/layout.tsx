@@ -25,10 +25,11 @@ export default async function LandingLayout({
   }
 
   // getMessages() timeout ile
+  // ÖNEMLİ: locale parametresini geçiyoruz - yoksa her zaman defaultLocale kullanır
   let messages
   try {
     messages = await Promise.race([
-      getMessages(),
+      getMessages({ locale }),
       new Promise((_, reject) => 
         setTimeout(() => reject(new Error('getMessages timeout')), 5000)
       ),
@@ -42,7 +43,7 @@ export default async function LandingLayout({
 
   // Landing sayfası - sidebar ve navbar YOK, sadece içerik
   return (
-    <NextIntlClientProvider messages={messages}>
+    <NextIntlClientProvider locale={locale} messages={messages}>
       <SessionProvider>
         <QueryProvider>
           <div className="min-h-screen w-full overflow-x-hidden">

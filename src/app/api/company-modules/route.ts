@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
-import { PERMISSION_DENIED_MESSAGE } from '@/lib/permissions'
+import { buildPermissionDeniedResponse } from '@/lib/permissions'
 
 export async function GET(request: Request) {
   try {
@@ -15,20 +15,14 @@ export async function GET(request: Request) {
 
     // Sadece SuperAdmin görebilir
     if (session.user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json(
-        {
-          error: 'Forbidden',
-          message: PERMISSION_DENIED_MESSAGE,
-        },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse('Sadece SuperAdmin modül izinlerini görüntüleyebilir.')
     }
 
     const { searchParams } = new URL(request.url)
     const companyId = searchParams.get('companyId')
 
     if (!companyId) {
-      return NextResponse.json({ error: 'companyId is required' }, { status: 400 })
+      return NextResponse.json({ error: 'companyId parametresi zorunludur' }, { status: 400 })
     }
 
     const supabase = getSupabaseWithServiceRole()
@@ -47,7 +41,7 @@ export async function GET(request: Request) {
     return NextResponse.json(data || [])
   } catch (error: any) {
     return NextResponse.json(
-      { error: 'Failed to fetch company modules' },
+      { error: 'Modül bilgileri alınamadı' },
       { status: 500 }
     )
   }
@@ -68,14 +62,7 @@ export async function POST(request: Request) {
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     
     if (!isSuperAdmin) {
-      return NextResponse.json(
-        {
-          error: 'Forbidden',
-          message: PERMISSION_DENIED_MESSAGE,
-          detail: 'Sadece SuperAdmin modül yönetimi yapabilir.',
-        },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse('Sadece SuperAdmin modül yönetimi yapabilir.')
     }
 
     const body = await request.json()
@@ -83,7 +70,7 @@ export async function POST(request: Request) {
 
     if (!companyId || !module) {
       return NextResponse.json(
-        { error: 'companyId and module are required' },
+        { error: 'companyId ve module alanları zorunludur' },
         { status: 400 }
       )
     }
@@ -149,7 +136,7 @@ export async function POST(request: Request) {
     return NextResponse.json(data, { status: 201 })
   } catch (error: any) {
     return NextResponse.json(
-      { error: 'Failed to create/update company module' },
+      { error: 'Modül kaydedilemedi' },
       { status: 500 }
     )
   }

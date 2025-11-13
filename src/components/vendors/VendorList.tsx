@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from '@/lib/toast'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,13 +29,19 @@ import { Building2 } from 'lucide-react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 
-// Lazy load VendorForm - performans için
+import { useData } from '@/hooks/useData'
+import { mutate } from 'swr'
+
+// Lazy load VendorForm ve VendorDetailModal - performans için
 const VendorForm = dynamic(() => import('./VendorForm'), {
   ssr: false,
   loading: () => null,
 })
-import { useData } from '@/hooks/useData'
-import { mutate } from 'swr'
+
+const VendorDetailModal = dynamic(() => import('./VendorDetailModal'), {
+  ssr: false,
+  loading: () => null,
+})
 
 interface Vendor {
   id: string
@@ -50,10 +56,15 @@ interface Vendor {
 
 export default function VendorList() {
   const locale = useLocale()
+  const t = useTranslations('vendors')
+  const tCommon = useTranslations('common')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null)
+  const [selectedVendorData, setSelectedVendorData] = useState<Vendor | null>(null)
 
   // Debounced search - performans için (kullanıcı yazmayı bitirdikten 300ms sonra arama)
   const [debouncedSearch, setDebouncedSearch] = useState(search)
@@ -78,7 +89,7 @@ export default function VendorList() {
   })
 
   const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!confirm(`${name} tedarikçisini silmek istediğinize emin misiniz?`)) {
+    if (!confirm(t('deleteConfirm', { name }))) {
       return
     }
 
@@ -109,7 +120,7 @@ export default function VendorList() {
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error('Silinemedi', error?.message)
+      toast.error(t('deleteFailed'), error?.message)
     }
   }, [vendors, mutateVendors, apiUrl])
 
@@ -150,9 +161,9 @@ export default function VendorList() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Tedarikçiler</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
           <p className="mt-2 text-gray-600">
-            Toplam {totalVendors} tedarikçi
+            {t('totalVendors', { count: totalVendors })}
           </p>
         </div>
         <div className="flex gap-2">
@@ -161,7 +172,7 @@ export default function VendorList() {
             className="bg-gradient-primary text-white"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Yeni Tedarikçi
+            {t('newVendor')}
           </Button>
         </div>
       </div>
@@ -172,7 +183,7 @@ export default function VendorList() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             type="search"
-            placeholder="Ara..."
+            placeholder={t('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -180,12 +191,12 @@ export default function VendorList() {
         </div>
         <Select value={status || 'all'} onValueChange={(v) => setStatus(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-48">
-            <SelectValue placeholder="Durum" />
+            <SelectValue placeholder={t('selectStatus')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tümü</SelectItem>
-            <SelectItem value="ACTIVE">Aktif</SelectItem>
-            <SelectItem value="INACTIVE">Pasif</SelectItem>
+            <SelectItem value="all">{t('allStatuses')}</SelectItem>
+            <SelectItem value="ACTIVE">{tCommon('active')}</SelectItem>
+            <SelectItem value="INACTIVE">{tCommon('inactive')}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -248,11 +259,18 @@ export default function VendorList() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Link href={`/${locale}/vendors/${vendor.id}`} prefetch={true}>
-                        <Button variant="ghost" size="icon" aria-label={`${vendor.name} tedarikçisini görüntüle`}>
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setSelectedVendorId(vendor.id)
+                          setSelectedVendorData(vendor)
+                          setDetailModalOpen(true)
+                        }}
+                        aria-label={`${vendor.name} tedarikçisini görüntüle`}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -278,6 +296,18 @@ export default function VendorList() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Detail Modal */}
+      <VendorDetailModal
+        vendorId={selectedVendorId}
+        open={detailModalOpen}
+        onClose={() => {
+          setDetailModalOpen(false)
+          setSelectedVendorId(null)
+          setSelectedVendorData(null)
+        }}
+        initialData={selectedVendorData || undefined}
+      />
 
       {/* Form Modal */}
       <VendorForm

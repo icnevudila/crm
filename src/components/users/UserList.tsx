@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from '@/lib/toast'
 import { useSession } from 'next-auth/react'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye, User as UserIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,6 +39,8 @@ interface User {
 
 export default function UserList() {
   const locale = useLocale()
+  const t = useTranslations('users')
+  const tCommon = useTranslations('common')
   const { data: session } = useSession()
   const [search, setSearch] = useState('')
   const [role, setRole] = useState('')
@@ -70,7 +72,7 @@ export default function UserList() {
   })
 
   const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!confirm(`${name} kullanıcısını silmek istediğinize emin misiniz?`)) {
+    if (!confirm(t('deleteConfirm', { name }))) {
       return
     }
 
@@ -101,9 +103,9 @@ export default function UserList() {
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error('Silinemedi', error?.message)
+      toast.error(tCommon('error'), error?.message)
     }
-  }, [users, mutateUsers, apiUrl])
+  }, [users, mutateUsers, apiUrl, t, tCommon])
 
   const handleAdd = useCallback(() => {
     setSelectedUser(null)
@@ -122,15 +124,17 @@ export default function UserList() {
   }, [])
 
   const roleLabels: Record<string, string> = {
-    SUPER_ADMIN: 'Süper Admin',
-    ADMIN: 'Admin',
-    SALES: 'Satış',
+    SUPER_ADMIN: t('superAdmin'),
+    ADMIN: t('admin'),
+    SALES: t('sales'),
+    USER: t('user'),
   }
 
   const roleColors: Record<string, string> = {
     SUPER_ADMIN: 'bg-purple-100 text-purple-800',
     ADMIN: 'bg-blue-100 text-blue-800',
     SALES: 'bg-green-100 text-green-800',
+    USER: 'bg-slate-200 text-slate-800',
   }
 
   if (isLoading) {
@@ -142,9 +146,9 @@ export default function UserList() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Kullanıcılar</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
           <p className="mt-2 text-gray-600">
-            Toplam {users.length} kullanıcı
+            {t('totalUsers', { count: users.length })}
           </p>
         </div>
         {isSuperAdmin && (
@@ -153,7 +157,7 @@ export default function UserList() {
             className="bg-gradient-primary text-white"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Yeni Kullanıcı
+            {t('newUser')}
           </Button>
         )}
       </div>
@@ -164,7 +168,7 @@ export default function UserList() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             type="search"
-            placeholder="Ara (isim, email)..."
+            placeholder={t('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -172,13 +176,13 @@ export default function UserList() {
         </div>
         <Select value={role || 'all'} onValueChange={(v) => setRole(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-48">
-            <SelectValue placeholder="Rol" />
+            <SelectValue placeholder={t('role')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tümü</SelectItem>
-            <SelectItem value="SUPER_ADMIN">Süper Admin</SelectItem>
-            <SelectItem value="ADMIN">Admin</SelectItem>
-            <SelectItem value="SALES">Satış</SelectItem>
+            <SelectItem value="all">{t('allRoles')}</SelectItem>
+            <SelectItem value="SUPER_ADMIN">{t('superAdmin')}</SelectItem>
+            <SelectItem value="ADMIN">{t('admin')}</SelectItem>
+            <SelectItem value="SALES">{t('sales')}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -188,18 +192,18 @@ export default function UserList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Ad Soyad</TableHead>
-              <TableHead>E-posta</TableHead>
-              <TableHead>Rol</TableHead>
-              <TableHead>Tarih</TableHead>
-              {isSuperAdmin && <TableHead className="text-right">İşlemler</TableHead>}
+              <TableHead>{t('name')}</TableHead>
+              <TableHead>{t('email')}</TableHead>
+              <TableHead>{t('roleLabel')}</TableHead>
+              <TableHead>{t('date')}</TableHead>
+              {isSuperAdmin && <TableHead className="text-right">{t('actions')}</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {users.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={isSuperAdmin ? 5 : 4} className="text-center py-8 text-gray-500">
-                  Kullanıcı bulunamadı
+                  {t('noUsersFound')}
                 </TableCell>
               </TableRow>
             ) : (
@@ -222,7 +226,7 @@ export default function UserList() {
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Link href={`/${locale}/users/${user.id}`} prefetch={true}>
-                          <Button variant="ghost" size="icon" aria-label={`${user.name} kullanıcısını görüntüle`}>
+                          <Button variant="ghost" size="icon" aria-label={t('viewUser', { name: user.name })}>
                             <Eye className="h-4 w-4" />
                           </Button>
                         </Link>
@@ -230,7 +234,7 @@ export default function UserList() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleEdit(user)}
-                          aria-label={`${user.name} kullanıcısını düzenle`}
+                          aria-label={t('editUserAction', { name: user.name })}
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
@@ -239,7 +243,7 @@ export default function UserList() {
                           size="icon"
                           onClick={() => handleDelete(user.id, user.name)}
                           className="text-red-600 hover:text-red-700"
-                          aria-label={`${user.name} kullanıcısını sil`}
+                          aria-label={t('deleteUserAction', { name: user.name })}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

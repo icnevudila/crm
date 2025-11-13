@@ -27,14 +27,14 @@ export async function GET(request: Request) {
 
     if (allRecurringError) {
       return NextResponse.json(
-        { error: allRecurringError.message || 'Failed to fetch recurring expenses' },
+        { error: allRecurringError.message || 'Tekrarlayan giderler getirilemedi' },
         { status: 500 }
       )
     }
 
     if (!allRecurring || allRecurring.length === 0) {
       return NextResponse.json({
-        message: 'No recurring expenses found',
+        message: 'Tekrarlayan gider bulunamadı',
         created: 0,
         skipped: 0,
       })
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
 
     if (thisMonthError) {
       return NextResponse.json(
-        { error: thisMonthError.message || 'Failed to fetch this month recurring expenses' },
+        { error: thisMonthError.message || 'Bu aya ait tekrarlayan giderler getirilemedi' },
         { status: 500 }
       )
     }
@@ -138,7 +138,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      message: 'Recurring expenses processed',
+      message: 'Tekrarlayan giderler işlendi',
       totalRecurring: allRecurring.length,
       created: totalCreated,
       skipped: allRecurring.length - totalCreated,
@@ -146,7 +146,7 @@ export async function GET(request: Request) {
     })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to process recurring expenses' },
+      { error: error.message || 'Tekrarlayan giderler işlenemedi' },
       { status: 500 }
     )
   }

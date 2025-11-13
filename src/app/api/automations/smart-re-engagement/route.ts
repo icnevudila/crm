@@ -32,14 +32,14 @@ export async function GET() {
     if (customersError) {
       console.error('Smart Re-Engagement error:', customersError)
       return NextResponse.json(
-        { error: 'Failed to fetch customers' },
+        { error: 'Müşteri listesi getirilemedi' },
         { status: 500 }
       )
     }
 
     if (!customers || customers.length === 0) {
       return NextResponse.json({
-        message: 'No inactive customers found',
+        message: 'İnaktif müşteri bulunamadı',
         inactiveCustomers: [],
       })
     }
@@ -120,9 +120,19 @@ export async function GET() {
   } catch (error: any) {
     console.error('Smart Re-Engagement error:', error)
     return NextResponse.json(
-      { error: error?.message || 'Failed to check re-engagement' },
+      { error: error?.message || 'Etkileşim analizi gerçekleştirilemedi' },
       { status: 500 }
     )
   }
 }
+
+
+
+
+
+
+
+
+
+
 

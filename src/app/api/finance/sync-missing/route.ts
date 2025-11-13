@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 // Eksik Finance kayıtlarını oluştur (PAID invoice'lar için)
 export async function POST(request: Request) {
   try {
-    // Session kontrolü
-    const session = await getServerSession(authOptions)
+    // PERFORMANCE FIX: getSafeSession kullan (cache var) - getServerSession yerine
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
+    }
     
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -31,47 +33,70 @@ export async function POST(request: Request) {
 
     if (invoiceError) {
       return NextResponse.json(
-        { error: invoiceError.message || 'Failed to fetch paid invoices' },
+        { error: invoiceError.message || 'Ödenmiş faturalar getirilemedi' },
         { status: 500 }
       )
     }
 
     if (!paidInvoices || paidInvoices.length === 0) {
       return NextResponse.json({
-        message: 'No paid invoices found',
+        message: 'Ödenmiş fatura bulunamadı',
         created: 0,
         skipped: 0,
       })
     }
 
-    // Her invoice için Finance kaydı var mı kontrol et
+    // PERFORMANCE FIX: N+1 query problemini çöz - check-missing ile aynı mantık
+    // Önceki: Her invoice için 2 ayrı query (N+1 problem - çok yavaş! 100 invoice = 200 query)
+    // Yeni: Tek query ile tüm Finance kayıtlarını çek, JavaScript'te map et (çok daha hızlı!)
+    const invoiceIds = paidInvoices.map((inv: any) => inv.id)
+    
+    // Tüm Finance kayıtlarını tek seferde çek (yeni format + eski format) - check-missing ile aynı mantık
+    const [newFormatFinance, oldFormatFinance] = await Promise.all([
+      invoiceIds.length > 0
+        ? supabase
+            .from('Finance')
+            .select('relatedEntityId, companyId')
+            .eq('relatedEntityType', 'INVOICE')
+            .in('relatedEntityId', invoiceIds)
+        : Promise.resolve({ data: [], error: null }),
+      invoiceIds.length > 0
+        ? supabase
+            .from('Finance')
+            .select('relatedTo, companyId')
+            .in('companyId', paidInvoices.map((inv: any) => inv.companyId).filter((id: string, index: number, arr: string[]) => arr.indexOf(id) === index))
+            .not('relatedTo', 'is', null)
+        : Promise.resolve({ data: [], error: null }),
+    ])
+
+    // Finance kayıtlarını map'e çevir (hızlı lookup için) - check-missing ile aynı mantık
+    const financeMap = new Map<string, boolean>()
+    
+    // Yeni format: relatedEntityId bazında
+    ;(newFormatFinance.data || []).forEach((f: any) => {
+      if (f.relatedEntityId) {
+        financeMap.set(`${f.companyId}:${f.relatedEntityId}`, true)
+      }
+    })
+    
+    // Eski format: relatedTo'dan invoice ID çıkar
+    ;(oldFormatFinance.data || []).forEach((f: any) => {
+      if (f.relatedTo && f.relatedTo.startsWith('Invoice: ')) {
+        const invoiceId = f.relatedTo.replace('Invoice: ', '')
+        financeMap.set(`${f.companyId}:${invoiceId}`, true)
+      }
+    })
+
+    // Eksik Finance kayıtlarını bul - check-missing ile aynı mantık
     const financeRecordsToCreate: any[] = []
     let skippedCount = 0
 
     for (const invoice of paidInvoices) {
-      // Bu invoice için Finance kaydı var mı kontrol et
-      // Önce yeni format ile kontrol et (relatedEntityType + relatedEntityId)
-      let { data: existingFinance } = await supabase
-        .from('Finance')
-        .select('id')
-        .eq('relatedEntityType', 'INVOICE')
-        .eq('relatedEntityId', invoice.id)
-        .eq('companyId', invoice.companyId)
-        .maybeSingle()
-      
-      // Eğer yeni formatta yoksa eski format ile kontrol et (relatedTo)
-      if (!existingFinance) {
-        const { data: oldFormatFinance } = await supabase
-          .from('Finance')
-          .select('id')
-          .eq('relatedTo', `Invoice: ${invoice.id}`)
-          .eq('companyId', invoice.companyId)
-          .maybeSingle()
-        existingFinance = oldFormatFinance
-      }
+      const key = `${invoice.companyId}:${invoice.id}`
+      const hasFinance = financeMap.has(key)
 
       // Eğer Finance kaydı yoksa oluştur (yeni format ile)
-      if (!existingFinance) {
+      if (!hasFinance) {
         financeRecordsToCreate.push({
           type: 'INCOME',
           amount: invoice.totalAmount || 0, // DÜZELTME: totalAmount kullan (050 migration ile total → totalAmount, total kolonu artık yok!)
@@ -98,7 +123,7 @@ export async function POST(request: Request) {
 
       if (financeError) {
         return NextResponse.json(
-          { error: financeError.message || 'Failed to create finance records' },
+          { error: financeError.message || 'Finans kayıtları oluşturulamadı' },
           { status: 500 }
         )
       }
@@ -130,7 +155,7 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      message: 'Finance records synced successfully',
+      message: 'Finans kayıtları başarıyla senkronize edildi',
       totalPaidInvoices: paidInvoices.length,
       created: createdCount,
       skipped: skippedCount,
@@ -138,7 +163,7 @@ export async function POST(request: Request) {
     })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to sync finance records' },
+      { error: error.message || 'Finans kayıtları senkronize edilemedi' },
       { status: 500 }
     )
   }

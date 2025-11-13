@@ -108,45 +108,80 @@ export async function GET(request: Request) {
       )
     }
 
-    // Her şirket için istatistikleri paralel olarak çek (performans için)
-    const companies = await Promise.all(
-      (companiesData || []).map(async (company: any) => {
-        // Her şirket için count'ları paralel çek
-        const [customersCount, dealsCount, quotesCount, invoicesCount] = await Promise.all([
-          supabase
+    // PERFORMANCE FIX: N+1 query problemini çöz - tek query ile tüm count'ları çek
+    // Önceki: Her şirket için 4 ayrı query (N+1 problem - çok yavaş!)
+    // Yeni: Tek query ile tüm count'ları çek, JavaScript'te grupla (çok daha hızlı!)
+    const companyIds = (companiesData || []).map((c: any) => c.id)
+    
+    // Tüm count'ları tek seferde çek (paralel)
+    const [customersData, dealsData, quotesData, invoicesData] = await Promise.all([
+      companyIds.length > 0
+        ? supabase
             .from('Customer')
-            .select('*', { count: 'exact', head: true })
-            .eq('companyId', company.id),
-          supabase
+            .select('companyId')
+            .in('companyId', companyIds)
+        : Promise.resolve({ data: [], error: null }),
+      companyIds.length > 0
+        ? supabase
             .from('Deal')
-            .select('*', { count: 'exact', head: true })
-            .eq('companyId', company.id),
-          supabase
+            .select('companyId')
+            .in('companyId', companyIds)
+        : Promise.resolve({ data: [], error: null }),
+      companyIds.length > 0
+        ? supabase
             .from('Quote')
-            .select('*', { count: 'exact', head: true })
-            .eq('companyId', company.id),
-          supabase
+            .select('companyId')
+            .in('companyId', companyIds)
+        : Promise.resolve({ data: [], error: null }),
+      companyIds.length > 0
+        ? supabase
             .from('Invoice')
-            .select('*', { count: 'exact', head: true })
-            .eq('companyId', company.id),
-        ])
+            .select('companyId')
+            .in('companyId', companyIds)
+        : Promise.resolve({ data: [], error: null }),
+    ])
 
-        return {
-          id: company.id,
-          name: company.name,
-          sector: company.sector,
-          city: company.city,
-          status: company.status,
-          createdAt: company.createdAt,
-          stats: {
-            customers: customersCount.count || 0,
-            deals: dealsCount.count || 0,
-            quotes: quotesCount.count || 0,
-            invoices: invoicesCount.count || 0,
-          },
-        }
-      })
-    )
+    // Count'ları grupla (companyId bazında)
+    const statsMap = new Map<string, { customers: number; deals: number; quotes: number; invoices: number }>()
+    
+    companyIds.forEach((id: string) => {
+      statsMap.set(id, { customers: 0, deals: 0, quotes: 0, invoices: 0 })
+    })
+
+    // Customers count
+    ;(customersData.data || []).forEach((c: any) => {
+      const stats = statsMap.get(c.companyId)
+      if (stats) stats.customers++
+    })
+
+    // Deals count
+    ;(dealsData.data || []).forEach((d: any) => {
+      const stats = statsMap.get(d.companyId)
+      if (stats) stats.deals++
+    })
+
+    // Quotes count
+    ;(quotesData.data || []).forEach((q: any) => {
+      const stats = statsMap.get(q.companyId)
+      if (stats) stats.quotes++
+    })
+
+    // Invoices count
+    ;(invoicesData.data || []).forEach((i: any) => {
+      const stats = statsMap.get(i.companyId)
+      if (stats) stats.invoices++
+    })
+
+    // Şirketleri stats ile birleştir
+    const companies = (companiesData || []).map((company: any) => ({
+      id: company.id,
+      name: company.name,
+      sector: company.sector,
+      city: company.city,
+      status: company.status,
+      createdAt: company.createdAt,
+      stats: statsMap.get(company.id) || { customers: 0, deals: 0, quotes: 0, invoices: 0 },
+    }))
 
     // Login sayfası için cache - 30 saniye (yeni firmalar için)
     return NextResponse.json(companies, {

@@ -1,3 +1,5 @@
+/* eslint-disable react/no-unescaped-entities */
+
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
 
 const styles = StyleSheet.create({
@@ -210,7 +212,7 @@ export default function KullanimKilavuzuPDF({ companyName = 'CRM Enterprise V3' 
             <Text style={styles.paragraph}>
               Her kurumun hangi modülleri kullanabileceği belirlenir. Modül aktif/pasif yapılabilir.
             </Text>
-            <Text style={styles.paragraph} style={{ marginTop: 8 }}>
+            <Text style={[styles.paragraph, { marginTop: 8 }]}>
               <Text style={{ fontWeight: 'bold' }}>Seviye 2: Rol Modül İzni (RolePermission)</Text>
             </Text>
             <Text style={styles.paragraph}>
@@ -241,7 +243,7 @@ export default function KullanimKilavuzuPDF({ companyName = 'CRM Enterprise V3' 
             <Text style={styles.listItem}>• Real-time güncellemeler (30 saniyede bir)</Text>
             <Text style={styles.listItem}>• Son aktiviteler listesi</Text>
           </View>
-          <Text style={styles.paragraph} style={{ marginTop: 8 }}>
+          <Text style={[styles.paragraph, { marginTop: 8 }]}>
             <Text style={{ fontWeight: 'bold' }}>Kim Kullanabilir:</Text> Tüm kullanıcılar (okuma yetkisi olanlar)
           </Text>
         </View>
@@ -258,7 +260,7 @@ export default function KullanimKilavuzuPDF({ companyName = 'CRM Enterprise V3' 
             <Text style={styles.listItem}>• Hızlı işlem butonları (Görüşme, Teklif, Görev oluştur)</Text>
             <Text style={styles.listItem}>• Arama ve filtreleme</Text>
           </View>
-          <Text style={styles.paragraph} style={{ marginTop: 8 }}>
+          <Text style={[styles.paragraph, { marginTop: 8 }]}>
             <Text style={{ fontWeight: 'bold' }}>Veri Akışı:</Text> Company → Customer → Deal → Quote → Invoice
           </Text>
         </View>
@@ -553,7 +555,7 @@ export default function KullanimKilavuzuPDF({ companyName = 'CRM Enterprise V3' 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>21. SATIŞ AKIŞI</Text>
           <View style={styles.highlight}>
-            <Text style={styles.paragraph} style={{ fontWeight: 'bold', marginBottom: 8 }}>
+            <Text style={[styles.paragraph, { fontWeight: 'bold', marginBottom: 8 }]}>
               Akış Sırası: Customer → Deal → Quote → Invoice → Shipment
             </Text>
             <View style={styles.list}>
@@ -728,7 +730,7 @@ export default function KullanimKilavuzuPDF({ companyName = 'CRM Enterprise V3' 
           <Text style={styles.paragraph}>
             Sistem hakkında sorularınız için yardım sayfasını ziyaret edebilir veya destek ekibi ile iletişime geçebilirsiniz.
           </Text>
-          <Text style={styles.paragraph} style={{ marginTop: 10 }}>
+          <Text style={[styles.paragraph, { marginTop: 10 }]}>
             <Text style={{ fontWeight: 'bold' }}>Not:</Text> Bu kılavuz sistemin güncel durumunu yansıtmaktadır. 
             Sistem sürekli geliştirilmekte ve yeni özellikler eklenmektedir.
           </Text>

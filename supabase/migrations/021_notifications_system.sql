@@ -6,6 +6,27 @@
 -- ============================================
 -- 1. NOTIFICATIONS TABLOSU
 -- ============================================
+-- Önce User ve Company tablolarının var olduğunu kontrol et
+DO $$
+BEGIN
+  -- User tablosu yoksa hata ver
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_schema = 'public' AND table_name = 'User'
+  ) THEN
+    RAISE EXCEPTION 'User table does not exist. Please run User table migration first.';
+  END IF;
+
+  -- Company tablosu yoksa hata ver
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.tables 
+    WHERE table_schema = 'public' AND table_name = 'Company'
+  ) THEN
+    RAISE EXCEPTION 'Company table does not exist. Please run Company table migration first.';
+  END IF;
+END $$;
+
+-- Notification tablosunu oluştur
 CREATE TABLE IF NOT EXISTS "Notification" (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   "userId" UUID NOT NULL REFERENCES "User"(id) ON DELETE CASCADE,
@@ -66,27 +87,45 @@ CREATE TRIGGER trigger_quote_accepted_notify
 -- ============================================
 CREATE OR REPLACE FUNCTION notify_low_stock()
 RETURNS TRIGGER AS $$
+DECLARE
+  min_stock_threshold INTEGER := 10; -- Varsayılan minimum stok eşiği
+  has_min_stock_column BOOLEAN;
 BEGIN
-  -- Stok minimum seviyenin altına düştüğünde Admin ve STOCK rolündeki kullanıcılara bildirim gönder
-  IF NEW.stock <= COALESCE(NEW."minStock", 0) AND (OLD.stock IS NULL OR OLD.stock > COALESCE(NEW."minStock", 0)) THEN
-    -- minStock kolonu varsa kontrol et
+  -- minStock kolonu var mı kontrol et
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'Product' 
+    AND column_name = 'minStock'
+  ) INTO has_min_stock_column;
+  
+  -- Eğer minStock kolonu varsa, onu kullan; yoksa varsayılan eşiği kullan
+  IF has_min_stock_column THEN
+    min_stock_threshold := COALESCE(NEW."minStock", 10);
+  END IF;
+  
+  -- Stok düştüyse ve minimum eşiğin altındaysa bildirim gönder
+  IF NEW.stock IS NOT NULL AND NEW.stock <= min_stock_threshold AND (OLD.stock IS NULL OR OLD.stock > min_stock_threshold) THEN
+    -- Notification tablosu var mı kontrol et
     IF EXISTS (
-      SELECT 1 FROM information_schema.columns 
-      WHERE table_name = 'Product' AND column_name = 'minStock'
+      SELECT 1 FROM information_schema.tables 
+      WHERE table_schema = 'public' 
+      AND table_name = 'Notification'
     ) THEN
       INSERT INTO "Notification" ("userId", "companyId", title, message, type, "relatedTo", "relatedId", link)
       SELECT 
         u.id,
         NEW."companyId",
         'Düşük Stok Uyarısı',
-        NEW.name || ' ürünü minimum stok seviyesinin altına düştü. (Mevcut: ' || NEW.stock || ', Minimum: ' || COALESCE(NEW."minStock", 0) || ') Detayları görmek ister misiniz?',
+        NEW.name || ' ürünü minimum stok seviyesinin altına düştü. (Mevcut: ' || NEW.stock || ', Minimum: ' || min_stock_threshold || ') Detayları görmek ister misiniz?',
         'warning',
         'Product',
         NEW.id,
         '/tr/products/' || NEW.id
       FROM "User" u
       WHERE u."companyId" = NEW."companyId"
-        AND u.role IN ('ADMIN', 'STOCK', 'SUPER_ADMIN');
+        AND u.role IN ('ADMIN', 'STOCK', 'SUPER_ADMIN')
+        AND (u.status = 'ACTIVE' OR u.status IS NULL);
     END IF;
   END IF;
   
@@ -99,12 +138,9 @@ CREATE TRIGGER trigger_product_low_stock
   AFTER UPDATE ON "Product"
   FOR EACH ROW
   WHEN (
-    EXISTS (
-      SELECT 1 FROM information_schema.columns 
-      WHERE table_name = 'Product' AND column_name = 'minStock'
-    )
-    AND NEW.stock <= COALESCE(NEW."minStock", 0)
-    AND (OLD.stock IS NULL OR OLD.stock > COALESCE(NEW."minStock", 0))
+    NEW.stock IS NOT NULL
+    AND OLD.stock IS NOT NULL
+    AND NEW.stock < OLD.stock
   )
   EXECUTE FUNCTION notify_low_stock();
 
@@ -193,4 +229,6 @@ COMMENT ON COLUMN "Notification"."isRead" IS 'Bildirim okundu mu?';
 -- ============================================
 -- MIGRATION TAMAMLANDI
 -- ============================================
+
+
 

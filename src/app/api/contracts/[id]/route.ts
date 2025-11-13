@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabase } from '@/lib/supabase'
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { 
@@ -20,7 +20,7 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const supabase = getSupabase()
+    const supabase = getSupabaseWithServiceRole()
 
     const { data, error } = await supabase
       .from('Contract')
@@ -87,16 +87,13 @@ export async function PUT(
     }
 
     // Permission check - canUpdate kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canUpdate = await hasPermission('contract', 'update', session.user.id)
     if (!canUpdate) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Sözleşme güncelleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
-    const supabase = getSupabase()
+    const supabase = getSupabaseWithServiceRole()
     const body = await request.json()
 
     // Mevcut kaydı kontrol et
@@ -230,13 +227,10 @@ export async function DELETE(
     }
 
     // Permission check - canDelete kontrolü
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canDelete = await hasPermission('contract', 'delete', session.user.id)
     if (!canDelete) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Sözleşme silme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const supabase = getSupabase()

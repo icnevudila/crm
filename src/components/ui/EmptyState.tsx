@@ -42,7 +42,8 @@ export default function EmptyState({
         {action && (
           <Button
             onClick={action.onClick}
-            className="mt-4 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 shadow-lg hover:shadow-xl transition-all duration-300"
+            variant="ghost"
+            className="mt-2 text-sm font-medium text-purple-500 hover:text-purple-600 hover:bg-purple-50"
           >
             {action.label}
           </Button>

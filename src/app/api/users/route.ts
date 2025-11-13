@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { buildPermissionDeniedResponse } from '@/lib/permissions'
 import bcrypt from 'bcryptjs'
 
 // Agresif cache - 1 saat cache (instant navigation - <300ms hedef)
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
         console.error('Users GET API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -33,23 +34,33 @@ export async function GET(request: Request) {
 
     // SuperAdmin tüm şirketlerin kullanıcılarını görebilir
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
-    const companyId = isSuperAdmin && requestedCompanyId ? requestedCompanyId : session.user.companyId
+    const companyId = requestedCompanyId ?? session.user.companyId
     
     const supabase = getSupabaseWithServiceRole()
 
-    // OPTİMİZE: SuperAdmin'leri tamamen filtrele + companyId kontrolü
-    // ÖNEMLİ: SuperAdmin'lerin companyId'si null veya farklı olabilir, bu yüzden hem role hem de companyId kontrolü yapıyoruz
     let query = supabase
       .from('User')
       .select('id, name, email, role, companyId, createdAt')
-      .eq('companyId', companyId) // ÖNCE companyId filtresi (SuperAdmin'ler farklı companyId'ye sahip olabilir)
-      .neq('role', 'SUPER_ADMIN') // SuperAdmin'i filtrele - admin panelinde görünmesin (sadece normal kullanıcılar)
-      .not('companyId', 'is', null) // companyId null olanları filtrele (güvenlik için)
       .order('name')
 
-    // Role filtresi - ama SuperAdmin'i asla gösterme
-    if (role && role !== 'SUPER_ADMIN') {
-      query = query.eq('role', role)
+    query = query.not('companyId', 'is', null)
+
+    if (isSuperAdmin) {
+      if (requestedCompanyId) {
+        query = query.eq('companyId', companyId)
+      } else {
+        query = query.not('companyId', 'is', null)
+      }
+    } else {
+      query = query.eq('companyId', companyId).neq('role', 'SUPER_ADMIN')
+    }
+
+    if (role) {
+      if (role === 'SUPER_ADMIN' && !isSuperAdmin) {
+        query = query.eq('role', 'USER') // yetkisi yoksa hiç sonuç döndürme
+      } else {
+        query = query.eq('role', role)
+      }
     }
 
     const { data: users, error } = await query
@@ -68,7 +79,7 @@ export async function GET(request: Request) {
     })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch users' },
+      { error: error.message || 'Kullanıcı listesi getirilemedi' },
       { status: 500 }
     )
   }
@@ -85,7 +96,7 @@ export async function POST(request: Request) {
         console.error('Users POST API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -99,23 +110,14 @@ export async function POST(request: Request) {
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     const isAdmin = session.user.role === 'ADMIN'
 
-    if (!isSuperAdmin && !isAdmin) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!isSuperAdmin) {
+      return buildPermissionDeniedResponse('Kullanıcı yönetimi için gerekli yetkiniz bulunmuyor.')
     }
 
     const body = await request.json()
     const supabase = getSupabaseWithServiceRole()
 
     // ADMIN sadece USER rolünde kullanıcı ekleyebilir (Admin ekleyemez)
-    if (isAdmin && body.role === 'ADMIN') {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Admin rolünde kullanıcı ekleyemezsiniz. Sadece SuperAdmin Admin ekleyebilir.' },
-        { status: 403 }
-      )
-    }
-
-    // SUPER_ADMIN herhangi bir Company'ye kullanıcı ekleyebilir
-    // ADMIN sadece kendi Company'sine kullanıcı ekleyebilir
     const targetCompanyId = isSuperAdmin && body.companyId ? body.companyId : session.user.companyId
 
     // Limitasyon kontrolleri
@@ -166,7 +168,6 @@ export async function POST(request: Request) {
 
     const { data: user, error } = await supabase
       .from('User')
-      // @ts-expect-error - Supabase database type tanımları eksik
       .insert([
         {
           name: body.name,
@@ -197,7 +198,7 @@ export async function POST(request: Request) {
     return NextResponse.json(user)
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to create user' },
+      { error: error.message || 'Kullanıcı oluşturulamadı' },
       { status: 500 }
     )
   }

@@ -1,7 +1,7 @@
 'use client'
 
 import { Clock, CheckCircle2, XCircle, Plus, Edit, Trash2 } from 'lucide-react'
-import { Card } from '@/components/ui/card'
+
 import { formatUserFriendlyMessage, formatEntity } from '@/lib/logger'
 
 interface ActivityLog {
@@ -40,57 +40,49 @@ const actionColors: Record<string, string> = {
 export default function ActivityTimeline({ activities }: ActivityTimelineProps) {
   if (!activities || activities.length === 0) {
     return (
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold mb-4">Aktivite Geçmişi</h2>
-        <p className="text-gray-500 text-center py-8">Henüz aktivite kaydı yok</p>
-      </Card>
+      <div className="flex h-[200px] items-center justify-center text-gray-500">
+        <p>Henüz aktivite kaydı yok</p>
+      </div>
     )
   }
 
   return (
-    <Card className="p-6">
-      <h2 className="text-xl font-semibold mb-6">Aktivite Geçmişi</h2>
-      <div className="space-y-4">
-        {activities.map((activity, index) => (
+    <div className="space-y-4">
+      {activities.map((activity, index) => (
+        <div
+          key={activity.id}
+          className={`relative border-l-2 pl-8 pb-4 ${
+            index !== activities.length - 1 ? 'border-gray-200' : 'border-transparent'
+          }`}
+        >
           <div
-            key={activity.id}
-            className={`relative pl-8 pb-4 border-l-2 ${
-              index !== activities.length - 1 ? 'border-gray-200' : 'border-transparent'
+            className={`absolute left-0 top-1 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border-2 ${
+              actionColors[activity.action] || 'bg-gray-100 border-gray-300'
             }`}
           >
-            {/* Timeline dot */}
-            <div
-              className={`absolute left-0 top-1 -translate-x-1/2 w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                actionColors[activity.action] || 'bg-gray-100 border-gray-300'
-              }`}
-            >
-              {actionIcons[activity.action] || (
-                <Clock className="h-3 w-3 text-gray-600" />
-              )}
-            </div>
+            {actionIcons[activity.action] || <Clock className="h-3 w-3 text-gray-600" />}
+          </div>
 
-            {/* Activity content */}
-            <div className="space-y-1">
-              <p className="font-medium text-gray-900">
-                {formatUserFriendlyMessage(activity.description, activity.meta)}
-              </p>
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <span>{new Date(activity.createdAt).toLocaleString('tr-TR')}</span>
-                {activity.User && (
-                  <>
-                    <span>•</span>
-                    <span>{activity.User.name}</span>
-                  </>
-                )}
-                <span className="ml-auto text-xs px-2 py-1 bg-gray-100 rounded">
-                  {formatEntity(activity.entity)}
-                </span>
-              </div>
+          <div className="space-y-1">
+            <p className="font-medium text-gray-900">
+              {formatUserFriendlyMessage(activity.description, activity.meta)}
+            </p>
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <span>{new Date(activity.createdAt).toLocaleString('tr-TR')}</span>
+              {activity.User && (
+                <>
+                  <span>•</span>
+                  <span>{activity.User.name}</span>
+                </>
+              )}
+              <span className="ml-auto rounded bg-gray-100 px-2 py-1 text-xs">
+                {formatEntity(activity.entity)}
+              </span>
             </div>
           </div>
-        ))}
-      </div>
-    </Card>
+        </div>
+      ))}
+    </div>
   )
 }
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from '@/lib/toast'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -43,6 +43,8 @@ interface EmailTemplate {
 
 export default function EmailTemplateList() {
   const locale = useLocale()
+  const t = useTranslations('emailTemplates')
+  const tCommon = useTranslations('common')
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState('')
   const [isActive, setIsActive] = useState<string>('')
@@ -78,7 +80,7 @@ export default function EmailTemplateList() {
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`${name} şablonunu silmek istediğinize emin misiniz?`)) {
+    if (!confirm(t('deleteConfirm', { name }))) {
       return
     }
 
@@ -104,7 +106,7 @@ export default function EmailTemplateList() {
       ])
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error('Silinemedi', error?.message)
+      toast.error(t('deleteFailed'), error?.message)
     }
   }
 
@@ -114,11 +116,11 @@ export default function EmailTemplateList() {
   }
 
   const categoryLabels: Record<string, string> = {
-    QUOTE: 'Teklif',
-    INVOICE: 'Fatura',
-    DEAL: 'Fırsat',
-    CUSTOMER: 'Müşteri',
-    GENERAL: 'Genel',
+    QUOTE: t('categoryQuote'),
+    INVOICE: t('categoryInvoice'),
+    DEAL: t('categoryDeal'),
+    CUSTOMER: t('categoryCustomer'),
+    GENERAL: t('categoryGeneral'),
   }
 
   if (isLoading) {
@@ -128,7 +130,7 @@ export default function EmailTemplateList() {
   if (error) {
     return (
       <div className="text-center py-8 text-red-600">
-        Şablonlar yüklenirken bir hata oluştu
+        {t('errorLoading')}
       </div>
     )
   }
@@ -138,8 +140,8 @@ export default function EmailTemplateList() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">E-posta Şablonları</h1>
-          <p className="mt-2 text-gray-600">Toplam {templates.length} şablon</p>
+          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
+          <p className="mt-2 text-gray-600">{t('totalTemplates', { count: templates.length })}</p>
         </div>
         <Button
           onClick={() => {
@@ -149,7 +151,7 @@ export default function EmailTemplateList() {
           className="bg-gradient-primary text-white"
         >
           <Plus className="mr-2 h-4 w-4" />
-          Yeni Şablon
+          {t('newTemplate')}
         </Button>
       </div>
 
@@ -159,7 +161,7 @@ export default function EmailTemplateList() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             type="search"
-            placeholder="Şablon ara..."
+            placeholder={t('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -167,25 +169,25 @@ export default function EmailTemplateList() {
         </div>
         <Select value={category || 'all'} onValueChange={(v) => setCategory(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Kategori" />
+            <SelectValue placeholder={t('selectCategory')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tüm Kategoriler</SelectItem>
-            <SelectItem value="QUOTE">Teklif</SelectItem>
-            <SelectItem value="INVOICE">Fatura</SelectItem>
-            <SelectItem value="DEAL">Fırsat</SelectItem>
-            <SelectItem value="CUSTOMER">Müşteri</SelectItem>
-            <SelectItem value="GENERAL">Genel</SelectItem>
+            <SelectItem value="all">{t('allCategories')}</SelectItem>
+            <SelectItem value="QUOTE">{t('categoryQuote')}</SelectItem>
+            <SelectItem value="INVOICE">{t('categoryInvoice')}</SelectItem>
+            <SelectItem value="DEAL">{t('categoryDeal')}</SelectItem>
+            <SelectItem value="CUSTOMER">{t('categoryCustomer')}</SelectItem>
+            <SelectItem value="GENERAL">{t('categoryGeneral')}</SelectItem>
           </SelectContent>
         </Select>
         <Select value={isActive || 'all'} onValueChange={(v) => setIsActive(v === 'all' ? '' : v)}>
           <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Durum" />
+            <SelectValue placeholder={t('selectStatus')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tümü</SelectItem>
-            <SelectItem value="true">Aktif</SelectItem>
-            <SelectItem value="false">Pasif</SelectItem>
+            <SelectItem value="all">{t('allStatuses')}</SelectItem>
+            <SelectItem value="true">{tCommon('active')}</SelectItem>
+            <SelectItem value="false">{tCommon('inactive')}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -195,20 +197,20 @@ export default function EmailTemplateList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Ad</TableHead>
-              <TableHead>Konu</TableHead>
-              <TableHead>Kategori</TableHead>
-              <TableHead>Değişkenler</TableHead>
-              <TableHead>Durum</TableHead>
-              <TableHead>Tarih</TableHead>
-              <TableHead className="text-right">İşlemler</TableHead>
+              <TableHead>{t('tableHeaders.name')}</TableHead>
+              <TableHead>{t('tableHeaders.subject')}</TableHead>
+              <TableHead>{t('tableHeaders.category')}</TableHead>
+              <TableHead>{t('tableHeaders.variables')}</TableHead>
+              <TableHead>{t('tableHeaders.status')}</TableHead>
+              <TableHead>{t('tableHeaders.date')}</TableHead>
+              <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {templates.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="text-center py-8 text-gray-500">
-                  Şablon bulunamadı
+                  {t('noTemplatesFound')}
                 </TableCell>
               </TableRow>
             ) : (
@@ -247,7 +249,7 @@ export default function EmailTemplateList() {
                   </TableCell>
                   <TableCell>
                     <Badge variant={template.isActive ? 'default' : 'secondary'}>
-                      {template.isActive ? 'Aktif' : 'Pasif'}
+                      {template.isActive ? tCommon('active') : tCommon('inactive')}
                     </Badge>
                   </TableCell>
                   <TableCell>

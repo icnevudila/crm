@@ -92,6 +92,9 @@ export function formatUserFriendlyMessage(description: string, meta?: Record<str
     message = message.replace(regex, entityLabels[entity])
   })
 
+  // Aynı ibarenin back-to-back tekrarlarını tekilleştir
+  message = message.replace(/(\b[^\s]+\b)\s+\1/gi, '$1')
+
   // Teknik ID'leri kaldır (UUID formatı: #xxxx-xxxx-xxxx)
   message = message.replace(/#[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi, '')
   message = message.replace(/#[a-f0-9]{8}/gi, '')

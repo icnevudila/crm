@@ -9,13 +9,16 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import { motion } from 'framer-motion'
 import Image from 'next/image'
 import CompanyForm from '@/components/companies/CompanyForm'
-import { useData } from '@/hooks/useData'
+import { MeetingCreateButton } from '@/components/companies/actions/MeetingCreateButton'
+import { QuoteCreateButton } from '@/components/companies/actions/QuoteCreateButton'
+import { TaskCreateButton } from '@/components/companies/actions/TaskCreateButton'
+import { cn } from '@/lib/utils'
 
 interface Company {
   id: string
@@ -276,19 +279,10 @@ export default function CompanyDetailPage() {
 
             {/* ENTERPRISE: Hızlı Eylemler (Sağ Taraf) */}
             <div className="flex flex-col gap-2">
-              <Link href={`/${locale}/meetings/new?customerCompanyId=${company.id}`}>
-                <Button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white">
-                  <Calendar className="mr-2 h-4 w-4" />
-                  Görüşme Ekle
-                </Button>
-              </Link>
-              <Link href={`/${locale}/quotes/new?customerCompanyId=${company.id}`}>
-                <Button variant="outline" className="w-full border-indigo-300 text-indigo-700 hover:bg-indigo-50">
-                  <FileText className="mr-2 h-4 w-4" />
-                  Teklif Oluştur
-                </Button>
-              </Link>
-              <Link href={`/${locale}/finance/new?customerCompanyId=${company.id}`}>
+              <MeetingCreateButton companyId={company.id} />
+              <QuoteCreateButton companyId={company.id} />
+              <TaskCreateButton companyId={company.id} />
+              <Link href={`/${locale}/finance/new?customerCompanyId=${company.id}`} prefetch={true}>
                 <Button variant="outline" className="w-full border-amber-300 text-amber-700 hover:bg-amber-50">
                   <Receipt className="mr-2 h-4 w-4" />
                   Gider Gir
@@ -299,385 +293,496 @@ export default function CompanyDetailPage() {
         </Card>
       </motion.div>
 
-      {/* Company Info (Readonly Mode) */}
       {!isEditMode && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card className="p-6">
-            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-              <Building2 className="h-5 w-5" />
-              Firma Bilgileri
-            </h2>
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm text-gray-600">Durum</p>
-                <Badge className={`${statusColors[company.status] || 'bg-gray-100 text-gray-800'} mt-1`}>
-                  {statusLabels[company.status] || company.status}
-                </Badge>
+        <Accordion
+          type="multiple"
+          defaultValue={['profile', 'contacts', 'meetings', 'quotes']}
+          className="space-y-4"
+        >
+          <AccordionItem value="profile">
+            <AccordionTrigger className="text-left">
+              <div className="flex w-full items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Profil Bilgileri
+                </span>
               </div>
-              {company.contactPerson && (
-                <div>
-                  <p className="text-sm text-gray-600">Kontak Kişi</p>
-                  <p className="font-medium mt-1">{company.contactPerson}</p>
-                </div>
-              )}
-              {company.sector && (
-                <div>
-                  <p className="text-sm text-gray-600">Sektör</p>
-                  <p className="font-medium mt-1">{company.sector}</p>
-                </div>
-              )}
-              {company.city && (
-                <div>
-                  <p className="text-sm text-gray-600">Şehir</p>
-                  <p className="font-medium mt-1">{company.city}</p>
-                </div>
-              )}
-              {company.phone && (
-                <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-gray-400" />
-                  <p className="font-medium">
-                    {company.countryCode && <span>{company.countryCode} </span>}
-                    {company.phone}
-                  </p>
-                </div>
-              )}
-              {company.lastMeetingDate && (
-                <div className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-gray-400" />
-                  <div>
-                    <p className="text-sm text-gray-600">Son Görüşme</p>
-                    <p className="font-medium mt-1">
-                      {new Date(company.lastMeetingDate).toLocaleDateString('tr-TR')}
-                    </p>
-                  </div>
-                </div>
-              )}
-              {company.email && (
-                <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-gray-400" />
-                  <p className="font-medium">{company.email}</p>
-                </div>
-              )}
-              {company.website && (
-                <div className="flex items-center gap-2">
-                  <Globe className="h-4 w-4 text-gray-400" />
-                  <a href={company.website} target="_blank" rel="noopener noreferrer" className="font-medium text-blue-600 hover:underline">
-                    {company.website}
-                  </a>
-                </div>
-              )}
-              {company.address && (
-                <div>
-                  <p className="text-sm text-gray-600">Adres</p>
-                  <p className="font-medium mt-1">{company.address}</p>
-                </div>
-              )}
-              {company.taxNumber && (
-                <div>
-                  <p className="text-sm text-gray-600">Vergi No</p>
-                  <p className="font-medium mt-1">{company.taxNumber}</p>
-                </div>
-              )}
-              {company.taxOffice && (
-                <div>
-                  <p className="text-sm text-gray-600">Vergi Dairesi</p>
-                  <p className="font-medium mt-1">{company.taxOffice}</p>
-                </div>
-              )}
-              {company.description && (
-                <div>
-                  <p className="text-sm text-gray-600">Açıklama</p>
-                  <p className="font-medium mt-1">{company.description}</p>
-                </div>
-              )}
-            </div>
-          </Card>
-
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Bilgiler</h2>
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm text-gray-600">Firma ID</p>
-              <p className="font-mono text-sm mt-1">{company.id}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Oluşturulma Tarihi</p>
-              <p className="font-medium mt-1">
-                {new Date(company.createdAt).toLocaleDateString('tr-TR')}
-              </p>
-            </div>
-            {company.updatedAt && (
-              <div>
-                <p className="text-sm text-gray-600">Son Güncelleme</p>
-                <p className="font-medium mt-1">
-                  {new Date(company.updatedAt).toLocaleDateString('tr-TR')}
-                </p>
-              </div>
-            )}
-          </div>
-        </Card>
-        </div>
-      )}
-
-      {/* İlişkili Veriler - Sekmeler */}
-      <Card className="p-6">
-        <Tabs defaultValue="meetings" className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="meetings" className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              Görüşmeler ({company.Meeting?.length || 0})
-            </TabsTrigger>
-            <TabsTrigger value="deals" className="flex items-center gap-2">
-              <Briefcase className="h-4 w-4" />
-              Fırsatlar ({company.Deal?.length || 0})
-            </TabsTrigger>
-            <TabsTrigger value="quotes" className="flex items-center gap-2">
-              <FileText className="h-4 w-4" />
-              Teklifler ({company.Quote?.length || 0})
-            </TabsTrigger>
-            <TabsTrigger value="invoices" className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4" />
-              Faturalar ({company.Invoice?.length || 0})
-            </TabsTrigger>
-            <TabsTrigger value="shipments" className="flex items-center gap-2">
-              <Truck className="h-4 w-4" />
-              Sevkiyatlar ({company.Shipment?.length || 0})
-            </TabsTrigger>
-            <TabsTrigger value="finance" className="flex items-center gap-2">
-              <Receipt className="h-4 w-4" />
-              Giderler ({company.Finance?.length || 0})
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Görüşmeler Sekmesi */}
-          <TabsContent value="meetings" className="mt-6">
-            {company.Meeting && company.Meeting.length > 0 ? (
-              <div className="space-y-2">
-                {company.Meeting.map((meeting) => (
-                  <Link key={meeting.id} href={`/${locale}/meetings/${meeting.id}`}>
-                    <div className="flex items-center justify-between p-4 border rounded hover:bg-gray-50 cursor-pointer transition-colors">
-                      <div>
-                        <p className="font-medium">{meeting.title}</p>
-                        <p className="text-sm text-gray-600">
-                          {new Date(meeting.meetingDate).toLocaleDateString('tr-TR')}
-                        </p>
-                      </div>
-                      <Badge>{meeting.status}</Badge>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="grid grid-cols-1 gap-6 pt-4 md:grid-cols-2">
+                <Card className="p-6">
+                  <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold">
+                    <Building2 className="h-5 w-5" />
+                    Firma Bilgileri
+                  </h2>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Durum</p>
+                      <Badge className={`${statusColors[company.status] || 'bg-gray-100 text-gray-800'} mt-1`}>
+                        {statusLabels[company.status] || company.status}
+                      </Badge>
                     </div>
-                  </Link>
-                ))}
-                <div className="mt-4">
-                  <Link href={`/${locale}/meetings?customerCompanyId=${company.id}`}>
-                    <Button variant="outline" className="w-full">
-                      Tüm Görüşmeleri Gör
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <Calendar className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                <p>Henüz görüşme kaydı yok</p>
-                <Link href={`/${locale}/meetings/new?customerCompanyId=${company.id}`}>
-                  <Button className="mt-4">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Görüşme Ekle
-                  </Button>
-                </Link>
-              </div>
-            )}
-          </TabsContent>
-
-          {/* Fırsatlar Sekmesi */}
-          <TabsContent value="deals" className="mt-6">
-            {company.Deal && company.Deal.length > 0 ? (
-              <div className="space-y-2">
-                {company.Deal.map((deal) => (
-                  <Link key={deal.id} href={`/${locale}/deals/${deal.id}`}>
-                    <div className="flex items-center justify-between p-4 border rounded hover:bg-gray-50 cursor-pointer transition-colors">
+                    {company.contactPerson && (
                       <div>
-                        <p className="font-medium">{deal.title}</p>
-                        <p className="text-sm text-gray-600">{deal.stage}</p>
+                        <p className="text-sm text-gray-600">Kontak Kişi</p>
+                        <p className="mt-1 font-medium">{company.contactPerson}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold">{new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(deal.value)}</p>
-                        <Badge className="mt-1">{deal.status}</Badge>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-                <div className="mt-4">
-                  <Link href={`/${locale}/deals?customerCompanyId=${company.id}`}>
-                    <Button variant="outline" className="w-full">
-                      Tüm Fırsatları Gör
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <Briefcase className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                <p>Henüz fırsat kaydı yok</p>
-              </div>
-            )}
-          </TabsContent>
-
-          {/* Teklifler Sekmesi */}
-          <TabsContent value="quotes" className="mt-6">
-            {company.Quote && company.Quote.length > 0 ? (
-              <div className="space-y-2">
-                {company.Quote.map((quote) => (
-                  <Link key={quote.id} href={`/${locale}/quotes/${quote.id}`}>
-                    <div className="flex items-center justify-between p-4 border rounded hover:bg-gray-50 cursor-pointer transition-colors">
+                    )}
+                    {company.sector && (
                       <div>
-                        <p className="font-medium">{quote.title}</p>
-                        <p className="text-sm text-gray-600">{quote.status}</p>
+                        <p className="text-sm text-gray-600">Sektör</p>
+                        <p className="mt-1 font-medium">{company.sector}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold">{new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(quote.total)}</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {new Date(quote.createdAt).toLocaleDateString('tr-TR')}
-                        </p>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-                <div className="mt-4">
-                  <Link href={`/${locale}/quotes?customerCompanyId=${company.id}`}>
-                    <Button variant="outline" className="w-full">
-                      Tüm Teklifleri Gör
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <FileText className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                <p>Henüz teklif kaydı yok</p>
-                <Link href={`/${locale}/quotes/new?customerCompanyId=${company.id}`}>
-                  <Button className="mt-4">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Teklif Oluştur
-                  </Button>
-                </Link>
-              </div>
-            )}
-          </TabsContent>
-
-          {/* Faturalar Sekmesi */}
-          <TabsContent value="invoices" className="mt-6">
-            {company.Invoice && company.Invoice.length > 0 ? (
-              <div className="space-y-2">
-                {company.Invoice.map((invoice) => (
-                  <Link key={invoice.id} href={`/${locale}/invoices/${invoice.id}`}>
-                    <div className="flex items-center justify-between p-4 border rounded hover:bg-gray-50 cursor-pointer transition-colors">
+                    )}
+                    {company.city && (
                       <div>
-                        <p className="font-medium">{invoice.title}</p>
-                        <p className="text-sm text-gray-600">{invoice.status}</p>
+                        <p className="text-sm text-gray-600">Şehir</p>
+                        <p className="mt-1 font-medium">{company.city}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="font-semibold">{new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(invoice.total)}</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {new Date(invoice.createdAt).toLocaleDateString('tr-TR')}
-                        </p>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-                <div className="mt-4">
-                  <Link href={`/${locale}/invoices?customerCompanyId=${company.id}`}>
-                    <Button variant="outline" className="w-full">
-                      Tüm Faturaları Gör
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <DollarSign className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                <p>Henüz fatura kaydı yok</p>
-              </div>
-            )}
-          </TabsContent>
-
-          {/* Sevkiyatlar Sekmesi */}
-          <TabsContent value="shipments" className="mt-6">
-            {company.Shipment && company.Shipment.length > 0 ? (
-              <div className="space-y-2">
-                {company.Shipment.map((shipment) => (
-                  <Link key={shipment.id} href={`/${locale}/shipments/${shipment.id}`}>
-                    <div className="flex items-center justify-between p-4 border rounded hover:bg-gray-50 cursor-pointer transition-colors">
-                      <div>
+                    )}
+                    {company.phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-gray-400" />
                         <p className="font-medium">
-                          {shipment.tracking || `Sevkiyat #${shipment.id.slice(0, 8)}`}
+                          {company.countryCode && <span>{company.countryCode} </span>}
+                          {company.phone}
                         </p>
-                        <p className="text-sm text-gray-600">{shipment.status}</p>
                       </div>
-                      <Badge>{shipment.status}</Badge>
-                    </div>
-                  </Link>
-                ))}
-                <div className="mt-4">
-                  <Link href={`/${locale}/shipments?customerCompanyId=${company.id}`}>
-                    <Button variant="outline" className="w-full">
-                      Tüm Sevkiyatları Gör
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <Truck className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                <p>Henüz sevkiyat kaydı yok</p>
-              </div>
-            )}
-          </TabsContent>
-
-          {/* Giderler Sekmesi */}
-          <TabsContent value="finance" className="mt-6">
-            {company.Finance && company.Finance.length > 0 ? (
-              <div className="space-y-2">
-                {company.Finance.map((finance) => (
-                  <Link key={finance.id} href={`/${locale}/finance/${finance.id}`}>
-                    <div className="flex items-center justify-between p-4 border rounded hover:bg-gray-50 cursor-pointer transition-colors">
+                    )}
+                    {company.lastMeetingDate && (
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-gray-400" />
+                        <div>
+                          <p className="text-sm text-gray-600">Son Görüşme</p>
+                          <p className="mt-1 font-medium">
+                            {new Date(company.lastMeetingDate).toLocaleDateString('tr-TR')}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {company.email && (
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-4 w-4 text-gray-400" />
+                        <p className="font-medium">{company.email}</p>
+                      </div>
+                    )}
+                    {company.website && (
+                      <div className="flex items-center gap-2">
+                        <Globe className="h-4 w-4 text-gray-400" />
+                        <a
+                          href={company.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-medium text-blue-600 hover:underline"
+                        >
+                          {company.website}
+                        </a>
+                      </div>
+                    )}
+                    {company.address && (
                       <div>
-                        <p className="font-medium">{finance.description || `${finance.type === 'EXPENSE' ? 'Gider' : 'Gelir'}`}</p>
-                        <p className="text-sm text-gray-600">{finance.type}</p>
+                        <p className="text-sm text-gray-600">Adres</p>
+                        <p className="mt-1 font-medium">{company.address}</p>
                       </div>
-                      <div className="text-right">
-                        <p className={`font-semibold ${finance.type === 'EXPENSE' ? 'text-red-600' : 'text-green-600'}`}>
-                          {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(finance.amount)}
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          {new Date(finance.createdAt).toLocaleDateString('tr-TR')}
-                        </p>
+                    )}
+                    {company.taxNumber && (
+                      <div>
+                        <p className="text-sm text-gray-600">Vergi No</p>
+                        <p className="mt-1 font-medium">{company.taxNumber}</p>
                       </div>
+                    )}
+                    {company.taxOffice && (
+                      <div>
+                        <p className="text-sm text-gray-600">Vergi Dairesi</p>
+                        <p className="mt-1 font-medium">{company.taxOffice}</p>
+                      </div>
+                    )}
+                    {company.description && (
+                      <div>
+                        <p className="text-sm text-gray-600">Açıklama</p>
+                        <p className="mt-1 font-medium">{company.description}</p>
+                      </div>
+                    )}
+                  </div>
+                </Card>
+
+                <Card className="p-6">
+                  <h2 className="mb-4 text-xl font-semibold">Kayıt Detayları</h2>
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Firma ID</p>
+                      <p className="mt-1 font-mono text-sm">{company.id}</p>
                     </div>
-                  </Link>
-                ))}
-                <div className="mt-4">
-                  <Link href={`/${locale}/finance?customerCompanyId=${company.id}`}>
-                    <Button variant="outline" className="w-full">
-                      Tüm Giderleri Gör
-                    </Button>
-                  </Link>
-                </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Oluşturulma Tarihi</p>
+                      <p className="mt-1 font-medium">
+                        {new Date(company.createdAt).toLocaleDateString('tr-TR')}
+                      </p>
+                    </div>
+                    {company.updatedAt && (
+                      <div>
+                        <p className="text-sm text-gray-600">Son Güncelleme</p>
+                        <p className="mt-1 font-medium">
+                          {new Date(company.updatedAt).toLocaleDateString('tr-TR')}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </Card>
               </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                <Receipt className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                <p>Henüz gider kaydı yok</p>
-                <Link href={`/${locale}/finance/new?customerCompanyId=${company.id}`}>
-                  <Button className="mt-4">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Gider Gir
-                  </Button>
-                </Link>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="contacts">
+            <AccordionTrigger className="text-left">
+              <div className="flex w-full items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Users className="h-4 w-4" />
+                  İletişim Kişileri
+                </span>
+                <Badge variant="outline">{company.Customer?.length || 0}</Badge>
               </div>
-            )}
-          </TabsContent>
-        </Tabs>
-      </Card>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-4 pt-4">
+                {company.Customer && company.Customer.length > 0 ? (
+                  company.Customer.map((customer) => (
+                    <Card key={customer.id} className="border border-slate-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-lg font-semibold text-slate-900">{customer.name}</p>
+                          <div className="mt-2 space-y-1 text-sm text-slate-600">
+                            {customer.email && <p>{customer.email}</p>}
+                            {customer.phone && <p>{customer.phone}</p>}
+                          </div>
+                        </div>
+                        <Badge variant="outline">{customer.status || 'Bilinmiyor'}</Badge>
+                      </div>
+                    </Card>
+                  ))
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-6 text-center text-sm text-slate-500">
+                    <p>Henüz kayıtlı bir iletişim kişisi yok.</p>
+                    <Link href={`/${locale}/customers`} prefetch={true}>
+                      <Button variant="outline" className="mt-4">
+                        İletişim Kişisi Ekle
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="meetings">
+            <AccordionTrigger className="text-left">
+              <div className="flex w-full items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Görüşmeler
+                </span>
+                <Badge variant="outline">{company.Meeting?.length || 0}</Badge>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2 pt-4">
+                {company.Meeting && company.Meeting.length > 0 ? (
+                  <>
+                    {company.Meeting.map((meeting) => (
+                      <Link key={meeting.id} href={`/${locale}/meetings/${meeting.id}`} prefetch={true}>
+                        <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4 transition-colors hover:bg-slate-50">
+                          <div>
+                            <p className="font-medium text-slate-900">{meeting.title}</p>
+                            <p className="text-sm text-slate-600">
+                              {new Date(meeting.meetingDate).toLocaleDateString('tr-TR')}
+                            </p>
+                          </div>
+                          <Badge>{meeting.status}</Badge>
+                        </div>
+                      </Link>
+                    ))}
+                    <div className="pt-2">
+                      <Link href={`/${locale}/meetings?customerCompanyId=${company.id}`} prefetch={true}>
+                        <Button variant="outline" className="w-full">
+                          Tüm Görüşmeleri Gör
+                        </Button>
+                      </Link>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-6 text-center text-sm text-slate-500">
+                    <Calendar className="mx-auto mb-4 h-10 w-10 text-slate-400" />
+                    <p>Henüz görüşme kaydı yok</p>
+                    <Link href={`/${locale}/meetings/new?customerCompanyId=${company.id}`} prefetch={true}>
+                      <Button className="mt-4">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Görüşme Ekle
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="quotes">
+            <AccordionTrigger className="text-left">
+              <div className="flex w-full items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Teklifler
+                </span>
+                <Badge variant="outline">{company.Quote?.length || 0}</Badge>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2 pt-4">
+                {company.Quote && company.Quote.length > 0 ? (
+                  <>
+                    {company.Quote.map((quote) => (
+                      <Link key={quote.id} href={`/${locale}/quotes/${quote.id}`} prefetch={true}>
+                        <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4 transition-colors hover:bg-slate-50">
+                          <div>
+                            <p className="font-medium text-slate-900">{quote.title}</p>
+                            <p className="text-sm text-slate-600">{quote.status}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold text-slate-900">
+                              {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(quote.total)}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {new Date(quote.createdAt).toLocaleDateString('tr-TR')}
+                            </p>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                    <div className="pt-2">
+                      <Link href={`/${locale}/quotes?customerCompanyId=${company.id}`} prefetch={true}>
+                        <Button variant="outline" className="w-full">
+                          Tüm Teklifleri Gör
+                        </Button>
+                      </Link>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-6 text-center text-sm text-slate-500">
+                    <FileText className="mx-auto mb-4 h-10 w-10 text-slate-400" />
+                    <p>Henüz teklif kaydı yok</p>
+                    <Link href={`/${locale}/quotes/new?customerCompanyId=${company.id}`} prefetch={true}>
+                      <Button className="mt-4">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Teklif Oluştur
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="deals">
+            <AccordionTrigger className="text-left">
+              <div className="flex w-full items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Briefcase className="h-4 w-4" />
+                  Fırsatlar
+                </span>
+                <Badge variant="outline">{company.Deal?.length || 0}</Badge>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2 pt-4">
+                {company.Deal && company.Deal.length > 0 ? (
+                  <>
+                    {company.Deal.map((deal) => (
+                      <Link key={deal.id} href={`/${locale}/deals/${deal.id}`} prefetch={true}>
+                        <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4 transition-colors hover:bg-slate-50">
+                          <div>
+                            <p className="font-medium text-slate-900">{deal.title}</p>
+                            <p className="text-sm text-slate-600">{deal.stage}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold text-slate-900">
+                              {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(deal.value)}
+                            </p>
+                            <Badge className="mt-1">{deal.status}</Badge>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                    <div className="pt-2">
+                      <Link href={`/${locale}/deals?customerCompanyId=${company.id}`} prefetch={true}>
+                        <Button variant="outline" className="w-full">
+                          Tüm Fırsatları Gör
+                        </Button>
+                      </Link>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-6 text-center text-sm text-slate-500">
+                    <Briefcase className="mx-auto mb-4 h-10 w-10 text-slate-400" />
+                    <p>Henüz fırsat kaydı yok</p>
+                  </div>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="invoices">
+            <AccordionTrigger className="text-left">
+              <div className="flex w-full items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  Faturalar
+                </span>
+                <Badge variant="outline">{company.Invoice?.length || 0}</Badge>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2 pt-4">
+                {company.Invoice && company.Invoice.length > 0 ? (
+                  <>
+                    {company.Invoice.map((invoice) => (
+                      <Link key={invoice.id} href={`/${locale}/invoices/${invoice.id}`} prefetch={true}>
+                        <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4 transition-colors hover:bg-slate-50">
+                          <div>
+                            <p className="font-medium text-slate-900">{invoice.title}</p>
+                            <p className="text-sm text-slate-600">{invoice.status}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-semibold text-slate-900">
+                              {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(invoice.total)}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {new Date(invoice.createdAt).toLocaleDateString('tr-TR')}
+                            </p>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                    <div className="pt-2">
+                      <Link href={`/${locale}/invoices?customerCompanyId=${company.id}`} prefetch={true}>
+                        <Button variant="outline" className="w-full">
+                          Tüm Faturaları Gör
+                        </Button>
+                      </Link>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-6 text-center text-sm text-slate-500">
+                    <DollarSign className="mx-auto mb-4 h-10 w-10 text-slate-400" />
+                    <p>Henüz fatura kaydı yok</p>
+                  </div>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="shipments">
+            <AccordionTrigger className="text-left">
+              <div className="flex w-full items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Truck className="h-4 w-4" />
+                  Sevkiyatlar
+                </span>
+                <Badge variant="outline">{company.Shipment?.length || 0}</Badge>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2 pt-4">
+                {company.Shipment && company.Shipment.length > 0 ? (
+                  <>
+                    {company.Shipment.map((shipment) => (
+                      <Link key={shipment.id} href={`/${locale}/shipments/${shipment.id}`} prefetch={true}>
+                        <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4 transition-colors hover:bg-slate-50">
+                          <div>
+                            <p className="font-medium text-slate-900">
+                              {shipment.tracking || `Sevkiyat #${shipment.id.slice(0, 8)}`}
+                            </p>
+                            <p className="text-sm text-slate-600">{shipment.status}</p>
+                          </div>
+                          <Badge>{shipment.status}</Badge>
+                        </div>
+                      </Link>
+                    ))}
+                    <div className="pt-2">
+                      <Link href={`/${locale}/shipments?customerCompanyId=${company.id}`} prefetch={true}>
+                        <Button variant="outline" className="w-full">
+                          Tüm Sevkiyatları Gör
+                        </Button>
+                      </Link>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-6 text-center text-sm text-slate-500">
+                    <Truck className="mx-auto mb-4 h-10 w-10 text-slate-400" />
+                    <p>Henüz sevkiyat kaydı yok</p>
+                  </div>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="finance">
+            <AccordionTrigger className="text-left">
+              <div className="flex w-full items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Receipt className="h-4 w-4" />
+                  Giderler
+                </span>
+                <Badge variant="outline">{company.Finance?.length || 0}</Badge>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="space-y-2 pt-4">
+                {company.Finance && company.Finance.length > 0 ? (
+                  <>
+                    {company.Finance.map((finance) => (
+                      <Link key={finance.id} href={`/${locale}/finance/${finance.id}`} prefetch={true}>
+                        <div className="flex items-center justify-between rounded-lg border border-slate-200 p-4 transition-colors hover:bg-slate-50">
+                          <div>
+                            <p className="font-medium text-slate-900">
+                              {finance.description || (finance.type === 'EXPENSE' ? 'Gider' : 'Gelir')}
+                            </p>
+                            <p className="text-sm text-slate-600">{finance.type}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className={cn('font-semibold', finance.type === 'EXPENSE' ? 'text-red-600' : 'text-green-600')}>
+                              {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(finance.amount)}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {new Date(finance.createdAt).toLocaleDateString('tr-TR')}
+                            </p>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                    <div className="pt-2">
+                      <Link href={`/${locale}/finance?customerCompanyId=${company.id}`} prefetch={true}>
+                        <Button variant="outline" className="w-full">
+                          Tüm Giderleri Gör
+                        </Button>
+                      </Link>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-slate-300 bg-slate-50/50 p-6 text-center text-sm text-slate-500">
+                    <Receipt className="mx-auto mb-4 h-10 w-10 text-slate-400" />
+                    <p>Henüz gider kaydı yok</p>
+                    <Link href={`/${locale}/finance/new?customerCompanyId=${company.id}`} prefetch={true}>
+                      <Button className="mt-4">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Gider Gir
+                      </Button>
+                    </Link>
+                  </div>
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      )}
 
       {/* Activity Timeline */}
       {company.activities && company.activities.length > 0 && (

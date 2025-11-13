@@ -20,7 +20,7 @@ export async function GET(
         console.error('Meetings [id] GET API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -32,13 +32,10 @@ export async function GET(
     // Permission check - canRead kontrolü (meeting modülü için)
     // Not: Meeting için özel bir modül yok, genel olarak activity veya task yetkisi kullanılabilir
     // Şimdilik activity yetkisi ile kontrol ediyoruz
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canRead = await hasPermission('activity', 'read', session.user.id)
     if (!canRead) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Toplantı görüntüleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const { id } = await params
@@ -97,29 +94,9 @@ export async function GET(
       .eq('type', 'EXPENSE')
       .order('createdAt', { ascending: false })
 
-    // ActivityLog'ları çek
-    let activityQuery = supabase
-      .from('ActivityLog')
-      .select(
-        `
-        *,
-        User (
-          name,
-          email
-        )
-      `
-      )
-      .eq('entity', 'Meeting')
-      .eq('meta->>meetingId', id)
-
-    if (!isSuperAdmin) {
-      activityQuery = activityQuery.eq('companyId', companyId)
-    }
-
-    const { data: activities } = await activityQuery
-      .order('createdAt', { ascending: false })
-      .limit(20)
-
+    // ActivityLog'lar KALDIRILDI - Lazy load için ayrı endpoint kullanılacak (/api/activity?entity=Meeting&id=...)
+    // (Performans optimizasyonu: Detay sayfası daha hızlı açılır, ActivityLog'lar gerektiğinde yüklenir)
+    
     // Participant'ları filtrele - SuperAdmin'leri ve farklı companyId'ye sahip olanları çıkar
     const filteredParticipants = (participants || []).filter((p: any) => {
       if (!p.User) return false
@@ -132,10 +109,12 @@ export async function GET(
       ...(data as any),
       participants: filteredParticipants,
       expenses: expenses || [],
-      activities: activities || [],
+      activities: [], // Boş array - lazy load için ayrı endpoint kullanılacak
     }, {
       headers: {
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120, max-age=30',
+        'CDN-Cache-Control': 'public, s-maxage=60',
+        'Vercel-CDN-Cache-Control': 'public, s-maxage=60',
       },
     })
   } catch (error: any) {
@@ -161,7 +140,7 @@ export async function PUT(
         console.error('Meetings [id] PUT API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -171,13 +150,10 @@ export async function PUT(
     }
 
     // Permission check - canUpdate kontrolü (meeting modülü için activity yetkisi kullanıyoruz)
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canUpdate = await hasPermission('activity', 'update', session.user.id)
     if (!canUpdate) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Toplantı güncelleme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const { id } = await params
@@ -191,7 +167,7 @@ export async function PUT(
         console.error('Meetings [id] PUT API JSON parse error:', jsonError)
       }
       return NextResponse.json(
-        { error: 'Invalid JSON body', message: jsonError?.message || 'Failed to parse request body' },
+        { error: 'Geçersiz JSON', message: jsonError?.message || 'İstek gövdesi çözümlenemedi' },
         { status: 400 }
       )
     }
@@ -257,7 +233,7 @@ export async function PUT(
     if (error) {
       console.error('Meetings [id] PUT API error:', error)
       return NextResponse.json(
-        { error: error.message || 'Failed to update meeting' },
+        { error: error.message || 'Toplantı güncellenemedi' },
         { status: 500 }
       )
     }
@@ -348,7 +324,7 @@ export async function DELETE(
         console.error('Meetings [id] DELETE API session error:', sessionError)
       }
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
+        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
         { status: 500 }
       )
     }
@@ -358,13 +334,10 @@ export async function DELETE(
     }
 
     // Permission check - canDelete kontrolü (meeting modülü için activity yetkisi kullanıyoruz)
-    const { hasPermission } = await import('@/lib/permissions')
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canDelete = await hasPermission('activity', 'delete', session.user.id)
     if (!canDelete) {
-      return NextResponse.json(
-        { error: 'Forbidden', message: 'Toplantı silme yetkiniz yok' },
-        { status: 403 }
-      )
+      return buildPermissionDeniedResponse()
     }
 
     const { id } = await params
@@ -406,7 +379,7 @@ export async function DELETE(
     if (error) {
       console.error('Meetings [id] DELETE API error:', error)
       return NextResponse.json(
-        { error: error.message || 'Failed to delete meeting' },
+        { error: error.message || 'Toplantı silinemedi' },
         { status: 500 }
       )
     }
@@ -438,7 +411,7 @@ export async function DELETE(
   } catch (error: any) {
     console.error('Meetings [id] DELETE API exception:', error)
     return NextResponse.json(
-      { error: 'Failed to delete meeting', message: error?.message || 'Unknown error' },
+      { error: 'Toplantı silinemedi', message: error?.message || 'Bilinmeyen hata' },
       { status: 500 }
     )
   }

@@ -40,12 +40,12 @@ export async function GET(
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     const companyId = session.user.companyId
 
-    // Deal'ı ilişkili verilerle çek - companyId kontrolü API seviyesinde
+    // Deal'ı sadece gerekli kolonlarla çek (performans için)
     let query = supabase
       .from('Deal')
       .select(
         `
-        *,
+        id, title, stage, value, status, customerId, customerCompanyId, priorityScore, isPriority, leadSource, companyId, createdAt, updatedAt,
         Customer (
           id,
           name,
@@ -91,34 +91,14 @@ export async function GET(
       .order('meetingDate', { ascending: false })
       .limit(10)
 
-    // ActivityLog'ları çek
-    let activityQuery = supabase
-      .from('ActivityLog')
-      .select(
-        `
-        *,
-        User (
-          name,
-          email
-        )
-      `
-      )
-      .eq('entity', 'Deal')
-      .eq('meta->>id', id)
+    // ActivityLog'lar KALDIRILDI - Lazy load için ayrı endpoint kullanılacak (/api/activity?entity=Deal&id=...)
+    // (Performans optimizasyonu: Detay sayfası daha hızlı açılır, ActivityLog'lar gerektiğinde yüklenir)
+    // NOT: Deal WON/LOST/CLOSED için ActivityLog'lar hala tutuluyor (PUT endpoint'inde)
     
-    // SuperAdmin değilse companyId filtresi ekle
-    if (!isSuperAdmin) {
-      activityQuery = activityQuery.eq('companyId', companyId)
-    }
-    
-    const { data: activities } = await activityQuery
-      .order('createdAt', { ascending: false })
-      .limit(20)
-
     return NextResponse.json({
       ...(data as any),
       Meeting: meetings || [],
-      activities: activities || [],
+      activities: [], // Boş array - lazy load için ayrı endpoint kullanılacak
     })
   } catch (error) {
     return NextResponse.json(
@@ -412,6 +392,9 @@ export async function PUT(
       }
     }
 
+    // Otomasyon bilgilerini sakla (response'a eklemek için)
+    const automationInfo: any = {}
+    
     // ÖNEMLİ: Deal WON olduğunda otomatik Quote oluştur
     if (body.stage === 'WON' && (existingDeal as any)?.stage !== 'WON') {
       try {
@@ -458,6 +441,10 @@ export async function PUT(
           .single()
         
         if (!quoteError && newQuote) {
+          // Otomasyon bilgilerini sakla
+          automationInfo.quoteId = (newQuote as any).id
+          automationInfo.quoteCreated = true
+          automationInfo.quoteTitle = quoteTitle
           // ActivityLog: Otomatik Quote oluşturuldu
           // @ts-ignore - Supabase type inference issue with dynamic table names
           await (supabase.from('ActivityLog') as any).insert([
@@ -598,7 +585,30 @@ export async function PUT(
       ...existingDeal,
     }
     
-    return NextResponse.json(updatedDeal, {
+    // LOST durumunda Task oluşturuldu mu kontrol et
+    if (body.stage === 'LOST' && (existingDeal as any)?.stage !== 'LOST') {
+      try {
+        const { data: tasks } = await supabase
+          .from('Task')
+          .select('id')
+          .eq('relatedTo', `Deal: ${id}`)
+          .eq('companyId', session.user.companyId)
+          .order('createdAt', { ascending: false })
+          .limit(1)
+        
+        if (tasks && tasks.length > 0) {
+          automationInfo.taskId = tasks[0].id
+          automationInfo.taskCreated = true
+        }
+      } catch (taskError) {
+        // Task kontrolü hatası ana işlemi engellemez
+      }
+    }
+    
+    return NextResponse.json({
+      ...updatedDeal,
+      automation: automationInfo,
+    }, {
       headers: {
         'Cache-Control': 'no-store, must-revalidate', // PUT sonrası fresh data için cache'i kapat
       },

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { toast } from '@/lib/toast'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
 import { Plus, Edit, Trash2, TrendingUp, TrendingDown, Eye, RefreshCw, AlertCircle, Info, Search, Download, Calendar, ArrowUpDown, BarChart3, PieChart, LineChart } from 'lucide-react'
@@ -30,7 +30,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import FinanceForm from './FinanceForm'
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import { AutomationInfo } from '@/components/automation/AutomationInfo'
 import Pagination from '@/components/ui/Pagination'
@@ -40,7 +39,12 @@ import { mutate } from 'swr'
 import dynamic from 'next/dynamic'
 import { Card } from '@/components/ui/card'
 
-// Lazy load grafikler - performans için
+// Lazy load grafikler ve form - performans için
+const FinanceForm = dynamic(() => import('./FinanceForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
 const FinanceTrendChart = dynamic(() => import('./charts/FinanceTrendChart'), {
   ssr: false,
   loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
@@ -50,6 +54,15 @@ const FinanceCategoryChart = dynamic(() => import('./charts/FinanceCategoryChart
   ssr: false,
   loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
 })
+
+const FinanceDetailModal = dynamic(() => import('./FinanceDetailModal'), {
+  ssr: false,
+  loading: () => null,
+})
+
+interface FinanceListProps {
+  isOpen?: boolean
+}
 
 interface Finance {
   id: string
@@ -81,25 +94,27 @@ interface CustomerCompany {
   name: string
 }
 
-// Kategori etiketleri
-const categoryLabels: Record<string, string> = {
-  // Gider kategorileri
-  FUEL: 'Araç Yakıtı',
-  ACCOMMODATION: 'Konaklama',
-  FOOD: 'Yemek',
-  TRANSPORT: 'Ulaşım',
-  OFFICE: 'Ofis Giderleri',
-  MARKETING: 'Pazarlama',
-  // Gelir kategorileri
-  INVOICE_INCOME: 'Fatura Geliri',
-  SERVICE: 'Hizmet Geliri',
-  PRODUCT_SALE: 'Ürün Satışı',
-  OTHER: 'Diğer',
-}
-
-export default function FinanceList() {
+export default function FinanceList({ isOpen = true }: FinanceListProps) {
   const locale = useLocale()
+  const t = useTranslations('finance')
+  const tCommon = useTranslations('common')
   const { data: session } = useSession()
+  
+  // Kategori etiketleri - locale desteği ile
+  const categoryLabels: Record<string, string> = {
+    // Gider kategorileri
+    FUEL: t('categoryFuel'),
+    ACCOMMODATION: t('categoryAccommodation'),
+    FOOD: t('categoryFood'),
+    TRANSPORT: t('categoryTransport'),
+    OFFICE: t('categoryOffice'),
+    MARKETING: t('categoryMarketing'),
+    // Gelir kategorileri
+    INVOICE_INCOME: t('categoryInvoiceIncome'),
+    SERVICE: t('categoryService'),
+    PRODUCT_SALE: t('categoryProductSale'),
+    OTHER: t('categoryOther'),
+  }
   
   // SuperAdmin kontrolü
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
@@ -118,12 +133,16 @@ export default function FinanceList() {
   const [pageSize, setPageSize] = useState(20)
   const [formOpen, setFormOpen] = useState(false)
   const [selectedFinance, setSelectedFinance] = useState<Finance | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [selectedFinanceId, setSelectedFinanceId] = useState<string | null>(null)
+  const [selectedFinanceData, setSelectedFinanceData] = useState<Finance | null>(null)
   const [missingCount, setMissingCount] = useState<number | null>(null)
   const [syncing, setSyncing] = useState(false)
+  const [checking, setChecking] = useState(false) // Kontrol butonu için loading state
   
   // SuperAdmin için firmaları çek
   const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
-    isSuperAdmin ? '/api/superadmin/companies' : null,
+    isOpen && isSuperAdmin ? '/api/superadmin/companies' : null,
     { dedupingInterval: 60000, revalidateOnFocus: false }
   )
   // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
@@ -143,27 +162,47 @@ export default function FinanceList() {
   }, [search])
 
   // Müşteri firmalarını çek (filtreleme için)
-  const { data: customerCompanies = [] } = useData<CustomerCompany[]>('/api/customer-companies', {
-    dedupingInterval: 60000, // 60 saniye cache
-    revalidateOnFocus: false,
-  })
+  const { data: customerCompanies = [] } = useData<CustomerCompany[]>(
+    isOpen ? '/api/customer-companies' : null,
+    {
+      dedupingInterval: 60000,
+      revalidateOnFocus: false,
+    }
+  )
 
   // SWR ile veri çekme (repo kurallarına uygun) - debounced search kullanıyoruz
-  const params = new URLSearchParams()
-  if (type) params.append('type', type)
-  if (category) params.append('category', category)
-  if (customerCompanyId) params.append('customerCompanyId', customerCompanyId)
-  if (startDate) params.append('startDate', startDate)
-  if (endDate) params.append('endDate', endDate)
-  if (debouncedSearch) params.append('search', debouncedSearch)
-  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId) // SuperAdmin için firma filtresi
-  
-  const apiUrl = `/api/finance?${params.toString()}`
-  const { data: financeRecords = [], isLoading, error, mutate: mutateFinance } = useData<Finance[]>(apiUrl, {
-    dedupingInterval: 5000, // 5 saniye cache (daha kısa - güncellemeler daha hızlı)
-    revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
-    refreshInterval: 0, // Otomatik refresh YOK
-  })
+  const apiUrl = useMemo(() => {
+    if (!isOpen) return null
+
+    const params = new URLSearchParams()
+    if (type) params.append('type', type)
+    if (category) params.append('category', category)
+    if (customerCompanyId) params.append('customerCompanyId', customerCompanyId)
+    if (startDate) params.append('startDate', startDate)
+    if (endDate) params.append('endDate', endDate)
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+    return `/api/finance?${params.toString()}`
+  }, [
+    isOpen,
+    type,
+    category,
+    customerCompanyId,
+    startDate,
+    endDate,
+    debouncedSearch,
+    isSuperAdmin,
+    filterCompanyId,
+  ])
+
+  const { data: financeRecords = [], isLoading, error, mutate: mutateFinance } = useData<Finance[]>(
+    apiUrl,
+    {
+      dedupingInterval: 5000,
+      revalidateOnFocus: false,
+      refreshInterval: 0,
+    }
+  )
 
   // Filtrelenmiş ve sıralanmış kayıtlar
   const filteredAndSortedRecords = useMemo(() => {
@@ -340,7 +379,7 @@ export default function FinanceList() {
         totalRecords: financeRecords.length,
       },
     }
-  }, [filteredAndSortedRecords])
+  }, [filteredAndSortedRecords, financeRecords])
   
   // Hızlı tarih filtreleri
   const setQuickDateFilter = useCallback((period: 'today' | 'week' | 'month' | 'year') => {
@@ -398,7 +437,7 @@ export default function FinanceList() {
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
     } catch (error: any) {
-      toast.error('Dışa aktarılamadı', error?.message || 'Bilinmeyen hata')
+      toast.error(t('exportFailed'), error?.message || tCommon('unknownError'))
     }
   }, [type, category, customerCompanyId, startDate, endDate, debouncedSearch])
 
@@ -427,14 +466,14 @@ export default function FinanceList() {
       await Promise.all([
         mutate('/api/finance', updatedFinance, { revalidate: false }),
         mutate('/api/finance?', updatedFinance, { revalidate: false }),
-        mutate(apiUrl, updatedFinance, { revalidate: false }),
+        apiUrl ? mutate(apiUrl, updatedFinance, { revalidate: false }) : Promise.resolve(),
       ])
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error('Silinemedi', error?.message)
+      toast.error(t('deleteFailed'), error?.message)
     }
   }, [financeRecords, mutateFinance, apiUrl])
 
@@ -455,39 +494,88 @@ export default function FinanceList() {
 
   // Eksik kayıtları kontrol et
   const checkMissing = useCallback(async () => {
+    setChecking(true) // Loading state başlat
+    
+    // Loading toast göster
+    const loadingToast = toast.loading(t('checkingMissing'))
+    
     try {
-      const res = await fetch('/api/finance/check-missing')
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}))
-        throw new Error(errorData.error || 'Failed to check missing records')
+      // Cache bypass için timestamp ekle (fresh data için)
+      const res = await fetch(`/api/finance/check-missing?t=${Date.now()}`)
+      
+      // Network hatası kontrolü
+      if (!res) {
+        throw new Error('Network hatası - sunucuya bağlanılamadı')
       }
+      
+      if (!res.ok) {
+        // JSON parse hatası olabilir - try-catch ile yakala
+        let errorData: any = {}
+        try {
+          errorData = await res.json()
+        } catch (parseError) {
+          // JSON parse edilemezse status text kullan
+          throw new Error(`HTTP ${res.status}: ${res.statusText || 'Bilinmeyen hata'}`)
+        }
+        throw new Error(errorData.error || `HTTP ${res.status}: Kontrol yapılamadı`)
+      }
+      
       const data = await res.json()
+      
+      // Response validation
+      if (typeof data.missingCount !== 'number') {
+        console.warn('Invalid response format:', data)
+        setMissingCount(0)
+        toast.dismiss(loadingToast)
+        toast.warning(t('invalidResponse'), t('invalidResponseMessage'))
+        return
+      }
+      
+      const previousCount = missingCount
       setMissingCount(data.missingCount || 0)
       
-      // Başarı mesajı (opsiyonel)
+      // Başarı toast'ı göster
+      toast.dismiss(loadingToast)
+      
       if (data.missingCount > 0) {
-        console.log(`${data.missingCount} eksik finans kaydı bulundu`)
+        toast.success(
+          t('missingRecordsFound', { count: data.missingCount }),
+          previousCount !== null && previousCount !== data.missingCount
+            ? t('missingRecordsFoundPrevious', { previous: previousCount, current: data.missingCount })
+            : undefined
+        )
       } else {
-        console.log('Eksik finans kaydı bulunamadı')
+        toast.success(t('noMissingRecords'), t('noMissingRecordsMessage'))
       }
     } catch (error: any) {
+      // Hata mesajını daha açıklayıcı yap
+      const errorMessage = error?.message || 'Bilinmeyen hata'
       console.error('Check missing error:', error)
-      toast.error('Kontrol yapılamadı', error?.message)
+      
+      // Hata toast'ı göster
+      toast.dismiss(loadingToast)
+      toast.error(t('checkFailed'), errorMessage)
+      
+      // Hata durumunda missingCount'u null yap (buton gösterilmesin)
+      setMissingCount(null)
+    } finally {
+      setChecking(false) // Loading state bitir
     }
-  }, [])
+  }, [missingCount])
 
   // Eksik kayıtları senkronize et
   const syncMissing = useCallback(async () => {
-    if (!confirm('Eksik finans kayıtlarını oluşturmak istediğinize emin misiniz?')) {
-      return
-    }
-
+    // Toast ile işlemi başlat (modal yerine - daha iyi UX)
     setSyncing(true)
+    
+    // Loading toast göster
+    const loadingToast = toast.loading(t('syncingMissing'))
+    
     try {
       const res = await fetch('/api/finance/sync-missing', {
         method: 'POST',
       })
-      
+  
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
         throw new Error(errorData.error || 'Failed to sync missing records')
@@ -500,14 +588,18 @@ export default function FinanceList() {
       await Promise.all([
         mutate('/api/finance'),
         mutate('/api/finance?'),
-        mutate(apiUrl),
+        apiUrl ? mutate(apiUrl) : Promise.resolve(),
       ])
       
       setMissingCount(0)
-      toast.success('Eksik kayıtlar tamamlandı', `${data.created || 0} kayıt eklendi.`)
+      
+      // Başarı toast'ı göster
+      toast.dismiss(loadingToast)
+      toast.success(t('syncSuccess', { count: data.created || 0 }))
     } catch (error: any) {
       console.error('Sync missing error:', error)
-      toast.error('Eşitlenemedi', error?.message)
+      toast.dismiss(loadingToast)
+      toast.error(t('syncFailed'), error?.message || tCommon('unknownError'))
     } finally {
       setSyncing(false)
     }
@@ -525,19 +617,23 @@ export default function FinanceList() {
     return (
       <div className="space-y-6">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-800 font-medium">Veri yüklenirken hata oluştu</p>
-          <p className="text-red-600 text-sm mt-1">{error.message || 'Bilinmeyen bir hata oluştu'}</p>
+          <p className="text-red-800 font-medium">{t('errorLoading')}</p>
+          <p className="text-red-600 text-sm mt-1">{error.message || tCommon('unknownError')}</p>
           <Button
             onClick={() => mutateFinance()}
             variant="outline"
             className="mt-4"
           >
             <RefreshCw className="mr-2 h-4 w-4" />
-            Tekrar Dene
+            {tCommon('retry')}
           </Button>
         </div>
       </div>
     )
+  }
+
+  if (!isOpen) {
+    return null
   }
 
   if (isLoading) {
@@ -548,25 +644,25 @@ export default function FinanceList() {
       <div className="space-y-6">
         {/* Otomasyon Bilgileri */}
         <AutomationInfo
-          title="Finans Modülü Otomasyonları"
+          title={t('automationTitle')}
           automations={[
             {
-              action: 'Fatura "Ödendi" yapıldığında (otomatik)',
-              result: 'Otomatik olarak "Finans" sayfasında yeni bir gelir kaydı açılır',
+              action: t('automationInvoicePaid'),
+              result: t('automationInvoicePaidResult'),
               details: [
-                'Finans kaydı tipi "GELİR" olarak ayarlanır',
-                'Finans kaydı tutarı fatura tutarı ile aynı olur',
-                'Finans kaydı tarihi bugün olarak ayarlanır',
-                '"Aktiviteler" sayfasında finans kaydı görünür',
+                t('automationInvoicePaidDetails1'),
+                t('automationInvoicePaidDetails2'),
+                t('automationInvoicePaidDetails3'),
+                t('automationInvoicePaidDetails4'),
               ],
             },
             {
-              action: 'Manuel finans kaydı oluşturduğunda',
-              result: 'Finans kaydı oluşturulur ve takip edilir',
+              action: t('automationManual'),
+              result: t('automationManualResult'),
               details: [
-                'Gelir veya gider olarak kaydedilir',
-                '"Aktiviteler" sayfasında kayıt görünür',
-                'Finans raporlarında görünür',
+                t('automationManualDetails1'),
+                t('automationManualDetails2'),
+                t('automationManualDetails3'),
               ],
             },
           ]}
@@ -575,8 +671,8 @@ export default function FinanceList() {
         {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Finans</h1>
-          <p className="mt-2 text-gray-600">Toplam {financeRecords.length} kayıt</p>
+          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
+          <p className="mt-2 text-gray-600">{t('totalRecords', { count: financeRecords.length })}</p>
         </div>
         <div className="flex gap-2">
           {/* Eksik Kayıt Uyarısı ve Senkronize Butonu */}
@@ -588,23 +684,23 @@ export default function FinanceList() {
               className="border-orange-500 text-orange-600 hover:bg-orange-50"
             >
               <AlertCircle className="mr-2 h-4 w-4" />
-              {syncing ? 'Senkronize Ediliyor...' : `${missingCount} Eksik Kayıt Var`}
+              {syncing ? t('syncing') : t('missingRecords', { count: missingCount })}
             </Button>
           )}
           <Button
             onClick={checkMissing}
             variant="outline"
-            disabled={syncing}
+            disabled={syncing || checking}
           >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Kontrol Et
+            <RefreshCw className={`mr-2 h-4 w-4 ${checking ? 'animate-spin' : ''}`} />
+            {checking ? 'Kontrol Ediliyor...' : t('check')}
           </Button>
           <Button
             onClick={handleAdd}
             className="bg-gradient-primary text-white"
           >
             <Plus className="mr-2 h-4 w-4" />
-            Yeni Kayıt
+            {t('newRecord')}
           </Button>
         </div>
       </div>
@@ -712,7 +808,7 @@ export default function FinanceList() {
                             <span className="text-purple-400">•</span>
                             <div>
                               <div className="font-medium">{automationStats.recurringCount} tekrarlayan gider</div>
-                              <div className="text-gray-300 text-[10px] mt-0.5">Her ayın 1'inde otomatik oluşuyor</div>
+                              <div className="text-gray-300 text-[10px] mt-0.5">Her ayın 1&#39;inde otomatik oluşuyor</div>
                             </div>
                           </div>
                         )}
@@ -893,7 +989,7 @@ export default function FinanceList() {
           )}
           <Select value={type || 'all'} onValueChange={(v) => setType(v === 'all' ? '' : v)}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Tip" />
+              <SelectValue placeholder={t('selectType')} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tümü</SelectItem>
@@ -904,7 +1000,7 @@ export default function FinanceList() {
           
           <Select value={category || 'all'} onValueChange={(v) => setCategory(v === 'all' ? '' : v)}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Kategori" />
+              <SelectValue placeholder={t('selectCategory')} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Tüm Kategoriler</SelectItem>
@@ -1109,11 +1205,18 @@ export default function FinanceList() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Link href={`/${locale}/finance/${finance.id}`} prefetch={true}>
-                        <Button variant="ghost" size="icon" aria-label={`Finans kaydını görüntüle`}>
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setSelectedFinanceId(finance.id)
+                          setSelectedFinanceData(finance)
+                          setDetailModalOpen(true)
+                        }}
+                        aria-label={`Finans kaydını görüntüle`}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -1158,6 +1261,18 @@ export default function FinanceList() {
         </>
       )}
 
+      {/* Detail Modal */}
+      <FinanceDetailModal
+        financeId={selectedFinanceId}
+        open={detailModalOpen}
+        onClose={() => {
+          setDetailModalOpen(false)
+          setSelectedFinanceId(null)
+          setSelectedFinanceData(null)
+        }}
+        initialData={selectedFinanceData || undefined}
+      />
+
       {/* Form Modal */}
       <FinanceForm
         finance={selectedFinance || undefined}
@@ -1179,7 +1294,7 @@ export default function FinanceList() {
           await Promise.all([
             mutate('/api/finance', updatedFinance, { revalidate: false }),
             mutate('/api/finance?', updatedFinance, { revalidate: false }),
-            mutate(apiUrl, updatedFinance, { revalidate: false }),
+            apiUrl ? mutate(apiUrl, updatedFinance, { revalidate: false }) : Promise.resolve(),
           ])
         }}
       />

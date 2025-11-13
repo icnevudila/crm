@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { toast } from '@/lib/toast'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -25,17 +26,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-const ticketSchema = z.object({
-  subject: z.string().min(1, 'Konu gereklidir').max(200, 'Konu en fazla 200 karakter olabilir'),
-  status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED']).default('OPEN'),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).default('MEDIUM'),
-  customerId: z.string().optional(),
-  assignedTo: z.string().optional(),
-  description: z.string().max(2000, 'Açıklama en fazla 2000 karakter olabilir').optional(),
-})
-
-type TicketFormData = z.infer<typeof ticketSchema>
-
 interface TicketFormProps {
   ticket?: any
   open: boolean
@@ -57,9 +47,23 @@ async function fetchUsers() {
 }
 
 export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketFormProps) {
+  const t = useTranslations('tickets.form')
+  const tCommon = useTranslations('common.form')
   const router = useRouter()
   const queryClient = useQueryClient()
   const [loading, setLoading] = useState(false)
+
+  // Schema'yı component içinde oluştur - locale desteği için
+  const ticketSchema = z.object({
+    subject: z.string().min(1, t('subjectRequired')).max(200, t('subjectMaxLength')),
+    status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED']).default('OPEN'),
+    priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).default('MEDIUM'),
+    customerId: z.string().optional(),
+    assignedTo: z.string().optional(),
+    description: z.string().max(2000, t('descriptionMaxLength')).optional(),
+  })
+
+  type TicketFormData = z.infer<typeof ticketSchema>
 
   const { data: customersData } = useQuery({
     queryKey: ['customers'],
@@ -146,6 +150,13 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
       return res.json()
     },
     onSuccess: (savedTicket) => {
+      // Toast mesajı göster
+      if (ticket) {
+        toast.success(t('ticketUpdated'), t('ticketUpdatedMessage', { subject: savedTicket.subject }))
+      } else {
+        toast.success(t('ticketCreated'), t('ticketCreatedMessage', { subject: savedTicket.subject }))
+      }
+      
       // onSuccess callback'i çağır - optimistic update için
       if (onSuccess) {
         onSuccess(savedTicket)
@@ -161,7 +172,7 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
       await mutation.mutateAsync(data)
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error('Kaydedilemedi', error?.message)
+      toast.error(t('saveFailed'), error?.message)
     } finally {
       setLoading(false)
     }
@@ -172,10 +183,10 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {ticket ? 'Destek Talebi Düzenle' : 'Yeni Destek Talebi'}
+            {ticket ? t('editTitle') : t('newTitle')}
           </DialogTitle>
           <DialogDescription>
-            {ticket ? 'Destek talebi bilgilerini güncelleyin' : 'Yeni destek talebi oluşturun'}
+            {ticket ? t('editDescription') : t('newDescription')}
           </DialogDescription>
         </DialogHeader>
 
@@ -183,10 +194,10 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Subject */}
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">Konu *</label>
+              <label className="text-sm font-medium">{t('subjectLabel')} *</label>
               <Input
                 {...register('subject')}
-                placeholder="Destek talebi konusu"
+                placeholder={t('subjectPlaceholder')}
                 disabled={loading}
               />
               {errors.subject && (
@@ -196,17 +207,17 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
 
             {/* Customer */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Müşteri</label>
+              <label className="text-sm font-medium">{t('customerLabel')}</label>
               <Select
                 value={customerId || 'none'}
                 onValueChange={(value) => setValue('customerId', value === 'none' ? '' : value)}
                 disabled={loading}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Müşteri seçin" />
+                  <SelectValue placeholder={t('customerPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Müşteri seçilmedi</SelectItem>
+                  <SelectItem value="none">{t('customerNotSelected')}</SelectItem>
                   {customers.map((customer: any) => (
                     <SelectItem key={customer.id} value={customer.id}>
                       {customer.name}
@@ -218,17 +229,17 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
 
             {/* Assigned To */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Atanan Kişi</label>
+              <label className="text-sm font-medium">{t('assignedToLabel')}</label>
               <Select
                 value={assignedTo || 'none'}
                 onValueChange={(value) => setValue('assignedTo', value === 'none' ? '' : value)}
                 disabled={loading}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Kullanıcı seçin" />
+                  <SelectValue placeholder={t('assignedToPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Atanmadı</SelectItem>
+                  <SelectItem value="none">{t('assignedToNone')}</SelectItem>
                   {users.map((user: any) => (
                     <SelectItem key={user.id} value={user.id}>
                       {user.name}
@@ -240,7 +251,7 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
 
             {/* Status */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Durum</label>
+              <label className="text-sm font-medium">{t('statusLabel')}</label>
               <Select
                 value={status}
                 onValueChange={(value) =>
@@ -252,18 +263,18 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="OPEN">Açık</SelectItem>
-                  <SelectItem value="IN_PROGRESS">Devam Ediyor</SelectItem>
-                  <SelectItem value="RESOLVED">Çözüldü</SelectItem>
-                  <SelectItem value="CLOSED">Kapatıldı</SelectItem>
-                  <SelectItem value="CANCELLED">İptal Edildi</SelectItem>
+                  <SelectItem value="OPEN">{t('statusOpen')}</SelectItem>
+                  <SelectItem value="IN_PROGRESS">{t('statusInProgress')}</SelectItem>
+                  <SelectItem value="RESOLVED">{t('statusResolved')}</SelectItem>
+                  <SelectItem value="CLOSED">{t('statusClosed')}</SelectItem>
+                  <SelectItem value="CANCELLED">{t('statusCancelled')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {/* Priority */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Öncelik</label>
+              <label className="text-sm font-medium">{t('priorityLabel')}</label>
               <Select
                 value={priority}
                 onValueChange={(value) =>
@@ -275,23 +286,26 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="LOW">Düşük</SelectItem>
-                  <SelectItem value="MEDIUM">Orta</SelectItem>
-                  <SelectItem value="HIGH">Yüksek</SelectItem>
-                  <SelectItem value="URGENT">Acil</SelectItem>
+                  <SelectItem value="LOW">{t('priorityLow')}</SelectItem>
+                  <SelectItem value="MEDIUM">{t('priorityMedium')}</SelectItem>
+                  <SelectItem value="HIGH">{t('priorityHigh')}</SelectItem>
+                  <SelectItem value="URGENT">{t('priorityUrgent')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
             {/* Description */}
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">Açıklama</label>
+              <label className="text-sm font-medium">{t('descriptionLabel')}</label>
               <Textarea
                 {...register('description')}
-                placeholder="Destek talebi açıklaması ve detaylar"
+                placeholder={t('descriptionPlaceholder')}
                 rows={5}
                 disabled={loading}
               />
+              {errors.description && (
+                <p className="text-sm text-red-600">{errors.description.message}</p>
+              )}
             </div>
           </div>
 
@@ -303,14 +317,14 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
               onClick={onClose}
               disabled={loading}
             >
-              İptal
+              {t('cancel')}
             </Button>
             <Button
               type="submit"
               className="bg-gradient-primary text-white"
               disabled={loading}
             >
-              {loading ? 'Kaydediliyor...' : ticket ? 'Güncelle' : 'Kaydet'}
+              {loading ? t('saving') : ticket ? t('update') : t('save')}
             </Button>
           </div>
         </form>

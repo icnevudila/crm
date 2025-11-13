@@ -500,11 +500,13 @@ END;
 $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trigger_invoice_paid_finance ON "Invoice";
-CREATE TRIGGER trigger_invoice_paid_finance
-  AFTER UPDATE OF status
-  ON "Invoice"
-  FOR EACH ROW
-  EXECUTE FUNCTION handle_invoice_paid();
+-- NOT: Bu trigger 045 migration'ında daha kapsamlı bir versiyonla değiştirildi
+-- (trigger_invoice_paid_finance_entry). Bu trigger'ı kaldırıyoruz çift çalışmayı önlemek için.
+-- CREATE TRIGGER trigger_invoice_paid_finance
+--   AFTER UPDATE OF status
+--   ON "Invoice"
+--   FOR EACH ROW
+--   EXECUTE FUNCTION handle_invoice_paid();
 
 -- ============================================
 -- PART 6: CONTRACT ACTIVE → INVOICE OTOMASYONu

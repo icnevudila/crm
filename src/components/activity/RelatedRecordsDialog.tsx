@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useLocale } from 'next-intl'
 import {
   Dialog,
@@ -37,13 +37,7 @@ export default function RelatedRecordsDialog({
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'records' | 'history'>('records')
 
-  useEffect(() => {
-    if (open && entityId) {
-      fetchRelatedData()
-    }
-  }, [open, entityId, entity])
-
-  const fetchRelatedData = async () => {
+  const fetchRelatedData = useCallback(async () => {
     setLoading(true)
     try {
       // Deal için ilişkili kayıtları çek
@@ -171,7 +165,13 @@ export default function RelatedRecordsDialog({
     } finally {
       setLoading(false)
     }
-  }
+  }, [entity, entityId, locale])
+
+  useEffect(() => {
+    if (open && entityId) {
+      fetchRelatedData()
+    }
+  }, [open, entityId, fetchRelatedData])
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -248,6 +248,23 @@ export default function RelatedRecordsDialog({
     </Dialog>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

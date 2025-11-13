@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getSupabase } from '@/lib/supabase'
 import { createRecord } from '@/lib/crud'
+import { buildPermissionDeniedResponse } from '@/lib/permissions'
 
 export async function GET(request: Request) {
   try {
@@ -23,7 +24,7 @@ export async function GET(request: Request) {
     const isAdmin = session.user.role === 'ADMIN'
     
     if (!isSuperAdmin && !isAdmin) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Yetki yönetimi için gerekli izniniz yok.')
     }
 
     let query = supabase
@@ -54,7 +55,7 @@ export async function GET(request: Request) {
     return NextResponse.json(permissions || [])
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch permissions' },
+      { error: error.message || 'Yetki listesi getirilemedi' },
       { status: 500 }
     )
   }
@@ -73,7 +74,7 @@ export async function POST(request: Request) {
     const isAdmin = session.user.role === 'ADMIN'
     
     if (!isSuperAdmin && !isAdmin) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Yetki yönetimi için gerekli izniniz yok.')
     }
 
     const body = await request.json()
@@ -93,10 +94,7 @@ export async function POST(request: Request) {
 
       const userData = user as any
       if (!user || userData.companyId !== targetCompanyId) {
-        return NextResponse.json(
-          { error: 'Forbidden', message: 'Kullanıcı bu şirkete ait değil' },
-          { status: 403 }
-        )
+        return buildPermissionDeniedResponse('Kullanıcı bu şirkete ait değil.')
       }
     }
 
@@ -113,7 +111,7 @@ export async function POST(request: Request) {
     return NextResponse.json(permission)
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to create permission' },
+      { error: error.message || 'Yetki oluşturulamadı' },
       { status: 500 }
     )
   }

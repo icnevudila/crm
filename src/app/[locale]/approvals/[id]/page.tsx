@@ -1,149 +1,155 @@
 'use client'
 
+import { useState, useEffect } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
 import { useParams, useRouter } from 'next/navigation'
-import { useState } from 'react'
-import { ArrowLeft, CheckCircle, XCircle, Clock, User, FileText, Calendar } from 'lucide-react'
-import Link from 'next/link'
-import { useLocale } from 'next-intl'
+import { ArrowLeft, CheckCircle, XCircle, Clock, User, Calendar, FileText, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Textarea } from '@/components/ui/textarea'
+import SkeletonList from '@/components/skeletons/SkeletonList'
 import { useData } from '@/hooks/useData'
-import { mutate } from 'swr'
+import { format } from 'date-fns'
+import { tr } from 'date-fns/locale'
+import { toast, confirm } from '@/lib/toast'
+import Link from 'next/link'
 
-interface Approval {
+interface ApprovalDetail {
   id: string
+  title: string
+  description: string
   relatedTo: string
   relatedId: string
-  requestedBy: string
-  requester: {
-    name: string
-    email: string
-  }
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
+  priority: 'LOW' | 'NORMAL' | 'HIGH'
   approverIds: string[]
-  approvers: {
-    id: string
-    name: string
-    email: string
-  }[]
-  status: string
-  priority: string
-  rejectionReason?: string
+  approvers?: Array<{ id: string; name: string; email: string }>
+  requestedBy: string
+  requester?: { name: string; email: string }
   approvedBy?: string
-  approver?: {
-    name: string
-  }
-  approvedAt?: string
+  approver?: { name: string; email: string }
+  rejectedBy?: string
+  rejectionReason?: string
   createdAt: string
-  updatedAt: string
-}
-
-const statusLabels: Record<string, string> = {
-  PENDING: 'Bekliyor',
-  APPROVED: 'Onaylandı',
-  REJECTED: 'Reddedildi',
-  CANCELLED: 'İptal',
-}
-
-const relatedToLabels: Record<string, string> = {
-  Deal: 'Fırsat',
-  Quote: 'Teklif',
-  Contract: 'Sözleşme',
-  Invoice: 'Fatura',
+  approvedAt?: string
+  rejectedAt?: string
+  companyId: string
 }
 
 export default function ApprovalDetailPage() {
+  const locale = useLocale()
   const params = useParams()
   const router = useRouter()
-  const locale = useLocale()
   const approvalId = params.id as string
 
-  const [rejectionReason, setRejectionReason] = useState('')
-  const [loading, setLoading] = useState(false)
-
-  const { data: approval, isLoading } = useData<Approval>(`/api/approvals/${approvalId}`)
+  const { data: approval, isLoading, error, mutate } = useData<ApprovalDetail>(
+    `/api/approvals/${approvalId}`
+  )
 
   const handleApprove = async () => {
-    if (!confirm('Bu onay talebini onaylamak istediğinize emin misiniz?')) {
-      return
-    }
+    const confirmed = await confirm('Bu onay talebini onaylamak istediğinize emin misiniz?')
+    if (!confirmed) return
 
-    setLoading(true)
+    const toastId = toast.loading('Onaylanıyor...')
     try {
-      const res = await fetch(`/api/approvals/${approvalId}/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      })
-
+      const res = await fetch(`/api/approvals/${approvalId}/approve`, { method: 'POST' })
       if (!res.ok) {
-        throw new Error('Onaylama işlemi başarısız')
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Onaylama işlemi başarısız')
       }
 
-      mutate(`/api/approvals/${approvalId}`)
-      mutate('/api/approvals')
-      
-      alert('✅ Onay talebi başarıyla onaylandı!')
+      await mutate()
+      toast.dismiss(toastId)
+      toast.success('Onaylandı', 'Onay talebi başarıyla onaylandı.')
     } catch (error: any) {
       console.error('Approve error:', error)
-      alert(error?.message || 'Onaylama işlemi başarısız oldu')
-    } finally {
-      setLoading(false)
+      toast.dismiss(toastId)
+      toast.error('Onaylama başarısız', error?.message || 'Onaylama işlemi sırasında bir hata oluştu.')
     }
   }
 
   const handleReject = async () => {
-    if (!rejectionReason.trim()) {
-      alert('Red sebebi girmeniz gerekiyor')
+    const reason = prompt('Red nedeni:')
+    if (!reason || reason.trim() === '') {
+      toast.warning('Red nedeni girmeniz gerekiyor')
       return
     }
 
-    if (!confirm('Bu onay talebini reddetmek istediğinize emin misiniz?')) {
-      return
-    }
+    const confirmed = await confirm('Bu onay talebini reddetmek istediğinize emin misiniz?')
+    if (!confirmed) return
 
-    setLoading(true)
+    const toastId = toast.loading('Reddediliyor...')
     try {
       const res = await fetch(`/api/approvals/${approvalId}/reject`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: rejectionReason }),
+        body: JSON.stringify({ reason: reason.trim() }),
       })
 
       if (!res.ok) {
-        throw new Error('Reddetme işlemi başarısız')
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Reddetme işlemi başarısız')
       }
 
-      mutate(`/api/approvals/${approvalId}`)
-      mutate('/api/approvals')
-      
-      alert('✅ Onay talebi reddedildi')
-      router.push(`/${locale}/approvals`)
+      await mutate()
+      toast.dismiss(toastId)
+      toast.success('Reddedildi', 'Onay talebi reddedildi.')
     } catch (error: any) {
       console.error('Reject error:', error)
-      alert(error?.message || 'Reddetme işlemi başarısız oldu')
-    } finally {
-      setLoading(false)
+      toast.dismiss(toastId)
+      toast.error('Reddetme başarısız', error?.message || 'Reddetme işlemi sırasında bir hata oluştu.')
     }
   }
 
-  if (isLoading) {
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'APPROVED':
+        return <Badge className="bg-green-100 text-green-800 border-0">Onaylandı</Badge>
+      case 'REJECTED':
+        return <Badge className="bg-red-100 text-red-800 border-0">Reddedildi</Badge>
+      case 'CANCELLED':
+        return <Badge className="bg-gray-200 text-gray-800 border-0">İptal</Badge>
+      default:
+        return <Badge className="bg-yellow-100 text-yellow-800 border-0">Bekliyor</Badge>
+    }
+  }
+
+  const getPriorityBadge = (priority: string) => {
+    switch (priority) {
+      case 'HIGH':
+        return <Badge className="bg-red-100 text-red-800 border-0">Yüksek</Badge>
+      case 'NORMAL':
+        return <Badge className="bg-blue-100 text-blue-800 border-0">Normal</Badge>
+      case 'LOW':
+        return <Badge className="bg-gray-100 text-gray-800 border-0">Düşük</Badge>
+      default:
+        return <Badge variant="outline">Normal</Badge>
+    }
+  }
+
+  if (isLoading) return <SkeletonList />
+
+  if (error || !approval) {
     return (
-      <div className="animate-pulse space-y-4">
-        <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-        <div className="h-64 bg-gray-200 rounded"></div>
+      <div className="space-y-6">
+        <Link href={`/${locale}/approvals`}>
+          <Button variant="ghost" size="sm">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Geri Dön
+          </Button>
+        </Link>
+        <Alert className="border-red-200 bg-red-50">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertTitle className="text-red-800">Hata</AlertTitle>
+          <AlertDescription className="text-red-700">
+            Onay talebi yüklenirken bir hata oluştu. Lütfen sayfayı yenileyin.
+          </AlertDescription>
+        </Alert>
       </div>
     )
   }
-
-  if (!approval) {
-    return <div>Onay talebi bulunamadı</div>
-  }
-
-  const isPending = approval.status === 'PENDING'
-  const isApproved = approval.status === 'APPROVED'
-  const isRejected = approval.status === 'REJECTED'
 
   return (
     <div className="space-y-6">
@@ -156,167 +162,183 @@ export default function ApprovalDetailPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold">Onay Talebi</h1>
-            <p className="text-gray-600">
-              #{approvalId.substring(0, 8)} • {new Date(approval.createdAt).toLocaleDateString('tr-TR')}
-            </p>
+            <h1 className="text-3xl font-bold">{approval.title}</h1>
+            <p className="text-gray-500 mt-1">Onay Talebi Detayları</p>
           </div>
         </div>
-        <Badge className={
-          isApproved ? 'bg-green-100 text-green-800 border-0' :
-          isRejected ? 'bg-red-100 text-red-800 border-0' :
-          'bg-yellow-100 text-yellow-800 border-0'
-        }>
-          {statusLabels[approval.status] || approval.status}
-        </Badge>
-      </div>
-
-      {/* Status Alert */}
-      {isPending && (
-        <Alert className="border-yellow-200 bg-yellow-50">
-          <Clock className="h-4 w-4 text-yellow-600" />
-          <AlertTitle className="text-yellow-800">Onay Bekliyor</AlertTitle>
-          <AlertDescription className="text-yellow-700">
-            Bu talep henüz onaylanmadı. Onaylamak veya reddetmek için aşağıdaki butonları kullanın.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {isApproved && (
-        <Alert className="border-green-200 bg-green-50">
-          <CheckCircle className="h-4 w-4 text-green-600" />
-          <AlertTitle className="text-green-800">Onaylandı</AlertTitle>
-          <AlertDescription className="text-green-700">
-            Bu talep {approval.approver?.name || 'bir kullanıcı'} tarafından onaylandı.
-            {approval.approvedAt && ` (${new Date(approval.approvedAt).toLocaleString('tr-TR')})`}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {isRejected && approval.rejectionReason && (
-        <Alert className="border-red-200 bg-red-50">
-          <XCircle className="h-4 w-4 text-red-600" />
-          <AlertTitle className="text-red-800">Reddedildi</AlertTitle>
-          <AlertDescription className="text-red-700">
-            <strong>Sebep:</strong> {approval.rejectionReason}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Details */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="p-6">
-          <h3 className="font-semibold mb-4 flex items-center gap-2">
-            <FileText className="h-5 w-5 text-indigo-600" />
-            Talep Bilgileri
-          </h3>
-          <div className="space-y-3">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">İlgili Modül</p>
-              <Badge className="bg-purple-100 text-purple-800 border-0">
-                {relatedToLabels[approval.relatedTo] || approval.relatedTo}
-              </Badge>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Kayıt ID</p>
-              <p className="text-xs text-gray-500 font-mono">{approval.relatedId}</p>
-              <Link href={`/${locale}/${approval.relatedTo.toLowerCase()}s/${approval.relatedId}`}>
-                <Button variant="link" size="sm" className="p-0 h-auto text-indigo-600">
-                  Kaydı Görüntüle →
-                </Button>
-              </Link>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Öncelik</p>
-              <Badge className={
-                approval.priority === 'HIGH' ? 'bg-red-100 text-red-800 border-0' :
-                approval.priority === 'NORMAL' ? 'bg-blue-100 text-blue-800 border-0' :
-                'bg-gray-100 text-gray-700 border-0'
-              }>
-                {approval.priority === 'HIGH' ? 'Yüksek' : approval.priority === 'NORMAL' ? 'Normal' : 'Düşük'}
-              </Badge>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Oluşturulma Tarihi</p>
-              <p className="text-gray-900">{new Date(approval.createdAt).toLocaleString('tr-TR')}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <h3 className="font-semibold mb-4 flex items-center gap-2">
-            <User className="h-5 w-5 text-indigo-600" />
-            Kullanıcı Bilgileri
-          </h3>
-          <div className="space-y-3">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Talep Eden</p>
-              <p className="text-gray-900">{approval.requester.name}</p>
-              <p className="text-sm text-gray-500">{approval.requester.email}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600 mb-2">Onaylayıcılar</p>
-              <div className="space-y-2">
-                {approval.approvers && approval.approvers.length > 0 ? (
-                  approval.approvers.map((approver) => (
-                    <div key={approver.id} className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                        <User className="h-4 w-4 text-indigo-600" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{approver.name}</p>
-                        <p className="text-xs text-gray-500">{approver.email}</p>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-gray-500">Onaylayıcı bilgisi yok</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      {/* Actions */}
-      {isPending && (
-        <Card className="p-6">
-          <h3 className="font-semibold mb-4">İşlem Yapın</h3>
-          <div className="space-y-4">
-            {/* Approve Button */}
+        {approval.status === 'PENDING' && (
+          <div className="flex gap-2">
             <Button
               onClick={handleApprove}
-              disabled={loading}
-              className="w-full bg-green-600 hover:bg-green-700 text-white"
+              className="bg-green-600 hover:bg-green-700 text-white"
             >
               <CheckCircle className="h-4 w-4 mr-2" />
               Onayla
             </Button>
-
-            {/* Reject Section */}
-            <div className="border-t pt-4">
-              <label className="block text-sm font-medium mb-2">Red Sebebi</label>
-              <Textarea
-                placeholder="Red sebebini yazın..."
-                value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
-                rows={3}
-                className="mb-2"
-              />
-              <Button
-                onClick={handleReject}
-                disabled={loading || !rejectionReason.trim()}
-                variant="destructive"
-                className="w-full"
-              >
-                <XCircle className="h-4 w-4 mr-2" />
-                Reddet
-              </Button>
-            </div>
+            <Button
+              onClick={handleReject}
+              variant="destructive"
+            >
+              <XCircle className="h-4 w-4 mr-2" />
+              Reddet
+            </Button>
           </div>
-        </Card>
-      )}
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Content */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Details Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Detaylar</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-gray-500">Açıklama</label>
+                <p className="mt-1 text-sm">{approval.description || 'Açıklama yok'}</p>
+              </div>
+              <Separator />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Durum</label>
+                  <div className="mt-1">{getStatusBadge(approval.status)}</div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Öncelik</label>
+                  <div className="mt-1">{getPriorityBadge(approval.priority)}</div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">İlişkili Modül</label>
+                  <div className="mt-1">
+                    <Badge variant="outline">{approval.relatedTo}</Badge>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-500">Kayıt ID</label>
+                  <div className="mt-1 text-sm font-mono text-gray-600">
+                    {approval.relatedId.substring(0, 8)}...
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Approvers Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Onaylayıcılar</CardTitle>
+              <CardDescription>Bu onay talebini onaylaması gereken kişiler</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {approval.approvers && approval.approvers.length > 0 ? (
+                <div className="space-y-2">
+                  {approval.approvers.map((approver) => (
+                    <div
+                      key={approver.id}
+                      className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
+                    >
+                      <User className="h-5 w-5 text-gray-400" />
+                      <div className="flex-1">
+                        <p className="font-medium">{approver.name}</p>
+                        <p className="text-sm text-gray-500">{approver.email}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">Onaylayıcı bulunamadı</p>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Status Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Durum Bilgisi</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <label className="text-sm font-medium text-gray-500">Talep Eden</label>
+                <div className="mt-1 flex items-center gap-2">
+                  <User className="h-4 w-4 text-gray-400" />
+                  <span className="text-sm">{approval.requester?.name || '-'}</span>
+                </div>
+              </div>
+              <Separator />
+              <div>
+                <label className="text-sm font-medium text-gray-500">Oluşturulma Tarihi</label>
+                <div className="mt-1 flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-gray-400" />
+                  <span className="text-sm">
+                    {format(new Date(approval.createdAt), 'dd MMMM yyyy, HH:mm', { locale: tr })}
+                  </span>
+                </div>
+              </div>
+              {approval.approvedAt && (
+                <>
+                  <Separator />
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Onaylanma Tarihi</label>
+                    <div className="mt-1 flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-500" />
+                      <span className="text-sm">
+                        {format(new Date(approval.approvedAt), 'dd MMMM yyyy, HH:mm', { locale: tr })}
+                      </span>
+                    </div>
+                    {approval.approver && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Onaylayan: {approval.approver.name}
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+              {approval.rejectedAt && (
+                <>
+                  <Separator />
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Reddedilme Tarihi</label>
+                    <div className="mt-1 flex items-center gap-2">
+                      <XCircle className="h-4 w-4 text-red-500" />
+                      <span className="text-sm">
+                        {format(new Date(approval.rejectedAt), 'dd MMMM yyyy, HH:mm', { locale: tr })}
+                      </span>
+                    </div>
+                    {approval.rejectionReason && (
+                      <p className="text-xs text-red-600 mt-1 italic">
+                        &quot;{approval.rejectionReason}&quot;
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Related Entity Link */}
+          <Card>
+            <CardHeader>
+              <CardTitle>İlişkili Kayıt</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Link
+                href={`/${locale}/${approval.relatedTo.toLowerCase()}s/${approval.relatedId}`}
+                className="flex items-center gap-2 text-indigo-600 hover:text-indigo-700 hover:underline"
+              >
+                <FileText className="h-4 w-4" />
+                <span className="text-sm">
+                  {approval.relatedTo} kaydını görüntüle
+                </span>
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   )
 }
-

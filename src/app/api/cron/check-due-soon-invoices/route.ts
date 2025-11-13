@@ -41,14 +41,14 @@ export async function GET(request: Request) {
     if (findError) {
       console.error('Check Due Soon Invoices - Find Error:', findError)
       return NextResponse.json(
-        { error: 'Failed to find due soon invoices', details: findError.message },
+        { error: 'Vadesi yaklaşan faturalar alınamadı', details: findError.message },
         { status: 500 }
       )
     }
 
     if (!dueSoonInvoices || dueSoonInvoices.length === 0) {
       return NextResponse.json({
-        message: 'No due soon invoices found',
+        message: 'Vadesi yaklaşan fatura bulunamadı',
         count: 0,
         date: todayStr,
       })
@@ -108,7 +108,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      message: 'Due soon invoices checked',
+      message: 'Vadesi yaklaşan faturalar kontrol edildi',
       totalInvoices: dueSoonInvoices.length,
       notificationsSent: notificationCount,
       date: todayStr,
@@ -116,7 +116,7 @@ export async function GET(request: Request) {
   } catch (error: any) {
     console.error('Check Due Soon Invoices - Error:', error)
     return NextResponse.json(
-      { error: error?.message || 'Failed to check due soon invoices' },
+      { error: error?.message || 'Vadesi yaklaşan faturalar kontrol edilemedi' },
       { status: 500 }
     )
   }

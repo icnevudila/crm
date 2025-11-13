@@ -1,32 +1,74 @@
 import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { getCacheScope, getKpiCache, setKpiCache } from '@/lib/cache/report-cache'
 
-// Dynamic route - cache'i kapat (POST/PUT sonrası fresh data için)
-// NOT: Dashboard'da staleTime ile cache yapılıyor, API seviyesinde cache kapatıyoruz
-export const dynamic = 'force-dynamic'
+// PERFORMANCE FIX: force-dynamic cache'i tamamen kapatıyor - kaldırıldı
+// Dashboard'da staleTime ile cache yapılıyor, API seviyesinde de cache ekliyoruz
+// export const dynamic = 'force-dynamic' // KALDIRILDI - cache performansı için
+export const revalidate = 60 // 60 saniye revalidate (performans için)
 // Edge Runtime kaldırıldı - NextAuth.js Edge Runtime'da çalışmıyor
 // export const runtime = 'edge'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    // Session kontrolü - hata yakalama ile
-    const { session, error: sessionError } = await getSafeSession()
-    if (sessionError) {
-      return sessionError
+    const url = new URL(request.url)
+    const cronToken = url.searchParams.get('cronToken')
+    const targetCompanyId = url.searchParams.get('companyId')
+    const globalCron = cronToken && url.searchParams.get('global') === '1'
+
+    let isSuperAdmin = false
+    let companyId: string
+    let sessionUser: { id?: string; role?: string } | null = null
+
+    if (cronToken && process.env.CRON_TASK_TOKEN && cronToken === process.env.CRON_TASK_TOKEN) {
+      if (!targetCompanyId && !globalCron) {
+        return NextResponse.json(
+          { error: 'companyId parametresi gerekli' },
+          { status: 400 }
+        )
+      }
+      companyId = targetCompanyId || 'global'
+      isSuperAdmin = Boolean(globalCron)
+    } else {
+      const { session, error: sessionError } = await getSafeSession()
+      if (sessionError) {
+        return sessionError
+      }
+
+      if (!session?.user?.companyId) {
+        return NextResponse.json(
+          { error: 'Unauthorized' },
+          { status: 401 }
+        )
+      }
+
+      sessionUser = session.user
+      isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+      companyId = session.user.companyId
     }
 
-    if (!session?.user?.companyId) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
-    // SuperAdmin tüm şirketlerin verilerini görebilir
-    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
-    const companyId = session.user.companyId
     const supabase = getSupabaseWithServiceRole()
+    const scope = globalCron ? { isGlobal: true } : getCacheScope(isSuperAdmin, companyId)
+    const forceRefresh = url.searchParams.get('refresh') === '1'
+
+    const cached = await getKpiCache({
+      supabase,
+      scope,
+      ttlMinutes: 15,
+      forceRefresh,
+    })
+
+    if (cached) {
+      return NextResponse.json(cached.payload, {
+        headers: {
+          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120, max-age=30', // PERFORMANCE FIX: Cache headers eklendi
+          'CDN-Cache-Control': 'public, s-maxage=60',
+          'Vercel-CDN-Cache-Control': 'public, s-maxage=60',
+          'x-cache-hit': 'kpi-cache',
+        },
+      })
+    }
 
     // TÜM QUERY'LERİ PARALEL ÇALIŞTIR - ÇOK DAHA HIZLI!
     // Sadece gerekli alanları seç - performans için
@@ -35,7 +77,7 @@ export async function GET() {
     // Diğerlerini sıralı çalıştır (connection pool limit'ini aşmamak için)
     const [
       { data: salesData, error: salesError },
-      { count: totalQuotesCount, error: quotesError },
+      { data: allQuotes, error: quotesError },
       { count: acceptedQuotes, error: acceptedError },
       { count: draftQuotes, error: draftQuotesError },
       { count: sentQuotes, error: sentQuotesError },
@@ -43,11 +85,11 @@ export async function GET() {
       { count: rejectedQuotes, error: rejectedQuotesError },
       { count: recentActivity, error: activityError },
       { data: invoiceData, error: invoiceError },
-      { count: totalCustomers, error: customersError },
-      { count: totalDeals, error: dealsError },
+      { data: allCustomers, error: customersError },
+      { data: allDeals, error: dealsError },
       { data: dealsData, error: dealsDataError },
       { data: pendingInvoices, error: pendingError },
-      { count: activeCompanies, error: companiesError },
+      { data: allCompanies, error: companiesError },
       // Aylık KPI'lar için son 3 ayın verilerini çek
       { data: monthlySalesData, error: monthlySalesError },
       { data: monthlyQuotesData, error: monthlyQuotesError },
@@ -62,9 +104,9 @@ export async function GET() {
         }
         return query
       })(),
-      // Toplam Teklif Sayısı - sadece count (fallback için)
+      // Toplam Teklif Sayısı - tüm quote'ları çekip JavaScript'te say (quotes sayfası ile tutarlılık için)
       (() => {
-        let query = supabase.from('Quote').select('*', { count: 'exact', head: true })
+        let query = supabase.from('Quote').select('id, status')
         if (!isSuperAdmin) {
           query = query.eq('companyId', companyId)
         }
@@ -129,17 +171,17 @@ export async function GET() {
         }
         return query
       })(),
-      // Toplam Müşteri Sayısı
+      // Toplam Müşteri Sayısı - tüm customer'ları çekip JavaScript'te say (customers sayfası ile tutarlılık için)
       (() => {
-        let query = supabase.from('Customer').select('*', { count: 'exact', head: true })
+        let query = supabase.from('Customer').select('id')
         if (!isSuperAdmin) {
           query = query.eq('companyId', companyId)
         }
         return query
       })(),
-      // Toplam Fırsat Sayısı
+      // Toplam Fırsat Sayısı - tüm deal'ları çekip JavaScript'te say (deals sayfası ile tutarlılık için)
       (() => {
-        let query = supabase.from('Deal').select('*', { count: 'exact', head: true })
+        let query = supabase.from('Deal').select('id')
         if (!isSuperAdmin) {
           query = query.eq('companyId', companyId)
         }
@@ -161,12 +203,12 @@ export async function GET() {
         }
         return query
       })(),
-      // Aktif Firmalar Sayısı - CustomerCompany tablosundan çek
+      // Aktif Firmalar Sayısı - CustomerCompany tablosundan tüm verileri çekip JavaScript'te say (companies sayfası ile tutarlılık için)
+      // ÖNEMLİ: Companies sayfası her zaman companyId filtresi kullanıyor (SuperAdmin dahil), bu yüzden burada da aynı mantığı kullanıyoruz
       (() => {
-        let query = supabase.from('CustomerCompany').select('*', { count: 'exact', head: true })
-        if (!isSuperAdmin) {
-          query = query.eq('companyId', companyId)
-        }
+        // Companies sayfası ile tutarlılık için: Her zaman companyId filtresi kullan (SuperAdmin dahil)
+        // Companies sayfasında: .eq('companyId', session.user.companyId) - her zaman filtreleniyor
+        let query = supabase.from('CustomerCompany').select('id').eq('companyId', companyId)
         return query
       })(),
       // Son 3 ayın satış verileri (aylık KPI için) - totalAmount kullan (050 migration ile total → totalAmount)
@@ -184,9 +226,11 @@ export async function GET() {
         return query
       })(),
       // Son 3 ayın teklif verileri (aylık KPI için) - totalAmount kullan (050 migration ile total → totalAmount)
+      // ÖNEMLİ: Son 3 ayın ilk gününden başla (monthlyKPIs ile tutarlılık için)
       (() => {
-        const threeMonthsAgo = new Date()
-        threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
+        const now = new Date()
+        // Son 3 ayın ilk gününü hesapla (monthlyKPIs ile aynı mantık)
+        const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1) // Son 3 ayın ilk günü
         let query = supabase
           .from('Quote')
           .select('id, createdAt, status, totalAmount, total')
@@ -256,8 +300,8 @@ export async function GET() {
       console.log('[KPIs API] Session info:', {
         isSuperAdmin,
         companyId,
-        userId: session.user.id,
-        role: session.user.role,
+        userId: sessionUser?.id ?? 'cron',
+        role: sessionUser?.role ?? (isSuperAdmin ? 'SUPER_ADMIN' : 'CRON'),
       })
       
       if (salesError) {
@@ -269,7 +313,15 @@ export async function GET() {
           hint: salesError?.hint,
         })
       }
-      if (quotesError) console.warn('Quotes query error:', quotesError)
+      if (quotesError) {
+        console.error('[KPIs API] Quotes query error:', quotesError)
+        console.error('[KPIs API] Quotes error details:', {
+          message: quotesError?.message,
+          code: quotesError?.code,
+          details: quotesError?.details,
+          hint: quotesError?.hint,
+        })
+      }
       if (acceptedError) console.warn('Accepted quotes query error:', acceptedError)
       if (draftQuotesError) console.warn('Draft quotes query error:', draftQuotesError)
       if (sentQuotesError) console.warn('Sent quotes query error:', sentQuotesError)
@@ -372,12 +424,33 @@ export async function GET() {
       console.log('[KPIs API] totalSales calculated:', totalSales)
     }
     
-    // Toplam Teklif Sayısı: Status bazlı count'ları topla (en doğru yöntem)
-    // TOPLAM = DRAFT + SENT + ACCEPTED + REJECTED + WAITING
-    const calculatedTotalQuotes = (draftQuotes || 0) + (sentQuotes || 0) + (acceptedQuotes || 0) + (rejectedQuotes || 0) + (waitingQuotes || 0)
-    // ÖNEMLİ: calculatedTotalQuotes kullan (status bazlı count'ların toplamı) - totalQuotesCount query'si yanlış sonuç verebilir
-    // Eğer calculatedTotalQuotes 0 ise, totalQuotesCount'u kullan (fallback)
-    const totalQuotes = calculatedTotalQuotes > 0 ? calculatedTotalQuotes : (totalQuotesCount || 0)
+    // Toplam Teklif Sayısı: Tüm quote'ları çekip JavaScript'te say (quotes sayfası ile tutarlılık için)
+    // Bu yöntem quotes sayfasındaki /api/stats/quotes endpoint'i ile aynı mantık - DOĞRU SONUÇ
+    let totalQuotes = 0
+    if (quotesError || !Array.isArray(allQuotes)) {
+      // Fallback: Status bazlı count'ları topla (eski yöntem)
+      const calculatedTotalQuotes = (draftQuotes || 0) + (sentQuotes || 0) + (acceptedQuotes || 0) + (rejectedQuotes || 0) + (waitingQuotes || 0)
+      totalQuotes = calculatedTotalQuotes
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[KPIs API] Quotes query hatası, fallback kullanılıyor:', {
+          quotesError,
+          calculatedTotalQuotes,
+        })
+      }
+    } else {
+      // Normal yöntem: JavaScript'te say
+      totalQuotes = allQuotes.length
+    }
+    
+    // Debug: Development'ta log ekle
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[KPIs API] Total quotes calculated:', {
+        totalQuotes,
+        allQuotesLength: Array.isArray(allQuotes) ? allQuotes.length : 0,
+        calculatedFromStatus: (draftQuotes || 0) + (sentQuotes || 0) + (acceptedQuotes || 0) + (rejectedQuotes || 0) + (waitingQuotes || 0),
+        hasError: !!quotesError,
+      })
+    }
     
     const successRate = totalQuotes ? Math.round((acceptedQuotes || 0) / totalQuotes * 100) : 0
     // DÜZELTME: totalAmount öncelikli kullan (050 migration ile total → totalAmount)
@@ -391,7 +464,35 @@ export async function GET() {
         error: pendingError,
       })
     }
-    const totalInvoices = Array.isArray(invoiceData) ? (invoiceData as any).reduce((sum: number, inv: any) => sum + (inv?.totalAmount || inv?.total || inv?.grandTotal || 0), 0) : 0
+    // Toplam Fatura Tutarı ve Sayısı: invoiceData array'inden hesapla (invoices sayfası ile tutarlılık için)
+    const totalInvoicesValue = Array.isArray(invoiceData) ? (invoiceData as any).reduce((sum: number, inv: any) => sum + (inv?.totalAmount || inv?.total || inv?.grandTotal || 0), 0) : 0
+    const totalInvoices = Array.isArray(invoiceData) ? invoiceData.length : 0
+    
+    // Debug: Development'ta log ekle
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[KPIs API] Total invoices calculated:', {
+        totalInvoices,
+        totalInvoicesValue,
+        invoiceDataLength: Array.isArray(invoiceData) ? invoiceData.length : 0,
+        hasError: !!invoiceError,
+      })
+    }
+    // Toplam Fırsat Sayısı: Tüm deal'ları çekip JavaScript'te say (deals sayfası ile tutarlılık için)
+    // ÖNEMLİ: Bu hesaplama avgDealValue'dan ÖNCE yapılmalı
+    let totalDeals = 0
+    if (dealsError || !Array.isArray(allDeals)) {
+      // Fallback: Eğer hata varsa 0 döndür
+      totalDeals = 0
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[KPIs API] Deals query hatası, fallback kullanılıyor:', {
+          dealsError,
+        })
+      }
+    } else {
+      // Normal yöntem: JavaScript'te say
+      totalDeals = allDeals.length
+    }
+    
     // CRITICAL FIX: Eğer dealsData boş array ise veya hata varsa, direkt SQL'den toplamı çek
     let totalDealsValue = 0
     if (dealsDataError || !Array.isArray(dealsData) || dealsData.length === 0) {
@@ -403,14 +504,14 @@ export async function GET() {
       if (!isSuperAdmin) {
         sumQuery = sumQuery.eq('companyId', companyId)
       }
-      const { data: allDeals, error: sumError } = await sumQuery
-      if (!sumError && Array.isArray(allDeals)) {
-        totalDealsValue = allDeals.reduce((sum: number, deal: any) => {
+      const { data: allDealsForValue, error: sumError } = await sumQuery
+      if (!sumError && Array.isArray(allDealsForValue)) {
+        totalDealsValue = allDealsForValue.reduce((sum: number, deal: any) => {
           const dealValue = typeof deal?.value === 'string' ? parseFloat(deal.value) || 0 : (deal?.value || 0)
           return sum + dealValue
         }, 0)
         if (process.env.NODE_ENV === 'development') {
-          console.log('[KPIs API] Fallback SQL SUM result (deals):', { totalDealsValue, count: allDeals.length })
+          console.log('[KPIs API] Fallback SQL SUM result (deals):', { totalDealsValue, count: allDealsForValue.length })
         }
       }
     } else {
@@ -536,13 +637,15 @@ export async function GET() {
     }
 
     // Aylık teklif verilerini grupla - CRITICAL FIX: Eğer monthlyQuotesData boş array ise, direkt SQL'den çek
+    // ÖNEMLİ: Son 3 ayın ilk gününden başla (monthlyKPIs ile tutarlılık için)
     if (!Array.isArray(monthlyQuotesData) || monthlyQuotesData.length === 0) {
-      // Fallback: Direkt SQL'den son 3 ayın quote'larını çek
+      // Fallback: Direkt SQL'den son 3 ayın quote'larını çek (monthlyKPIs ile tutarlılık için)
       if (process.env.NODE_ENV === 'development') {
         console.warn('[KPIs API] monthlyQuotesData bos, direkt SQL\'den cekiliyor...')
       }
-      const threeMonthsAgo = new Date()
-      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
+      // Son 3 ayın ilk gününü hesapla (monthlyKPIs ile aynı mantık) - now değişkenini tekrar tanımla
+      const currentDate = new Date()
+      const threeMonthsAgo = new Date(currentDate.getFullYear(), currentDate.getMonth() - 2, 1)
       let monthlyQuery = supabase
         .from('Quote')
         .select('id, createdAt, status')
@@ -555,6 +658,7 @@ export async function GET() {
         allMonthlyQuotes.forEach((quote: any) => {
           const date = new Date(quote.createdAt)
           const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+          // monthlyKPIs'de varsa say (son 3 ay için)
           if (monthlyKPIs[monthKey]) {
             monthlyKPIs[monthKey].quotes += 1
             if (quote.status === 'ACCEPTED') {
@@ -563,21 +667,46 @@ export async function GET() {
           }
         })
         if (process.env.NODE_ENV === 'development') {
-          console.log('[KPIs API] Fallback monthly quotes loaded:', { count: allMonthlyQuotes.length })
+          console.log('[KPIs API] Fallback monthly quotes loaded:', { 
+            count: allMonthlyQuotes.length,
+            threeMonthsAgo: threeMonthsAgo.toISOString(),
+            monthlyKPIsKeys: Object.keys(monthlyKPIs),
+          })
         }
       }
     } else {
-      // Normal hesaplama
+      // Normal hesaplama - monthlyQuotesData zaten son 3 ayın ilk gününden başlıyor
       (monthlyQuotesData as any).forEach((quote: any) => {
         const date = new Date(quote.createdAt)
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+        // monthlyKPIs'de varsa say (son 3 ay için)
         if (monthlyKPIs[monthKey]) {
           monthlyKPIs[monthKey].quotes += 1
           if (quote.status === 'ACCEPTED') {
             monthlyKPIs[monthKey].acceptedQuotes += 1
           }
+        } else {
+          // Debug: Eğer monthKey yoksa logla (son 3 ay dışında bir ay)
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[KPIs API] Quote found outside last 3 months:', {
+              quoteId: quote.id,
+              createdAt: quote.createdAt,
+              monthKey,
+              availableKeys: Object.keys(monthlyKPIs),
+            })
+          }
         }
       })
+      
+      // Debug: Development'ta aylık toplamları logla
+      if (process.env.NODE_ENV === 'development') {
+        const monthlyTotal = Object.values(monthlyKPIs).reduce((sum, month) => sum + month.quotes, 0)
+        console.log('[KPIs API] Monthly quotes calculated:', {
+          monthlyTotal,
+          monthlyKPIs: Object.entries(monthlyKPIs).map(([key, value]) => ({ month: key, quotes: value.quotes })),
+          totalQuotesFromData: monthlyQuotesData.length,
+        })
+      }
     }
 
     // Aylık fatura verilerini grupla - DÜZELTME: totalAmount öncelikli (050 migration ile total → totalAmount)
@@ -655,32 +784,95 @@ export async function GET() {
       })
     }
 
-    return NextResponse.json(
-      {
-        // Genel KPI'lar
-        totalSales,
-        totalQuotes: totalQuotes || 0,
-        successRate,
-        activeCompanies: activeCompanies || 0,
-        recentActivity: recentActivity || 0,
-        totalInvoices,
-        totalCustomers: totalCustomers || 0,
-        totalDeals: totalDeals || 0,
-        avgDealValue,
-        pendingInvoices: pendingInvoicesTotal,
-        pendingShipments: pendingShipmentsCount,
-        pendingPurchaseShipments: pendingPurchaseShipmentsCount,
-        // Aylık KPI'lar (son 3 ay)
-        monthlyKPIs: monthlyData,
-      },
-      {
-        headers: {
-          'Cache-Control': 'no-store, must-revalidate, max-age=0', // DÜZELTME: Cache'i tamamen kapat - her zaman fresh data
-          'Pragma': 'no-cache', // DÜZELTME: Eski browser'lar için cache kapat
-          'Expires': '0', // DÜZELTME: Cache'i tamamen kapat
-        },
+    // Aktif Firmalar Sayısı: Tüm company'leri çekip JavaScript'te say (companies sayfası ile tutarlılık için)
+    let activeCompanies = 0
+    if (companiesError || !Array.isArray(allCompanies)) {
+      // Fallback: Eğer hata varsa 0 döndür
+      activeCompanies = 0
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[KPIs API] Companies query hatası, fallback kullanılıyor:', {
+          companiesError,
+        })
       }
-    )
+    } else {
+      // Normal yöntem: JavaScript'te say
+      activeCompanies = allCompanies.length
+    }
+    
+    // Debug: Development'ta log ekle
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[KPIs API] Active companies calculated:', {
+        activeCompanies,
+        allCompaniesLength: Array.isArray(allCompanies) ? allCompanies.length : 0,
+        hasError: !!companiesError,
+      })
+    }
+
+    // Toplam Müşteri Sayısı: Tüm customer'ları çekip JavaScript'te say (customers sayfası ile tutarlılık için)
+    let totalCustomers = 0
+    if (customersError || !Array.isArray(allCustomers)) {
+      // Fallback: Eğer hata varsa 0 döndür
+      totalCustomers = 0
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[KPIs API] Customers query hatası, fallback kullanılıyor:', {
+          customersError,
+        })
+      }
+    } else {
+      // Normal yöntem: JavaScript'te say
+      totalCustomers = allCustomers.length
+    }
+    
+    // Debug: Development'ta log ekle
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[KPIs API] Total customers calculated:', {
+        totalCustomers,
+        allCustomersLength: Array.isArray(allCustomers) ? allCustomers.length : 0,
+        hasError: !!customersError,
+      })
+    }
+
+    // Debug: Development'ta log ekle (totalDeals zaten yukarıda hesaplandı)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[KPIs API] Total deals calculated:', {
+        totalDeals,
+        allDealsLength: Array.isArray(allDeals) ? allDeals.length : 0,
+        hasError: !!dealsError,
+      })
+    }
+
+    const payload = {
+      // Genel KPI'lar
+      totalSales,
+      totalQuotes: totalQuotes || 0,
+      successRate,
+      activeCompanies: activeCompanies || 0,
+      recentActivity: recentActivity || 0,
+      totalInvoices,
+      totalCustomers: totalCustomers || 0,
+      totalDeals: totalDeals || 0,
+      avgDealValue,
+      pendingInvoices: pendingInvoicesTotal,
+      pendingShipments: pendingShipmentsCount,
+      pendingPurchaseShipments: pendingPurchaseShipmentsCount,
+      // Aylık KPI'lar (son 3 ay)
+      monthlyKPIs: monthlyData,
+    }
+
+    await setKpiCache({
+      supabase,
+      scope,
+      payload,
+    })
+
+    return NextResponse.json(payload, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120, max-age=30', // PERFORMANCE FIX: Cache headers eklendi
+        'CDN-Cache-Control': 'public, s-maxage=60',
+        'Vercel-CDN-Cache-Control': 'public, s-maxage=60',
+        'x-cache-hit': 'miss',
+      },
+    })
   } catch (error: any) {
     if (process.env.NODE_ENV === 'development') {
       console.error('KPIs API error:', error)

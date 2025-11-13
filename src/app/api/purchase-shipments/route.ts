@@ -53,6 +53,10 @@ export async function GET(request: Request) {
 
     // PurchaseTransaction'ları Invoice bilgileriyle çek
     // Vendor ilişkisi opsiyonel (Invoice'da vendorId olmayabilir)
+    // NOT: PurchaseTransaction ve Invoice arasında iki ilişki var:
+    // 1. PurchaseTransaction_invoiceId_fkey (one-to-one): PurchaseTransaction.invoiceId -> Invoice.id
+    // 2. Invoice_purchaseShipmentId_fkey (one-to-many): PurchaseTransaction.id -> Invoice.purchaseShipmentId
+    // Burada PurchaseTransaction_invoiceId_fkey kullanıyoruz (invoiceId üzerinden)
     let query = supabase
       .from('PurchaseTransaction')
       .select(`
@@ -62,7 +66,7 @@ export async function GET(request: Request) {
         companyId,
         createdAt,
         updatedAt,
-        Invoice (
+        Invoice!PurchaseTransaction_invoiceId_fkey (
           id,
           title,
           totalAmount,

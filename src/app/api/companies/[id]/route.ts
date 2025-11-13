@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { getRecordById, updateRecord, deleteRecord } from '@/lib/crud'
+import { buildPermissionDeniedResponse } from '@/lib/permissions'
 
 export async function GET(
   request: Request,
@@ -21,7 +22,7 @@ export async function GET(
 
     // Normal kullanıcı sadece kendi firmasını görebilir
     if (!isSuperAdmin && id !== session.user.companyId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Sadece kendi firmanızı görüntüleyebilirsiniz.')
     }
 
     const supabase = getSupabaseWithServiceRole()
@@ -101,7 +102,7 @@ export async function GET(
     })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch company' },
+      { error: error.message || 'Firma bilgileri getirilemedi' },
       { status: 500 }
     )
   }
@@ -119,7 +120,7 @@ export async function PUT(
 
     // Sadece SuperAdmin firma düzenleyebilir
     if (session.user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Sadece SuperAdmin firma bilgilerini güncelleyebilir.')
     }
 
     const { id } = await params
@@ -135,7 +136,7 @@ export async function PUT(
     return NextResponse.json(data)
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to update company' },
+      { error: error.message || 'Firma güncellenemedi' },
       { status: 500 }
     )
   }
@@ -153,7 +154,7 @@ export async function DELETE(
 
     // Sadece SuperAdmin firma silebilir
     if (session.user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return buildPermissionDeniedResponse('Sadece SuperAdmin firmaları silebilir.')
     }
 
     const { id } = await params
@@ -167,7 +168,7 @@ export async function DELETE(
     return NextResponse.json({ success: true })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Failed to delete company' },
+      { error: error.message || 'Firma silinemedi' },
       { status: 500 }
     )
   }

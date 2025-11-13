@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/authOptions'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { getCacheScope, getReportCache, setReportCache } from '@/lib/cache/report-cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,23 @@ export async function GET(request: Request) {
 
     const { searchParams } = new URL(request.url)
     const period = searchParams.get('period') || 'monthly' // daily, weekly, monthly, yearly
+    const forceRefresh = searchParams.get('refresh') === '1'
+    const scope = getCacheScope(isSuperAdmin, companyId)
+    const reportType = `time:${period}`
+
+    const cached = await getReportCache({
+      supabase,
+      reportType,
+      scope,
+      ttlMinutes: 60,
+      forceRefresh,
+    })
+
+    if (cached) {
+      return NextResponse.json(cached.payload, {
+        headers: { 'Cache-Control': 'no-store, must-revalidate', 'x-cache-hit': 'report-cache' },
+      })
+    }
 
     // Günlük trend (son 30 gün)
     const dailyTrend: Record<string, { sales: number; customers: number; deals: number }> = {}
@@ -274,47 +292,53 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json(
-      {
-        dailyTrend: Object.keys(dailyTrend)
-          .sort()
-          .map((day) => ({
-            day,
-            sales: dailyTrend[day].sales,
-            customers: dailyTrend[day].customers,
-            deals: dailyTrend[day].deals,
-          })),
-        weeklyComparison: Object.keys(weeklyComparison)
-          .sort()
-          .map((week) => ({
-            week,
-            sales: weeklyComparison[week].sales,
-            customers: weeklyComparison[week].customers,
-            deals: weeklyComparison[week].deals,
-          })),
-        monthlyGrowth: Object.keys(monthlyGrowth)
-          .sort()
-          .map((month) => ({
-            month,
-            sales: monthlyGrowth[month].sales,
-            customers: monthlyGrowth[month].customers,
-            deals: monthlyGrowth[month].deals,
-            growth: monthlyGrowth[month].growth,
-          })),
-        yearlySummary: Object.keys(yearlySummary)
-          .sort()
-          .map((year) => ({
-            year,
-            sales: yearlySummary[year].sales,
-            customers: yearlySummary[year].customers,
-            deals: yearlySummary[year].deals,
-            invoices: yearlySummary[year].invoices,
-          })),
-      },
-      {
-        headers: { 'Cache-Control': 'no-store, must-revalidate' },
-      }
-    )
+    const payload = {
+      dailyTrend: Object.keys(dailyTrend)
+        .sort()
+        .map((day) => ({
+          day,
+          sales: dailyTrend[day].sales,
+          customers: dailyTrend[day].customers,
+          deals: dailyTrend[day].deals,
+        })),
+      weeklyComparison: Object.keys(weeklyComparison)
+        .sort()
+        .map((week) => ({
+          week,
+          sales: weeklyComparison[week].sales,
+          customers: weeklyComparison[week].customers,
+          deals: weeklyComparison[week].deals,
+        })),
+      monthlyGrowth: Object.keys(monthlyGrowth)
+        .sort()
+        .map((month) => ({
+          month,
+          sales: monthlyGrowth[month].sales,
+          customers: monthlyGrowth[month].customers,
+          deals: monthlyGrowth[month].deals,
+          growth: monthlyGrowth[month].growth,
+        })),
+      yearlySummary: Object.keys(yearlySummary)
+        .sort()
+        .map((year) => ({
+          year,
+          sales: yearlySummary[year].sales,
+          customers: yearlySummary[year].customers,
+          deals: yearlySummary[year].deals,
+          invoices: yearlySummary[year].invoices,
+        })),
+    }
+
+    await setReportCache({
+      supabase,
+      reportType,
+      scope,
+      payload,
+    })
+
+    return NextResponse.json(payload, {
+      headers: { 'Cache-Control': 'no-store, must-revalidate', 'x-cache-hit': 'miss' },
+    })
   } catch (error: any) {
     console.error('Error fetching time-based reports:', error)
     return NextResponse.json(

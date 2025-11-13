@@ -40,6 +40,10 @@ export async function GET(request: Request) {
     const customerCompanyId = searchParams.get('customerCompanyId') || '' // Firma bazlı filtreleme
     const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
 
+    // Pagination parametreleri
+    const page = parseInt(searchParams.get('page') || '1', 10)
+    const pageSize = parseInt(searchParams.get('pageSize') || '20', 10) // Default 20 kayıt/sayfa
+
     // OPTİMİZE: Sadece gerekli kolonları seç - performans için
     // SuperAdmin için Company bilgisi ekle
     // ÖNEMLİ: totalAmount kolonunu çek (050 migration ile total → totalAmount olarak değiştirildi)
@@ -51,9 +55,8 @@ export async function GET(request: Request) {
           id,
           name
         )
-      `)
+      `, { count: 'exact' })
       .order('createdAt', { ascending: false })
-      .limit(100) // ULTRA AGRESİF limit - sadece 100 kayıt (instant load)
     
     // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
@@ -82,20 +85,36 @@ export async function GET(request: Request) {
       query = query.eq('customerCompanyId', customerCompanyId)
     }
 
-    const { data, error } = await query
+    // Pagination uygula - EN SON (filtrelerden sonra)
+    query = query.range((page - 1) * pageSize, page * pageSize - 1)
+
+    const { data, error, count } = await query
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // ULTRA AGRESİF cache headers - 1 SAAT cache (instant navigation - <300ms hedef)
-    return NextResponse.json(data || [], {
-      headers: {
-        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200, max-age=1800',
-        'CDN-Cache-Control': 'public, s-maxage=3600',
-        'Vercel-CDN-Cache-Control': 'public, s-maxage=3600',
+    const totalPages = Math.ceil((count || 0) / pageSize)
+
+    // Dengeli cache - 60 saniye (performans + veri güncelliği dengesi)
+    return NextResponse.json(
+      {
+        data: data || [],
+        pagination: {
+          page,
+          pageSize,
+          totalItems: count || 0,
+          totalPages,
+        },
       },
-    })
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120, max-age=30',
+          'CDN-Cache-Control': 'public, s-maxage=60',
+          'Vercel-CDN-Cache-Control': 'public, s-maxage=60',
+        },
+      }
+    )
   } catch (error) {
     return NextResponse.json(
       { error: 'Failed to fetch invoices' },
@@ -185,9 +204,18 @@ export async function POST(request: Request) {
     if (body.quoteId) invoiceData.quoteId = body.quoteId
     // Firma bazlı ilişki (customerCompanyId)
     if (body.customerCompanyId) invoiceData.customerCompanyId = body.customerCompanyId
-    // ÖNEMLİ: invoiceType ekle (PURCHASE veya SALES) - mal kabul/sevkiyat kaydı açmak için gerekli
-    if (body.invoiceType && (body.invoiceType === 'PURCHASE' || body.invoiceType === 'SALES')) {
+    // ÖNEMLİ: invoiceType ekle (PURCHASE, SALES, SERVICE_SALES, SERVICE_PURCHASE) - mal kabul/sevkiyat kaydı açmak için gerekli
+    if (body.invoiceType && (
+      body.invoiceType === 'PURCHASE' || 
+      body.invoiceType === 'SALES' || 
+      body.invoiceType === 'SERVICE_SALES' || 
+      body.invoiceType === 'SERVICE_PURCHASE'
+    )) {
       invoiceData.invoiceType = body.invoiceType
+    }
+    // Hizmet açıklaması ekle (hizmet faturaları için)
+    if (body.serviceDescription && body.serviceDescription.trim() !== '') {
+      invoiceData.serviceDescription = body.serviceDescription.trim()
     }
     // NOT: invoiceNumber, dueDate, paymentDate, taxRate, vendorId schema-extension/schema-vendor'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
@@ -199,20 +227,11 @@ export async function POST(request: Request) {
     )
 
     // Oluşturulan invoice'ı tam bilgileriyle çek (commit edildiğinden emin olmak için)
-    // Retry mekanizması - yeni oluşturulan invoice için (commit gecikmesi olabilir)
-    // NOT: supabase zaten yukarıda tanımlanmış (satır 121)
+    // OPTİMİZE: Retry mekanizması azaltıldı - sadece 2 deneme, 100ms bekleme (performans için)
+    // Normal kullanımda invoice hemen commit edilir, retry'ye gerek yok
     let fullData = data
-    const maxRetries = 10 // Daha fazla deneme
-    const retryDelay = 300 // 300ms - daha uzun bekleme
-    
-    if (process.env.NODE_ENV === 'development') {
-      console.log('Invoice POST - initial data:', {
-        invoiceId: data?.id,
-        invoiceTitle: data?.title,
-        companyId: data?.companyId,
-        hasId: !!data?.id,
-      })
-    }
+    const maxRetries = 2 // Sadece 2 deneme (performans için)
+    const retryDelay = 100 // 100ms - çok kısa bekleme (performans için)
     
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       if (data?.id) {
@@ -223,22 +242,8 @@ export async function POST(request: Request) {
           .eq('companyId', session.user.companyId)
           .single()
         
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`Invoice POST - retry attempt ${attempt + 1}/${maxRetries}:`, {
-            invoiceId: data.id,
-            invoiceFound: !!fetchedData,
-            error: fetchError?.message,
-          })
-        }
-        
         if (fetchedData && !fetchError) {
           fullData = fetchedData
-          if (process.env.NODE_ENV === 'development') {
-            console.log('Invoice POST - invoice found after retry:', {
-              attempt: attempt + 1,
-              invoiceId: fullData.id,
-            })
-          }
           break // Invoice bulundu, retry'ye gerek yok
         }
       }
@@ -545,17 +550,66 @@ export async function POST(request: Request) {
     if (invoiceResult?.id) {
       try {
         const { createNotificationForRole } = await import('@/lib/notification-helper')
-        await createNotificationForRole({
+        
+        // Firma bilgisini çek (eğer customerCompanyId varsa)
+        let companyName = ''
+        if (body.customerCompanyId) {
+          const { data: companyData } = await supabase
+            .from('CustomerCompany')
+            .select('name')
+            .eq('id', body.customerCompanyId)
+            .single()
+          if (companyData) {
+            companyName = companyData.name
+          }
+        }
+        
+        // Quote bilgisini çek (eğer quoteId varsa)
+        let quoteTitle = ''
+        if (body.quoteId) {
+          const { data: quoteData } = await supabase
+            .from('Quote')
+            .select('title')
+            .eq('id', body.quoteId)
+            .single()
+          if (quoteData) {
+            quoteTitle = quoteData.title
+          }
+        }
+        
+        // Bildirim mesajını oluştur
+        let notificationMessage = `"${(invoiceResult as any).title}" faturası oluşturuldu.`
+        if (companyName) {
+          notificationMessage = `${companyName} firması için "${(invoiceResult as any).title}" faturası oluşturuldu.`
+        } else if (quoteTitle) {
+          notificationMessage = `"${quoteTitle}" teklifi için "${(invoiceResult as any).title}" faturası oluşturuldu.`
+        }
+        
+        const notificationResult = await createNotificationForRole({
           companyId: session.user.companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
           title: 'Yeni Fatura Oluşturuldu',
-          message: `Yeni bir fatura oluşturuldu. Detayları görmek ister misiniz?`,
+          message: notificationMessage,
           type: 'info',
           relatedTo: 'Invoice',
           relatedId: (invoiceResult as any).id,
         })
-      } catch (notificationError) {
-        // Bildirim hatası ana işlemi engellemez
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Invoice notification sent:', {
+            invoiceId: (invoiceResult as any).id,
+            invoiceTitle: (invoiceResult as any).title,
+            companyId: session.user.companyId,
+            notificationResult,
+          })
+        }
+      } catch (notificationError: any) {
+        // Bildirim hatası ana işlemi engellemez ama logla
+        console.error('Invoice notification error:', {
+          error: notificationError?.message || notificationError,
+          invoiceId: (invoiceResult as any)?.id,
+          companyId: session.user.companyId,
+        })
       }
     }
 

@@ -5,6 +5,12 @@ const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts')
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Production'da console.log'ları kaldır (error hariç)
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production' ? {
+      exclude: ['error'], // Error logları korunur (kritik hatalar için)
+    } : false,
+  },
   experimental: {
     // Edge Runtime optimizasyonları
     serverActions: {
@@ -31,8 +37,6 @@ const nextConfig = {
     optimizeCss: true,
     // Bundle size optimization
     webpackBuildWorker: true,
-    // Build hızlandırma - static generation timeout
-    staticPageGenerationTimeout: 10, // 10 saniye timeout (build hızlandırır)
     // swcMinify Next.js 15'te varsayılan olarak aktif - deprecated uyarısını önlemek için kaldırıldı
     // turbo deprecated - turbopack'e taşındı
   },
@@ -63,7 +67,7 @@ const nextConfig = {
   // Sekme geçişlerini <100ms'e düşürmek için (tıklama anında açılmalı)
   onDemandEntries: {
     maxInactiveAge: 60 * 60 * 1000, // 60 dakika (ULTRA uzun tut - instant navigation)
-    pagesBufferLength: 100, // 100 sayfa buffer (sekme geçişlerini hızlandırmak için - veri çekimini etkilemez)
+    pagesBufferLength: 200, // 200 sayfa buffer (sekme geçişlerini maksimum hızlandırmak için - veri çekimini etkilemez)
   },
   // Build optimizasyonu - hızlandırma
   // swcMinify: Next.js 15'te varsayılan olarak aktif - deprecated uyarısını önlemek için kaldırıldı
@@ -117,18 +121,6 @@ const nextConfig = {
     // Image optimization settings
     formats: ['image/avif', 'image/webp'],
     minimumCacheTTL: 86400, // 24 saat cache
-  },
-  // Webpack optimization - exports hatasını önlemek için minimal
-  webpack: (config, { dev, isServer }) => {
-    // Server-side için chunk splitting'i tamamen kaldır
-    if (isServer) {
-      config.optimization = {
-        ...config.optimization,
-        splitChunks: false, // Server-side'da chunk splitting yok - exports hatasını önler
-      }
-    }
-    // Client-side için Next.js varsayılan ayarlarını kullan (müdahale etme)
-    return config
   },
 }
 
