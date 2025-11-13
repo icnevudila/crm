@@ -86,7 +86,9 @@ export default function QuoteForm({
   const quoteSchema = z.object({
     title: z.string().min(1, tCommon('titleRequired')).max(200, tCommon('titleMaxLength', { max: 200 })),
     status: z.enum(['DRAFT', 'SENT', 'ACCEPTED', 'DECLINED', 'WAITING']).default('DRAFT'),
-    total: z.number().min(0.01, t('amountMin')).max(999999999, tCommon('amountMax')),
+    total: z.number().min(0.01, t('amountMin')).max(999999999, tCommon('amountMax')).refine((val) => val > 0, {
+      message: 'Teklif tutarı 0 olamaz. Lütfen geçerli bir tutar girin.',
+    }),
     dealId: z.string().min(1, t('dealRequired')),
     vendorId: z.string().optional(),
     description: z.string().max(2000, t('descriptionMaxLength')).optional(),

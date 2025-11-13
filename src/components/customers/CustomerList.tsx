@@ -816,7 +816,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
                         size="icon"
                         onClick={() => {
                           setSelectedCustomerId(customer.id)
-                          setSelectedCustomerData(customer) // Liste sayfasÄ±ndaki veriyi hemen gÃ¶ster (hÄ±zlÄ± aÃ§Ä±lÄ±ÅŸ)
+                          setSelectedCustomerData(customer) // Liste sayfasındaki veriyi hemen göster (hızlı açılış)
                           setDetailModalOpen(true)
                         }}
                         aria-label={t('viewCustomer', { name: customer.name })}
@@ -925,12 +925,12 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
           setSelectedCustomer(null)
           
           if (selectedCustomer) {
-            // UPDATE: Mevcut kaydÄ± gÃ¼ncelle
+            // UPDATE: Mevcut kaydı güncelle
             const updatedCustomers = customers.map((c) =>
               c.id === savedCustomer.id ? savedCustomer : c
             )
             
-            // Optimistic update - cache'i gÃ¼ncelle
+            // Optimistic update - cache'i güncelle
             await mutateCustomers(
               {
                 data: updatedCustomers,
@@ -967,23 +967,23 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
             
             const firstPageUrl = `/api/customers?${firstPageParams.toString()}`
             
-            // Ã–NCE tÃ¼m cache'i temizle ve 1. sayfayÄ± refetch et
+            // ÖNCE tüm cache'i temizle ve 1. sayfayı refetch et
             await Promise.all([
               mutate('/api/customers', undefined, { revalidate: true }),
               mutate('/api/customers?', undefined, { revalidate: true }),
               apiUrl,
               mutate(firstPageUrl, undefined, { revalidate: true }),
-              // Dashboard'daki mÃ¼ÅŸteri sektÃ¶r daÄŸÄ±lÄ±mÄ± grafiÄŸini gÃ¼ncelle
+              // Dashboard'daki müşteri sektör dağılımı grafiğini güncelle
               queryClient.invalidateQueries({ queryKey: ['distribution'] }),
             ])
             
             // Dashboard'daki distribution query'sini refetch et
             await queryClient.refetchQueries({ queryKey: ['distribution'] })
             
-            // SONRA 1. sayfaya geÃ§ (apiUrl deÄŸiÅŸir ve SWR otomatik refetch yapar)
+            // SONRA 1. sayfaya geç (apiUrl değişir ve SWR otomatik refetch yapar)
             setCurrentPage(1)
             
-            // Ekstra gÃ¼vence: 500ms sonra tekrar refetch (sayfa yenilendiÄŸinde kesinlikle fresh data gelsin)
+            // Ekstra güvence: 500ms sonra tekrar refetch (sayfa yenilendiğinde kesinlikle fresh data gelsin)
             setTimeout(async () => {
               await Promise.all([
                 mutate(firstPageUrl, undefined, { revalidate: true }),
@@ -1001,10 +1001,10 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         open={quickAction?.type === 'deal'}
         onClose={closeQuickAction}
         onSuccess={async (savedDeal) => {
-          // CRITICAL FIX: onSuccess iÃ§inde closeQuickAction Ã§aÄŸrÄ±lmasÄ±n
-          // Form zaten kendi iÃ§inde onClose() Ã§aÄŸÄ±rÄ±yor, bu da closeQuickAction'Ä± tetikliyor
-          // closeQuickAction() tekrar Ã§aÄŸrÄ±lÄ±rsa sonsuz dÃ¶ngÃ¼ oluÅŸur (Maximum update depth exceeded)
-          // Form baÅŸarÄ±yla kaydedildi - form'un kendi onClose'u closeQuickAction'Ä± zaten Ã§aÄŸÄ±racak
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
+          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
+          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
         }}
         customerCompanyId={quickAction?.customer.customerCompanyId}
         customerCompanyName={quickAction?.customer.CustomerCompany?.name}
@@ -1014,10 +1014,10 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         open={quickAction?.type === 'quote'}
         onClose={closeQuickAction}
         onSuccess={async (savedQuote) => {
-          // CRITICAL FIX: onSuccess iÃ§inde closeQuickAction Ã§aÄŸrÄ±lmasÄ±n
-          // Form zaten kendi iÃ§inde onClose() Ã§aÄŸÄ±rÄ±yor, bu da closeQuickAction'Ä± tetikliyor
-          // closeQuickAction() tekrar Ã§aÄŸrÄ±lÄ±rsa sonsuz dÃ¶ngÃ¼ oluÅŸur (Maximum update depth exceeded)
-          // Form baÅŸarÄ±yla kaydedildi - form'un kendi onClose'u closeQuickAction'Ä± zaten Ã§aÄŸÄ±racak
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
+          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
+          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
         }}
         customerCompanyId={quickAction?.customer.customerCompanyId}
         customerCompanyName={quickAction?.customer.CustomerCompany?.name}
@@ -1027,10 +1027,10 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         open={quickAction?.type === 'invoice'}
         onClose={closeQuickAction}
         onSuccess={async (savedInvoice) => {
-          // CRITICAL FIX: onSuccess iÃ§inde closeQuickAction Ã§aÄŸrÄ±lmasÄ±n
-          // Form zaten kendi iÃ§inde onClose() Ã§aÄŸÄ±rÄ±yor, bu da closeQuickAction'Ä± tetikliyor
-          // closeQuickAction() tekrar Ã§aÄŸrÄ±lÄ±rsa sonsuz dÃ¶ngÃ¼ oluÅŸur (Maximum update depth exceeded)
-          // Form baÅŸarÄ±yla kaydedildi - form'un kendi onClose'u closeQuickAction'Ä± zaten Ã§aÄŸÄ±racak
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
+          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
+          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
         }}
         customerCompanyId={quickAction?.customer.customerCompanyId}
         customerCompanyName={quickAction?.customer.CustomerCompany?.name}
@@ -1040,10 +1040,10 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         open={quickAction?.type === 'task'}
         onClose={closeQuickAction}
         onSuccess={async (savedTask) => {
-          // CRITICAL FIX: onSuccess iÃ§inde closeQuickAction Ã§aÄŸrÄ±lmasÄ±n
-          // Form zaten kendi iÃ§inde onClose() Ã§aÄŸÄ±rÄ±yor, bu da closeQuickAction'Ä± tetikliyor
-          // closeQuickAction() tekrar Ã§aÄŸrÄ±lÄ±rsa sonsuz dÃ¶ngÃ¼ oluÅŸur (Maximum update depth exceeded)
-          // Form baÅŸarÄ±yla kaydedildi - form'un kendi onClose'u closeQuickAction'Ä± zaten Ã§aÄŸÄ±racak
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
+          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
+          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
         }}
         customerName={quickAction?.customer.name}
         customerCompanyName={quickAction?.customer.CustomerCompany?.name}
@@ -1052,10 +1052,10 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         open={quickAction?.type === 'meeting'}
         onClose={closeQuickAction}
         onSuccess={async (savedMeeting) => {
-          // CRITICAL FIX: onSuccess iÃ§inde closeQuickAction Ã§aÄŸrÄ±lmasÄ±n
-          // Form zaten kendi iÃ§inde onClose() Ã§aÄŸÄ±rÄ±yor, bu da closeQuickAction'Ä± tetikliyor
-          // closeQuickAction() tekrar Ã§aÄŸrÄ±lÄ±rsa sonsuz dÃ¶ngÃ¼ oluÅŸur (Maximum update depth exceeded)
-          // Form baÅŸarÄ±yla kaydedildi - form'un kendi onClose'u closeQuickAction'Ä± zaten Ã§aÄŸÄ±racak
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
+          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
+          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
         }}
         customerCompanyId={quickAction?.customer.customerCompanyId}
         customerCompanyName={quickAction?.customer.CustomerCompany?.name}

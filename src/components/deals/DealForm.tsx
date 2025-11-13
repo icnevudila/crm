@@ -74,7 +74,9 @@ export default function DealForm({
     title: z.string().min(1, tCommon('titleRequired')).max(200, tCommon('titleMaxLength', { max: 200 })),
     stage: z.enum(['LEAD', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST']).default('LEAD'),
     status: z.enum(['OPEN', 'CLOSED']).default('OPEN'),
-    value: z.number().min(0, t('valueMin')).max(999999999, tCommon('amountMax')),
+    value: z.number().min(0.01, t('valueMin')).max(999999999, tCommon('amountMax')).refine((val) => val > 0, {
+      message: 'Fırsat değeri 0 olamaz. Lütfen geçerli bir tutar girin.',
+    }),
     customerId: z.string().optional(),
     description: z.string().max(2000, t('descriptionMaxLength')).optional(),
     winProbability: z.number().min(0, t('winProbabilityRange')).max(100, t('winProbabilityRange')).optional(),

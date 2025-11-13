@@ -110,7 +110,9 @@ export default function InvoiceForm({
   const invoiceSchema = z.object({
     title: z.string().min(1, tCommon('titleRequired')).max(200, tCommon('titleMaxLength', { max: 200 })),
     status: z.enum(['DRAFT', 'SENT', 'SHIPPED', 'RECEIVED', 'PAID', 'OVERDUE', 'CANCELLED']).default('DRAFT'),
-    total: z.number().min(0, t('totalMin')).max(999999999, tCommon('amountMax')),
+    total: z.number().min(0.01, t('totalMin')).max(999999999, tCommon('amountMax')).refine((val) => val > 0, {
+      message: 'Fatura tutarı 0 olamaz. Lütfen geçerli bir tutar girin.',
+    }),
     invoiceType: z.enum(['SALES', 'PURCHASE', 'SERVICE_SALES', 'SERVICE_PURCHASE']).default('SALES'), // SALES (Satış), PURCHASE (Alış), SERVICE_SALES (Hizmet Satış), SERVICE_PURCHASE (Hizmet Alım)
     serviceDescription: z.string().max(1000, t('serviceDescriptionMaxLength')).optional(), // Hizmet faturaları için hizmet açıklaması
     customerId: z.string().optional(),

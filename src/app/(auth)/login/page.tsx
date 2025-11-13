@@ -11,13 +11,9 @@ import {
   Eye,
   EyeOff,
   Sparkles,
-  Zap,
   Shield,
   TrendingUp,
   ArrowRight,
-  CheckCircle2,
-  Rocket,
-  Award,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -275,7 +271,7 @@ function LoginPage() {
                   <AnimatedTitle text="CRM Enterprise V3" />
                 </CardTitle>
                 <CardDescription className="text-base text-gray-600 font-medium">
-                  Hesabınıza giriş yapın ve işinizi yönetmeye başlayın
+                  Hoş Geldiniz! Hesabınıza giriş yapın ve işinizi yönetmeye başlayın
                 </CardDescription>
               </CardHeader>
             <CardContent>
@@ -419,20 +415,35 @@ function LoginPage() {
                   </div>
                 </motion.div>
 
-                {/* Demo Info */}
+                {/* Welcome Message */}
                 <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={mounted ? { opacity: 1 } : { opacity: 0 }}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={mounted ? { opacity: 1, y: 0 } : { opacity: 0, y: 10 }}
                   transition={{ delay: 0.5 }}
-                  className="rounded-lg bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border border-indigo-100 p-4 text-xs text-indigo-700"
+                  className="rounded-xl bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border border-indigo-200/50 p-5 text-center"
                 >
-                  <div className="flex items-start gap-2">
-                    <Zap className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <div className="flex flex-col items-center gap-3">
+                    <motion.div
+                      animate={{ 
+                        scale: [1, 1.1, 1],
+                        rotate: [0, 5, -5, 0]
+                      }}
+                      transition={{ 
+                        duration: 2,
+                        repeat: Infinity,
+                        repeatDelay: 3
+                      }}
+                      className="relative"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-indigo-400 to-purple-400 rounded-full blur-xl opacity-30 animate-pulse" />
+                      <Sparkles className="relative h-8 w-8 text-indigo-600" />
+                    </motion.div>
                     <div>
-                      <p className="font-semibold mb-1">Demo Girişi:</p>
-                      <p>
-                        Seed&apos;den oluşturulan kullanıcılar için şifre:{' '}
-                        <code className="font-mono bg-white px-2 py-1 rounded border">demo123</code>
+                      <p className="text-sm font-bold text-gray-800 mb-1">
+                        İşinizi Yönetmenin En İyi Yolu
+                      </p>
+                      <p className="text-xs text-gray-600 leading-relaxed">
+                        Modern CRM çözümü ile müşterilerinizi, satışlarınızı ve iş süreçlerinizi tek bir platformda yönetin.
                       </p>
                     </div>
                   </div>

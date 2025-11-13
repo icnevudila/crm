@@ -99,6 +99,13 @@ export default function SegmentList({ isOpen = true }: SegmentListProps) {
         <div>
           <h1 className="text-3xl font-bold">{t('title')}</h1>
           <p className="text-gray-500 mt-1">{t('description')}</p>
+          <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+            <p className="text-sm text-blue-800">
+              <strong>💡 Nasıl Çalışır?</strong> Segmentler, müşterilerinizi kriterlere göre otomatik gruplandırmanızı sağlar. 
+              Örnek: "VIP Müşteriler" segmentine toplam geliri 100K+ olan müşteriler otomatik eklenebilir. 
+              Segmentler müşteri filtreleme, kampanya hedefleme ve raporlama için kullanılır.
+            </p>
+          </div>
         </div>
         <Button onClick={handleNew}>
           <Plus className="h-4 w-4 mr-2" />
