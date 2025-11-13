@@ -100,7 +100,7 @@ export default function CommentsSection({ entityType, entityId }: CommentsSectio
             type="submit"
             disabled={loading || !comment.trim()}
             className="self-end"
-            aria-label="Yorum gÃ¶nder"
+            aria-label="Yorum gönder"
           >
             <Send className="h-4 w-4" />
           </Button>
@@ -110,7 +110,7 @@ export default function CommentsSection({ entityType, entityId }: CommentsSectio
       {/* Yorum listesi */}
       <div className="space-y-4">
         {comments.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-4">HenÃ¼z yorum yok</p>
+          <p className="text-sm text-gray-500 text-center py-4">Henüz yorum yok</p>
         ) : (
           comments.map((comment) => (
             <div key={comment.id} className="flex gap-3 p-3 bg-gray-50 rounded-lg">

@@ -85,11 +85,11 @@ async function fetchKanbanQuotes(search: string, dealId: string, filterCompanyId
   if (dealId) params.append('dealId', dealId)
   if (filterCompanyId) params.append('filterCompanyId', filterCompanyId)
 
-  // âœ… Ã‡Ã–ZÃœM: Cache'i kapat - refresh sonrasÄ± her zaman yeni data Ã§ek
+  // ÇÖZÜM: Cache'i kapat - refresh sonrası her zaman yeni data çek
   const res = await fetch(`/api/analytics/quote-kanban?${params.toString()}`, {
-    cache: 'no-store', // âœ… Ã‡Ã–ZÃœM: Next.js cache'i kapat - her zaman fresh data Ã§ek
+    cache: 'no-store', // ÇÖZÜM: Next.js cache'i kapat - her zaman fresh data çek
     headers: {
-      'Cache-Control': 'no-store, must-revalidate', // âœ… Ã‡Ã–ZÃœM: Browser cache'i de kapat
+      'Cache-Control': 'no-store, must-revalidate', // ÇÖZÜM: Browser cache'i de kapat
     },
   })
   if (!res.ok) throw new Error('Failed to fetch kanban quotes')
@@ -123,7 +123,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
     WAITING: t('statusWaiting'),
   }
   
-  // SuperAdmin kontrolÃ¼
+  // SuperAdmin kontrolü
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
   
   // URL parametrelerinden filtreleri oku
@@ -246,7 +246,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
   }, [])
 
   const handleDelete = useCallback(async (id: string, title: string) => {
-    // Ã‡ift tÄ±klamayÄ± Ã¶nle
+    // Çift tıklamayı önle
     if (deletingId === id) {
       return
     }
@@ -262,7 +262,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
     setDeletingId(id)
 
     try {
-      // Ã–NCE optimistic update yap - UI anÄ±nda gÃ¼ncellensin
+      // ÖNCE optimistic update yap - UI anında güncellensin
       // Table view için optimistic update
       if (quotes.length > 0) {
         const updatedQuotes = quotes.filter((q) => q.id !== id)
@@ -292,12 +292,12 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
           }
           return col
         })
-        // Kanban query cache'ini gÃ¼ncelle - optimistic update (refetch yapmadan Ã¶nce)
-        // Ã–NEMLÄ°: setQueryData ile cache'i gÃ¼ncelle, bÃ¶ylece kanbanData prop'u otomatik gÃ¼ncellenir
+        // Kanban query cache'ini güncelle - optimistic update (refetch yapmadan önce)
+        // ÖNEMLİ: setQueryData ile cache'i güncelle, böylece kanbanData prop'u otomatik güncellenir
         queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId], updatedKanbanData)
       }
       
-      // SONRA API'ye DELETE isteÄŸi gÃ¶nder
+      // SONRA API'ye DELETE isteği gönder
       const res = await fetch(`/api/quotes/${id}`, {
         method: 'DELETE',
       })
@@ -372,7 +372,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
 
   return (
     <div className="space-y-6">
-      {/* Ä°statistikler */}
+      {/* İstatistikler */}
       <ModuleStats module="quotes" statsUrl="/api/stats/quotes" />
 
       <AutomationInfo
@@ -525,7 +525,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
               })
             }
             
-            // âœ… Ã‡Ã–ZÃœM: Optimistic update - kart anÄ±nda taÅŸÄ±nÄ±r
+            // ÇÖZÜM: Optimistic update - kart anında taşınır
             const optimisticKanbanData = kanbanData.map((col: any) => {
               // Eski status'den quote'u bul ve kaldÄ±r
               const quoteIndex = (col.quotes || []).findIndex((q: any) => q.id === quoteId)
@@ -572,11 +572,11 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
               return col
             })
             
-            // âœ… Ã‡Ã–ZÃœM: Optimistic update'i state'e set et - kart anÄ±nda taÅŸÄ±nÄ±r
+            // ÇÖZÜM: Optimistic update'i state'e set et - kart anında taşınır
             const optimisticKanbanDataWithNewRef = JSON.parse(JSON.stringify(optimisticKanbanData))
             setKanbanData(optimisticKanbanDataWithNewRef)
             
-            // âœ… Ã‡Ã–ZÃœM: API Ã§aÄŸrÄ±sÄ± yap - backend'de gÃ¼ncelleme yapÄ±lsÄ±n
+            // ÇÖZÜM: API çağrısı yap - backend'de güncelleme yapılsın
             try {
               const res = await fetch(`/api/quotes/${quoteId}`, {
                 method: 'PUT',
@@ -591,8 +591,8 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                 throw new Error(error.error || 'Failed to update quote status')
               }
 
-              // âœ… %100 KESÄ°N Ã‡Ã–ZÃœM: API'den dÃ¶nen gÃ¼ncellenmiÅŸ quote'u al
-              // Ã–NEMLÄ°: Backend'den dÃ¶nen gerÃ§ek data'yÄ± kullan - updatedAt ve diÄŸer alanlar gÃ¼ncel olacak
+              // %100 KESİN ÇÖZÜM: API'den dönen güncellenmiş quote'u al
+              // ÖNEMLİ: Backend'den dönen gerçek data'yı kullan - updatedAt ve diğer alanlar güncel olacak
               const updatedQuote = await res.json()
               const automation = updatedQuote?.automation || {}
               
@@ -607,30 +607,30 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
               switch (newStatus) {
                 case 'ACCEPTED':
                   toastTitle = `Teklif kabul edildi: "${quoteTitle}"`
-                  toastDescription = `Teklif "Kabul Edildi" durumuna taÅŸÄ±ndÄ±.`
+                  toastDescription = `Teklif "Kabul Edildi" durumuna taşındı.`
                   
                   if (automation.invoiceCreated && automation.invoiceId) {
-                    toastDescription += `\n\nOtomatik iÅŸlemler:\nâ€¢ Fatura oluÅŸturuldu (ID: ${automation.invoiceId.substring(0, 8)}...)\nâ€¢ Fatura baÅŸlÄ±ÄŸÄ±: ${automation.invoiceTitle || 'Otomatik oluÅŸturuldu'}\nâ€¢ E-posta gÃ¶nderildi\nâ€¢ Bildirim gÃ¶nderildi`
+                    toastDescription += `\n\nOtomatik işlemler:\n• Fatura oluşturuldu (ID: ${automation.invoiceId.substring(0, 8)}...)\n• Fatura başlığı: ${automation.invoiceTitle || 'Otomatik oluşturuldu'}\n• E-posta gönderildi\n• Bildirim gönderildi`
                   }
                   break
                   
                 case 'REJECTED':
                 case 'DECLINED':
                   toastTitle = `Teklif reddedildi: "${quoteTitle}"`
-                  toastDescription = `Teklif "${newStatus === 'REJECTED' ? 'Reddedildi' : 'Ä°ptal Edildi'}" durumuna taÅŸÄ±ndÄ±.`
+                  toastDescription = `Teklif "${newStatus === 'REJECTED' ? 'Reddedildi' : 'İptal Edildi'}" durumuna taşındı.`
                   
                   if (automation.taskCreated && automation.taskId) {
-                    toastDescription += `\n\nOtomatik iÅŸlemler:\nâ€¢ Revizyon gÃ¶revi oluÅŸturuldu (ID: ${automation.taskId.substring(0, 8)}...)\nâ€¢ Bildirim gÃ¶nderildi`
+                    toastDescription += `\n\nOtomatik işlemler:\n• Revizyon görevi oluşturuldu (ID: ${automation.taskId.substring(0, 8)}...)\n• Bildirim gönderildi`
                   } else {
-                    toastDescription += `\n\nBildirim gÃ¶nderildi`
+                    toastDescription += `\n\nBildirim gönderildi`
                   }
                   
                   toastType = 'warning'
                   break
                   
                 case 'SENT':
-                  toastTitle = `Teklif gÃ¶nderildi: "${quoteTitle}"`
-                  toastDescription = `Teklif "GÃ¶nderildi" durumuna taÅŸÄ±ndÄ±.\n\nOtomatik iÅŸlemler:\nâ€¢ E-posta gÃ¶nderildi\nâ€¢ Bildirim gÃ¶nderildi`
+                  toastTitle = `Teklif gönderildi: "${quoteTitle}"`
+                  toastDescription = `Teklif "Gönderildi" durumuna taşındı.\n\nOtomatik işlemler:\n• E-posta gönderildi\n• Bildirim gönderildi`
                   break
                   
                 default:
@@ -647,8 +647,8 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                 toast.success(toastTitle, toastDescription)
               }
               
-              // âœ… %100 KESÄ°N Ã‡Ã–ZÃœM: Backend'den dÃ¶nen gÃ¼ncellenmiÅŸ quote ile kanban data'yÄ± gÃ¼ncelle
-              // Ã–NEMLÄ°: Backend'den dÃ¶nen gerÃ§ek data'yÄ± kullan - updatedAt gÃ¼ncel olacak
+              // %100 KESİN ÇÖZÜM: Backend'den dönen güncellenmiş quote ile kanban data'yı güncelle
+              // ÖNEMLİ: Backend'den dönen gerçek data'yı kullan - updatedAt güncel olacak
               const updatedKanbanDataWithBackendData = previousKanbanData.map((col: any) => {
                 // Eski kolondan quote'u kaldÄ±r
                 if (col.quotes?.some((q: any) => q.id === quoteId)) {
@@ -666,16 +666,16 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                 }
                 return col
               }).map((col: any) => {
-                // Yeni kolona gÃ¼ncellenmiÅŸ quote'u ekle - REJECTED ve DECLINED ikisini de destekle
+                // Yeni kolona güncellenmiş quote'u ekle - REJECTED ve DECLINED ikisini de destekle
                 if (col.status === newStatus || (newStatus === 'REJECTED' && col.status === 'DECLINED') || (newStatus === 'DECLINED' && col.status === 'REJECTED')) {
-                  // âœ… Ã‡Ã–ZÃœM: Backend'den dÃ¶nen gÃ¼ncellenmiÅŸ quote'u kullan
+                  // ÇÖZÜM: Backend'den dönen güncellenmiş quote'u kullan
                   const updatedQuoteForKanban = {
                     id: updatedQuote.id,
                     title: updatedQuote.title,
                     totalAmount: updatedQuote.totalAmount || 0,
                     dealId: updatedQuote.dealId,
                     createdAt: updatedQuote.createdAt,
-                    updatedAt: updatedQuote.updatedAt, // âœ… Ã‡Ã–ZÃœM: Backend'den dÃ¶nen gÃ¼ncel updatedAt
+                    updatedAt: updatedQuote.updatedAt, // ÇÖZÜM: Backend'den dönen güncel updatedAt
                   }
                   const updatedQuotes = [updatedQuoteForKanban, ...(col.quotes || [])]
                   const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
@@ -692,47 +692,47 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                 return col
               })
               
-              // âœ… %100 KESÄ°N Ã‡Ã–ZÃœM: Backend'den dÃ¶nen gÃ¼ncellenmiÅŸ data ile cache'i gÃ¼ncelle
+              // %100 KESİN ÇÖZÜM: Backend'den dönen güncellenmiş data ile cache'i güncelle
               const updatedKanbanDataWithNewRef = JSON.parse(JSON.stringify(updatedKanbanDataWithBackendData))
               
-              // âœ… %100 KESÄ°N Ã‡Ã–ZÃœM: Backend'den dÃ¶nen gerÃ§ek data ile cache'i gÃ¼ncelle
-              // Ã–NEMLÄ°: Backend'den dÃ¶nen gerÃ§ek data ile cache gÃ¼ncelleniyor - refresh sonrasÄ± gÃ¼ncel data gÃ¶rÃ¼necek
+              // %100 KESİN ÇÖZÜM: Backend'den dönen gerçek data ile cache'i güncelle
+              // ÖNEMLİ: Backend'den dönen gerçek data ile cache güncelleniyor - refresh sonrası güncel data görünecek
               queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId], updatedKanbanDataWithNewRef)
               
-              // âœ… %100 KESÄ°N Ã‡Ã–ZÃœM: State'i de gÃ¼ncelle - backend'den dÃ¶nen gerÃ§ek data ile
+              // %100 KESİN ÇÖZÜM: State'i de güncelle - backend'den dönen gerçek data ile
               setKanbanData(updatedKanbanDataWithNewRef)
               
-              // âœ… %100 KESÄ°N Ã‡Ã–ZÃœM: Cache'i tamamen temizle - refresh sonrasÄ± kesinlikle yeni data Ã§ekilsin
-              // Ã–NEMLÄ°: removeQueries ile cache'i tamamen temizle - refresh sonrasÄ± kesinlikle API'den yeni data Ã§ekilecek
+              // %100 KESİN ÇÖZÜM: Cache'i tamamen temizle - refresh sonrası kesinlikle yeni data çekilsin
+              // ÖNEMLİ: removeQueries ile cache'i tamamen temizle - refresh sonrası kesinlikle API'den yeni data çekilecek
               queryClient.removeQueries({ 
                 queryKey: ['kanban-quotes'],
               })
               
-              // âœ… %100 KESÄ°N Ã‡Ã–ZÃœM: Cache'i backend'den dÃ¶nen gerÃ§ek data ile tekrar set et
-              // Ã–NEMLÄ°: removeQueries sonrasÄ± cache'i tekrar set et - refresh sonrasÄ± cache'den gÃ¼ncel data gelsin
+              // %100 KESİN ÇÖZÜM: Cache'i backend'den dönen gerçek data ile tekrar set et
+              // ÖNEMLİ: removeQueries sonrası cache'i tekrar set et - refresh sonrası cache'den güncel data gelsin
               queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId], updatedKanbanDataWithNewRef)
               
-              // âœ… %100 KESÄ°N Ã‡Ã–ZÃœM: Query'yi invalidate et ve manuel refetch yap - refresh sonrasÄ± API'den yeni data Ã§ekilsin
-              // Ã–NEMLÄ°: staleTime: 0 ve gcTime: 0 nedeniyle refresh sonrasÄ± kesinlikle yeni data Ã§ekilecek
+              // %100 KESİN ÇÖZÜM: Query'yi invalidate et ve manuel refetch yap - refresh sonrası API'den yeni data çekilsin
+              // ÖNEMLİ: staleTime: 0 ve gcTime: 0 nedeniyle refresh sonrası kesinlikle yeni data çekilecek
               await queryClient.invalidateQueries({ 
                 queryKey: ['kanban-quotes', debouncedSearch, dealId],
                 exact: true,
               })
               
-              // âœ… %100 KESÄ°N Ã‡Ã–ZÃœM: Manuel refetch yap - kesinlikle fresh data Ã§ek
-              // Ã–NEMLÄ°: invalidateQueries sonrasÄ± manuel refetch yap - kesinlikle API'den yeni data Ã§ekilsin
+              // %100 KESİN ÇÖZÜM: Manuel refetch yap - kesinlikle fresh data çek
+              // ÖNEMLİ: invalidateQueries sonrası manuel refetch yap - kesinlikle API'den yeni data çekilsin
               await queryClient.refetchQueries({ 
                 queryKey: ['kanban-quotes', debouncedSearch, dealId],
                 exact: true,
               })
               
-              // âœ… %100 KESÄ°N Ã‡Ã–ZÃœM: isInitialLoad'i false yap - useEffect'in state'i override etmesini engelle
+              // %100 KESİN ÇÖZÜM: isInitialLoad'i false yap - useEffect'in state'i override etmesini engelle
               setIsInitialLoad(false)
 
-              // âœ… Ã‡Ã–ZÃœM: Sadece dashboard'daki diÄŸer query'leri invalidate et (background'da, refetch olmadan)
-              // Ã–NEMLÄ°: kanban-quotes query'sini invalidate ETME - optimistic update'i koru
-              // Ã–NEMLÄ°: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
-              // Sadece dashboard'daki diÄŸer query'leri invalidate et - onlar kendi staleTime'larÄ±na gÃ¶re refetch olur
+              // ÇÖZÜM: Sadece dashboard'daki diğer query'leri invalidate et (background'da, refetch olmadan)
+              // ÖNEMLİ: kanban-quotes query'sini invalidate ETME - optimistic update'i koru
+              // ÖNEMLİ: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
+              // Sadece dashboard'daki diğer query'leri invalidate et - onlar kendi staleTime'larına göre refetch olur
               await Promise.all([
                 queryClient.invalidateQueries({ queryKey: ['quotes'] }), // Table view iÃ§in
                 queryClient.invalidateQueries({ queryKey: ['stats-quotes'] }), // Stats iÃ§in

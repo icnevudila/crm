@@ -126,3 +126,4 @@ Migration 071: Meeting notes kolonları eklendi
 **Son Güncelleme:** 2024
 **Durum:** ✅ Tüm özellikler tamamlandı ve test edilmeye hazır
 
+

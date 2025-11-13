@@ -52,3 +52,4 @@ CREATE INDEX IF NOT EXISTS idx_meeting_customer_company ON "Meeting"("customerCo
 -- Migration tamamlandı
 SELECT 'Migration 071: Meeting notes kolonları eklendi' AS result;
 
+

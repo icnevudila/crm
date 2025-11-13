@@ -242,24 +242,24 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
     }
 
     if (response) {
-      // EÄŸer response direkt array ise
+      // Eğer response direkt array ise
       if (Array.isArray(response)) {
         customersData = response
       } 
-      // EÄŸer response { data: [...], pagination: {...} } formatÄ±nda ise
+      // Eğer response { data: [...], pagination: {...} } formatında ise
       else if (response && typeof response === 'object' && 'data' in response) {
         const responseData = (response as CustomersResponse).data
         customersData = Array.isArray(responseData) ? responseData : []
         paginationData = (response as CustomersResponse).pagination || paginationData
       }
-      // EÄŸer response { customers: [...] } formatÄ±nda ise (bazÄ± API'ler bÃ¶yle dÃ¶nebilir)
+      // Eğer response { customers: [...] } formatında ise (bazı API'ler böyle dönebilir)
       else if (response && typeof response === 'object' && 'customers' in response) {
         const responseCustomers = (response as any).customers
         customersData = Array.isArray(responseCustomers) ? responseCustomers : []
       }
     }
 
-    // GÃ¼venlik kontrolÃ¼ - customers her zaman array olmalÄ±
+    // Güvenlik kontrolü - customers her zaman array olmalı
     if (!Array.isArray(customersData)) {
       if (process.env.NODE_ENV === 'development') {
         console.warn('CustomerList: customers is not an array, defaulting to empty array', { response, customersData })
@@ -291,7 +291,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         throw new Error(errorData.error || 'Failed to delete customer')
       }
       
-      // Optimistic update - silinen kaydÄ± listeden kaldÄ±r
+      // Optimistic update - silinen kaydı listeden kaldır
       const updatedCustomers = customers.filter((c) => c.id !== id)
       const updatedPagination = {
         ...pagination,
@@ -299,12 +299,12 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         totalPages: Math.ceil((pagination.totalItems - 1) / pagination.pageSize),
       }
       
-      // EÄŸer sayfa boÅŸaldÄ±ysa, Ã¶nceki sayfaya git
+      // Eğer sayfa boşaldıysa, önceki sayfaya git
       if (updatedCustomers.length === 0 && pagination.page > 1) {
         setCurrentPage(pagination.page - 1)
       }
       
-      // Cache'i gÃ¼ncelle - yeni listeyi hemen gÃ¶ster
+      // Cache'i güncelle - yeni listeyi hemen göster
       await mutateCustomers(
         {
           data: updatedCustomers,
@@ -335,8 +335,11 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       
       // Dashboard'daki distribution query'sini refetch et
       await queryClient.refetchQueries({ queryKey: ['distribution'] })
+      
+      // Başarı toast'ı göster
+      toast.success('Müşteri silindi', `${name} başarıyla silindi.`)
     } catch (error: any) {
-      // Production'da console.error kaldÄ±rÄ±ldÄ±
+      // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
@@ -357,7 +360,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
   const handleFormClose = useCallback(() => {
     setFormOpen(false)
     setSelectedCustomer(null)
-    // Form kapanÄ±rken cache'i gÃ¼ncelleme yapÄ±lmaz - onSuccess callback'te zaten yapÄ±lÄ±yor
+    // Form kapanırken cache'i güncelleme yapılmaz - onSuccess callback'te zaten yapılıyor
   }, [])
 
   const closeQuickAction = useCallback(() => {
@@ -396,7 +399,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         throw new Error(errorData.error || 'Failed to bulk delete customers')
       }
 
-      // Optimistic update - silinen kayÄ±tlarÄ± listeden kaldÄ±r
+      // Optimistic update - silinen kayıtları listeden kaldır
       const updatedCustomers = customers.filter((c) => !ids.includes(c.id))
       
       // Cache'i gÃ¼ncelle

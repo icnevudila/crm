@@ -191,6 +191,12 @@ export default function CustomerForm({
         await onSuccess(result) // result = API'den dönen yeni veya güncellenmiş müşteri
       }
       
+      // Başarı toast'ı göster
+      toast.success(
+        customer ? 'Müşteri güncellendi' : 'Müşteri kaydedildi',
+        customer ? 'Müşteri bilgileri başarıyla güncellendi.' : 'Yeni müşteri başarıyla eklendi.'
+      )
+      
       reset()
       onClose()
     } catch (error: any) {

@@ -805,7 +805,7 @@ export default function ShipmentList() {
                             </SelectContent>
                           </Select>
                           {/* Onayla Butonu - Sadece DRAFT veya PENDING durumunda */}
-                          {/* Status'Ã¼ uppercase yaparak kontrol et (gÃ¼venlik iÃ§in) */}
+                          {/* Status'ü uppercase yaparak kontrol et (güvenlik için) */}
                           {(shipment.status?.toUpperCase() === 'DRAFT' || shipment.status?.toUpperCase() === 'PENDING') && (
                             <Button
                               size="sm"
@@ -881,29 +881,29 @@ export default function ShipmentList() {
                     <div className="flex justify-end gap-2">
                       {/* 7ï¸âƒ£ Context MenÃ¼ (3-dot) - OnaylÄ± sevkiyatlar iÃ§in sadece gÃ¶rÃ¼ntÃ¼le */}
                       {shipment.status?.toUpperCase() === 'APPROVED' ? (
-                        // OnaylÄ± sevkiyatlar iÃ§in sadece gÃ¶rÃ¼ntÃ¼le butonu (tek gÃ¶z ikonu)
+                        // Onaylı sevkiyatlar için sadece görüntüle butonu (tek göz ikonu)
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => handleViewDetail(shipment)}
-                          aria-label="DetaylarÄ± gÃ¶rÃ¼ntÃ¼le"
+                          aria-label="Detayları görüntüle"
                         >
                           <Eye className="h-4 w-4 text-gray-600" />
                         </Button>
                       ) : (
-                        // OnaylanmamÄ±ÅŸ sevkiyatlar iÃ§in gÃ¶z ikonu + context menÃ¼
+                        // Onaylanmamış sevkiyatlar için göz ikonu + context menü
                         <>
                           {/* 5ï¸âƒ£ GÃ¶z Ä°konu - Detay Modal */}
                           <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => handleViewDetail(shipment)}
-                            aria-label="DetaylarÄ± gÃ¶rÃ¼ntÃ¼le"
+                            aria-label="Detayları görüntüle"
                           >
                             <Eye className="h-4 w-4 text-gray-600" />
                           </Button>
                           
-                          {/* Context MenÃ¼ (3-dot) */}
+                          {/* Context Menü (3-dot) */}
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" size="icon">
@@ -929,14 +929,14 @@ export default function ShipmentList() {
                                   </Link>
                                 </DropdownMenuItem>
                               )}
-                              {/* OnaylÄ± sevkiyatlar iÃ§in iptal butonu gÃ¶sterilmez */}
+                              {/* Onaylı sevkiyatlar için iptal butonu gösterilmez */}
                               {shipment.status?.toUpperCase() !== 'APPROVED' && (
                                 <DropdownMenuItem 
                                   onClick={() => handleStatusChange(shipment.id, 'CANCELLED')}
                                   className="text-red-600"
                                 >
                                   <X className="mr-2 h-4 w-4" />
-                                  Ä°ptal Et
+                                  İptal Et
                                 </DropdownMenuItem>
                               )}
                               <DropdownMenuSeparator />
@@ -944,8 +944,8 @@ export default function ShipmentList() {
                                 onClick={() => {
                                   if (shipment.status === 'DELIVERED') {
                                     toast.warning(
-                                      'Teslim edilmiÅŸ sevkiyat silinemez',
-                                      'Bu sevkiyat mÃ¼ÅŸteriye teslim edildi ve iÅŸlem tamamlandÄ±. Silmek iÃ§in Ã¶nce sevkiyat durumunu deÄŸiÅŸtirin.'
+                                      'Teslim edilmiş sevkiyat silinemez',
+                                      'Bu sevkiyat müşteriye teslim edildi ve işlem tamamlandı. Silmek için önce sevkiyat durumunu değiştirin.'
                                     )
                                     return
                                   }
@@ -978,17 +978,17 @@ export default function ShipmentList() {
             <DialogTitle>
               {(() => {
                 const shipmentName = detailShipment?.Invoice?.title 
-                  ? `${detailShipment.Invoice.title} faturasÄ±na ait Sevkiyat`
+                  ? `${detailShipment.Invoice.title} faturasına ait Sevkiyat`
                   : detailShipment?.Invoice?.invoiceNumber
-                  ? `Fatura #${detailShipment.Invoice.invoiceNumber} sevkiyatÄ±`
+                  ? `Fatura #${detailShipment.Invoice.invoiceNumber} sevkiyatı`
                   : detailShipment?.invoiceId
-                  ? `Fatura #${detailShipment.invoiceId.substring(0, 8)} sevkiyatÄ±`
+                  ? `Fatura #${detailShipment.invoiceId.substring(0, 8)} sevkiyatı`
                   : `Sevkiyat #${detailShipment?.tracking || detailShipment?.id.substring(0, 8)}`
                 return shipmentName
               })()}
             </DialogTitle>
             <DialogDescription>
-              Sevkiyat detaylarÄ±, Ã¼rÃ¼n listesi ve stok hareketleri
+              Sevkiyat detayları, ürün listesi ve stok hareketleri
             </DialogDescription>
           </DialogHeader>
           
@@ -998,8 +998,8 @@ export default function ShipmentList() {
               <Card className="p-4">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold">Sevkiyat Bilgileri</h3>
-                  {/* Onay Butonu - Sadece DRAFT veya PENDING durumunda gÃ¶ster */}
-                  {/* APPROVED durumunda buton gÃ¶rÃ¼nmez (onaylandÄ±ktan sonra deÄŸiÅŸtirilemez) */}
+                  {/* Onay Butonu - Sadece DRAFT veya PENDING durumunda göster */}
+                  {/* APPROVED durumunda buton görünmez (onaylandıktan sonra değiştirilemez) */}
                   {(detailShipment.status === 'DRAFT' || detailShipment.status === 'PENDING') && (
                     <Button
                       onClick={() => handleStatusChange(detailShipment.id, 'APPROVED')}
@@ -1007,10 +1007,10 @@ export default function ShipmentList() {
                       className="bg-green-600 hover:bg-green-700 text-white"
                     >
                       <CheckCircle className="mr-2 h-4 w-4" />
-                      {statusChangingId === detailShipment.id ? 'OnaylanÄ±yor...' : 'Onayla'}
+                      {statusChangingId === detailShipment.id ? 'Onaylanıyor...' : 'Onayla'}
                     </Button>
                   )}
-                  {/* OnaylandÄ±ktan sonra durum badge'i gÃ¶ster */}
+                  {/* Onaylandıktan sonra durum badge'i göster */}
                   {detailShipment.status === 'APPROVED' && (
                     <Badge className={statusColors[detailShipment.status] || 'bg-green-100'}>
                       <CheckCircle className="mr-1 h-3 w-3" />
@@ -1045,7 +1045,7 @@ export default function ShipmentList() {
               {/* Fatura Bilgisi */}
               {detailShipment.Invoice ? (
                 <Card className="p-4">
-                  <h3 className="font-semibold mb-3">Ä°lgili Fatura</h3>
+                  <h3 className="font-semibold mb-3">İlgili Fatura</h3>
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
@@ -1065,7 +1065,7 @@ export default function ShipmentList() {
                         {(detailShipment.Invoice as any).status || 'DRAFT'}
                       </Badge>
                     </div>
-                    {/* Fatura DetaylarÄ± - KDV, Ä°ndirim, Ara Toplam */}
+                    {/* Fatura Detayları - KDV, İndirim, Ara Toplam */}
                     {(() => {
                       const taxRate = (detailShipment.Invoice as any).taxRate || 18
                       const invoiceItems = detailShipment.invoiceItems || []
@@ -1078,20 +1078,20 @@ export default function ShipmentList() {
                       const subtotal = itemsTotal - discount
                       const taxAmount = (subtotal * taxRate) / 100
                       const totalWithTax = subtotal + taxAmount
-                      // Invoice'dan gelen total'Ä± kullan (eÄŸer varsa), yoksa hesaplanan total'Ä± kullan
+                      // Invoice'dan gelen total'ı kullan (eğer varsa), yoksa hesaplanan total'ı kullan
                       const finalTotal = (detailShipment.Invoice as any).totalAmount || totalWithTax
 
                       return (
                         <div className="space-y-3 pt-3 border-t">
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <p className="text-sm text-gray-600">Ara Toplam (KDV HariÃ§)</p>
+                              <p className="text-sm text-gray-600">Ara Toplam (KDV Hariç)</p>
                               <p className="text-lg font-semibold text-gray-900">
                                 {formatCurrency(itemsTotal)}
                               </p>
                             </div>
                             <div>
-                              <p className="text-sm text-gray-600">OluÅŸturulma Tarihi</p>
+                              <p className="text-sm text-gray-600">Oluşturulma Tarihi</p>
                               <p className="text-sm text-gray-900">
                                 {new Date(detailShipment.Invoice.createdAt).toLocaleDateString('tr-TR', {
                                   year: 'numeric',
@@ -1142,7 +1142,7 @@ export default function ShipmentList() {
                     })()}
                     {detailShipment.Invoice.Customer && (
                       <div className="pt-3 border-t">
-                        <p className="text-sm text-gray-600 mb-1">MÃ¼ÅŸteri</p>
+                        <p className="text-sm text-gray-600 mb-1">Müşteri</p>
                         <p className="font-medium">{detailShipment.Invoice.Customer.name}</p>
                         {detailShipment.Invoice.Customer.email && (
                           <p className="text-sm text-gray-500">{detailShipment.Invoice.Customer.email}</p>
@@ -1161,22 +1161,22 @@ export default function ShipmentList() {
                 </Card>
               ) : (
                 <Card className="p-4">
-                  <h3 className="font-semibold mb-3">Ä°lgili Fatura</h3>
+                  <h3 className="font-semibold mb-3">İlgili Fatura</h3>
                   <p className="text-sm text-gray-500">
-                    Bu sevkiyat iÃ§in fatura bulunamadÄ±.
+                    Bu sevkiyat için fatura bulunamadı.
                   </p>
                 </Card>
               )}
 
-              {/* ÃœrÃ¼n Listesi - InvoiceItem'larÄ± gÃ¶ster */}
+              {/* Ürün Listesi - InvoiceItem'ları göster */}
               <Card className="p-4">
-                <h3 className="font-semibold mb-3">Sevkiyat Ä°Ã§eriÄŸi</h3>
+                <h3 className="font-semibold mb-3">Sevkiyat İçeriği</h3>
                 {detailShipment.invoiceItems && detailShipment.invoiceItems.length > 0 ? (
                   <div className="overflow-x-auto">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>ÃœrÃ¼n</TableHead>
+                          <TableHead>Ürün</TableHead>
                           <TableHead>SKU/Barkod</TableHead>
                           <TableHead className="text-right">Miktar</TableHead>
                           <TableHead className="text-right">Birim Fiyat</TableHead>
@@ -1256,12 +1256,12 @@ export default function ShipmentList() {
                   </div>
                 ) : (
                   <p className="text-sm text-gray-500">
-                    Bu sevkiyat iÃ§in Ã¼rÃ¼n bulunamadÄ±. ÃœrÃ¼n listesi fatura detay sayfasÄ±ndan gÃ¶rÃ¼ntÃ¼lenebilir.
+                    Bu sevkiyat için ürün bulunamadı. Ürün listesi fatura detay sayfasından görüntülenebilir.
                   </p>
                 )}
               </Card>
 
-              {/* Stok Hareketleri - StockMovement'larÄ± gÃ¶ster */}
+              {/* Stok Hareketleri - StockMovement'ları göster */}
               <Card className="p-4">
                 <h3 className="font-semibold mb-3">Stok Hareketleri</h3>
                 {detailShipment.stockMovements && detailShipment.stockMovements.length > 0 ? (
@@ -1269,11 +1269,11 @@ export default function ShipmentList() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>ÃœrÃ¼n</TableHead>
+                          <TableHead>Ürün</TableHead>
                           <TableHead>Hareket Tipi</TableHead>
                           <TableHead className="text-right">Miktar</TableHead>
                           <TableHead>Neden</TableHead>
-                          <TableHead>KullanÄ±cÄ±</TableHead>
+                          <TableHead>Kullanıcı</TableHead>
                           <TableHead>Tarih</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1315,7 +1315,7 @@ export default function ShipmentList() {
                   </div>
                 ) : (
                   <p className="text-sm text-gray-500">
-                    Bu sevkiyat iÃ§in stok hareketi bulunamadÄ±. Stok hareketleri Ã¼rÃ¼n detay sayfasÄ±ndan gÃ¶rÃ¼ntÃ¼lenebilir.
+                    Bu sevkiyat için stok hareketi bulunamadı. Stok hareketleri ürün detay sayfasından görüntülenebilir.
                   </p>
                 )}
               </Card>
@@ -1328,7 +1328,7 @@ export default function ShipmentList() {
       <Dialog open={reportModalOpen} onOpenChange={setReportModalOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Sevkiyat RaporlarÄ±</DialogTitle>
+            <DialogTitle>Sevkiyat Raporları</DialogTitle>
             <DialogDescription>
               Sevkiyat istatistikleri ve analizler
             </DialogDescription>
@@ -1336,7 +1336,7 @@ export default function ShipmentList() {
           
           <div className="space-y-4">
             <Card className="p-4">
-              <h3 className="font-semibold mb-3">Ã–zet Ä°statistikler</h3>
+              <h3 className="font-semibold mb-3">Özet İstatistikler</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-gray-600">Toplam Sevkiyat</p>

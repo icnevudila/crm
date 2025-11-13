@@ -125,3 +125,4 @@ Test planı dosyası: `testsprite_tests/testsprite_frontend_test_plan.json`
 **Not:** Test sonuçları TestSprite web arayüzünden alınmıştır. Detaylı hata logları için TestSprite dashboard'unu kontrol edin.
 
 
+

@@ -1,8 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useTranslations } from 'next-intl'
-import { AlertTriangle, Merge, X, CheckCircle2, Loader2 } from 'lucide-react'
+import { useState } from 'react'
+import { AlertTriangle, Merge, CheckCircle2, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -12,7 +11,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from '@/lib/toast'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
@@ -50,9 +49,6 @@ export default function DuplicateDetectionModal({
   onClose,
   onMergeComplete,
 }: DuplicateDetectionModalProps) {
-  const t = useTranslations('customers')
-  const tCommon = useTranslations('common')
-  const [loading, setLoading] = useState(false)
   const [merging, setMerging] = useState<string | null>(null) // Merging group ID
 
   // Duplicate'leri çek
@@ -249,4 +245,5 @@ export default function DuplicateDetectionModal({
     </Dialog>
   )
 }
+
 

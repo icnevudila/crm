@@ -254,7 +254,7 @@ export default function MeetingDetailModal({
                 </Card>
               )}
 
-              {/* Ä°lgili Bilgiler */}
+              {/* İlgili Bilgiler */}
               <Card>
                 <CardHeader>
                   <CardTitle>İlgili Bilgiler</CardTitle>
@@ -366,7 +366,7 @@ export default function MeetingDetailModal({
                 </Card>
               )}
 
-              {/* Gider UyarÄ±sÄ± */}
+              {/* Gider Uyarısı */}
               {displayMeeting?.expenseWarning && (
                 <Card className="border-amber-200 bg-amber-50">
                   <CardHeader>
@@ -393,7 +393,7 @@ export default function MeetingDetailModal({
 
             {/* Sidebar */}
             <div className="space-y-6">
-              {/* HÄ±zlÄ± Eylemler */}
+              {/* Hızlı Eylemler */}
               <Card>
                 <CardHeader>
                   <CardTitle>Hızlı Eylemler</CardTitle>
@@ -426,7 +426,7 @@ export default function MeetingDetailModal({
                 </CardContent>
               </Card>
 
-              {/* OluÅŸturan */}
+              {/* Oluşturan */}
               {displayMeeting?.CreatedBy && (
                 <Card>
                   <CardHeader>
@@ -463,6 +463,9 @@ export default function MeetingDetailModal({
     </>
   )
 }
+
+
+
 
 
 

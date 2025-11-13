@@ -31,21 +31,21 @@ import { CountryCodeSelector } from '@/components/ui/country-code-selector'
 import { useLocale } from 'next-intl'
 
 const companySchema = z.object({
-  name: z.string().min(1, 'Firma adÄ± gereklidir'),
-  contactPerson: z.string().min(1, 'Kontak kiÅŸi gereklidir'),
+  name: z.string().min(1, 'Firma adı gereklidir'),
+  contactPerson: z.string().min(1, 'Kontak kişi gereklidir'),
   phone: z.string().min(1, 'Telefon gereklidir'),
   countryCode: z.string().default('+90'),
   taxOffice: z.string().min(1, 'Vergi dairesi gereklidir'),
-  taxNumber: z.string().min(1, 'Vergi numarasÄ± gereklidir'),
+  taxNumber: z.string().min(1, 'Vergi numarası gereklidir'),
   sector: z.string().optional(),
   city: z.string().optional(),
-  // district kolonu veritabanÄ±nda yok, bu yÃ¼zden kaldÄ±rÄ±ldÄ±
+  // district kolonu veritabanında yok, bu yüzden kaldırıldı
   address: z.string().optional(),
-  email: z.string().email('GeÃ§erli bir email adresi giriniz').optional().or(z.literal('')),
-  website: z.string().url('GeÃ§erli bir website adresi giriniz').optional().or(z.literal('')),
+  email: z.string().email('Geçerli bir email adresi giriniz').optional().or(z.literal('')),
+  website: z.string().url('Geçerli bir website adresi giriniz').optional().or(z.literal('')),
   description: z.string().optional(),
   status: z.enum(['POT', 'MUS', 'ALT', 'PAS']).default('POT'),
-  logoUrl: z.string().url('GeÃ§erli bir URL girin').optional().or(z.literal('')),
+  logoUrl: z.string().url('Geçerli bir URL girin').optional().or(z.literal('')),
 })
 
 type CompanyFormData = z.infer<typeof companySchema>
@@ -57,14 +57,14 @@ interface CompanyFormProps {
   onSuccess?: (savedCompany: any) => void | Promise<void>
 }
 
-// Ã–nceden tanÄ±mlÄ± sektÃ¶rler
+// Önceden tanımlı sektörler
 const SECTORS = [
   'Teknoloji',
-  'YazÄ±lÄ±m',
-  'SaÄŸlÄ±k',
-  'EÄŸitim',
-  'GÄ±da',
-  'Ä°nÅŸaat',
+  'Yazılım',
+  'Sağlık',
+  'Eğitim',
+  'Gıda',
+  'İnşaat',
   'Otomotiv',
   'Enerji',
   'Finans',

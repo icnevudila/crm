@@ -51,3 +51,4 @@ Eğer login başarısız olursa:
 3. Login endpoint çalışıyor mu kontrol et: `curl -X POST http://localhost:3000/api/auth/login -H "Content-Type: application/json" -d '{"email":"admin@tipplusmedikal.com","password":"demo123"}'`
 
 
+
