@@ -145,6 +145,9 @@ export default function ContactList() {
         mutate('/api/contacts?', updatedContacts, { revalidate: false }),
         mutate(apiUrl, updatedContacts, { revalidate: false }),
       ])
+      
+      // Başarı toast'ı göster
+      toast.success('Firma yetkilisi silindi', `${name} başarıyla silindi.`)
     } catch (error: any) {
       console.error('Delete error:', error)
       toast.error(t('deleteFailed'), error?.message)

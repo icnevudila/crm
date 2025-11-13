@@ -335,9 +335,6 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       
       // Dashboard'daki distribution query'sini refetch et
       await queryClient.refetchQueries({ queryKey: ['distribution'] })
-      
-      // Başarı toast'ı göster
-      toast.success('Müşteri silindi', `${name} başarıyla silindi.`)
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
@@ -402,7 +399,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       // Optimistic update - silinen kayıtları listeden kaldır
       const updatedCustomers = customers.filter((c) => !ids.includes(c.id))
       
-      // Cache'i gÃ¼ncelle
+      // Cache'i güncelle
       await mutateCustomers(
         {
           data: updatedCustomers,
@@ -493,7 +490,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       const result = await res.json()
       toast.success(t('fileUploaded'), t('customersImported', { count: result.importedCount }))
 
-      // Cache'i invalidate et - yeni verileri Ã§ek
+      // Cache'i invalidate et - yeni verileri çek
       await Promise.all([
         mutateCustomers(undefined, { revalidate: true }),
         apiUrl,
@@ -541,7 +538,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
     }
   }, [debouncedSearch, status, sector])
 
-  // Select all checkbox kontrolÃ¼
+  // Select all checkbox kontrolü
   useEffect(() => {
     if (customers.length > 0 && selectedIds.length === customers.length) {
       setSelectAll(true)
@@ -560,7 +557,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
 
   return (
     <div className="space-y-6">
-      {/* Ä°statistikler */}
+      {/* İstatistikler */}
       <ModuleStats module="customers" statsUrl="/api/stats/customers" />
 
       {/* Header */}
@@ -642,22 +639,22 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
           <SelectContent>
             <SelectItem value="all">{t('allSectors')}</SelectItem>
             <SelectItem value="Teknoloji">Teknoloji</SelectItem>
-            <SelectItem value="SaÄŸlÄ±k">SaÄŸlÄ±k</SelectItem>
-            <SelectItem value="EÄŸitim">EÄŸitim</SelectItem>
-            <SelectItem value="Ä°nÅŸaat">Ä°nÅŸaat</SelectItem>
+            <SelectItem value="Sağlık">Sağlık</SelectItem>
+            <SelectItem value="Eğitim">Eğitim</SelectItem>
+            <SelectItem value="İnşaat">İnşaat</SelectItem>
             <SelectItem value="Otomotiv">Otomotiv</SelectItem>
-            <SelectItem value="GÄ±da">GÄ±da</SelectItem>
+            <SelectItem value="Gıda">Gıda</SelectItem>
             <SelectItem value="Tekstil">Tekstil</SelectItem>
             <SelectItem value="Enerji">Enerji</SelectItem>
             <SelectItem value="Finans">Finans</SelectItem>
             <SelectItem value="Turizm">Turizm</SelectItem>
             <SelectItem value="Lojistik">Lojistik</SelectItem>
             <SelectItem value="Medya">Medya</SelectItem>
-            <SelectItem value="DanÄ±ÅŸmanlÄ±k">DanÄ±ÅŸmanlÄ±k</SelectItem>
+            <SelectItem value="Danışmanlık">Danışmanlık</SelectItem>
             <SelectItem value="E-ticaret">E-ticaret</SelectItem>
-            <SelectItem value="Ä°malat">Ä°malat</SelectItem>
+            <SelectItem value="İmalat">İmalat</SelectItem>
             <SelectItem value="Ticaret">Ticaret</SelectItem>
-            <SelectItem value="DiÄŸer">DiÄŸer</SelectItem>
+            <SelectItem value="Diğer">Diğer</SelectItem>
           </SelectContent>
         </Select>
       </div>

@@ -156,6 +156,12 @@ export default function ContactForm({
         onSuccess(savedContact)
       }
       
+      // Başarı toast'ı göster
+      toast.success(
+        contact ? 'Firma yetkilisi güncellendi' : 'Firma yetkilisi kaydedildi',
+        contact ? 'Yetkili bilgileri başarıyla güncellendi.' : 'Yeni yetkili başarıyla eklendi.'
+      )
+      
       reset()
       onClose()
     } catch (error: any) {
