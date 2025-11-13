@@ -29,6 +29,7 @@ export async function GET(request: Request) {
     let maxValue: string | null = null
     let startDate: string | null = null
     let endDate: string | null = null
+    let filterCompanyId = '' // SuperAdmin için firma filtresi
     
     try {
       const { searchParams } = new URL(request.url)
@@ -38,6 +39,7 @@ export async function GET(request: Request) {
       maxValue = searchParams.get('maxValue')
       startDate = searchParams.get('startDate')
       endDate = searchParams.get('endDate')
+      filterCompanyId = searchParams.get('filterCompanyId') || ''
     } catch (error) {
       // request.url undefined veya geçersizse, filtreler boş kalır
       if (process.env.NODE_ENV === 'development') {
@@ -68,9 +70,14 @@ export async function GET(request: Request) {
       .order('updatedAt', { ascending: false }) // En son güncellenen en üstte (idx_deal_updated_at index'i kullanılır)
       .order('createdAt', { ascending: false }) // Aynı updatedAt için createdAt'e göre
     
+    // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
       query = query.eq('companyId', companyId)
+    } else if (filterCompanyId) {
+      // SuperAdmin firma filtresi seçtiyse sadece o firmayı göster
+      query = query.eq('companyId', filterCompanyId)
     }
+    // SuperAdmin ve firma filtresi yoksa tüm firmaları göster
 
     // Filtreler
     if (customerId) {

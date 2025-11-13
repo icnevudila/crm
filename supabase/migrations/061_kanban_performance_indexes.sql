@@ -36,3 +36,4 @@ COMMENT ON INDEX idx_invoice_company_status_updated IS 'Invoice composite index 
 
 
 
+

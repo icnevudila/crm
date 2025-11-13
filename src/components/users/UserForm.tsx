@@ -1,13 +1,13 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
-import { toast } from '@/lib/toast'
+import { toast, handleApiError } from '@/lib/toast'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/hooks/useSession'
 import { useTranslations } from 'next-intl'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -44,7 +44,7 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
   const [generatedPassword, setGeneratedPassword] = useState<string | null>(null)
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
 
-  // SuperAdmin için kurumları çek - her zaman çek (hem SuperAdmin hem de normal admin için)
+  // SuperAdmin iÃ§in kurumlarÄ± Ã§ek - her zaman Ã§ek (hem SuperAdmin hem de normal admin iÃ§in)
   const { data: companies = [] } = useQuery({
     queryKey: ['companies'],
     queryFn: async () => {
@@ -55,8 +55,8 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
     enabled: open && isSuperAdmin,
   })
 
-  // Schema'yı dinamik olarak oluştur (SuperAdmin kontrolü için)
-  // Validation mesajları locale'den alınıyor
+  // Schema'yÄ± dinamik olarak oluÅŸtur (SuperAdmin kontrolÃ¼ iÃ§in)
+  // Validation mesajlarÄ± locale'den alÄ±nÄ±yor
   const createUserSchema = () => {
     if (isSuperAdmin) {
       return z.object({
@@ -64,7 +64,7 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
         email: z.string().email(t('form.emailRequired')),
         password: z.string().min(6, t('form.passwordMin')).optional(),
         role: z.enum(['USER', 'ADMIN', 'SALES', 'SUPER_ADMIN']).default('USER'),
-        companyId: z.string().min(1, t('form.companyRequired')), // SuperAdmin için kurum seçimi zorunlu
+        companyId: z.string().min(1, t('form.companyRequired')), // SuperAdmin iÃ§in kurum seÃ§imi zorunlu
       })
     } else {
       return z.object({
@@ -72,7 +72,7 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
         email: z.string().email(t('form.emailRequired')),
         password: z.string().min(6, t('form.passwordMin')).optional(),
         role: z.enum(['USER', 'SALES']).default('USER'),
-        companyId: z.string().optional(), // Normal admin için companyId session'dan gelir
+        companyId: z.string().optional(), // Normal admin iÃ§in companyId session'dan gelir
       })
     }
   }
@@ -101,20 +101,20 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
   const role = watch('role')
   const companyId = watch('companyId')
 
-  // User prop değiştiğinde veya modal açıldığında form'u güncelle
+  // User prop deÄŸiÅŸtiÄŸinde veya modal aÃ§Ä±ldÄ±ÄŸÄ±nda form'u gÃ¼ncelle
   useEffect(() => {
     if (open) {
       if (user) {
-        // Düzenleme modu - user bilgilerini yükle
+        // DÃ¼zenleme modu - user bilgilerini yÃ¼kle
         reset({
           name: user.name || '',
           email: user.email || '',
-          password: '', // Şifreyi gösterme
+          password: '', // Åifreyi gÃ¶sterme
           role: user.role || 'SALES',
           companyId: user.companyId || '',
         })
       } else {
-        // Yeni kayıt modu - form'u temizle
+        // Yeni kayÄ±t modu - form'u temizle
         reset({
           name: '',
           email: '',
@@ -131,13 +131,13 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
       const url = user ? `/api/users/${user.id}` : '/api/users'
       const method = user ? 'PUT' : 'POST'
 
-      // Güncellemede şifre yoksa kaldır
+      // GÃ¼ncellemede ÅŸifre yoksa kaldÄ±r
       if (user && !data.password) {
         const { password, ...rest } = data
         data = rest as any
       }
 
-      // SuperAdmin değilse companyId'yi session'dan al
+      // SuperAdmin deÄŸilse companyId'yi session'dan al
       if (!isSuperAdmin) {
         data.companyId = session?.user?.companyId
       }
@@ -156,7 +156,7 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
       return res.json()
     },
     onSuccess: (savedUser) => {
-      // onSuccess callback'i çağır - optimistic update için
+      // onSuccess callback'i Ã§aÄŸÄ±r - optimistic update iÃ§in
       if (onSuccess) {
         onSuccess(savedUser)
       }
@@ -171,7 +171,7 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
     },
     onError: (error: any) => {
       console.error('Error:', error)
-      toast.error(t('form.saveFailed'), error.message)
+      handleApiError(error, t('form.saveFailed'), error.message)
     },
   })
 
@@ -277,7 +277,7 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
             </Select>
           </div>
 
-          {/* SuperAdmin için kurum seçimi - ZORUNLU */}
+          {/* SuperAdmin iÃ§in kurum seÃ§imi - ZORUNLU */}
           {isSuperAdmin && (
             <div className="space-y-2">
               <label className="text-sm font-medium">{t('form.companyLabel')} *</label>

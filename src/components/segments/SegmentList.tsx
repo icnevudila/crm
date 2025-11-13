@@ -13,6 +13,12 @@ import SegmentForm from './SegmentForm'
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
+import dynamic from 'next/dynamic'
+
+const SegmentDetailModal = dynamic(() => import('./SegmentDetailModal'), {
+  ssr: false,
+  loading: () => null,
+})
 
 interface SegmentListProps {
   isOpen?: boolean
@@ -36,6 +42,9 @@ export default function SegmentList({ isOpen = true }: SegmentListProps) {
   const [search, setSearch] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [selectedSegment, setSelectedSegment] = useState<Segment | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null)
+  const [selectedSegmentData, setSelectedSegmentData] = useState<Segment | null>(null)
 
   const apiUrl = useMemo(() => {
     if (!isOpen) return null
@@ -155,11 +164,17 @@ export default function SegmentList({ isOpen = true }: SegmentListProps) {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Link href={`/${locale}/segments/${segment.id}`} prefetch={true}>
-                        <Button variant="ghost" size="icon">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setSelectedSegmentId(segment.id)
+                          setSelectedSegmentData(segment)
+                          setDetailModalOpen(true)
+                        }}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
                       <Button variant="ghost" size="icon" onClick={() => handleEdit(segment)}>
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -196,6 +211,20 @@ export default function SegmentList({ isOpen = true }: SegmentListProps) {
           await mutate('/api/segments', updated, { revalidate: false })
         }}
       />
+
+      {/* Detail Modal */}
+      {selectedSegmentId && (
+        <SegmentDetailModal
+          segmentId={selectedSegmentId}
+          open={detailModalOpen}
+          onClose={() => {
+            setDetailModalOpen(false)
+            setSelectedSegmentId(null)
+            setSelectedSegmentData(null)
+          }}
+          initialData={selectedSegmentData || undefined}
+        />
+      )}
     </div>
   )
 }

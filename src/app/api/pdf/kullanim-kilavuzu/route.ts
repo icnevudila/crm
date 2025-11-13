@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
+
 import React from 'react'
 import { renderToBuffer } from '@react-pdf/renderer'
 import KullanimKilavuzuPDF from '@/components/pdf/KullanimKilavuzuPDF'
@@ -10,7 +10,10 @@ import KullanimKilavuzuPDF from '@/components/pdf/KullanimKilavuzuPDF'
 
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
+    }
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -37,6 +40,7 @@ export async function GET(request: Request) {
     )
   }
 }
+
 
 
 

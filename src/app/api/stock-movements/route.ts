@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 export const dynamic = 'force-dynamic'
@@ -8,7 +7,10 @@ export const dynamic = 'force-dynamic'
 // GET: Stok hareketlerini listele
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
+    }
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -74,7 +76,10 @@ export async function GET(request: Request) {
 // POST: Yeni stok hareketi oluştur
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
+    }
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

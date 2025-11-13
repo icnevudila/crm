@@ -26,12 +26,14 @@ export async function GET(request: Request) {
     let quoteId = ''
     let search = ''
     let invoiceType = ''
+    let filterCompanyId = '' // SuperAdmin için firma filtresi
     
     try {
       const { searchParams } = new URL(request.url)
       quoteId = searchParams.get('quoteId') || ''
       search = searchParams.get('search') || ''
       invoiceType = searchParams.get('invoiceType') || '' // SALES veya PURCHASE
+      filterCompanyId = searchParams.get('filterCompanyId') || ''
     } catch (error) {
       // request.url undefined veya geçersizse, filtreler boş kalır
       if (process.env.NODE_ENV === 'development') {
@@ -47,9 +49,14 @@ export async function GET(request: Request) {
       .select('id, title, status, totalAmount, quoteId, createdAt, invoiceType, serviceDescription')
       .order('createdAt', { ascending: false })
     
+    // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
       query = query.eq('companyId', companyId)
+    } else if (filterCompanyId) {
+      // SuperAdmin firma filtresi seçtiyse sadece o firmayı göster
+      query = query.eq('companyId', filterCompanyId)
     }
+    // SuperAdmin ve firma filtresi yoksa tüm firmaları göster
 
     // Filtreler
     if (quoteId) {

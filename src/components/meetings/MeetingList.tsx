@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from '@/lib/toast'
@@ -28,13 +28,18 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/hooks/useSession'
 import { formatCurrency } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import dynamic from 'next/dynamic'
 
-// Lazy load MeetingForm - performans için
+// Lazy load MeetingForm - performans iÃ§in
 const MeetingForm = dynamic(() => import('./MeetingForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
+const MeetingDetailModal = dynamic(() => import('./MeetingDetailModal'), {
   ssr: false,
   loading: () => null,
 })
@@ -91,17 +96,25 @@ export default function MeetingList() {
   const tCommon = useTranslations('common')
   const router = useRouter()
   const { data: session } = useSession()
+  
+  // SuperAdmin kontrolü
+  const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+  
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [userId, setUserId] = useState('all') // Admin filtreleme için
+  const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin için firma filtresi
   const [formOpen, setFormOpen] = useState(false)
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null)
+  const [selectedMeetingData, setSelectedMeetingData] = useState<Meeting | null>(null)
   const [expenseWarningOpen, setExpenseWarningOpen] = useState(false)
   const [newMeetingId, setNewMeetingId] = useState<string | null>(null)
 
-  // Debounced search - performans için
+  // Debounced search - performans iÃ§in
   const [debouncedSearch, setDebouncedSearch] = useState(search)
   
   useEffect(() => {
@@ -112,6 +125,16 @@ export default function MeetingList() {
     return () => clearTimeout(timer)
   }, [search])
 
+  // SuperAdmin için firmaları çek
+  const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
+    isSuperAdmin ? '/api/superadmin/companies' : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
+  // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
+  const companies = (companiesData?.companies || []).filter((company, index, self) => 
+    index === self.findIndex((c) => c.id === company.id)
+  )
+
   // SWR ile veri çekme - debounced search kullanıyoruz
   const params = new URLSearchParams()
   if (debouncedSearch) params.append('search', debouncedSearch)
@@ -121,16 +144,17 @@ export default function MeetingList() {
   if (userId && (session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPER_ADMIN')) {
     params.append('userId', userId)
   }
+  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
   
   const apiUrl = `/api/meetings?${params.toString()}`
   const { data: meetings = [], isLoading, error, mutate: mutateMeetings } = useData<Meeting[]>(apiUrl, {
-    dedupingInterval: 5000, // 5 saniye cache (daha kısa - güncellemeler daha hızlı)
+    dedupingInterval: 5000, // 5 saniye cache (daha kÄ±sa - gÃ¼ncellemeler daha hÄ±zlÄ±)
     revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
-    keepPreviousData: true, // Hata durumunda önceki veriyi göster
-    fallbackData: [], // İlk yüklemede boş array göster
+    keepPreviousData: true, // Hata durumunda Ã¶nceki veriyi gÃ¶ster
+    fallbackData: [], // Ä°lk yÃ¼klemede boÅŸ array gÃ¶ster
   })
 
-  // Kullanıcı listesi (Admin filtreleme için) - sadece admin için çek
+  // KullanÄ±cÄ± listesi (Admin filtreleme iÃ§in) - sadece admin iÃ§in Ã§ek
   const shouldFetchUsers = session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPER_ADMIN'
   const { data: users = [] } = useData<any[]>(
     shouldFetchUsers ? '/api/users' : null,
@@ -153,10 +177,11 @@ export default function MeetingList() {
   }
 
   const handleDelete = async (id: string, title: string) => {
-    if (!confirm(`${title} görüşmesini silmek istediğinize emin misiniz?`)) {
+    if (!window.confirm(`${title} görüşmesini silmek istediğinize emin misiniz?`)) {
       return
     }
 
+    const toastId = toast.loading('Siliniyor...')
     try {
       const res = await fetch(`/api/meetings/${id}`, {
         method: 'DELETE',
@@ -164,7 +189,7 @@ export default function MeetingList() {
       
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
-        throw new Error(errorData.error || 'Failed to delete meeting')
+        throw new Error(errorData.error || 'Silme işlemi başarısız oldu')
       }
       
       // Optimistic update
@@ -176,9 +201,13 @@ export default function MeetingList() {
         mutate('/api/meetings?', updatedMeetings, { revalidate: false }),
         mutate(apiUrl, updatedMeetings, { revalidate: false }),
       ])
+
+      toast.dismiss(toastId)
+      toast.success('Silindi', 'Görüşme başarıyla silindi.')
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error('Silinemedi', error?.message)
+      toast.dismiss(toastId)
+      toast.error('Silme başarısız', error?.message || 'Silme işlemi sırasında bir hata oluştu.')
     }
   }
 
@@ -338,6 +367,26 @@ export default function MeetingList() {
         </div>
       )}
 
+      {/* SuperAdmin: Firma Filtresi */}
+      {isSuperAdmin && (
+        <div className="flex items-center gap-2">
+          <label className="text-sm font-medium">Firma:</label>
+          <Select value={filterCompanyId || 'all'} onValueChange={(value) => setFilterCompanyId(value === 'all' ? '' : value)}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Tüm Firmalar" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tüm Firmalar</SelectItem>
+              {companies.map((company) => (
+                <SelectItem key={company.id} value={company.id}>
+                  {company.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* Table */}
       <div className="border rounded-lg">
         <Table>
@@ -346,6 +395,7 @@ export default function MeetingList() {
               <TableHead>{t('tableHeaders.date')}</TableHead>
               <TableHead>{t('tableHeaders.title')}</TableHead>
               <TableHead>{t('tableHeaders.company')}</TableHead>
+              {isSuperAdmin && <TableHead>Firma</TableHead>}
               <TableHead>{t('tableHeaders.customer')}</TableHead>
               <TableHead>{t('tableHeaders.status')}</TableHead>
               <TableHead>{t('tableHeaders.expense')}</TableHead>
@@ -355,17 +405,17 @@ export default function MeetingList() {
           </TableHeader>
           <TableBody>
             {isLoading && meetings.length === 0 ? (
-              // Loading skeleton - her satır için
+              // Loading skeleton - her satÄ±r iÃ§in
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={`skeleton-${i}`}>
-                  <TableCell colSpan={8}>
+                  <TableCell colSpan={isSuperAdmin ? 9 : 8}>
                     <div className="h-12 bg-gray-100 animate-pulse rounded" />
                   </TableCell>
                 </TableRow>
               ))
             ) : meetings.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                <TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-8 text-gray-500">
                   {t('noMeetingsFound')}
                 </TableCell>
               </TableRow>
@@ -412,6 +462,13 @@ export default function MeetingList() {
                       <span className="text-gray-400">-</span>
                     )}
                   </TableCell>
+                  {isSuperAdmin && (
+                    <TableCell>
+                      {meeting.Company ? (
+                        <Badge variant="outline">{meeting.Company.name}</Badge>
+                      ) : '-'}
+                    </TableCell>
+                  )}
                   <TableCell>
                     {meeting.Customer ? (
                       <Link
@@ -447,11 +504,17 @@ export default function MeetingList() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Link href={`/${locale}/meetings/${meeting.id}`} prefetch={true}>
-                        <Button variant="ghost" size="icon">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setSelectedMeetingId(meeting.id)
+                          setSelectedMeetingData(meeting)
+                          setDetailModalOpen(true)
+                        }}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
                       {(session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPER_ADMIN' || meeting.createdBy === session?.user?.id) && (
                         <>
                           <Button
@@ -498,20 +561,20 @@ export default function MeetingList() {
             // CREATE
             updatedMeetings = [savedMeeting, ...meetings]
             
-            // Gider uyarısı kontrolü
+            // Gider uyarÄ±sÄ± kontrolÃ¼
             if (savedMeeting.expenseWarning) {
               setNewMeetingId(savedMeeting.id)
               setExpenseWarningOpen(true)
             }
             
-            // Yeni görüşme oluşturulduğunda detay sayfasına yönlendir
+            // Yeni gÃ¶rÃ¼ÅŸme oluÅŸturulduÄŸunda detay sayfasÄ±na yÃ¶nlendir
             router.push(`/${locale}/meetings/${savedMeeting.id}`)
           }
           
-          // Cache'i güncelle
+          // Cache'i gÃ¼ncelle
           await mutateMeetings(updatedMeetings, { revalidate: false })
           
-          // Tüm ilgili URL'leri güncelle
+          // TÃ¼m ilgili URL'leri gÃ¼ncelle
           await Promise.all([
             mutate('/api/meetings', updatedMeetings, { revalidate: false }),
             mutate('/api/meetings?', updatedMeetings, { revalidate: false }),
@@ -519,6 +582,20 @@ export default function MeetingList() {
           ])
         }}
       />
+
+      {/* Detail Modal */}
+      {selectedMeetingId && (
+        <MeetingDetailModal
+          meetingId={selectedMeetingId}
+          open={detailModalOpen}
+          onClose={() => {
+            setDetailModalOpen(false)
+            setSelectedMeetingId(null)
+            setSelectedMeetingData(null)
+          }}
+          initialData={selectedMeetingData || undefined}
+        />
+      )}
 
       {/* Gider Uyarısı Modal */}
       {expenseWarningOpen && newMeetingId && (

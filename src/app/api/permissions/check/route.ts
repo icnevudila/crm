@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { checkUserPermission } from '@/lib/permissions'
 
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
+    }
     
     // Session yoksa veya companyId yoksa varsayılan yetkiler döndür (401 yerine)
     // Client-side'da session yüklenene kadar bekleyecek

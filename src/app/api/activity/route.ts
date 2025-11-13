@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
-import { getSupabase } from '@/lib/supabase'
+import { getSafeSession } from '@/lib/safe-session'
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 // Build-time'da çalışmasın - sadece runtime'da çalışsın
 export const dynamic = 'force-dynamic'
@@ -9,7 +8,12 @@ export const revalidate = 0
 
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
+    // Session kontrolü - Supabase Auth ile
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
+    }
+
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -22,8 +26,9 @@ export async function GET(request: Request) {
     const entity = searchParams.get('entity')
     const entityId = searchParams.get('entityId')
     const limit = parseInt(searchParams.get('limit') || '200') // Limit artırıldı - bağlı kayıtların işlemleri de gösterilecek
+    const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
 
-    const supabase = getSupabase()
+    const supabase = getSupabaseWithServiceRole()
 
     let query = supabase
       .from('ActivityLog')
@@ -40,10 +45,14 @@ export async function GET(request: Request) {
       .order('createdAt', { ascending: false })
       .limit(limit)
 
-    // SuperAdmin değilse MUTLAKA companyId filtresi uygula
+    // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
       query = query.eq('companyId', companyId)
+    } else if (filterCompanyId) {
+      // SuperAdmin firma filtresi seçtiyse sadece o firmayı göster
+      query = query.eq('companyId', filterCompanyId)
     }
+    // SuperAdmin ve firma filtresi yoksa tüm firmaları göster
 
     // Entity ID filtresi (meta JSON içinde)
     // NOT: Entity filtresini kaldırdık çünkü bağlı kayıtlar farklı entity'ler olabilir

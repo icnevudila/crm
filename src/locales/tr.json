@@ -80,7 +80,8 @@
       "statusReceived": "Mal Kabul Edildi",
       "statusPaid": "Ödendi",
       "statusOverdue": "Vadesi Geçmiş",
-      "statusCancelled": "İptal"
+      "statusCancelled": "İptal",
+      "noData": "Veri bulunamadı"
     }
   },
   "sidebar": {

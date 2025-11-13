@@ -18,10 +18,30 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // DEBUG: Session ve permission bilgisini logla
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Quotes API] 🔍 Session Check:', {
+        userId: session.user.id,
+        email: session.user.email,
+        role: session.user.role,
+        companyId: session.user.companyId,
+        companyName: session.user.companyName,
+      })
+    }
+
     // Permission check - canRead kontrolü
     const { hasPermission, PERMISSION_DENIED_MESSAGE } = await import('@/lib/permissions')
     const canRead = await hasPermission('quote', 'read', session.user.id)
     if (!canRead) {
+      // DEBUG: Permission denied logla
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Quotes API] ❌ Permission Denied:', {
+          module: 'quote',
+          action: 'read',
+          userId: session.user.id,
+          role: session.user.role,
+        })
+      }
       return NextResponse.json(
         { error: 'Forbidden', message: PERMISSION_DENIED_MESSAGE },
         { status: 403 }

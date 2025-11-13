@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getRecords, createRecord } from '@/lib/crud'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
@@ -10,27 +9,39 @@ export const revalidate = 3600
 export async function GET(request: Request) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Finance GET API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // DEBUG: Session ve permission bilgisini logla
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Finance API] 🔍 Session Check:', {
+        userId: session.user.id,
+        email: session.user.email,
+        role: session.user.role,
+        companyId: session.user.companyId,
+        companyName: session.user.companyName,
+      })
+    }
+
     // Permission check - canRead kontrolü
     const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canRead = await hasPermission('finance', 'read', session.user.id)
     if (!canRead) {
+      // DEBUG: Permission denied logla
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Finance API] ❌ Permission Denied:', {
+          module: 'finance',
+          action: 'read',
+          userId: session.user.id,
+          role: session.user.role,
+        })
+      }
       return buildPermissionDeniedResponse()
     }
 
@@ -138,17 +149,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Finance POST API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {

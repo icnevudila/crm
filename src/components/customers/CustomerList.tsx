@@ -1,10 +1,10 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
 import { Plus, Search, Edit, Trash2, Eye, Upload, Download, CheckSquare, Square, Building2, Sparkles, Briefcase, FileText, Receipt, Calendar } from 'lucide-react'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/hooks/useSession'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -129,7 +129,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
   const searchParams = useSearchParams()
   const { data: session } = useSession()
   
-  // SuperAdmin kontrolü
+  // SuperAdmin kontrolÃ¼
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
   
   // URL parametrelerinden filtreleri oku
@@ -188,12 +188,12 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
-    }, 300) // 300ms debounce - her harfte arama yapılmaz
+    }, 300) // 300ms debounce - her harfte arama yapÄ±lmaz
     
     return () => clearTimeout(timer)
   }, [search])
 
-  // SWR ile veri çekme (repo kurallarına uygun) - debounced search kullanıyoruz
+  // SWR ile veri Ã§ekme (repo kurallarÄ±na uygun) - debounced search kullanÄ±yoruz
   const apiUrl = useMemo(() => {
     if (!isOpen) return null
 
@@ -242,24 +242,24 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
     }
 
     if (response) {
-      // Eğer response direkt array ise
+      // EÄŸer response direkt array ise
       if (Array.isArray(response)) {
         customersData = response
       } 
-      // Eğer response { data: [...], pagination: {...} } formatında ise
+      // EÄŸer response { data: [...], pagination: {...} } formatÄ±nda ise
       else if (response && typeof response === 'object' && 'data' in response) {
         const responseData = (response as CustomersResponse).data
         customersData = Array.isArray(responseData) ? responseData : []
         paginationData = (response as CustomersResponse).pagination || paginationData
       }
-      // Eğer response { customers: [...] } formatında ise (bazı API'ler böyle dönebilir)
+      // EÄŸer response { customers: [...] } formatÄ±nda ise (bazÄ± API'ler bÃ¶yle dÃ¶nebilir)
       else if (response && typeof response === 'object' && 'customers' in response) {
         const responseCustomers = (response as any).customers
         customersData = Array.isArray(responseCustomers) ? responseCustomers : []
       }
     }
 
-    // Güvenlik kontrolü - customers her zaman array olmalı
+    // GÃ¼venlik kontrolÃ¼ - customers her zaman array olmalÄ±
     if (!Array.isArray(customersData)) {
       if (process.env.NODE_ENV === 'development') {
         console.warn('CustomerList: customers is not an array, defaulting to empty array', { response, customersData })
@@ -291,7 +291,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         throw new Error(errorData.error || 'Failed to delete customer')
       }
       
-      // Optimistic update - silinen kaydı listeden kaldır
+      // Optimistic update - silinen kaydÄ± listeden kaldÄ±r
       const updatedCustomers = customers.filter((c) => c.id !== id)
       const updatedPagination = {
         ...pagination,
@@ -299,12 +299,12 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         totalPages: Math.ceil((pagination.totalItems - 1) / pagination.pageSize),
       }
       
-      // Eğer sayfa boşaldıysa, önceki sayfaya git
+      // EÄŸer sayfa boÅŸaldÄ±ysa, Ã¶nceki sayfaya git
       if (updatedCustomers.length === 0 && pagination.page > 1) {
         setCurrentPage(pagination.page - 1)
       }
       
-      // Cache'i güncelle - yeni listeyi hemen göster
+      // Cache'i gÃ¼ncelle - yeni listeyi hemen gÃ¶ster
       await mutateCustomers(
         {
           data: updatedCustomers,
@@ -336,7 +336,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       // Dashboard'daki distribution query'sini refetch et
       await queryClient.refetchQueries({ queryKey: ['distribution'] })
     } catch (error: any) {
-      // Production'da console.error kaldırıldı
+      // Production'da console.error kaldÄ±rÄ±ldÄ±
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
@@ -357,7 +357,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
   const handleFormClose = useCallback(() => {
     setFormOpen(false)
     setSelectedCustomer(null)
-    // Form kapanırken cache'i güncelleme yapılmaz - onSuccess callback'te zaten yapılıyor
+    // Form kapanÄ±rken cache'i gÃ¼ncelleme yapÄ±lmaz - onSuccess callback'te zaten yapÄ±lÄ±yor
   }, [])
 
   const closeQuickAction = useCallback(() => {
@@ -396,10 +396,10 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         throw new Error(errorData.error || 'Failed to bulk delete customers')
       }
 
-      // Optimistic update - silinen kayıtları listeden kaldır
+      // Optimistic update - silinen kayÄ±tlarÄ± listeden kaldÄ±r
       const updatedCustomers = customers.filter((c) => !ids.includes(c.id))
       
-      // Cache'i güncelle
+      // Cache'i gÃ¼ncelle
       await mutateCustomers(
         {
           data: updatedCustomers,
@@ -490,7 +490,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       const result = await res.json()
       toast.success(t('fileUploaded'), t('customersImported', { count: result.importedCount }))
 
-      // Cache'i invalidate et - yeni verileri çek
+      // Cache'i invalidate et - yeni verileri Ã§ek
       await Promise.all([
         mutateCustomers(undefined, { revalidate: true }),
         apiUrl,
@@ -538,7 +538,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
     }
   }, [debouncedSearch, status, sector])
 
-  // Select all checkbox kontrolü
+  // Select all checkbox kontrolÃ¼
   useEffect(() => {
     if (customers.length > 0 && selectedIds.length === customers.length) {
       setSelectAll(true)
@@ -557,7 +557,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
 
   return (
     <div className="space-y-6">
-      {/* İstatistikler */}
+      {/* Ä°statistikler */}
       <ModuleStats module="customers" statsUrl="/api/stats/customers" />
 
       {/* Header */}
@@ -639,22 +639,22 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
           <SelectContent>
             <SelectItem value="all">{t('allSectors')}</SelectItem>
             <SelectItem value="Teknoloji">Teknoloji</SelectItem>
-            <SelectItem value="Sağlık">Sağlık</SelectItem>
-            <SelectItem value="Eğitim">Eğitim</SelectItem>
-            <SelectItem value="İnşaat">İnşaat</SelectItem>
+            <SelectItem value="SaÄŸlÄ±k">SaÄŸlÄ±k</SelectItem>
+            <SelectItem value="EÄŸitim">EÄŸitim</SelectItem>
+            <SelectItem value="Ä°nÅŸaat">Ä°nÅŸaat</SelectItem>
             <SelectItem value="Otomotiv">Otomotiv</SelectItem>
-            <SelectItem value="Gıda">Gıda</SelectItem>
+            <SelectItem value="GÄ±da">GÄ±da</SelectItem>
             <SelectItem value="Tekstil">Tekstil</SelectItem>
             <SelectItem value="Enerji">Enerji</SelectItem>
             <SelectItem value="Finans">Finans</SelectItem>
             <SelectItem value="Turizm">Turizm</SelectItem>
             <SelectItem value="Lojistik">Lojistik</SelectItem>
             <SelectItem value="Medya">Medya</SelectItem>
-            <SelectItem value="Danışmanlık">Danışmanlık</SelectItem>
+            <SelectItem value="DanÄ±ÅŸmanlÄ±k">DanÄ±ÅŸmanlÄ±k</SelectItem>
             <SelectItem value="E-ticaret">E-ticaret</SelectItem>
-            <SelectItem value="İmalat">İmalat</SelectItem>
+            <SelectItem value="Ä°malat">Ä°malat</SelectItem>
             <SelectItem value="Ticaret">Ticaret</SelectItem>
-            <SelectItem value="Diğer">Diğer</SelectItem>
+            <SelectItem value="DiÄŸer">DiÄŸer</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -816,7 +816,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
                         size="icon"
                         onClick={() => {
                           setSelectedCustomerId(customer.id)
-                          setSelectedCustomerData(customer) // Liste sayfasındaki veriyi hemen göster (hızlı açılış)
+                          setSelectedCustomerData(customer) // Liste sayfasÄ±ndaki veriyi hemen gÃ¶ster (hÄ±zlÄ± aÃ§Ä±lÄ±ÅŸ)
                           setDetailModalOpen(true)
                         }}
                         aria-label={t('viewCustomer', { name: customer.name })}
@@ -925,12 +925,12 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
           setSelectedCustomer(null)
           
           if (selectedCustomer) {
-            // UPDATE: Mevcut kaydı güncelle
+            // UPDATE: Mevcut kaydÄ± gÃ¼ncelle
             const updatedCustomers = customers.map((c) =>
               c.id === savedCustomer.id ? savedCustomer : c
             )
             
-            // Optimistic update - cache'i güncelle
+            // Optimistic update - cache'i gÃ¼ncelle
             await mutateCustomers(
               {
                 data: updatedCustomers,
@@ -948,7 +948,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
               await Promise.all([
                 mutateCustomers(undefined, { revalidate: true }),
                 apiUrl,
-                // Dashboard'daki müşteri sektör dağılımı grafiğini tekrar güncelle
+                // Dashboard'daki mÃ¼ÅŸteri sektÃ¶r daÄŸÄ±lÄ±mÄ± grafiÄŸini tekrar gÃ¼ncelle
                 queryClient.refetchQueries({ queryKey: ['distribution'] }),
               ])
             }, 500)
@@ -967,28 +967,28 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
             
             const firstPageUrl = `/api/customers?${firstPageParams.toString()}`
             
-            // ÖNCE tüm cache'i temizle ve 1. sayfayı refetch et
+            // Ã–NCE tÃ¼m cache'i temizle ve 1. sayfayÄ± refetch et
             await Promise.all([
               mutate('/api/customers', undefined, { revalidate: true }),
               mutate('/api/customers?', undefined, { revalidate: true }),
               apiUrl,
               mutate(firstPageUrl, undefined, { revalidate: true }),
-              // Dashboard'daki müşteri sektör dağılımı grafiğini güncelle
+              // Dashboard'daki mÃ¼ÅŸteri sektÃ¶r daÄŸÄ±lÄ±mÄ± grafiÄŸini gÃ¼ncelle
               queryClient.invalidateQueries({ queryKey: ['distribution'] }),
             ])
             
             // Dashboard'daki distribution query'sini refetch et
             await queryClient.refetchQueries({ queryKey: ['distribution'] })
             
-            // SONRA 1. sayfaya geç (apiUrl değişir ve SWR otomatik refetch yapar)
+            // SONRA 1. sayfaya geÃ§ (apiUrl deÄŸiÅŸir ve SWR otomatik refetch yapar)
             setCurrentPage(1)
             
-            // Ekstra güvence: 500ms sonra tekrar refetch (sayfa yenilendiğinde kesinlikle fresh data gelsin)
+            // Ekstra gÃ¼vence: 500ms sonra tekrar refetch (sayfa yenilendiÄŸinde kesinlikle fresh data gelsin)
             setTimeout(async () => {
               await Promise.all([
                 mutate(firstPageUrl, undefined, { revalidate: true }),
                 mutateCustomers(undefined, { revalidate: true }),
-                // Dashboard'daki müşteri sektör dağılımı grafiğini tekrar güncelle
+                // Dashboard'daki mÃ¼ÅŸteri sektÃ¶r daÄŸÄ±lÄ±mÄ± grafiÄŸini tekrar gÃ¼ncelle
                 queryClient.refetchQueries({ queryKey: ['distribution'] }),
               ])
             }, 500)
@@ -1001,10 +1001,10 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         open={quickAction?.type === 'deal'}
         onClose={closeQuickAction}
         onSuccess={async (savedDeal) => {
-          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
-          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
-          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
-          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
+          // CRITICAL FIX: onSuccess iÃ§inde closeQuickAction Ã§aÄŸrÄ±lmasÄ±n
+          // Form zaten kendi iÃ§inde onClose() Ã§aÄŸÄ±rÄ±yor, bu da closeQuickAction'Ä± tetikliyor
+          // closeQuickAction() tekrar Ã§aÄŸrÄ±lÄ±rsa sonsuz dÃ¶ngÃ¼ oluÅŸur (Maximum update depth exceeded)
+          // Form baÅŸarÄ±yla kaydedildi - form'un kendi onClose'u closeQuickAction'Ä± zaten Ã§aÄŸÄ±racak
         }}
         customerCompanyId={quickAction?.customer.customerCompanyId}
         customerCompanyName={quickAction?.customer.CustomerCompany?.name}
@@ -1014,10 +1014,10 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         open={quickAction?.type === 'quote'}
         onClose={closeQuickAction}
         onSuccess={async (savedQuote) => {
-          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
-          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
-          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
-          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
+          // CRITICAL FIX: onSuccess iÃ§inde closeQuickAction Ã§aÄŸrÄ±lmasÄ±n
+          // Form zaten kendi iÃ§inde onClose() Ã§aÄŸÄ±rÄ±yor, bu da closeQuickAction'Ä± tetikliyor
+          // closeQuickAction() tekrar Ã§aÄŸrÄ±lÄ±rsa sonsuz dÃ¶ngÃ¼ oluÅŸur (Maximum update depth exceeded)
+          // Form baÅŸarÄ±yla kaydedildi - form'un kendi onClose'u closeQuickAction'Ä± zaten Ã§aÄŸÄ±racak
         }}
         customerCompanyId={quickAction?.customer.customerCompanyId}
         customerCompanyName={quickAction?.customer.CustomerCompany?.name}
@@ -1027,10 +1027,10 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         open={quickAction?.type === 'invoice'}
         onClose={closeQuickAction}
         onSuccess={async (savedInvoice) => {
-          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
-          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
-          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
-          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
+          // CRITICAL FIX: onSuccess iÃ§inde closeQuickAction Ã§aÄŸrÄ±lmasÄ±n
+          // Form zaten kendi iÃ§inde onClose() Ã§aÄŸÄ±rÄ±yor, bu da closeQuickAction'Ä± tetikliyor
+          // closeQuickAction() tekrar Ã§aÄŸrÄ±lÄ±rsa sonsuz dÃ¶ngÃ¼ oluÅŸur (Maximum update depth exceeded)
+          // Form baÅŸarÄ±yla kaydedildi - form'un kendi onClose'u closeQuickAction'Ä± zaten Ã§aÄŸÄ±racak
         }}
         customerCompanyId={quickAction?.customer.customerCompanyId}
         customerCompanyName={quickAction?.customer.CustomerCompany?.name}
@@ -1040,10 +1040,10 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         open={quickAction?.type === 'task'}
         onClose={closeQuickAction}
         onSuccess={async (savedTask) => {
-          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
-          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
-          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
-          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
+          // CRITICAL FIX: onSuccess iÃ§inde closeQuickAction Ã§aÄŸrÄ±lmasÄ±n
+          // Form zaten kendi iÃ§inde onClose() Ã§aÄŸÄ±rÄ±yor, bu da closeQuickAction'Ä± tetikliyor
+          // closeQuickAction() tekrar Ã§aÄŸrÄ±lÄ±rsa sonsuz dÃ¶ngÃ¼ oluÅŸur (Maximum update depth exceeded)
+          // Form baÅŸarÄ±yla kaydedildi - form'un kendi onClose'u closeQuickAction'Ä± zaten Ã§aÄŸÄ±racak
         }}
         customerName={quickAction?.customer.name}
         customerCompanyName={quickAction?.customer.CustomerCompany?.name}
@@ -1052,10 +1052,10 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         open={quickAction?.type === 'meeting'}
         onClose={closeQuickAction}
         onSuccess={async (savedMeeting) => {
-          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
-          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
-          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
-          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
+          // CRITICAL FIX: onSuccess iÃ§inde closeQuickAction Ã§aÄŸrÄ±lmasÄ±n
+          // Form zaten kendi iÃ§inde onClose() Ã§aÄŸÄ±rÄ±yor, bu da closeQuickAction'Ä± tetikliyor
+          // closeQuickAction() tekrar Ã§aÄŸrÄ±lÄ±rsa sonsuz dÃ¶ngÃ¼ oluÅŸur (Maximum update depth exceeded)
+          // Form baÅŸarÄ±yla kaydedildi - form'un kendi onClose'u closeQuickAction'Ä± zaten Ã§aÄŸÄ±racak
         }}
         customerCompanyId={quickAction?.customer.customerCompanyId}
         customerCompanyName={quickAction?.customer.CustomerCompany?.name}

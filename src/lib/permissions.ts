@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getServerSession } from '@/lib/auth-supabase'
 import { getSupabase } from '@/lib/supabase'
 
 export const PERMISSION_DENIED_MESSAGE =
@@ -35,7 +34,7 @@ export async function checkUserPermission(
   module: string,
   userId?: string
 ): Promise<PermissionCheck> {
-  const session = await getServerSession(authOptions)
+  const session = await getServerSession()
   
   if (!session?.user?.companyId) {
     return {
@@ -60,7 +59,38 @@ export async function checkUserPermission(
   const companyId = session.user.companyId
   const targetUserId = userId || session.user.id
 
-  // 1. Önce kurum_modul_izinleri kontrol et (CompanyModulePermission)
+  // 1. ÖNCE kullanıcının rolünü kontrol et - Admin ve SuperAdmin bypass için
+  // Kullanıcının rolünü al
+  const { data: userData } = await supabase
+    .from('User')
+    .select('roleId, role')
+    .eq('id', targetUserId)
+    .single()
+
+  if (!userData) {
+    return {
+      canRead: false,
+      canCreate: false,
+      canUpdate: false,
+      canDelete: false,
+    }
+  }
+
+  // ADMIN rolü her zaman tüm yetkilere sahip (kendi şirketi için) - CompanyModulePermission bypass
+  if (userData.role === 'ADMIN') {
+    // DEBUG: Admin bypass logla
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Permission Check] Admin bypass - tüm yetkiler verildi', { module, userId: targetUserId, role: userData.role })
+    }
+    return {
+      canRead: true,
+      canCreate: true,
+      canUpdate: true,
+      canDelete: true,
+    }
+  }
+
+  // 2. Sonra kurum_modul_izinleri kontrol et (CompanyModulePermission)
   // Modül kodundan Module ID'yi bul
   const { data: moduleData } = await supabase
     .from('Module')
@@ -89,7 +119,7 @@ export async function checkUserPermission(
     .eq('moduleId', moduleId)
     .single()
 
-  // Kurum modül izni yoksa veya kapalıysa, erişim yok
+  // Kurum modül izni yoksa veya kapalıysa, erişim yok (Admin hariç - yukarıda kontrol edildi)
   if (!companyModulePermission || !companyModulePermission.enabled) {
     return {
       canRead: false,
@@ -99,32 +129,7 @@ export async function checkUserPermission(
     }
   }
 
-  // 2. Sonra rol_izinleri kontrol et (RolePermission)
-  // Kullanıcının rolünü al
-  const { data: userData } = await supabase
-    .from('User')
-    .select('roleId, role')
-    .eq('id', targetUserId)
-    .single()
-
-  if (!userData) {
-    return {
-      canRead: false,
-      canCreate: false,
-      canUpdate: false,
-      canDelete: false,
-    }
-  }
-
-  // ADMIN rolü her zaman tüm yetkilere sahip (kendi şirketi için)
-  if (userData.role === 'ADMIN') {
-    return {
-      canRead: true,
-      canCreate: true,
-      canUpdate: true,
-      canDelete: true,
-    }
-  }
+  // 3. Sonra rol_izinleri kontrol et (RolePermission)
 
   // 3. Önce UserPermission kontrol et (kullanıcı özel yetkileri - en yüksek öncelik)
   const { data: userPermission } = await supabase
@@ -186,6 +191,22 @@ export async function hasPermission(
   userId?: string
 ): Promise<boolean> {
   const permissions = await checkUserPermission(module, userId)
+  
+  // DEBUG: Permission kontrolü logla
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[Permission Check]', {
+      module,
+      action,
+      userId,
+      permissions,
+      result: {
+        read: permissions.canRead,
+        create: permissions.canCreate,
+        update: permissions.canUpdate,
+        delete: permissions.canDelete,
+      }[action],
+    })
+  }
   
   switch (action) {
     case 'read':

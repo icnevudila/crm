@@ -79,6 +79,30 @@ export const toast = {
   },
 }
 
+/**
+ * API hatasını toast notification olarak göster
+ * Forbidden (403) hataları için özel mesaj kullanır
+ */
+export function handleApiError(error: any, defaultTitle: string = 'İşlem Başarısız', defaultMessage?: string) {
+  const errorMessage = error?.message || error?.error || defaultMessage || 'İşlem sırasında bir hata oluştu.'
+  
+  // Forbidden veya yetki hatası için özel mesaj
+  if (
+    error?.status === 403 || 
+    error?.response?.status === 403 ||
+    errorMessage?.includes('Forbidden') ||
+    errorMessage?.toLowerCase().includes('yetkiniz') ||
+    errorMessage?.toLowerCase().includes('yetki')
+  ) {
+    toast.error(
+      'Yetkisiz İşlem',
+      'Bu işlemi gerçekleştirmek için yetkiniz bulunmuyor. Lütfen kurum yöneticinizle veya bilgi işlem ekibiyle iletişime geçin.'
+    )
+  } else {
+    toast.error(defaultTitle, errorMessage)
+  }
+}
+
 // ✅ Modern toast-based confirm - window.confirm yerine kullan
 // ÖNEMLİ: Promise döndürür - async/await ile kullanılmalı
 export const confirm = (message: string, description?: string): Promise<boolean> => {

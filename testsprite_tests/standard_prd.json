@@ -1,0 +1,452 @@
+{
+  "meta": {
+    "project": "CRM Enterprise V3",
+    "date": "2025-11-12",
+    "prepared_by": "Software Development Manager"
+  },
+  "product_overview": "CRM Enterprise V3 is a next-generation, multi-tenant CRM system built with Next.js 15 and Supabase, designed for enterprise use. It features high performance with sub-300ms page transitions, a premium UI with multi-language support (Turkish and English), and comprehensive modules covering customer, deal, finance, and administrative management.",
+  "core_goals": [
+    "Provide robust multi-tenant CRM capabilities with strict data isolation via RLS.",
+    "Deliver fast, responsive user experiences with optimized page load and API response times.",
+    "Offer comprehensive functionality including customer, deal, quote, invoice, product, finance, task, ticket, meeting, shipment, company, vendor management, and reporting.",
+    "Ensure security through strict authentication, role-based access control, and session management.",
+    "Support extensibility and workflow automation through cron jobs and automated processes.",
+    "Facilitate ease of use and localization with intuitive UI components and multi-language support (TR/EN)."
+  ],
+  "key_features": [
+    "Authentication system with NextAuth.js for secure login and session handling.",
+    "Interactive dashboard with KPI cards, trend analytics, and recent activities display.",
+    "Customer management with CRUD, bulk operations, and import/export capabilities.",
+    "Deal management featuring sales pipeline, win probability, and kanban board visualization.",
+    "Quote management supporting CRUD, PDF creation, revision tracking, and automatic expiry.",
+    "Invoice management including CRUD, PDF generation, payment tracking, and kanban view.",
+    "Product management with stock tracking and bundle management.",
+    "Finance management for income, expense tracking, and budget alerts.",
+    "Task and ticket management with status tracking and assignment capabilities.",
+    "Meeting module with participant handling and export functions.",
+    "Shipment management linking shipments with invoices and status tracking.",
+    "Company and vendor management with permissions and export functionality.",
+    "Comprehensive reporting system spanning customer, sales, finance, and product data with export options.",
+    "Admin panel for user, role, and permission management.",
+    "Real-time notification system with read tracking.",
+    "Activity log capturing detailed CRUD operations with JSON metadata.",
+    "Multi-language support (Turkish and English) using next-intl.",
+    "Performance optimizations including prefetching, lazy loading, and skeleton states.",
+    "Workflow automation for quote expirations, deal monitoring, and goal tracking.",
+    "Scheduled cron jobs for invoice monitoring, stock alerts, and task reminders.",
+    "Document management with upload, access control, and versioning.",
+    "Email campaign management with templates, sending, and tracking.",
+    "UI components using shadcn/ui for consistent design.",
+    "Localization and layout components for seamless user experience."
+  ],
+  "user_flow_summary": [
+    "User authentication with secure login and session management.",
+    "Users navigate to the dashboard to view KPIs, charts, and recent activities.",
+    "Users manage customers via list view, detail modal, bulk operations, import/export.",
+    "Sales team manages deals through a stage-based pipeline and kanban board.",
+    "Users create, edit, and generate PDFs for quotes with expiry automation.",
+    "Invoice management with creation, editing, PDF export, and payment tracking.",
+    "Product and inventory management including bundles.",
+    "Finance team tracks income, expenses, and budgets with alerts.",
+    "Task and ticket workflows with assignment and status updates.",
+    "Scheduling and managing meetings with participant tracking and export capabilities.",
+    "Managing shipments linked to invoices with real-time status tracking.",
+    "Admins manage companies, vendor data, and permissions with export options.",
+    "Generating and exporting various reports for analytics.",
+    "Admins manage users, roles, and permissions from the admin panel.",
+    "Users receive and interact with real-time notifications.",
+    "All CRUD actions logged for audit and tracking.",
+    "Workflow automations run in the background based on triggers.",
+    "Scheduled cron jobs monitor system health and alerts.",
+    "Users manage documents and email campaigns within the system."
+  ],
+  "validation_criteria": [
+    "Authentication enforces multi-factor controls and session expiration policies.",
+    "Dashboard loads KPIs and charts within 500 milliseconds.",
+    "API endpoints meet performance targets: cached <200ms, uncached <1000ms.",
+    "Multi-tenant data isolation verified through RLS policies.",
+    "Role-based access enforces permissions accurately across modules.",
+    "All CRUD operations persist correctly and support bulk actions where applicable.",
+    "PDF generation for quotes and invoices is accurate and consistent.",
+    "Real-time notifications delivered and marked as read properly.",
+    "Activity logs accurately capture all user operations with meta data.",
+    "Localization switches seamlessly between Turkish and English without UI issues.",
+    "Workflow automations trigger and execute as expected under defined conditions.",
+    "Cron jobs run as scheduled and handle exceptions gracefully.",
+    "Reports generate and export expected datasets correctly.",
+    "UI components display correctly on supported browsers and devices.",
+    "Security audits confirm no cross-tenant data leaks or privilege escalations."
+  ],
+  "code_summary": {
+    "tech_stack": [
+      "TypeScript",
+      "Next.js 15",
+      "React 18",
+      "Supabase",
+      "PostgreSQL",
+      "Tailwind CSS",
+      "shadcn/ui",
+      "SWR",
+      "NextAuth.js",
+      "next-intl",
+      "Framer Motion",
+      "Recharts",
+      "@react-pdf/renderer",
+      "react-hook-form",
+      "Zod",
+      "Playwright",
+      "Jest"
+    ],
+    "features": [
+      {
+        "name": "Authentication",
+        "description": "NextAuth.js ile kullanıcı kimlik doğrulama ve oturum yönetimi",
+        "files": [
+          "src/lib/auth.ts",
+          "src/lib/authOptions.ts",
+          "src/lib/safe-session.ts",
+          "src/app/api/auth/[...nextauth]/route.ts",
+          "src/app/[locale]/login/page.tsx"
+        ]
+      },
+      {
+        "name": "Dashboard",
+        "description": "Ana gösterge paneli - KPI kartları, grafikler ve son aktiviteler",
+        "files": [
+          "src/app/[locale]/dashboard/page.tsx",
+          "src/components/dashboard/DashboardSpotlight.tsx",
+          "src/components/dashboard/sections",
+          "src/app/api/analytics/kpis/route.ts",
+          "src/app/api/analytics/trends/route.ts"
+        ]
+      },
+      {
+        "name": "Customer Management",
+        "description": "Müşteri yönetimi - CRUD işlemleri, bulk operations, import/export",
+        "files": [
+          "src/components/customers/CustomerList.tsx",
+          "src/components/customers/CustomerForm.tsx",
+          "src/components/customers/CustomerDetailModal.tsx",
+          "src/app/api/customers/route.ts",
+          "src/app/api/customers/[id]/route.ts",
+          "src/app/api/customers/bulk/route.ts",
+          "src/app/api/customers/export/route.ts",
+          "src/app/api/customers/import/route.ts"
+        ]
+      },
+      {
+        "name": "Deal Management",
+        "description": "Satış fırsatları yönetimi - Stage pipeline, win probability, kanban görünümü",
+        "files": [
+          "src/components/deals/DealList.tsx",
+          "src/components/deals/DealForm.tsx",
+          "src/components/deals/DealDetailModal.tsx",
+          "src/app/api/deals/route.ts",
+          "src/app/api/deals/[id]/route.ts",
+          "src/app/api/analytics/deal-kanban/route.ts",
+          "src/components/charts/DealKanbanChart.tsx"
+        ]
+      },
+      {
+        "name": "Quote Management",
+        "description": "Teklif yönetimi - CRUD, PDF oluşturma, revize sistemi, otomatik expiry",
+        "files": [
+          "src/components/quotes/QuoteList.tsx",
+          "src/components/quotes/QuoteForm.tsx",
+          "src/components/quotes/QuoteDetailModal.tsx",
+          "src/app/api/quotes/route.ts",
+          "src/app/api/quotes/[id]/route.ts",
+          "src/app/api/pdf/quote/[id]/route.ts",
+          "src/components/pdf/QuotePDF.tsx",
+          "src/app/api/analytics/quote-kanban/route.ts"
+        ]
+      },
+      {
+        "name": "Invoice Management",
+        "description": "Fatura yönetimi - CRUD, PDF oluşturma, ödeme takibi, kanban görünümü",
+        "files": [
+          "src/components/invoices/InvoiceList.tsx",
+          "src/components/invoices/InvoiceForm.tsx",
+          "src/components/invoices/InvoiceDetailModal.tsx",
+          "src/components/invoices/InvoiceItemForm.tsx",
+          "src/app/api/invoices/route.ts",
+          "src/app/api/invoices/[id]/route.ts",
+          "src/app/api/pdf/invoice/[id]/route.ts",
+          "src/components/pdf/InvoicePDF.tsx",
+          "src/app/api/analytics/invoice-kanban/route.ts"
+        ]
+      },
+      {
+        "name": "Product Management",
+        "description": "Ürün yönetimi - CRUD, stok takibi, bundle yönetimi",
+        "files": [
+          "src/components/products/ProductList.tsx",
+          "src/components/products/ProductForm.tsx",
+          "src/components/products/ProductDetailModal.tsx",
+          "src/app/api/products/route.ts",
+          "src/app/api/products/[id]/route.ts",
+          "src/app/api/product-bundles/route.ts"
+        ]
+      },
+      {
+        "name": "Finance Management",
+        "description": "Finans yönetimi - Gelir/gider takibi, bütçe yönetimi, raporlar",
+        "files": [
+          "src/components/finance/FinanceList.tsx",
+          "src/components/finance/FinanceForm.tsx",
+          "src/components/finance/FinanceDetailModal.tsx",
+          "src/app/api/finance/route.ts",
+          "src/app/api/finance/[id]/route.ts",
+          "src/app/api/finance/monthly-summary/route.ts",
+          "src/app/api/finance/budget-alert/route.ts"
+        ]
+      },
+      {
+        "name": "Task Management",
+        "description": "Görev yönetimi - CRUD, durum takibi, atama",
+        "files": [
+          "src/components/tasks/TaskList.tsx",
+          "src/components/tasks/TaskForm.tsx",
+          "src/components/tasks/TaskDetailModal.tsx",
+          "src/app/api/tasks/route.ts",
+          "src/app/api/tasks/[id]/route.ts"
+        ]
+      },
+      {
+        "name": "Ticket Management",
+        "description": "Destek talebi yönetimi - CRUD, durum takibi, öncelik yönetimi",
+        "files": [
+          "src/components/tickets/TicketList.tsx",
+          "src/components/tickets/TicketForm.tsx",
+          "src/components/tickets/TicketDetailModal.tsx",
+          "src/app/api/tickets/route.ts",
+          "src/app/api/tickets/[id]/route.ts"
+        ]
+      },
+      {
+        "name": "Meeting Management",
+        "description": "Görüşme yönetimi - CRUD, katılımcı yönetimi, export",
+        "files": [
+          "src/components/meetings/MeetingList.tsx",
+          "src/components/meetings/MeetingForm.tsx",
+          "src/components/meetings/MeetingDetailModal.tsx",
+          "src/app/api/meetings/route.ts",
+          "src/app/api/meetings/[id]/route.ts",
+          "src/app/api/meetings/export/route.ts"
+        ]
+      },
+      {
+        "name": "Shipment Management",
+        "description": "Sevkiyat yönetimi - CRUD, durum takibi, fatura bağlantısı",
+        "files": [
+          "src/components/shipments/ShipmentList.tsx",
+          "src/components/shipments/ShipmentForm.tsx",
+          "src/app/api/shipments/route.ts",
+          "src/app/api/shipments/[id]/route.ts"
+        ]
+      },
+      {
+        "name": "Company Management",
+        "description": "Firma yönetimi - CRUD, modül izinleri, export",
+        "files": [
+          "src/components/companies/CompanyList.tsx",
+          "src/components/companies/CompanyForm.tsx",
+          "src/components/companies/CompanyDetailModal.tsx",
+          "src/app/api/companies/route.ts",
+          "src/app/api/companies/[id]/route.ts",
+          "src/app/api/companies/export/route.ts"
+        ]
+      },
+      {
+        "name": "Vendor Management",
+        "description": "Tedarikçi yönetimi - CRUD, alış işlemleri",
+        "files": [
+          "src/components/vendors/VendorList.tsx",
+          "src/components/vendors/VendorForm.tsx",
+          "src/components/vendors/VendorDetailModal.tsx",
+          "src/app/api/vendors/route.ts",
+          "src/app/api/vendors/[id]/route.ts"
+        ]
+      },
+      {
+        "name": "Reports",
+        "description": "Raporlama sistemi - Müşteri, satış, finans, ürün raporları, export",
+        "files": [
+          "src/components/reports/CustomerReports.tsx",
+          "src/components/reports/SalesReports.tsx",
+          "src/components/reports/FinancialReports.tsx",
+          "src/components/reports/ProductReports.tsx",
+          "src/app/api/reports/route.ts",
+          "src/app/api/reports/export/route.ts",
+          "src/lib/reports/compute.ts"
+        ]
+      },
+      {
+        "name": "Admin Panel",
+        "description": "Yönetici paneli - Kullanıcı yönetimi, rol yönetimi, izin yönetimi",
+        "files": [
+          "src/app/[locale]/admin/page.tsx",
+          "src/app/api/users/route.ts",
+          "src/app/api/permissions/route.ts",
+          "src/app/api/superadmin/companies/route.ts",
+          "src/lib/permissions.ts"
+        ]
+      },
+      {
+        "name": "PDF Generation",
+        "description": "PDF oluşturma - Teklif, fatura, kullanım kılavuzu PDF'leri",
+        "files": [
+          "src/components/pdf/QuotePDF.tsx",
+          "src/components/pdf/InvoicePDF.tsx",
+          "src/components/pdf/KullanimKilavuzuPDF.tsx",
+          "src/app/api/pdf/quote/[id]/route.ts",
+          "src/app/api/pdf/invoice/[id]/route.ts"
+        ]
+      },
+      {
+        "name": "Activity Log",
+        "description": "Aktivite log sistemi - Tüm CRUD işlemlerini loglama, meta JSON desteği",
+        "files": [
+          "src/components/activity/ActivityList.tsx",
+          "src/components/activity/ActivityLogDialog.tsx",
+          "src/app/api/activity/route.ts"
+        ]
+      },
+      {
+        "name": "Notifications",
+        "description": "Bildirim sistemi - Real-time bildirimler, okunma takibi",
+        "files": [
+          "src/components/NotificationMenu.tsx",
+          "src/components/NotificationItem.tsx",
+          "src/app/api/notifications/route.ts",
+          "src/lib/notifications.ts",
+          "src/lib/notification-helper.ts"
+        ]
+      },
+      {
+        "name": "Multi-tenant RLS",
+        "description": "Row-Level Security ile multi-tenant yapı - Company bazlı veri izolasyonu",
+        "files": [
+          "src/lib/supabase.ts",
+          "src/lib/api.ts",
+          "src/lib/crud.ts"
+        ]
+      },
+      {
+        "name": "Data Fetching",
+        "description": "SWR ile veri çekme - Cache yönetimi, optimistic updates",
+        "files": [
+          "src/hooks/useData.ts",
+          "src/lib/api.ts",
+          "src/components/providers/QueryProvider.tsx"
+        ]
+      },
+      {
+        "name": "Form Management",
+        "description": "React Hook Form + Zod ile form yönetimi ve validasyon",
+        "files": [
+          "src/components/customers/CustomerForm.tsx",
+          "src/components/deals/DealForm.tsx",
+          "src/components/quotes/QuoteForm.tsx",
+          "src/components/invoices/InvoiceForm.tsx"
+        ]
+      },
+      {
+        "name": "Charts and Analytics",
+        "description": "Recharts ile grafikler - KPI'lar, trend analizi, kanban görünümleri",
+        "files": [
+          "src/components/charts/SalesTrendChart.tsx",
+          "src/components/charts/DealKanbanChart.tsx",
+          "src/components/charts/InvoiceKanbanChart.tsx",
+          "src/components/charts/QuoteKanbanChart.tsx",
+          "src/components/charts/UserPerformanceChart.tsx"
+        ]
+      },
+      {
+        "name": "Localization",
+        "description": "next-intl ile çoklu dil desteği - TR/EN locale",
+        "files": [
+          "src/lib/i18n.ts",
+          "src/components/layout/LocaleSwitcher.tsx",
+          "src/lib/stageTranslations.ts"
+        ]
+      },
+      {
+        "name": "Performance Optimization",
+        "description": "Performans optimizasyonu - Prefetching, lazy loading, skeleton states",
+        "files": [
+          "src/hooks/usePrefetchOnHover.ts",
+          "src/lib/navigation-optimizer.ts",
+          "src/lib/performance.ts",
+          "src/components/skeletons/SkeletonList.tsx",
+          "src/components/skeletons/SkeletonDashboard.tsx"
+        ]
+      },
+      {
+        "name": "Workflow Automation",
+        "description": "İş akışı otomasyonları - Quote expiry, deal monitoring, goal tracking",
+        "files": [
+          "src/app/api/automations/auto-quote-expiry/route.ts",
+          "src/app/api/automations/deal-to-quote-monitor/route.ts",
+          "src/app/api/automations/goal-tracker/route.ts",
+          "src/lib/workflowActions.ts",
+          "src/lib/workflowSteps.ts"
+        ]
+      },
+      {
+        "name": "Cron Jobs",
+        "description": "Zamanlanmış görevler - Invoice kontrolü, stok uyarıları, görev hatırlatıcıları",
+        "files": [
+          "src/app/api/cron/check-overdue-invoices/route.ts",
+          "src/app/api/cron/check-low-stock/route.ts",
+          "src/app/api/cron/check-overdue-tasks/route.ts",
+          "src/app/api/cron/check-expired-quotes/route.ts"
+        ]
+      },
+      {
+        "name": "Document Management",
+        "description": "Doküman yönetimi - Upload, erişim kontrolü, versiyonlama",
+        "files": [
+          "src/components/documents/DocumentList.tsx",
+          "src/components/documents/DocumentForm.tsx",
+          "src/components/documents/DocumentUploadForm.tsx",
+          "src/app/api/documents/route.ts",
+          "src/app/api/documents/[id]/route.ts"
+        ]
+      },
+      {
+        "name": "Email Campaigns",
+        "description": "E-posta kampanyaları - Template yönetimi, gönderim, takip",
+        "files": [
+          "src/components/email-campaigns/EmailCampaignForm.tsx",
+          "src/components/email-campaigns/EmailCampaignDetailModal.tsx",
+          "src/app/api/email-campaigns/route.ts",
+          "src/lib/email-service.ts",
+          "src/lib/email-helper.ts"
+        ]
+      },
+      {
+        "name": "UI Components",
+        "description": "shadcn/ui component kütüphanesi - Button, Input, Table, Dialog, Tabs vb.",
+        "files": [
+          "src/components/ui/button.tsx",
+          "src/components/ui/input.tsx",
+          "src/components/ui/table.tsx",
+          "src/components/ui/dialog.tsx",
+          "src/components/ui/tabs.tsx"
+        ]
+      },
+      {
+        "name": "Layout Components",
+        "description": "Layout bileşenleri - Sidebar, Header, Breadcrumbs, Footer",
+        "files": [
+          "src/components/layout/Sidebar.tsx",
+          "src/components/layout/Header.tsx",
+          "src/components/layout/Breadcrumbs.tsx",
+          "src/components/layout/Footer.tsx",
+          "src/components/layout/MobileMenu.tsx"
+        ]
+      }
+    ]
+  }
+}

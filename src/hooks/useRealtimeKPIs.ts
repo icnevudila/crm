@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useMemo } from 'react'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/hooks/useSession'
 import { createClientSupabase } from '@/lib/supabase'
 
 interface KPIData {

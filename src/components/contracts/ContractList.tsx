@@ -13,7 +13,7 @@ import { AutomationInfo } from '@/components/automation/AutomationInfo'
 import Link from 'next/link'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import dynamic from 'next/dynamic'
 
 // Lazy load ContractForm ve ContractDetailModal - performans için
@@ -104,7 +104,7 @@ export default function ContractList() {
   }
 
   const handleDelete = async (id: string, title: string) => {
-    if (!confirm(t('deleteConfirm', { title }))) {
+    if (!(await confirm(t('deleteConfirm', { title })))) {
       return
     }
 

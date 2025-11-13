@@ -12,7 +12,7 @@ import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { toast } from '@/lib/toast'
+import { toast, handleApiError } from '@/lib/toast'
 import {
   Dialog,
   DialogContent,
@@ -177,7 +177,12 @@ export default function CustomerForm({
       const result = await res.json()
       
       if (!res.ok) {
-        throw new Error(result.error || 'Failed to save customer')
+        const apiError: any = {
+          status: res.status,
+          message: result.error || result.message || 'Müşteri kaydedilemedi',
+          error: result.error,
+        }
+        throw apiError
       }
       
       // Optimistic update - yeni kaydı hemen cache'e ekle ve UI'da göster
@@ -190,10 +195,7 @@ export default function CustomerForm({
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error(
-        'Müşteri kaydedilemedi',
-        error.message || 'Müşteri kaydetme işlemi sırasında bir hata oluştu. Lütfen tüm alanları kontrol edip tekrar deneyin.'
-      )
+      handleApiError(error, 'Müşteri kaydedilemedi', 'Müşteri kaydetme işlemi sırasında bir hata oluştu. Lütfen tüm alanları kontrol edip tekrar deneyin.')
     } finally {
       setLoading(false)
     }

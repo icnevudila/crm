@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 // Dynamic route - her zaman fresh data
@@ -10,27 +9,39 @@ export const revalidate = 0 // Cache'i devre dışı bırak
 export async function GET(request: Request) {
   try {
     // Session kontrolü
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Meetings GET API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // DEBUG: Session ve permission bilgisini logla
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Meetings API] 🔍 Session Check:', {
+        userId: session.user.id,
+        email: session.user.email,
+        role: session.user.role,
+        companyId: session.user.companyId,
+        companyName: session.user.companyName,
+      })
+    }
+
     // Permission check - canRead kontrolü (meeting modülü için activity yetkisi kullanıyoruz)
     const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canRead = await hasPermission('activity', 'read', session.user.id)
     if (!canRead) {
+      // DEBUG: Permission denied logla
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Meetings API] ❌ Permission Denied:', {
+          module: 'activity',
+          action: 'read',
+          userId: session.user.id,
+          role: session.user.role,
+        })
+      }
       return buildPermissionDeniedResponse()
     }
 
@@ -45,6 +56,7 @@ export async function GET(request: Request) {
     const dateTo = searchParams.get('dateTo') || ''
     const userId = searchParams.get('userId') || '' // Admin filtreleme için
     const customerId = searchParams.get('customerId') || ''
+    const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
     // NOT: customerCompanyId kolonu Meeting tablosunda yok, bu yüzden kaldırıldı
     // const customerCompanyId = searchParams.get('customerCompanyId') || '' // Firma bazlı filtreleme
 
@@ -131,10 +143,14 @@ export async function GET(request: Request) {
       .order('meetingDate', { ascending: false })
       .limit(100) // Dengeli limit - 100 kayıt (performans + veri dengesi)
 
-    // CompanyId filtresi (SuperAdmin hariç)
+    // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
       query = query.eq('companyId', companyId)
+    } else if (filterCompanyId) {
+      // SuperAdmin firma filtresi seçtiyse sadece o firmayı göster
+      query = query.eq('companyId', filterCompanyId)
     }
+    // SuperAdmin ve firma filtresi yoksa tüm firmaları göster
 
     // Status filtresi
     if (statusFilter && statusFilter !== 'all') {
@@ -302,18 +318,10 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    // Session kontrolü
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Meetings POST API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Failed to get session' },
-        { status: 500 }
-      )
+    // Session kontrolü - hata yakalama ile
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {

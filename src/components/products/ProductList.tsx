@@ -1,10 +1,10 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { toast } from '@/lib/toast'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/hooks/useSession'
 import { Plus, Search, Edit, Trash2, Eye, Package, AlertTriangle, TrendingUp, TrendingDown, Clock } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -78,7 +78,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
   const searchParams = useSearchParams()
   const { data: session } = useSession()
   
-  // SuperAdmin kontrolü
+  // SuperAdmin kontrolÃ¼
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
   
   // URL parametrelerinden filtreleri oku
@@ -107,7 +107,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     isOpen && isSuperAdmin ? '/api/superadmin/companies' : null,
     { dedupingInterval: 60000, revalidateOnFocus: false }
   )
-  // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
+  // Duplicate'leri filtrele - aynÄ± id'ye sahip kayÄ±tlarÄ± tekilleÅŸtir
   const companies = (companiesData?.companies || []).filter((company, index, self) => 
     index === self.findIndex((c) => c.id === company.id)
   )
@@ -123,7 +123,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     return () => clearTimeout(timer)
   }, [search])
 
-  // SWR ile veri çekme (CustomerList pattern'i)
+  // SWR ile veri Ã§ekme (CustomerList pattern'i)
   const apiUrl = useMemo(() => {
     if (!isOpen) return null
 
@@ -152,9 +152,9 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     }
   )
 
-  // API'den dönen veriyi parse et - array olarak bekliyoruz (useMemo ile memoize)
+  // API'den dÃ¶nen veriyi parse et - array olarak bekliyoruz (useMemo ile memoize)
   const products = useMemo(() => {
-    // Hata varsa boş array döndür
+    // Hata varsa boÅŸ array dÃ¶ndÃ¼r
     if (error) {
       return []
     }
@@ -192,10 +192,10 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
         throw new Error(errorData.error || 'Failed to delete product')
       }
       
-      // Optimistic update - silinen kaydı listeden kaldır
+      // Optimistic update - silinen kaydÄ± listeden kaldÄ±r
       const updatedProducts = products.filter((p) => p.id !== id)
       
-      // Cache'i güncelle
+      // Cache'i gÃ¼ncelle
       await mutateProducts(updatedProducts, { revalidate: false })
       
       // Tüm diğer product URL'lerini de güncelle
@@ -205,7 +205,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
         apiUrl ? mutate(apiUrl, updatedProducts, { revalidate: false }) : Promise.resolve(),
       ])
     } catch (error: any) {
-      // Production'da console.error kaldırıldı
+      // Production'da console.error kaldÄ±rÄ±ldÄ±
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
@@ -251,7 +251,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     const outOfStock = products.filter(p => p.stock === 0).length
     const inStock = products.filter(p => p.stock > (p.minStock || 10)).length
     
-    // Son giriş ve çıkış tarihlerini bul
+    // Son giriÅŸ ve Ã§Ä±kÄ±ÅŸ tarihlerini bul
     const lastEntry = products
       .filter(p => p.updatedAt)
       .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())[0]
@@ -273,7 +273,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     return <SkeletonList />
   }
 
-  // Hata durumunda kullanıcıya bilgi ver
+  // Hata durumunda kullanÄ±cÄ±ya bilgi ver
   if (error) {
     return (
       <div className="space-y-6">
@@ -298,7 +298,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
 
   return (
     <div className="space-y-6">
-      {/* İstatistikler */}
+      {/* Ä°statistikler */}
       <ModuleStats module="products" statsUrl="/api/stats/products" />
 
       {/* Otomasyon Bilgileri */}
@@ -340,7 +340,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
         ]}
       />
       
-      {/* Stok Durumu İstatistik Kartları */}
+      {/* Stok Durumu Ä°statistik KartlarÄ± */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -606,7 +606,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
                         size="icon"
                         onClick={() => {
                           setSelectedProductId(product.id)
-                          setSelectedProductData(product) // Liste sayfasındaki veriyi hemen göster (hızlı açılış)
+                          setSelectedProductData(product) // Liste sayfasÄ±ndaki veriyi hemen gÃ¶ster (hÄ±zlÄ± aÃ§Ä±lÄ±ÅŸ)
                           setDetailModalOpen(true)
                         }}
                         aria-label={t('viewProduct', { name: product.name })}
@@ -657,32 +657,32 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
         open={formOpen}
         onClose={handleFormClose}
         onSuccess={async (savedProduct: Product) => {
-          // Optimistic update - yeni/güncellenmiş kaydı hemen cache'e ekle
+          // Optimistic update - yeni/gÃ¼ncellenmiÅŸ kaydÄ± hemen cache'e ekle
           let updatedProducts: Product[]
           
           if (selectedProduct) {
-            // UPDATE: Mevcut kaydı güncelle - savedProduct'daki tüm alanları kullan (minStock dahil)
-            // savedProduct API'den dönen tam veri, tüm alanları içeriyor
+            // UPDATE: Mevcut kaydÄ± gÃ¼ncelle - savedProduct'daki tÃ¼m alanlarÄ± kullan (minStock dahil)
+            // savedProduct API'den dÃ¶nen tam veri, tÃ¼m alanlarÄ± iÃ§eriyor
             updatedProducts = products.map((p) =>
               p.id === savedProduct.id ? { ...savedProduct } : p
             )
           } else {
-            // CREATE: Yeni kaydı listenin başına ekle
+            // CREATE: Yeni kaydÄ± listenin baÅŸÄ±na ekle
             updatedProducts = [{ ...savedProduct }, ...products]
           }
           
-          // Cache'i güncelle - optimistic update (revalidate: true ile fresh data çek)
-          // Böylece API'den fresh data çekilir ve minStock güncel gelir
+          // Cache'i gÃ¼ncelle - optimistic update (revalidate: true ile fresh data Ã§ek)
+          // BÃ¶ylece API'den fresh data Ã§ekilir ve minStock gÃ¼ncel gelir
           await mutateProducts(updatedProducts, { revalidate: true })
           
-          // Tüm diğer product URL'lerini de güncelle (revalidate: true ile fresh data çek)
+          // Tüm diğer product URL'lerini de güncelle (revalidate: true ile fresh data Ã§ek)
           await Promise.all([
             mutate('/api/products', updatedProducts, { revalidate: true }),
             mutate('/api/products?', updatedProducts, { revalidate: true }),
             apiUrl ? mutate(apiUrl, updatedProducts, { revalidate: true }) : Promise.resolve(),
           ])
           
-          // Form'u kapat ve seçili ürünü temizle
+          // Form'u kapat ve seÃ§ili Ã¼rÃ¼nÃ¼ temizle
           setFormOpen(false)
           setSelectedProduct(null)
         }}

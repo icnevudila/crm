@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -22,10 +21,14 @@ export async function POST(
     
     // Internal call değilse normal auth kontrolü yap
     if (!isInternalCall) {
-      session = await getServerSession(authOptions)
-      if (!session?.user?.companyId) {
+      const { session: userSession, error: sessionError } = await getSafeSession(request)
+      if (sessionError) {
+        return sessionError
+      }
+      if (!userSession?.user?.companyId) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       }
+      session = userSession
 
       // Permission check - canUpdate kontrolü (send işlemi update sayılır)
       const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')

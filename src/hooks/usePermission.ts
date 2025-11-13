@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/hooks/useSession'
 import { useRouter, usePathname } from 'next/navigation'
 import { useData } from './useData'
 
@@ -86,6 +86,8 @@ export function usePermission(
     refetch: mutate,
   }
 }
+
+
 
 
 

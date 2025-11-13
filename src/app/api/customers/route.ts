@@ -44,6 +44,18 @@ export async function GET(request: Request) {
     const companyId = session.user.companyId
     const supabase = getSupabaseWithServiceRole()
 
+    // DEBUG: Session bilgisini logla - multi-tenant kontrolü için
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Customers API] 🔍 Session Check:', {
+        userId: session.user.id,
+        email: session.user.email,
+        role: session.user.role,
+        companyId: session.user.companyId,
+        companyName: session.user.companyName,
+        isSuperAdmin,
+      })
+    }
+
     // Toplam kayıt sayısını al (pagination için)
     let countQuery = supabase
       .from('Customer')
@@ -51,6 +63,15 @@ export async function GET(request: Request) {
     
     if (!isSuperAdmin) {
       countQuery = countQuery.eq('companyId', companyId)
+      // DEBUG: companyId filtresi uygulandı
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Customers API] 🔒 Customer query filtered by companyId:', companyId)
+      }
+    } else {
+      // DEBUG: SuperAdmin - tüm firmaları göster
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Customers API] 👑 SuperAdmin - showing all companies')
+      }
     }
 
     // Filtreleri uygula (count için)

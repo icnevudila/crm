@@ -6,7 +6,7 @@ import { Activity } from 'lucide-react'
 
 import { Card } from '@/components/ui/card'
 import { useData } from '@/hooks/useData'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/hooks/useSession'
 
 import type { RecentActivitiesResponse } from '@/components/dashboard/types'
 

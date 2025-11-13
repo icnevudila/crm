@@ -4,8 +4,7 @@
  * ULTRA AGRESİF performans için - 30 dakika cache
  */
 
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getServerSession } from '@/lib/auth-supabase'
 import { NextResponse } from 'next/server'
 
 // Session cache - ULTRA AGRESİF performans için
@@ -16,9 +15,9 @@ const SESSION_CACHE_TTL = 30 * 60 * 1000 // 30 DAKİKA cache (instant navigation
 function getCacheKey(request?: Request): string {
   if (!request) return 'default'
   
-  // Cookie'lerden session token'ı al
+  // Cookie'lerden session token'ı al (Supabase Auth - crm_session)
   const cookies = request.headers.get('cookie') || ''
-  const sessionToken = cookies.match(/next-auth\.session-token=([^;]+)/)?.[1] || ''
+  const sessionToken = cookies.match(/crm_session=([^;]+)/)?.[1] || ''
   
   return sessionToken || 'default'
 }
@@ -76,7 +75,7 @@ export async function getSafeSession(request?: Request): Promise<SafeSessionResu
   
   // Cache miss - getServerSession çağır
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getServerSession()
     
     // Cache'e kaydet (30 dakika)
     sessionCache.set(cacheKey, {

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { getToken } from 'next-auth/jwt'
 import createIntlMiddleware from 'next-intl/middleware'
 import { locales, defaultLocale } from './lib/i18n'
 
@@ -47,32 +46,37 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Locale'li path'ler için auth kontrolü - timeout ile
+  // Locale'li path'ler için auth kontrolü - cookie kontrolü ile
   // Login sayfası için auth kontrolünü bypass et
   if ((pathname.startsWith('/tr/') || pathname.startsWith('/en/')) && 
       !pathname.startsWith('/tr/login') && !pathname.startsWith('/en/login')) {
     try {
-      // Timeout ile token kontrolü - çok yavaş olursa atla
-      // İlk yükleme hızı için timeout'u 2 saniyeye düşür
-      const token = await Promise.race([
-        getToken({
-          req: request,
-          secret: process.env.NEXTAUTH_SECRET,
-        }),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Token check timeout')), 2000) // 5 saniye → 2 saniye (daha hızlı)
-        ),
-      ]) as any
-
-      // Token yoksa login'e yönlendir
-      if (!token) {
+      // Cookie'den session kontrolü - Supabase Auth ile
+      const cookies = request.cookies.get('crm_session')
+      
+      // Session cookie yoksa login'e yönlendir
+      if (!cookies) {
+        const loginUrl = new URL('/tr/login', request.url)
+        return NextResponse.redirect(loginUrl)
+      }
+      
+      // Cookie varsa içeriğini kontrol et (expired olabilir)
+      try {
+        const sessionData = JSON.parse(cookies.value)
+        if (new Date(sessionData.expires) < new Date()) {
+          // Session expired - login'e yönlendir
+          const loginUrl = new URL('/tr/login', request.url)
+          return NextResponse.redirect(loginUrl)
+        }
+      } catch {
+        // Cookie formatı hatalı - login'e yönlendir
         const loginUrl = new URL('/tr/login', request.url)
         return NextResponse.redirect(loginUrl)
       }
     } catch (error) {
-      // Timeout veya hata durumunda - intl middleware'i uygula (auth kontrolü atlanır)
+      // Hata durumunda - intl middleware'i uygula (auth kontrolü atlanır)
       if (process.env.NODE_ENV === 'development') {
-        console.warn('Middleware token check timeout or error:', error)
+        console.warn('Middleware session check error:', error)
       }
     }
   }

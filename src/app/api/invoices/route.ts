@@ -19,10 +19,30 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // DEBUG: Session ve permission bilgisini logla
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Invoices API] 🔍 Session Check:', {
+        userId: session.user.id,
+        email: session.user.email,
+        role: session.user.role,
+        companyId: session.user.companyId,
+        companyName: session.user.companyName,
+      })
+    }
+
     // Permission check - canRead kontrolü
     const { hasPermission, PERMISSION_DENIED_MESSAGE } = await import('@/lib/permissions')
     const canRead = await hasPermission('invoice', 'read', session.user.id)
     if (!canRead) {
+      // DEBUG: Permission denied logla
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Invoices API] ❌ Permission Denied:', {
+          module: 'invoice',
+          action: 'read',
+          userId: session.user.id,
+          role: session.user.role,
+        })
+      }
       return NextResponse.json(
         { error: 'Forbidden', message: PERMISSION_DENIED_MESSAGE },
         { status: 403 }

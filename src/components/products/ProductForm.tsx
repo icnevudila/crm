@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { toast } from '@/lib/toast'
+import { toast, handleApiError } from '@/lib/toast'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -210,7 +210,7 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
       await mutation.mutateAsync(data)
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error('Kaydedilemedi', error?.message)
+      handleApiError(error, 'Ürün kaydedilemedi', 'Ürün kaydetme işlemi sırasında bir hata oluştu. Lütfen tekrar deneyin.')
     } finally {
       setLoading(false)
     }

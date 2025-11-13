@@ -2,7 +2,7 @@
 
 import { Clock, CheckCircle2, XCircle, Plus, Edit, Trash2 } from 'lucide-react'
 
-import { formatUserFriendlyMessage, formatEntity } from '@/lib/logger'
+import { formatUserFriendlyMessage, formatEntity } from '@/lib/logger-utils'
 
 interface ActivityLog {
   id: string

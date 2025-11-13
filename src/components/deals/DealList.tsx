@@ -1,10 +1,10 @@
-'use client'
+﻿'use client'
 
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/hooks/useSession'
 import { Plus, Search, Edit, Trash2, Eye, LayoutGrid, Table as TableIcon, Filter } from 'lucide-react'
 import { useData } from '@/hooks/useData'
 import { Button } from '@/components/ui/button'
@@ -117,7 +117,7 @@ async function fetchDeals(
   })
   if (!res.ok) throw new Error('Failed to fetch deals')
   const data = await res.json()
-  // Pagination format desteği: { data: [...], pagination: {...} } veya direkt array
+  // Pagination format desteÄŸi: { data: [...], pagination: {...} } veya direkt array
   return Array.isArray(data) ? data : (data?.data || [])
 }
 
@@ -127,7 +127,8 @@ async function fetchKanbanDeals(
   minValue: string,
   maxValue: string,
   startDate: string,
-  endDate: string
+  endDate: string,
+  filterCompanyId?: string
 ) {
   const params = new URLSearchParams()
   if (customerId) params.append('customerId', customerId)
@@ -136,10 +137,11 @@ async function fetchKanbanDeals(
   if (maxValue) params.append('maxValue', maxValue)
   if (startDate) params.append('startDate', startDate)
   if (endDate) params.append('endDate', endDate)
+  if (filterCompanyId) params.append('filterCompanyId', filterCompanyId)
 
   // Cache headers - Performans için 60 saniye cache (repo kurallarına uygun)
   const res = await fetch(`/api/analytics/deal-kanban?${params.toString()}`, {
-    next: { revalidate: 60 }, // 60 saniye ISR cache (repo kurallarına uygun)
+    next: { revalidate: 60 }, // 60 saniye ISR cache (repo kurallarÄ±na uygun)
     headers: {
       'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
     },
@@ -163,7 +165,7 @@ async function fetchKanbanDeals(
 }
 
 async function fetchCustomers() {
-  // OPTİMİZE: Cache headers (veri çekme mantığı aynı)
+  // OPTÄ°MÄ°ZE: Cache headers (veri Ã§ekme mantÄ±ÄŸÄ± aynÄ±)
   const res = await fetch('/api/customers?pageSize=1000', {
     next: { revalidate: 300 },
     cache: 'force-cache',
@@ -173,7 +175,7 @@ async function fetchCustomers() {
   })
   if (!res.ok) throw new Error('Failed to fetch customers')
   const data = await res.json()
-  // API'den dönen veri formatını kontrol et - array mi yoksa object mi?
+  // API'den dÃ¶nen veri formatÄ±nÄ± kontrol et - array mi yoksa object mi?
   return Array.isArray(data) ? data : (data.data || data.customers || [])
 }
 
@@ -188,10 +190,10 @@ const stageColors: Record<string, string> = {
 
 const stageLabels: Record<string, string> = {
   LEAD: 'Potansiyel',
-  CONTACTED: 'İletişimde',
+  CONTACTED: 'Ä°letiÅŸimde',
   PROPOSAL: 'Teklif',
-  NEGOTIATION: 'Pazarlık',
-  WON: 'Kazanıldı',
+  NEGOTIATION: 'PazarlÄ±k',
+  WON: 'KazanÄ±ldÄ±',
   LOST: 'Kaybedildi',
 }
 
@@ -203,7 +205,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
   const searchParams = useSearchParams()
   const { data: session } = useSession()
   
-  // SuperAdmin kontrolü
+  // SuperAdmin kontrolÃ¼
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
   
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('kanban')
@@ -233,12 +235,12 @@ export default function DealList({ isOpen = true }: DealListProps) {
     isSuperAdmin ? '/api/superadmin/companies' : null,
     { dedupingInterval: 60000, revalidateOnFocus: false }
   )
-  // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
+  // Duplicate'leri filtrele - aynÄ± id'ye sahip kayÄ±tlarÄ± tekilleÅŸtir
   const companies = (companiesData?.companies || []).filter((company, index, self) => 
     index === self.findIndex((c) => c.id === company.id)
   )
 
-  // Debounced search - kullanıcı yazmayı bitirdikten 300ms sonra arama yap
+  // Debounced search - kullanÄ±cÄ± yazmayÄ± bitirdikten 300ms sonra arama yap
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
@@ -279,14 +281,14 @@ export default function DealList({ isOpen = true }: DealListProps) {
   })
 
   const kanbanQuery = useQuery({
-    queryKey: ['kanban-deals', customerId, debouncedSearch, minValue, maxValue, startDate, endDate],
-    queryFn: () => fetchKanbanDeals(customerId, debouncedSearch, minValue, maxValue, startDate, endDate), // debouncedSearch kullan
-    staleTime: 60 * 1000, // 60 saniye cache (repo kurallarına uygun - API ile aynı)
+    queryKey: ['kanban-deals', customerId, debouncedSearch, minValue, maxValue, startDate, endDate, filterCompanyId],
+    queryFn: () => fetchKanbanDeals(customerId, debouncedSearch, minValue, maxValue, startDate, endDate, filterCompanyId || undefined), // debouncedSearch kullan
+    staleTime: 60 * 1000, // 60 saniye cache (repo kurallarÄ±na uygun - API ile aynÄ±)
     gcTime: 5 * 60 * 1000, // 5 dakika garbage collection
     refetchOnWindowFocus: false, // Focus'ta refetch yapma - cache kullan
     refetchOnMount: false, // Mount'ta refetch yapma - cache kullan
     placeholderData: (previousData) => previousData, // Optimistic update
-    enabled: isOpen && viewMode === 'kanban', // Sadece kanban view'da çalış
+    enabled: isOpen && viewMode === 'kanban', // Sadece kanban view'da Ã§alÄ±ÅŸ
   })
 
   const { data: customers } = useQuery({
@@ -300,7 +302,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
     enabled: isOpen,
   })
 
-  // customers'ı array olarak garanti et
+  // customers'Ä± array olarak garanti et
   const customersArray = Array.isArray(customers) ? customers : []
 
   const deleteMutation = useMutation({
@@ -318,14 +320,14 @@ export default function DealList({ isOpen = true }: DealListProps) {
       queryClient.invalidateQueries({ queryKey: ['deals'] })
       queryClient.invalidateQueries({ queryKey: ['kanban-deals'] })
       queryClient.invalidateQueries({ queryKey: ['stats-deals'] })
-      queryClient.invalidateQueries({ queryKey: ['deal-kanban'] }) // Dashboard'daki kanban chart'ı güncelle
-      queryClient.invalidateQueries({ queryKey: ['kpis'] }) // Dashboard'daki KPIs güncelle (toplam değer, ortalama vs.)
+      queryClient.invalidateQueries({ queryKey: ['deal-kanban'] }) // Dashboard'daki kanban chart'Ä± gÃ¼ncelle
+      queryClient.invalidateQueries({ queryKey: ['kpis'] }) // Dashboard'daki KPIs gÃ¼ncelle (toplam deÄŸer, ortalama vs.)
       // Optimistic update için cache'i temizle
       queryClient.refetchQueries({ queryKey: ['deals'] })
       queryClient.refetchQueries({ queryKey: ['kanban-deals'] })
       queryClient.refetchQueries({ queryKey: ['stats-deals'] })
-      queryClient.refetchQueries({ queryKey: ['deal-kanban'] }) // Dashboard'daki kanban chart'ı refetch et
-      queryClient.refetchQueries({ queryKey: ['kpis'] }) // Dashboard'daki KPIs refetch et (toplam değer, ortalama vs.)
+      queryClient.refetchQueries({ queryKey: ['deal-kanban'] }) // Dashboard'daki kanban chart'Ä± refetch et
+      queryClient.refetchQueries({ queryKey: ['kpis'] }) // Dashboard'daki KPIs refetch et (toplam deÄŸer, ortalama vs.)
     },
     onError: (error: any) => {
       // Production'da console.error kaldırıldı
@@ -348,25 +350,25 @@ export default function DealList({ isOpen = true }: DealListProps) {
     try {
       await deleteMutation.mutateAsync(id)
       
-      // Başarı bildirimi
+      // BaÅŸarÄ± bildirimi
       toast.success(
         t('dealDeleted'),
         t('dealDeletedMessage', { title })
       )
       
-      // Kanban ve table view için query'leri invalidate et
+      // Kanban ve table view iÃ§in query'leri invalidate et
       // ÖNEMLİ: Dashboard'daki tüm ilgili query'leri invalidate et (ana sayfada güncellensin)
       queryClient.invalidateQueries({ queryKey: ['deals'] })
       queryClient.invalidateQueries({ queryKey: ['kanban-deals'] })
       queryClient.invalidateQueries({ queryKey: ['stats-deals'] })
-      queryClient.invalidateQueries({ queryKey: ['deal-kanban'] }) // Dashboard'daki kanban chart'ı güncelle
-      queryClient.invalidateQueries({ queryKey: ['kpis'] }) // Dashboard'daki KPIs güncelle (toplam değer, ortalama vs.)
+      queryClient.invalidateQueries({ queryKey: ['deal-kanban'] }) // Dashboard'daki kanban chart'Ä± gÃ¼ncelle
+      queryClient.invalidateQueries({ queryKey: ['kpis'] }) // Dashboard'daki KPIs gÃ¼ncelle (toplam deÄŸer, ortalama vs.)
       // Refetch yap - anında güncel veri gelsin
       queryClient.refetchQueries({ queryKey: ['deals'] })
       queryClient.refetchQueries({ queryKey: ['kanban-deals'] })
       queryClient.refetchQueries({ queryKey: ['stats-deals'] })
-      queryClient.refetchQueries({ queryKey: ['deal-kanban'] }) // Dashboard'daki kanban chart'ı refetch et
-      queryClient.refetchQueries({ queryKey: ['kpis'] }) // Dashboard'daki KPIs refetch et (toplam değer, ortalama vs.)
+      queryClient.refetchQueries({ queryKey: ['deal-kanban'] }) // Dashboard'daki kanban chart'Ä± refetch et
+      queryClient.refetchQueries({ queryKey: ['kpis'] }) // Dashboard'daki KPIs refetch et (toplam deÄŸer, ortalama vs.)
     } catch (error: any) {
       toast.error(tCommon('error'), error?.message)
     }
@@ -397,8 +399,8 @@ export default function DealList({ isOpen = true }: DealListProps) {
     return stats?.total || (viewMode === 'table' ? tableDeals.length : kanbanTotal)
   }, [stats?.total, viewMode, tableDeals.length, kanbanTotal])
 
-  // Skeleton göster - hook'lardan SONRA (early return)
-  // ÖNEMLİ: kanbanData her zaman array olmalı (undefined kontrolü)
+  // Skeleton gÃ¶ster - hook'lardan SONRA (early return)
+  // Ã–NEMLÄ°: kanbanData her zaman array olmalÄ± (undefined kontrolÃ¼)
   const hasKanbanData = Array.isArray(kanbanQuery.data) && kanbanQuery.data.length > 0
   if (!isOpen) {
     return null
@@ -410,7 +412,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
   return (
     <div className="space-y-6">
-      {/* İstatistikler */}
+      {/* Ä°statistikler */}
       <ModuleStats module="deals" statsUrl="/api/stats/deals" />
 
       <AutomationInfo
@@ -455,7 +457,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
             size="icon"
             onClick={() => {
               setViewMode('table')
-              // Table view'a geçildiğinde veri çek
+              // Table view'a geÃ§ildiÄŸinde veri Ã§ek
               queryClient.refetchQueries({ queryKey: ['deals'] })
             }}
           >
@@ -466,7 +468,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
             size="icon"
             onClick={() => {
               setViewMode('kanban')
-              // Kanban view'a geçildiğinde veri çek
+              // Kanban view'a geÃ§ildiÄŸinde veri Ã§ek
               queryClient.refetchQueries({ queryKey: ['kanban-deals'] })
             }}
           >
@@ -563,12 +565,12 @@ export default function DealList({ isOpen = true }: DealListProps) {
                       <SelectValue placeholder={t('allStages')} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Tümü</SelectItem>
+                      <SelectItem value="all">TÃ¼mÃ¼</SelectItem>
                       <SelectItem value="LEAD">Potansiyel</SelectItem>
-                      <SelectItem value="CONTACTED">İletişimde</SelectItem>
+                      <SelectItem value="CONTACTED">Ä°letiÅŸimde</SelectItem>
                       <SelectItem value="PROPOSAL">Teklif</SelectItem>
-                      <SelectItem value="NEGOTIATION">Pazarlık</SelectItem>
-                      <SelectItem value="WON">Kazanıldı</SelectItem>
+                      <SelectItem value="NEGOTIATION">PazarlÄ±k</SelectItem>
+                      <SelectItem value="WON">KazanÄ±ldÄ±</SelectItem>
                       <SelectItem value="LOST">Kaybedildi</SelectItem>
                     </SelectContent>
                   </Select>
@@ -591,16 +593,16 @@ export default function DealList({ isOpen = true }: DealListProps) {
                     router.push(`?${params.toString()}`)
                   }}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Tümü" />
+                      <SelectValue placeholder="TÃ¼mÃ¼" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Tümü</SelectItem>
+                      <SelectItem value="all">TÃ¼mÃ¼</SelectItem>
                       <SelectItem value="WEB">Web Sitesi</SelectItem>
                       <SelectItem value="EMAIL">E-posta</SelectItem>
                       <SelectItem value="PHONE">Telefon</SelectItem>
                       <SelectItem value="REFERRAL">Referans</SelectItem>
                       <SelectItem value="SOCIAL">Sosyal Medya</SelectItem>
-                      <SelectItem value="OTHER">Diğer</SelectItem>
+                      <SelectItem value="OTHER">DiÄŸer</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -608,7 +610,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
               {/* Min Value */}
               <div className="space-y-2">
-                <label className="text-sm font-medium">Min Değer (₺)</label>
+                <label className="text-sm font-medium">Min DeÄŸer (â‚º)</label>
                 <Input
                   type="number"
                   placeholder="0"
@@ -619,7 +621,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
               {/* Max Value */}
               <div className="space-y-2">
-                <label className="text-sm font-medium">Max Değer (₺)</label>
+                <label className="text-sm font-medium">Max DeÄŸer (â‚º)</label>
                 <Input
                   type="number"
                   placeholder="1000000"
@@ -716,22 +718,22 @@ export default function DealList({ isOpen = true }: DealListProps) {
               
               switch (newStage) {
                 case 'WON':
-                  toastTitle = `Fırsat kazanıldı: "${dealTitle}"`
-                  toastDescription = `Fırsat "Kazanıldı" aşamasına taşındı.`
+                  toastTitle = `FÄ±rsat kazanÄ±ldÄ±: "${dealTitle}"`
+                  toastDescription = `FÄ±rsat "KazanÄ±ldÄ±" aÅŸamasÄ±na taÅŸÄ±ndÄ±.`
                   
                   if (automation.quoteCreated && automation.quoteId) {
-                    toastDescription += `\n\nOtomatik işlemler:\n• Teklif oluşturuldu (ID: ${automation.quoteId.substring(0, 8)}...)\n• Teklif başlığı: ${automation.quoteTitle || 'Otomatik oluşturuldu'}\n• E-posta gönderildi\n• Bildirim gönderildi`
+                    toastDescription += `\n\nOtomatik iÅŸlemler:\nâ€¢ Teklif oluÅŸturuldu (ID: ${automation.quoteId.substring(0, 8)}...)\nâ€¢ Teklif baÅŸlÄ±ÄŸÄ±: ${automation.quoteTitle || 'Otomatik oluÅŸturuldu'}\nâ€¢ E-posta gÃ¶nderildi\nâ€¢ Bildirim gÃ¶nderildi`
                   }
                   break
                   
                 case 'LOST':
-                  toastTitle = `Fırsat kaybedildi: "${dealTitle}"`
-                  toastDescription = `Fırsat "Kaybedildi" aşamasına taşındı.`
+                  toastTitle = `FÄ±rsat kaybedildi: "${dealTitle}"`
+                  toastDescription = `FÄ±rsat "Kaybedildi" aÅŸamasÄ±na taÅŸÄ±ndÄ±.`
                   
                   if (automation.taskCreated && automation.taskId) {
-                    toastDescription += `\n\nOtomatik işlemler:\n• Analiz görevi oluşturuldu (ID: ${automation.taskId.substring(0, 8)}...)\n• Bildirim gönderildi`
+                    toastDescription += `\n\nOtomatik iÅŸlemler:\nâ€¢ Analiz gÃ¶revi oluÅŸturuldu (ID: ${automation.taskId.substring(0, 8)}...)\nâ€¢ Bildirim gÃ¶nderildi`
                   } else {
-                    toastDescription += `\n\nBildirim gönderildi`
+                    toastDescription += `\n\nBildirim gÃ¶nderildi`
                   }
                   
                   toastType = 'warning'
@@ -739,8 +741,8 @@ export default function DealList({ isOpen = true }: DealListProps) {
                   
                 default:
                   const currentStageName = stageLabels[newStage] || newStage
-                  toastTitle = `Fırsat aşaması güncellendi: "${dealTitle}"`
-                  toastDescription = `Fırsat "${currentStageName}" aşamasına taşındı.`
+                  toastTitle = `FÄ±rsat aÅŸamasÄ± gÃ¼ncellendi: "${dealTitle}"`
+                  toastDescription = `FÄ±rsat "${currentStageName}" aÅŸamasÄ±na taÅŸÄ±ndÄ±.`
               }
 
               if (toastType === 'success') {
@@ -757,8 +759,8 @@ export default function DealList({ isOpen = true }: DealListProps) {
                 queryClient.invalidateQueries({ queryKey: ['deals'] }),
                 queryClient.invalidateQueries({ queryKey: ['kanban-deals'] }),
                 queryClient.invalidateQueries({ queryKey: ['stats-deals'] }),
-                queryClient.invalidateQueries({ queryKey: ['deal-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
-                queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle (toplam değer, ortalama vs.)
+      queryClient.invalidateQueries({ queryKey: ['deal-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
+      queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle (toplam değer, ortalama vs.)
               ])
               
               // Refetch yap - anında güncel veri gelsin
@@ -766,8 +768,8 @@ export default function DealList({ isOpen = true }: DealListProps) {
                 queryClient.refetchQueries({ queryKey: ['deals'] }),
                 queryClient.refetchQueries({ queryKey: ['kanban-deals'] }),
                 queryClient.refetchQueries({ queryKey: ['stats-deals'] }),
-                queryClient.refetchQueries({ queryKey: ['deal-kanban'] }), // Dashboard'daki kanban chart'ı refetch et
-                queryClient.refetchQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs refetch et (toplam değer, ortalama vs.)
+      queryClient.refetchQueries({ queryKey: ['deal-kanban'] }), // Dashboard'daki kanban chart'ı refetch et
+      queryClient.refetchQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs refetch et (toplam değer, ortalama vs.)
               ])
             } catch (error: any) {
               console.error('Stage update error:', error)
@@ -833,7 +835,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                   </TableCell>
                   <TableCell>
                     <Badge variant={deal.status === 'OPEN' ? 'default' : 'secondary'}>
-                      {deal.status === 'OPEN' ? 'Açık' : 'Kapalı'}
+                      {deal.status === 'OPEN' ? 'AÃ§Ä±k' : 'KapalÄ±'}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -852,9 +854,9 @@ export default function DealList({ isOpen = true }: DealListProps) {
                                 : 'bg-blue-100 text-blue-800'
                             }
                           >
-                            {deal.leadScore[0].temperature === 'HOT' ? '🔥 Sıcak' :
-                             deal.leadScore[0].temperature === 'WARM' ? '☀️ Ilık' :
-                             '❄️ Soğuk'}
+                            {deal.leadScore[0].temperature === 'HOT' ? 'ğŸ”¥ SÄ±cak' :
+                             deal.leadScore[0].temperature === 'WARM' ? 'â˜€ï¸ IlÄ±k' :
+                             'â„ï¸ SoÄŸuk'}
                           </Badge>
                         </>
                       ) : (
@@ -870,7 +872,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                          deal.leadSource === 'PHONE' ? 'Telefon' :
                          deal.leadSource === 'REFERRAL' ? 'Referans' :
                          deal.leadSource === 'SOCIAL' ? 'Sosyal Medya' :
-                         deal.leadSource === 'OTHER' ? 'Diğer' :
+                         deal.leadSource === 'OTHER' ? 'DiÄŸer' :
                          deal.leadSource}
                       </Badge>
                     ) : (
@@ -958,36 +960,36 @@ export default function DealList({ isOpen = true }: DealListProps) {
           setSelectedDeal(null)
         }}
         onSuccess={async (savedDeal) => {
-          // Başarı bildirimi
+          // BaÅŸarÄ± bildirimi
           toast.success(
-            selectedDeal ? 'Fırsat güncellendi!' : 'Fırsat oluşturuldu!',
+            selectedDeal ? 'FÄ±rsat gÃ¼ncellendi!' : 'FÄ±rsat oluÅŸturuldu!',
             selectedDeal 
-              ? `${savedDeal.title} başarıyla güncellendi.`
-              : `${savedDeal.title} başarıyla oluşturuldu.`
+              ? `${savedDeal.title} baÅŸarÄ±yla gÃ¼ncellendi.`
+              : `${savedDeal.title} baÅŸarÄ±yla oluÅŸturuldu.`
           )
           
-          // Optimistic update - yeni/ güncellenmiş kaydı hemen cache'e ekle ve UI'da göster
-          // Böylece form kapanmadan önce fırsat listede görünür
+          // Optimistic update - yeni/ gÃ¼ncellenmiÅŸ kaydÄ± hemen cache'e ekle ve UI'da gÃ¶ster
+          // BÃ¶ylece form kapanmadan Ã¶nce fÄ±rsat listede gÃ¶rÃ¼nÃ¼r
           
-          // Table view için optimistic update
+          // Table view iÃ§in optimistic update
           if (viewMode === 'table') {
             let updatedDeals: Deal[]
             
             if (selectedDeal) {
-              // UPDATE: Mevcut kaydı güncelle
+              // UPDATE: Mevcut kaydÄ± gÃ¼ncelle
               updatedDeals = dealsQuery.data.map((d) =>
                 d.id === savedDeal.id ? savedDeal : d
               )
             } else {
-              // CREATE: Yeni kaydı listenin başına ekle
+              // CREATE: Yeni kaydÄ± listenin baÅŸÄ±na ekle
               updatedDeals = [savedDeal, ...dealsQuery.data]
             }
             
-            // React Query cache'ini güncelle
+            // React Query cache'ini gÃ¼ncelle
             queryClient.setQueryData(['deals', stage, customerId, search, minValue, maxValue, startDate, endDate], updatedDeals)
           }
           
-          // Tüm query'leri invalidate et - fresh data çek (hem table hem kanban)
+          // TÃ¼m query'leri invalidate et - fresh data Ã§ek (hem table hem kanban)
           await Promise.all([
             queryClient.invalidateQueries({ queryKey: ['deals'] }),
             queryClient.invalidateQueries({ queryKey: ['kanban-deals'] }),
@@ -1003,7 +1005,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
         }}
       />
 
-      {/* LOST Dialog - Kayıp sebebi sor */}
+      {/* LOST Dialog - KayÄ±p sebebi sor */}
       <Dialog open={lostDialogOpen} onOpenChange={setLostDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -1059,7 +1061,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                 setLostReason('')
                 setLosingDealId(null)
 
-                // API çağrısı yap - lostReason ile birlikte
+                // API Ã§aÄŸrÄ±sÄ± yap - lostReason ile birlikte
                 try {
                   const res = await fetch(`/api/deals/${dealId}`, {
                     method: 'PUT',
@@ -1077,7 +1079,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
                   const updatedDeal = await res.json()
                   
-                  // Toast mesajı - analiz görevi oluşturulduğunu bildir
+                  // Toast mesajÄ± - analiz gÃ¶revi oluÅŸturulduÄŸunu bildir
                   toast.success(
                     t('lostDialog.dealMarkedAsLost'),
                     t('lostDialog.dealMarkedAsLostMessage'),

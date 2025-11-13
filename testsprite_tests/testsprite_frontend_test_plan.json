@@ -1,0 +1,573 @@
+[
+  {
+    "id": "TC001",
+    "title": "Authentication - Successful Login with Valid Credentials",
+    "description": "Verify that users can log in successfully with correct username and password, session is established, and multi-factor authentication is enforced if enabled.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the login page"
+      },
+      {
+        "type": "action",
+        "description": "Enter valid username and password"
+      },
+      {
+        "type": "action",
+        "description": "Complete multi-factor authentication if prompted"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify user is authenticated and redirected to dashboard"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify session is established with appropriate expiration policies"
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Authentication - Failed Login with Invalid Credentials",
+    "description": "Verify that login attempts with incorrect username or password are rejected with appropriate error messages and no session is created.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the login page"
+      },
+      {
+        "type": "action",
+        "description": "Enter invalid username or password"
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify login is rejected"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify appropriate error message is displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify no authentication session is created"
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "Dashboard - KPI and Chart Load Performance",
+    "description": "Verify that the dashboard main page loads KPI cards, trend analytics, and recent activities within 500 milliseconds.",
+    "category": "performance",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as a valid user"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to the dashboard page"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify KPI cards, trend analytics charts, and recent activities are displayed"
+      },
+      {
+        "type": "assertion",
+        "description": "Measure and confirm that the page and data load within 500ms"
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Multi-Tenant Data Isolation with RLS Policies",
+    "description": "Verify that data accessed by a user is strictly isolated to their tenant using Row-Level Security to prevent data leaks across companies.",
+    "category": "security",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as a user from Tenant A"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to access data entities belonging to Tenant B"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify Tenant B data is not accessible or visible"
+      },
+      {
+        "type": "action",
+        "description": "Perform CRUD operations on Tenant A data"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify operations are successful and data modifications remain scoped to Tenant A"
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Customer Management - CRUD Operations and Bulk Actions",
+    "description": "Verify the customer management module supports creating, reading, updating, deleting single and multiple customers with correct data persistence.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the customer management page"
+      },
+      {
+        "type": "action",
+        "description": "Create a new customer with valid data"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new customer is listed and data is correct"
+      },
+      {
+        "type": "action",
+        "description": "Edit the newly created customer information"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify changes are saved and displayed correctly"
+      },
+      {
+        "type": "action",
+        "description": "Select multiple customers and perform bulk delete"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify selected customers are deleted from the list and database"
+      },
+      {
+        "type": "action",
+        "description": "Use the import feature to bulk add customers from a CSV file with valid data"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify imported customers appear and data integrity is maintained"
+      },
+      {
+        "type": "action",
+        "description": "Export current customer list to file"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify export file matches displayed customer data accurately"
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Quote Management - PDF Generation and Automatic Expiry",
+    "description": "Verify quote CRUD operations, PDF generation correctness, revision tracking, and automatic expiry trigger workflow.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Create a new quote with valid details"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify quote is saved and appears in the list"
+      },
+      {
+        "type": "action",
+        "description": "Generate PDF for the created quote"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify PDF content matches quote details and formatting"
+      },
+      {
+        "type": "action",
+        "description": "Create a revision of the existing quote"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify revision is tracked and previous versions accessible"
+      },
+      {
+        "type": "action",
+        "description": "Set quote expiry date and wait or simulate expiry time"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify workflow automation marks quote as expired and triggers appropriate notifications"
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "Invoice Management - Payment Tracking and Kanban View",
+    "description": "Verify invoice creation, editing, PDF export, payment status tracking, and kanban board visualization work correctly.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Create a new invoice linked to a customer and deal"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify invoice details and status saved correctly"
+      },
+      {
+        "type": "action",
+        "description": "Mark an invoice as paid and update payment tracking"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify payment status is updated and reflected in the UI"
+      },
+      {
+        "type": "action",
+        "description": "Generate and download invoice PDF"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify PDF accuracy and formatting"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to invoice kanban board"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify invoices are correctly categorized by status in kanban view"
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "Role-Based Access Control Enforcement",
+    "description": "Verify that users with different roles only have access to the permissions and modules assigned to them across the system.",
+    "category": "security",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Log in as a user with limited role permissions"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to access restricted modules or operations"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify access is denied or UI elements are hidden"
+      },
+      {
+        "type": "action",
+        "description": "Log in as an admin with full permissions"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify admin can access and perform CRUD on all modules and user management"
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Real-Time Notification System Functionality",
+    "description": "Verify notifications are delivered in real-time, can be marked as read, and their state is synchronized correctly.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Trigger a system event that sends a notification to the user"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify notification appears immediately in the notification UI"
+      },
+      {
+        "type": "action",
+        "description": "Mark the notification as read"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify notification read status updates and persists across sessions"
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Localization and Language Switch",
+    "description": "Verify the UI switches seamlessly between Turkish and English with correct text translations and layout adjustments.",
+    "category": "ui",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to any main page"
+      },
+      {
+        "type": "action",
+        "description": "Switch language to Turkish using LocaleSwitcher component"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify all static and dynamic text is displayed in Turkish correctly"
+      },
+      {
+        "type": "action",
+        "description": "Switch language back to English"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify all text changes instantly to English without page reload or layout issues"
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Activity Log - CRUD Operation Tracking with Metadata",
+    "description": "Verify that all user CRUD actions are logged with correct metadata in JSON format and are retrievable for audit.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Perform create, update, and delete operations on a customer entity"
+      },
+      {
+        "type": "action",
+        "description": "Access the activity log UI"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify corresponding log entries exist with accurate JSON metadata"
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "Workflow Automation - Quote Expiry and Deal Monitoring",
+    "description": "Verify that defined workflow automations run as expected: expired quotes are marked and deal monitoring triggers alerts or status changes.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Create a quote with an expiry date set in the near future"
+      },
+      {
+        "type": "action",
+        "description": "Wait for expiry or trigger the automation execution manually"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify quote status changes to expired and notifications are sent if applicable"
+      },
+      {
+        "type": "action",
+        "description": "Create or update a deal meeting monitoring criteria"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify deal monitoring automation runs and triggers expected workflow actions"
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "Scheduled Cron Jobs Running and Recovery",
+    "description": "Verify scheduled cron jobs for invoice monitoring, stock alerts, and task reminders execute on schedule and handle exceptions gracefully.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Verify cron jobs run at scheduled times or trigger them manually"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify alerts for low stock, overdue invoices, and overdue tasks are generated correctly"
+      },
+      {
+        "type": "action",
+        "description": "Simulate failure in a cron job execution"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify system logs the error and recovers without crashing the service"
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "Report Generation and Export Accuracy",
+    "description": "Verify that reports for customers, sales, finance, and products generate correct datasets and support export in expected formats.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the reporting module"
+      },
+      {
+        "type": "action",
+        "description": "Select report types (customer, sales, finance, product) and generate each"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify report data shown matches backend data and filters applied"
+      },
+      {
+        "type": "action",
+        "description": "Export each report"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify exported files contain accurate and complete report data"
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "Document Management - Upload, Access Control and Versioning",
+    "description": "Verify documents can be uploaded, access permissions are enforced, and versioning correctly preserves changes.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Upload a new document with valid content"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify document is saved and visible in the document list"
+      },
+      {
+        "type": "action",
+        "description": "Attempt to access the document as a user without permissions"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify access is denied"
+      },
+      {
+        "type": "action",
+        "description": "Upload a new version of the existing document"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify version history is maintained and previous versions retrievable"
+      }
+    ]
+  },
+  {
+    "id": "TC016",
+    "title": "UI Components Render Correctly on Supported Browsers and Devices",
+    "description": "Verify all UI components (buttons, inputs, tables, dialogs, tabs) render correctly, are responsive, and interact as expected on supported browsers and devices.",
+    "category": "ui",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Open the application on multiple supported browsers and mobile devices"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify UI components render with consistent style and positioning"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify UI components respond to user interactions correctly (click, input, toggle)"
+      }
+    ]
+  },
+  {
+    "id": "TC017",
+    "title": "Performance Optimization Verification - Prefetch, Lazy Loading, Skeleton States",
+    "description": "Verify prefetching of data on hover, lazy loading of components, and skeleton states display correctly during load to optimize user experience.",
+    "category": "performance",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Hover over interactive elements that prefetch data"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify data is prefetched and subsequent load is faster"
+      },
+      {
+        "type": "action",
+        "description": "Navigate to pages with heavy components"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify lazy loading triggers correctly and skeleton placeholders show until data loads"
+      }
+    ]
+  },
+  {
+    "id": "TC018",
+    "title": "Email Campaign - Template Management, Sending and Tracking",
+    "description": "Verify email campaign templates can be created, modified, campaigns sent, and delivery/tracking data updates correctly.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Create a new email campaign template with valid input"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify template saved and editable"
+      },
+      {
+        "type": "action",
+        "description": "Send an email campaign using the created template"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify emails are sent successfully and delivery tracking updates"
+      }
+    ]
+  },
+  {
+    "id": "TC019",
+    "title": "Security Audit - Cross-Tenant Data Leak and Privilege Escalation Prevention",
+    "description": "Verify the system prevents data leaks between tenants and does not allow privilege escalation beyond assigned roles.",
+    "category": "security",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Attempt to access data from a different tenant using API or UI"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify access is rejected with appropriate errors"
+      },
+      {
+        "type": "action",
+        "description": "Attempt role privilege escalation via crafted requests or UI manipulations"
+      },
+      {
+        "type": "assertion",
+        "description": "Verify status quo of user permissions is maintained and changes rejected"
+      }
+    ]
+  }
+]

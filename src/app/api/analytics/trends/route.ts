@@ -5,10 +5,10 @@ import { getSupabaseWithServiceRole } from '@/lib/supabase'
 // Dynamic route - fresh data için cache'i kapat
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     // Session kontrolü - hata yakalama ile
-    const { session, error: sessionError } = await getSafeSession()
+    const { session, error: sessionError } = await getSafeSession(request)
     if (sessionError) {
       return sessionError
     }
@@ -21,6 +21,10 @@ export async function GET() {
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     const companyId = session.user.companyId
     const supabase = getSupabaseWithServiceRole()
+    
+    // SuperAdmin için firma filtresi parametresi
+    const { searchParams } = new URL(request.url)
+    const filterCompanyId = searchParams.get('filterCompanyId') || ''
 
     // Son 12 ayın satış verilerini çek - Sadece PAID Invoice'ları say (KPI'larla tutarlı olması için)
     const twelveMonthsAgo = new Date()
@@ -35,9 +39,14 @@ export async function GET() {
       .order('createdAt', { ascending: true })
       .limit(1000) // Daha fazla kayıt çek (tüm PAID invoice'lar için)
     
+    // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
       invoicesQuery = invoicesQuery.eq('companyId', companyId)
+    } else if (filterCompanyId) {
+      // SuperAdmin firma filtresi seçtiyse sadece o firmayı göster
+      invoicesQuery = invoicesQuery.eq('companyId', filterCompanyId)
     }
+    // SuperAdmin ve firma filtresi yoksa tüm firmaları göster
     
     const { data: invoices, error } = await invoicesQuery
     

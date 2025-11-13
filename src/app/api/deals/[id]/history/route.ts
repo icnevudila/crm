@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
-import { getServerSession } from 'next-auth'
+import { getSafeSession } from '@/lib/safe-session'
 
 export async function GET(
   request: NextRequest,

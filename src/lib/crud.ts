@@ -5,8 +5,7 @@
 
 import { getSupabase, getSupabaseWithServiceRole } from './supabase'
 import { logAction } from './logger'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getServerSession } from '@/lib/auth-supabase'
 
 export interface CrudFilters {
   search?: string
@@ -29,7 +28,7 @@ export interface CrudOptions {
  * Kayıtları listele (GET)
  */
 export async function getRecords(options: CrudOptions) {
-  const session = await getServerSession(authOptions)
+  const session = await getServerSession()
   if (!session?.user?.companyId) {
     throw new Error('Unauthorized')
   }
@@ -116,7 +115,7 @@ export async function getRecords(options: CrudOptions) {
  * Tek kayıt getir (GET by ID)
  */
 export async function getRecordById(table: string, id: string, select?: string) {
-  const session = await getServerSession(authOptions)
+  const session = await getServerSession()
   if (!session?.user?.companyId) {
     throw new Error('Unauthorized')
   }
@@ -144,7 +143,7 @@ export async function getRecordById(table: string, id: string, select?: string) 
  * Yeni kayıt oluştur (POST)
  */
 export async function createRecord(table: string, data: any, logDescription?: string) {
-  const session = await getServerSession(authOptions)
+  const session = await getServerSession()
   if (!session?.user?.companyId) {
     throw new Error('Unauthorized')
   }
@@ -191,7 +190,7 @@ export async function updateRecord(
   data: any,
   logDescription?: string
 ) {
-  const session = await getServerSession(authOptions)
+  const session = await getServerSession()
   if (!session?.user?.companyId) {
     throw new Error('Unauthorized')
   }
@@ -236,7 +235,7 @@ export async function updateRecord(
  * Kayıt sil (DELETE)
  */
 export async function deleteRecord(table: string, id: string, logDescription?: string) {
-  const session = await getServerSession(authOptions)
+  const session = await getServerSession()
   if (!session?.user?.companyId) {
     throw new Error('Unauthorized')
   }

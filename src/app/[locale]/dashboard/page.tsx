@@ -7,7 +7,7 @@ import {
   useState,
 } from 'react'
 import dynamic from 'next/dynamic'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/hooks/useSession'
 import { useLocale, useTranslations } from 'next-intl'
 import { motion } from 'framer-motion'
 import type { LucideIcon } from 'lucide-react'

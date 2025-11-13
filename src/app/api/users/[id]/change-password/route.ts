@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getServerSession } from '@/lib/auth-supabase'
 import { getSupabase } from '@/lib/supabase'
 import bcrypt from 'bcryptjs'
 import { buildPermissionDeniedResponse } from '@/lib/permissions'
@@ -10,7 +9,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getServerSession()
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

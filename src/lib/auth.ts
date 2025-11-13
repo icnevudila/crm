@@ -1,10 +1,9 @@
 /**
  * Auth Utilities
- * NextAuth.js + Supabase Auth integration
+ * Supabase Auth integration
  */
 
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getServerSession } from '@/lib/auth-supabase'
 import { getSupabase } from './supabase'
 
 export interface SessionUser {
@@ -12,14 +11,14 @@ export interface SessionUser {
   email: string
   name: string
   role: string
-  companyId: string
+  companyId: string | null
 }
 
 /**
  * Get current session user
  */
 export async function getCurrentUser(): Promise<SessionUser | null> {
-  const session = await getServerSession(authOptions)
+  const session = await getServerSession()
   if (!session?.user) return null
 
   return session.user as SessionUser

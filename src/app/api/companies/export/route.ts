@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabase, getSupabaseWithServiceRole } from '@/lib/supabase'
 import * as XLSX from 'xlsx'
 
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
+    }
     const { searchParams } = new URL(request.url)
     const format = searchParams.get('format') || 'excel'
     const search = searchParams.get('search') || ''

@@ -35,7 +35,7 @@ import {
   Target,
   Send,
 } from 'lucide-react'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/hooks/useSession'
 import { useData } from '@/hooks/useData'
 import { OnboardingButton } from '@/components/onboarding/OnboardingButton'
 

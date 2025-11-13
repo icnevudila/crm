@@ -1,7 +1,8 @@
 'use client'
 
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/hooks/useSession'
 import { useLocale } from 'next-intl'
+import { useRouter } from 'next/navigation'
 import NotificationMenu from '@/components/NotificationMenu'
 import Breadcrumbs from '@/components/layout/Breadcrumbs'
 import LocaleSwitcher from '@/components/layout/LocaleSwitcher'
@@ -15,13 +16,26 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { User, LogOut, Settings, HelpCircle, BookOpen, MessageCircle } from 'lucide-react'
-import { signOut } from 'next-auth/react'
 import Link from 'next/link'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
 export default function Header() {
   const { data: session } = useSession()
   const locale = useLocale()
+  const router = useRouter()
+
+  const handleSignOut = async () => {
+    try {
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'include',
+      })
+      window.location.href = `/${locale}/login`
+    } catch (error) {
+      console.error('Logout error:', error)
+      window.location.href = `/${locale}/login`
+    }
+  }
 
   return (
     <header className="fixed top-0 left-64 right-0 h-16 bg-white border-b border-gray-200 z-40 flex items-center justify-between px-6">
@@ -92,7 +106,7 @@ export default function Header() {
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                onClick={() => signOut({ callbackUrl: `/${locale}/login` })}
+                onClick={handleSignOut}
                 className="text-red-600 focus:text-red-600 cursor-pointer"
               >
                 <LogOut className="mr-2 h-4 w-4" />

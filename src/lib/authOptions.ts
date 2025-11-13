@@ -26,7 +26,7 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) {
-          throw new Error('Email ve password gereklidir')
+          return null // NextAuth'da null döndürmek hata anlamına gelir
         }
 
         // Login için service role key kullan (RLS bypass)
@@ -57,17 +57,20 @@ export const authOptions: NextAuthOptions = {
         // Hata kontrolü
         if (userError) {
           console.error('User lookup error:', userError)
-          throw new Error(`Kullanıcı bulunamadı: ${userError.message}`)
+          return null // NextAuth'da null döndürmek hata anlamına gelir
         }
 
         // Sonuç kontrolü
         if (!user) {
-          throw new Error('Kullanıcı bulunamadı. Email veya şifre hatalı olabilir.')
+          console.error('User not found')
+          return null // NextAuth'da null döndürmek hata anlamına gelir
         }
 
-        // Kullanıcının companyId'si yoksa hata ver
-        if (!user.companyId) {
-          throw new Error('Kullanıcının şirket bilgisi bulunamadı. Lütfen yöneticinizle iletişime geçin.')
+        // Kullanıcının companyId'si yoksa hata ver (SuperAdmin hariç)
+        const isSuperAdmin = user.role === 'SUPER_ADMIN'
+        if (!user.companyId && !isSuperAdmin) {
+          console.error('User has no companyId')
+          return null // NextAuth'da null döndürmek hata anlamına gelir
         }
 
         // Şifre kontrolü
@@ -80,23 +83,36 @@ export const authOptions: NextAuthOptions = {
             (await bcryptCompare(credentials.password, user.password)))
 
         if (!passwordMatch) {
-          throw new Error('Şifre hatalı')
+          console.error('Password mismatch')
+          return null // NextAuth'da null döndürmek hata anlamına gelir
         }
 
         // Şirket bilgisini al - kullanıcının kendi companyId'sini kullan
-        const { data: company, error: companyError } = await supabase
-          .from('Company')
-          .select('id, name')
-          .eq('id', user.companyId)
-          .maybeSingle()
+        // SuperAdmin için company yoksa da devam et
+        let company = null
+        if (user.companyId) {
+          const { data: companyData, error: companyError } = await supabase
+            .from('Company')
+            .select('id, name')
+            .eq('id', user.companyId)
+            .maybeSingle()
 
-        if (companyError) {
-          console.error('Company lookup error:', companyError)
-          throw new Error(`Şirket bulunamadı: ${companyError.message}`)
+          if (companyError) {
+            console.error('Company lookup error:', companyError)
+            // SuperAdmin için company hatası kritik değil
+            if (!isSuperAdmin) {
+              console.error('Company lookup error:', companyError)
+              return null // NextAuth'da null döndürmek hata anlamına gelir
+            }
+          } else {
+            company = companyData
+          }
         }
 
-        if (!company) {
-          throw new Error('Kullanıcının şirket bilgisi bulunamadı. Lütfen yöneticinizle iletişime geçin.')
+        // SuperAdmin için company yoksa da devam et
+        if (!company && !isSuperAdmin) {
+          console.error('Company not found for user')
+          return null // NextAuth'da null döndürmek hata anlamına gelir
         }
 
         return {
@@ -104,8 +120,8 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name,
           role: user.role,
-          companyId: user.companyId, // Her zaman kullanıcının kendi companyId'si
-          companyName: company.name,
+          companyId: user.companyId || null, // SuperAdmin için null olabilir
+          companyName: company?.name || null, // SuperAdmin için null olabilir
         }
       },
     }),
@@ -131,8 +147,8 @@ export const authOptions: NextAuthOptions = {
     },
   },
   pages: {
-    signIn: '/login',
-    error: '/login',
+    signIn: '/tr/login', // Locale prefix ile login sayfası
+    error: '/tr/login',
   },
   session: {
     strategy: 'jwt',
@@ -143,11 +159,6 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   // Debug mode - development'ta daha fazla log
   debug: process.env.NODE_ENV === 'development',
-  // NextAuth URL - CLIENT_FETCH_ERROR'u önlemek için
-  trustHost: true, // Development'ta localhost için
   useSecureCookies: process.env.NODE_ENV === 'production',
-  // NEXTAUTH_URL - CLIENT_FETCH_ERROR'u önlemek için
-  // Eğer NEXTAUTH_URL yoksa, otomatik olarak tespit et
-  ...(process.env.NEXTAUTH_URL ? { url: process.env.NEXTAUTH_URL } : {}),
 }
 

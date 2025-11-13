@@ -157,7 +157,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions)
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
+    }
     const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
 
     if (!session?.user?.companyId && !isSuperAdmin) {
@@ -239,7 +242,10 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await getServerSession(authOptions)
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
+    }
     const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
 
     if (!session?.user?.companyId && !isSuperAdmin) {

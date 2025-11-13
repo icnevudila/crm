@@ -4,8 +4,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getServerSession } from '@/lib/auth-supabase'
 
 /**
  * Auth middleware - session kontrolü yapar (hata yakalama ile)
@@ -13,7 +12,7 @@ import { authOptions } from '@/lib/authOptions'
 export async function requireAuth() {
   let session
   try {
-    session = await getServerSession(authOptions)
+    session = await getServerSession()
   } catch (sessionError: any) {
     if (process.env.NODE_ENV === 'development') {
       console.error('requireAuth session error:', sessionError)

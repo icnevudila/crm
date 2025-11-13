@@ -1,11 +1,12 @@
 /**
  * ActivityLog Otomasyonu
  * Tüm sistem işlemlerini loglar
+ * SERVER-ONLY: next/headers kullanır, Client Component'lerde kullanılamaz
  */
 
 import { getSupabase } from './supabase'
-import { getServerSession } from 'next-auth'
-import { authOptions } from './authOptions'
+import { getServerSession } from './auth-supabase'
+import { formatUserFriendlyMessage, formatEntity, formatStatus } from './logger-utils'
 
 export interface LogActionParams {
   entity: string
@@ -16,104 +17,15 @@ export interface LogActionParams {
   companyId?: string
 }
 
-/**
- * Entity isimlerini kullanıcı dostu Türkçe'ye çevir
- */
-const entityLabels: Record<string, string> = {
-  Quote: 'Teklif',
-  Invoice: 'Fatura',
-  Deal: 'Fırsat',
-  Customer: 'Müşteri',
-  Product: 'Ürün',
-  Shipment: 'Sevkiyat',
-  Finance: 'Finans',
-  Task: 'Görev',
-  Ticket: 'Destek',
-  Meeting: 'Görüşme',
-  Company: 'Firma',
-  User: 'Kullanıcı',
-  Vendor: 'Tedarikçi',
-  PurchaseShipment: 'Mal Kabul',
-}
-
-/**
- * Status değerlerini kullanıcı dostu Türkçe'ye çevir
- */
-const statusLabels: Record<string, string> = {
-  DRAFT: 'Taslak',
-  PENDING: 'Beklemede',
-  APPROVED: 'Onaylandı',
-  REJECTED: 'Reddedildi',
-  IN_PROGRESS: 'Devam Ediyor',
-  COMPLETED: 'Tamamlandı',
-  CANCELLED: 'İptal Edildi',
-  PAID: 'Ödendi',
-  UNPAID: 'Ödenmedi',
-  DELIVERED: 'Teslim Edildi',
-  SHIPPED: 'Sevk Edildi',
-  ACTIVE: 'Aktif',
-  INACTIVE: 'Pasif',
-  ACCEPTED: 'Kabul Edildi',
-  SENT: 'Gönderildi',
-}
-
-/**
- * Status değerini kullanıcı dostu Türkçe'ye çevir
- */
-export function formatStatus(status: string): string {
-  return statusLabels[status] || status
-}
-
-/**
- * Entity ismini kullanıcı dostu Türkçe'ye çevir
- */
-export function formatEntity(entity: string): string {
-  return entityLabels[entity] || entity
-}
-
-/**
- * Mesajı kullanıcı dostu hale getir
- * - Teknik ID'leri kaldır
- * - Status değerlerini Türkçe'ye çevir
- * - Entity isimlerini Türkçe'ye çevir
- */
-export function formatUserFriendlyMessage(description: string, meta?: Record<string, any>): string {
-  let message = description
-
-  // Status değerlerini Türkçe'ye çevir
-  Object.keys(statusLabels).forEach((status) => {
-    const regex = new RegExp(`\\b${status}\\b`, 'gi')
-    message = message.replace(regex, statusLabels[status])
-  })
-
-  // Entity isimlerini Türkçe'ye çevir
-  Object.keys(entityLabels).forEach((entity) => {
-    const regex = new RegExp(`\\b${entity}\\b`, 'gi')
-    message = message.replace(regex, entityLabels[entity])
-  })
-
-  // Aynı ibarenin back-to-back tekrarlarını tekilleştir
-  message = message.replace(/(\b[^\s]+\b)\s+\1/gi, '$1')
-
-  // Teknik ID'leri kaldır (UUID formatı: #xxxx-xxxx-xxxx)
-  message = message.replace(/#[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/gi, '')
-  message = message.replace(/#[a-f0-9]{8}/gi, '')
-
-  // "→" yerine "→" kullan (daha okunabilir)
-  message = message.replace(/→/g, '→')
-
-  // Fazla boşlukları temizle
-  message = message.replace(/\s+/g, ' ').trim()
-
-  return message
-}
+// Re-export utility functions for backward compatibility
+export { formatUserFriendlyMessage, formatEntity, formatStatus }
 
 /**
  * ActivityLog kaydı oluştur
  */
 export async function logAction(params: LogActionParams) {
   try {
-    const session = await getServerSession(authOptions)
+    const session = await getServerSession()
     
     // Session yoksa (seed script gibi durumlar) userId ve companyId params'tan gelecek
     const userId = params.userId || session?.user?.id

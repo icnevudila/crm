@@ -31,7 +31,7 @@ export async function GET(request: Request) {
       companyId = targetCompanyId || 'global'
       isSuperAdmin = Boolean(globalCron)
     } else {
-      const { session, error: sessionError } = await getSafeSession()
+      const { session, error: sessionError } = await getSafeSession(request)
       if (sessionError) {
         return sessionError
       }
@@ -46,6 +46,18 @@ export async function GET(request: Request) {
       sessionUser = session.user
       isSuperAdmin = session.user.role === 'SUPER_ADMIN'
       companyId = session.user.companyId
+
+      // DEBUG: Session bilgisini logla - multi-tenant kontrolü için
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[KPIs API] 🔍 Session Check:', {
+          userId: session.user.id,
+          email: session.user.email,
+          role: session.user.role,
+          companyId: session.user.companyId,
+          companyName: session.user.companyName,
+          isSuperAdmin,
+        })
+      }
     }
 
     const supabase = getSupabaseWithServiceRole()
@@ -98,9 +110,18 @@ export async function GET(request: Request) {
     ] = await Promise.all([
       // Toplam Satış (PAID Invoice'ların toplamı) - totalAmount kullan (050 migration ile total → totalAmount)
       (() => {
-        let query = supabase.from('Invoice').select('totalAmount, total').eq('status', 'PAID')
+        let query = supabase.from('Invoice').select('totalAmount, total, companyId').eq('status', 'PAID')
         if (!isSuperAdmin) {
           query = query.eq('companyId', companyId)
+          // DEBUG: companyId filtresi uygulandı
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[KPIs API] 🔒 Invoice query filtered by companyId:', companyId)
+          }
+        } else {
+          // DEBUG: SuperAdmin - tüm firmaları göster
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[KPIs API] 👑 SuperAdmin - showing all companies')
+          }
         }
         return query
       })(),

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getServerSession } from '@/lib/auth-supabase'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { logAction } from '@/lib/logger'
 import bcrypt from 'bcryptjs'
@@ -12,16 +11,11 @@ export async function GET(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Users [id] GET API session error:', sessionError)
-      }
+    const session = await getServerSession()
+    if (!session) {
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
-        { status: 500 }
+        { error: 'Unauthorized', message: 'Oturum bilgisi alınamadı' },
+        { status: 401 }
       )
     }
 
@@ -99,16 +93,11 @@ export async function PUT(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Users [id] PUT API session error:', sessionError)
-      }
+    const session = await getServerSession()
+    if (!session) {
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
-        { status: 500 }
+        { error: 'Unauthorized', message: 'Oturum bilgisi alınamadı' },
+        { status: 401 }
       )
     }
 
@@ -206,16 +195,11 @@ export async function DELETE(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Users [id] DELETE API session error:', sessionError)
-      }
+    const session = await getServerSession()
+    if (!session) {
       return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
-        { status: 500 }
+        { error: 'Unauthorized', message: 'Oturum bilgisi alınamadı' },
+        { status: 401 }
       )
     }
 

@@ -1,16 +1,31 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 // Dynamic route - cache'i kapat (POST/PUT sonrası fresh data için)
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const session = await getServerSession(authOptions)
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
+    }
+    
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    
+    // DEBUG: Session ve companyId kontrolü logla
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Stats Quotes API] 🔍 Session Check:', {
+        userId: session.user.id,
+        email: session.user.email,
+        role: session.user.role,
+        companyId: session.user.companyId,
+        companyName: session.user.companyName,
+        isSuperAdmin: session.user.role === 'SUPER_ADMIN',
+      })
     }
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
@@ -21,11 +36,21 @@ export async function GET() {
     // Tüm quote'ları çek - limit yok (tüm verileri çek)
     let query = supabase
       .from('Quote')
-      .select('id, status, totalAmount, createdAt') // DÜZELTME: totalAmount kullan (050 migration ile total → totalAmount)
+      .select('id, status, totalAmount, createdAt, companyId') // DÜZELTME: totalAmount kullan (050 migration ile total → totalAmount) - companyId eklendi
       .order('createdAt', { ascending: false })
     
+    // ÖNCE companyId filtresi (SuperAdmin değilse MUTLAKA filtrele)
     if (!isSuperAdmin) {
       query = query.eq('companyId', companyId)
+      // DEBUG: companyId filtresi uygulandı
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Stats Quotes API] 🔒 Quote query filtered by companyId:', companyId)
+      }
+    } else {
+      // DEBUG: SuperAdmin - tüm firmaları göster
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Stats Quotes API] 👑 SuperAdmin - showing all companies')
+      }
     }
     
     const { data: quotes, error } = await query

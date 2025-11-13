@@ -1,9 +1,9 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import { useLocale, useTranslations } from 'next-intl'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/hooks/useSession'
 import { Plus, Edit, Trash2, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -113,7 +113,7 @@ export default function TaskList({ isOpen = true }: TaskListProps) {
   })
 
   const handleDelete = useCallback(async (id: string, title: string) => {
-    if (!confirm(t('deleteConfirm', { title }))) {
+    if (!(await confirm(t('deleteConfirm', { title })))) {
       return
     }
 

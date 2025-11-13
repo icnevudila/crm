@@ -80,7 +80,8 @@
       "statusReceived": "Received",
       "statusPaid": "Paid",
       "statusOverdue": "Overdue",
-      "statusCancelled": "Cancelled"
+      "statusCancelled": "Cancelled",
+      "noData": "No data found"
     }
   },
   "sidebar": {

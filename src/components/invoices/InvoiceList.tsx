@@ -1,9 +1,9 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/hooks/useSession'
 import { Plus, Search, Edit, Trash2, Eye, FileText, LayoutGrid, Table as TableIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -120,7 +120,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
     CANCELLED: tStatus('cancelled'),
   }
   
-  // SuperAdmin kontrolü
+  // SuperAdmin kontrolÃ¼
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
   
   // URL parametrelerinden filtreleri oku
@@ -207,8 +207,8 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
   // ÖNEMLİ: Her zaman çalıştır (viewMode ne olursa olsun) - silme/güncelleme için gerekli
   const queryClient = useQueryClient()
   const { data: kanbanDataRaw = [], isLoading: isLoadingKanban } = useQuery({
-    queryKey: ['kanban-invoices', debouncedSearch, quoteId, invoiceType],
-    queryFn: () => fetchKanbanInvoices(debouncedSearch, quoteId, invoiceType),
+    queryKey: ['kanban-invoices', debouncedSearch, quoteId, invoiceType, filterCompanyId],
+    queryFn: () => fetchKanbanInvoices(debouncedSearch, quoteId, invoiceType, filterCompanyId || undefined),
     staleTime: 5 * 60 * 1000, // 5 dakika cache
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -277,7 +277,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
               ...col,
               invoices: updatedInvoices,
               count: Math.max(0, (col.count || 0) - 1),
-              totalValue: updatedTotalValue, // Toplam tutarı güncelle
+              totalValue: updatedTotalValue, // Toplam tutarÄ± gÃ¼ncelle
             }
           }
           return col
@@ -324,7 +324,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
       })
       
       // ÖNEMLİ: kanban-invoices query'sini invalidate ve refetch ETME - optimistic update'i koru
-      // setQueryData ile cache'i güncelledik, bu yeterli - invalidate etmek refetch tetikler ve eski veriyi geri getirir
+      // setQueryData ile cache'i gÃ¼ncelledik, bu yeterli - invalidate etmek refetch tetikler ve eski veriyi geri getirir
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
@@ -371,7 +371,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
 
   return (
     <div className="space-y-6">
-      {/* İstatistikler */}
+      {/* Ä°statistikler */}
       <ModuleStats 
         module="invoices" 
         statsUrl="/api/stats/invoices"
@@ -478,10 +478,10 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
         {isSuperAdmin && (
           <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
             <SelectTrigger className="w-48">
-              <SelectValue placeholder="Firma Seç" />
+              <SelectValue placeholder="Firma SeÃ§" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Tüm Firmalar</SelectItem>
+              <SelectItem value="all">TÃ¼m Firmalar</SelectItem>
               {companies.map((company) => (
                 <SelectItem key={company.id} value={company.id}>
                   {company.name}

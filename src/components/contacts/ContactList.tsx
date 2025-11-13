@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
+import { useSession } from '@/hooks/useSession'
 import { Plus, Search, Edit, Trash2, Eye, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -23,13 +24,18 @@ import {
 } from '@/components/ui/select'
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import EmptyState from '@/components/ui/EmptyState'
-import Link from 'next/link'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
+import { toast } from '@/lib/toast'
 import dynamic from 'next/dynamic'
 
 // Lazy load ContactForm
 const ContactForm = dynamic(() => import('./ContactForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
+const ContactDetailModal = dynamic(() => import('./ContactDetailModal'), {
   ssr: false,
   loading: () => null,
 })
@@ -58,11 +64,30 @@ export default function ContactList() {
   const locale = useLocale()
   const t = useTranslations('contacts')
   const tCommon = useTranslations('common')
+  const { data: session } = useSession()
+  
+  // SuperAdmin kontrolü
+  const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+  
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [role, setRole] = useState('')
+  const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin için firma filtresi
   const [formOpen, setFormOpen] = useState(false)
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null)
+  const [selectedContactData, setSelectedContactData] = useState<Contact | null>(null)
+
+  // SuperAdmin için firmaları çek
+  const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
+    isSuperAdmin ? '/api/superadmin/companies' : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
+  // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
+  const companies = (companiesData?.companies || []).filter((company, index, self) => 
+    index === self.findIndex((c) => c.id === company.id)
+  )
 
   // Debounced search
   const [debouncedSearch, setDebouncedSearch] = useState(search)
@@ -80,6 +105,7 @@ export default function ContactList() {
   if (debouncedSearch) params.append('search', debouncedSearch)
   if (status) params.append('status', status)
   if (role) params.append('role', role)
+  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
   
   const apiUrl = `/api/contacts?${params.toString()}`
   const { data: response, isLoading, error, mutate: mutateContacts } = useData<any>(apiUrl, {
@@ -208,6 +234,22 @@ export default function ContactList() {
           />
         </div>
         
+        {isSuperAdmin && (
+          <Select value={filterCompanyId || 'all'} onValueChange={(value) => setFilterCompanyId(value === 'all' ? '' : value)}>
+            <SelectTrigger>
+              <SelectValue placeholder="Tüm Firmalar" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tüm Firmalar</SelectItem>
+              {companies.map((company) => (
+                <SelectItem key={company.id} value={company.id}>
+                  {company.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        
         <Select value={status || 'all'} onValueChange={(value) => setStatus(value === 'all' ? '' : value)}>
           <SelectTrigger>
             <SelectValue placeholder={t('allStatuses')} />
@@ -256,6 +298,7 @@ export default function ContactList() {
                 <TableHead>{t('tableHeaders.title')}</TableHead>
                 <TableHead>{t('tableHeaders.role')}</TableHead>
                 <TableHead>{t('tableHeaders.customerCompany')}</TableHead>
+                {isSuperAdmin && <TableHead>Firma</TableHead>}
                 <TableHead>{t('tableHeaders.status')}</TableHead>
                 <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
               </TableRow>
@@ -299,11 +342,17 @@ export default function ContactList() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Link href={`/${locale}/contacts/${contact.id}`} prefetch={true}>
-                        <Button variant="ghost" size="icon">
-                          <Eye className="h-4 w-4 text-gray-600" />
-                        </Button>
-                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setSelectedContactId(contact.id)
+                          setSelectedContactData(contact)
+                          setDetailModalOpen(true)
+                        }}
+                      >
+                        <Eye className="h-4 w-4 text-gray-600" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -358,6 +407,20 @@ export default function ContactList() {
               mutate(apiUrl, updatedContacts, { revalidate: false }),
             ])
           }}
+        />
+      )}
+
+      {/* Detail Modal */}
+      {selectedContactId && (
+        <ContactDetailModal
+          contactId={selectedContactId}
+          open={detailModalOpen}
+          onClose={() => {
+            setDetailModalOpen(false)
+            setSelectedContactId(null)
+            setSelectedContactData(null)
+          }}
+          initialData={selectedContactData || undefined}
         />
       )}
     </div>

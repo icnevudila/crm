@@ -1,0 +1,17 @@
+{
+  "status": "init",
+  "scope": "codebase",
+  "type": "frontend",
+  "localEndpoint": "http://localhost:3000/",
+  "serverPort": 46560,
+  "executionArgs": {
+    "projectName": "CRMV2",
+    "projectPath": "C:\\Users\\TP2\\Documents\\CRMV2",
+    "testIds": [],
+    "additionalInstruction": "Login için şu bilgileri kullan: Email: superadmin@crm.com, Password: superadmin123. Login sayfası URL: http://localhost:3000/tr/login. Login form'unda email input'una \"superadmin@crm.com\", password input'una \"superadmin123\" gir ve submit butonuna tıkla. Başarılı login sonrası http://localhost:3000/tr/dashboard sayfasına yönlendirilmelisin.",
+    "envs": {
+      "API_KEY": "sk-user-XzTwDhRlt4SPXGLCSrmCyfdy4GOZqHt6NQhpuuiZEtQrwndm5zF2VzlXF8NdUA9L-ZFJXmeyvq5wWSH2IYuvYvtLiBKooak3Rq_HLMLZToW9HNuEbBqFsiLp3atzaJMebKQ"
+    }
+  },
+  "proxy": "http://652e1420-7593-4911-8195-a80acfc8e7f6:GhI2HOtuRLU6Dnp7I3hT4ZMvnBAxEDr9@tun.testsprite.com:8080"
+}

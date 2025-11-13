@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { authOptions } from '@/lib/authOptions'
+import { getSafeSession } from '@/lib/safe-session'
 import { getRecords, createRecord } from '@/lib/crud'
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 // Agresif cache - 1 saat cache (instant navigation - <300ms hedef)
 export const revalidate = 3600
@@ -9,32 +9,45 @@ export const revalidate = 3600
 export async function GET(request: Request) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Tickets GET API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    // DEBUG: Session ve permission bilgisini logla
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Tickets API] 🔍 Session Check:', {
+        userId: session.user.id,
+        email: session.user.email,
+        role: session.user.role,
+        companyId: session.user.companyId,
+        companyName: session.user.companyName,
+      })
+    }
+
     // Permission check - canRead kontrolü
     const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
     const canRead = await hasPermission('ticket', 'read', session.user.id)
     if (!canRead) {
+      // DEBUG: Permission denied logla
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Tickets API] ❌ Permission Denied:', {
+          module: 'ticket',
+          action: 'read',
+          userId: session.user.id,
+          role: session.user.role,
+        })
+      }
       return buildPermissionDeniedResponse()
     }
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    const companyId = session.user.companyId
     
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') || ''
@@ -42,6 +55,43 @@ export async function GET(request: Request) {
     const customerId = searchParams.get('customerId') || ''
     const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
 
+    // SuperAdmin için direkt Supabase query (getRecords companyId filtresi uygular)
+    if (isSuperAdmin) {
+      const supabase = getSupabaseWithServiceRole()
+      let query = supabase
+        .from('Ticket')
+        .select('*, Customer(name, email), Company:companyId(id, name)')
+        .order('createdAt', { ascending: false })
+      
+      // SuperAdmin firma filtresi seçtiyse sadece o firmayı göster
+      if (filterCompanyId) {
+        query = query.eq('companyId', filterCompanyId)
+      }
+      // SuperAdmin ve firma filtresi yoksa tüm firmaları göster
+      
+      if (status) query = query.eq('status', status)
+      if (priority) query = query.eq('priority', priority)
+      if (customerId) query = query.eq('customerId', customerId)
+      
+      const { data, error } = await query
+      
+      if (error) {
+        return NextResponse.json(
+          { error: error.message || 'Failed to fetch tickets' },
+          { status: 500 }
+        )
+      }
+      
+      return NextResponse.json(data || [], {
+        headers: {
+          'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200, max-age=1800',
+          'CDN-Cache-Control': 'public, s-maxage=3600',
+          'Vercel-CDN-Cache-Control': 'public, s-maxage=3600',
+        },
+      })
+    }
+
+    // Normal kullanıcılar için getRecords kullan (companyId filtresi ile)
     const filters: any = {}
     if (status) filters.status = status
     if (priority) filters.priority = priority
@@ -74,17 +124,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     // Session kontrolü - hata yakalama ile
-    let session
-    try {
-      session = await getServerSession(authOptions)
-    } catch (sessionError: any) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Tickets POST API session error:', sessionError)
-      }
-      return NextResponse.json(
-        { error: 'Session error', message: sessionError?.message || 'Oturum bilgisi alınamadı' },
-        { status: 500 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {

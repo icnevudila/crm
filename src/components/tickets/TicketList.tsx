@@ -1,9 +1,9 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import { useLocale, useTranslations } from 'next-intl'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/hooks/useSession'
 import { Plus, Edit, Trash2, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -111,7 +111,7 @@ export default function TicketList() {
   const params = new URLSearchParams()
   if (status) params.append('status', status)
   if (priority) params.append('priority', priority)
-  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId) // SuperAdmin için firma filtresi
+    if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId) // SuperAdmin için firma filtresi
   
   const apiUrl = `/api/tickets?${params.toString()}`
   const { data: tickets = [], isLoading, error, mutate: mutateTickets } = useData<Ticket[]>(apiUrl, {
@@ -120,7 +120,7 @@ export default function TicketList() {
   })
 
   const handleDelete = useCallback(async (id: string, subject: string) => {
-    if (!confirm(t('deleteConfirm', { subject }))) {
+    if (!(await confirm(t('deleteConfirm', { subject })))) {
       return
     }
 

@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
+import { toast, handleApiError } from '@/lib/toast'
 
 const contactSchema = z.object({
   firstName: z.string().min(1, 'İsim gereklidir'),
@@ -159,7 +160,7 @@ export default function ContactForm({
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error('Kaydedilemedi', error?.message)
+      handleApiError(error, 'İletişim kaydedilemedi', 'İletişim kaydetme işlemi sırasında bir hata oluştu. Lütfen tekrar deneyin.')
     } finally {
       setLoading(false)
     }

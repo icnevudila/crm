@@ -473,7 +473,7 @@ function LandingPage() {
                   className="mt-6 text-4xl font-extrabold leading-tight text-slate-900 sm:text-5xl lg:text-[3.4rem] lg:leading-[1.08]"
                 >
                   <span className="block text-slate-900/85">Tüm müşteri ve satış süreçleriniz</span>
-                  <span className="bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                  <span className="block bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 bg-clip-text text-transparent">
                     tek platformda birleşsin
                   </span>
                 </motion.h1>
@@ -495,10 +495,10 @@ function LandingPage() {
                     <Button
                       size="lg"
                       onClick={() => scrollToSection('#contact')}
-                      className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 px-10 py-6 text-base font-semibold text-white shadow-[0_25px_60px_-20px_rgba(95,109,225,0.55)] transition-all duration-300"
+                      className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-500 via-cyan-500 to-indigo-500 px-10 py-6 text-base font-semibold text-white shadow-[0_25px_60px_-20px_rgba(59,130,246,0.55)] transition-all duration-300 hover:shadow-[0_30px_70px_-20px_rgba(59,130,246,0.65)]"
                     >
                       <span className="relative z-10 flex items-center gap-3">
-                        Demoyu Gör
+                        Ücretsiz Başla
                         <motion.div
                           animate={{ x: [0, 6, 0] }}
                           transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
@@ -517,9 +517,9 @@ function LandingPage() {
                       size="lg"
                       variant="outline"
                       onClick={() => scrollToSection('#features')}
-                      className="rounded-2xl border-slate-200/70 bg-white/75 px-10 py-6 text-base font-semibold text-slate-700 shadow-[0_18px_40px_-25px_rgba(79,102,183,0.55)] backdrop-blur-lg transition-all duration-300 hover:bg-white"
+                      className="rounded-2xl border-2 border-slate-300/70 bg-white/90 px-10 py-6 text-base font-semibold text-slate-800 shadow-[0_18px_40px_-25px_rgba(79,102,183,0.55)] backdrop-blur-lg transition-all duration-300 hover:bg-white hover:border-slate-400/70"
                     >
-                      Özellikleri İncele
+                      Daha Fazla Bilgi
                     </Button>
                   </motion.div>
                 </motion.div>

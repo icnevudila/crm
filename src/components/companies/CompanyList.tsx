@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
 import dynamic from 'next/dynamic'
@@ -27,7 +27,7 @@ import {
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import Link from 'next/link'
 import Image from 'next/image'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/hooks/useSession'
 import { cn } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import {
@@ -80,12 +80,12 @@ const statusColors: Record<string, string> = {
 
 const statusLabels: Record<string, string> = {
   POT: 'Potansiyel',
-  MUS: 'Müşteri',
+  MUS: 'MÃ¼ÅŸteri',
   ALT: 'Alt Bayi',
   PAS: 'Pasif',
 }
 
-// Durum bazlı satır renkleri
+// Durum bazlÄ± satÄ±r renkleri
 const statusRowColors: Record<string, string> = {
   POT: 'bg-amber-50/30 border-l-4 border-amber-400',
   MUS: 'bg-green-50/30 border-l-4 border-green-400',
@@ -152,11 +152,12 @@ export default function CompanyList() {
   }, [companies])
 
   const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!confirm(`${name} firmasını silmek istediğinize emin misiniz?`)) {
+    if (!window.confirm(`${name} firmasını silmek istediğinize emin misiniz?`)) {
       return
     }
 
-      try {
+    const toastId = toast.loading('Siliniyor...')
+    try {
       // KURUM İÇİ FİRMA YÖNETİMİ: Tüm kullanıcılar CustomerCompany tablosundan siler
       const deleteUrl = `/api/customer-companies/${id}`
       
@@ -167,7 +168,7 @@ export default function CompanyList() {
       
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
-        throw new Error(errorData.error || 'Failed to delete company')
+        throw new Error(errorData.error || 'Silme işlemi başarısız oldu')
       }
       
       // Optimistic update - silinen kaydı listeden kaldır
@@ -184,12 +185,16 @@ export default function CompanyList() {
       await Promise.all(
         cacheKeys.map(key => mutate(key, updatedCompanies, { revalidate: false }))
       )
+
+      toast.dismiss(toastId)
+      toast.success('Silindi', 'Firma başarıyla silindi.')
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error('Silinemedi', error?.message)
+      toast.dismiss(toastId)
+      toast.error('Silme başarısız', error?.message || 'Silme işlemi sırasında bir hata oluştu.')
     }
   }, [companies, mutateCompanies, apiUrl])
 
@@ -274,7 +279,7 @@ export default function CompanyList() {
             <DropdownMenuTrigger asChild>
               <Button variant="outline">
                 <Download className="mr-2 h-4 w-4" />
-                Dışa Aktar
+                DÄ±ÅŸa Aktar
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
@@ -301,7 +306,7 @@ export default function CompanyList() {
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             type="search"
-            placeholder="Firma adı, vergi dairesi, vergi no ile ara..."
+            placeholder="Firma adÄ±, vergi dairesi, vergi no ile ara..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-10"
@@ -339,13 +344,13 @@ export default function CompanyList() {
         <Table>
           <TableHeader>
             <TableRow className="bg-gray-50">
-              <TableHead>Firma Adı</TableHead>
-              <TableHead>Şehir</TableHead>
+              <TableHead>Firma AdÄ±</TableHead>
+              <TableHead>Åehir</TableHead>
               <TableHead>Vergi Dairesi</TableHead>
               <TableHead>Vergi No</TableHead>
               <TableHead>Durum</TableHead>
-              <TableHead>Son Görüşme</TableHead>
-              <TableHead className="text-right">İşlemler</TableHead>
+              <TableHead>Son GÃ¶rÃ¼ÅŸme</TableHead>
+              <TableHead className="text-right">Ä°ÅŸlemler</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

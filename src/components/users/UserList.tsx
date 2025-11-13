@@ -1,8 +1,8 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from '@/lib/toast'
-import { useSession } from 'next-auth/react'
+import { useSession } from '@/hooks/useSession'
 import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye, User as UserIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -28,6 +28,12 @@ import SkeletonList from '@/components/skeletons/SkeletonList'
 import Link from 'next/link'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
+import dynamic from 'next/dynamic'
+
+const UserDetailModal = dynamic(() => import('./UserDetailModal'), {
+  ssr: false,
+  loading: () => null,
+})
 
 interface User {
   id: string
@@ -46,28 +52,31 @@ export default function UserList() {
   const [role, setRole] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [selectedUserData, setSelectedUserData] = useState<User | null>(null)
 
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
 
-  // Debounced search - performans için (kullanıcı yazmayı bitirdikten 300ms sonra arama)
+  // Debounced search - performans iÃ§in (kullanÄ±cÄ± yazmayÄ± bitirdikten 300ms sonra arama)
   const [debouncedSearch, setDebouncedSearch] = useState(search)
   
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
-    }, 300) // 300ms debounce - her harfte arama yapılmaz
+    }, 300) // 300ms debounce - her harfte arama yapÄ±lmaz
     
     return () => clearTimeout(timer)
   }, [search])
 
-  // SWR ile veri çekme (repo kurallarına uygun) - debounced search kullanıyoruz
+  // SWR ile veri Ã§ekme (repo kurallarÄ±na uygun) - debounced search kullanÄ±yoruz
   const params = new URLSearchParams()
   if (debouncedSearch) params.append('search', debouncedSearch)
   if (role) params.append('role', role)
   
   const apiUrl = `/api/users?${params.toString()}`
   const { data: users = [], isLoading, error, mutate: mutateUsers } = useData<User[]>(apiUrl, {
-    dedupingInterval: 5000, // 5 saniye cache (daha kısa - güncellemeler daha hızlı)
+    dedupingInterval: 5000, // 5 saniye cache (daha kÄ±sa - gÃ¼ncellemeler daha hÄ±zlÄ±)
     revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
   })
 
@@ -86,20 +95,20 @@ export default function UserList() {
         throw new Error(errorData.error || 'Failed to delete user')
       }
       
-      // Optimistic update - silinen kaydı listeden kaldır
+      // Optimistic update - silinen kaydÄ± listeden kaldÄ±r
       const updatedUsers = users.filter((u) => u.id !== id)
       
-      // Cache'i güncelle - yeni listeyi hemen göster
+      // Cache'i gÃ¼ncelle - yeni listeyi hemen gÃ¶ster
       await mutateUsers(updatedUsers, { revalidate: false })
       
-      // Tüm diğer user URL'lerini de güncelle
+      // TÃ¼m diÄŸer user URL'lerini de gÃ¼ncelle
       await Promise.all([
         mutate('/api/users', updatedUsers, { revalidate: false }),
         mutate('/api/users?', updatedUsers, { revalidate: false }),
         mutate(apiUrl, updatedUsers, { revalidate: false }),
       ])
     } catch (error: any) {
-      // Production'da console.error kaldırıldı
+      // Production'da console.error kaldÄ±rÄ±ldÄ±
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
@@ -120,7 +129,7 @@ export default function UserList() {
   const handleFormClose = useCallback(() => {
     setFormOpen(false)
     setSelectedUser(null)
-    // Form kapanırken cache'i güncelleme yapılmaz - onSuccess callback'te zaten yapılıyor
+    // Form kapanÄ±rken cache'i gÃ¼ncelleme yapÄ±lmaz - onSuccess callback'te zaten yapÄ±lÄ±yor
   }, [])
 
   const roleLabels: Record<string, string> = {
@@ -225,11 +234,18 @@ export default function UserList() {
                   {isSuperAdmin && (
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        <Link href={`/${locale}/users/${user.id}`} prefetch={true}>
-                          <Button variant="ghost" size="icon" aria-label={t('viewUser', { name: user.name })}>
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                        </Link>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setSelectedUserId(user.id)
+                            setSelectedUserData(user)
+                            setDetailModalOpen(true)
+                          }}
+                          aria-label={t('viewUser', { name: user.name })}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -264,32 +280,46 @@ export default function UserList() {
           open={formOpen}
           onClose={handleFormClose}
           onSuccess={async (savedUser: User) => {
-            // Optimistic update - yeni/ güncellenmiş kaydı hemen cache'e ekle ve UI'da göster
-            // Böylece form kapanmadan önce kullanıcı listede görünür
+            // Optimistic update - yeni/ gÃ¼ncellenmiÅŸ kaydÄ± hemen cache'e ekle ve UI'da gÃ¶ster
+            // BÃ¶ylece form kapanmadan Ã¶nce kullanÄ±cÄ± listede gÃ¶rÃ¼nÃ¼r
             
             let updatedUsers: User[]
             
             if (selectedUser) {
-              // UPDATE: Mevcut kaydı güncelle
+              // UPDATE: Mevcut kaydÄ± gÃ¼ncelle
               updatedUsers = users.map((u) =>
                 u.id === savedUser.id ? savedUser : u
               )
             } else {
-              // CREATE: Yeni kaydı listenin başına ekle
+              // CREATE: Yeni kaydÄ± listenin baÅŸÄ±na ekle
               updatedUsers = [savedUser, ...users]
             }
             
-            // Cache'i güncelle - optimistic update'i hemen uygula ve koru
+            // Cache'i gÃ¼ncelle - optimistic update'i hemen uygula ve koru
             // revalidate: false = background refetch yapmaz, optimistic update korunur
             await mutateUsers(updatedUsers, { revalidate: false })
             
-            // Tüm diğer user URL'lerini de güncelle (optimistic update)
+            // TÃ¼m diÄŸer user URL'lerini de gÃ¼ncelle (optimistic update)
             await Promise.all([
               mutate('/api/users', updatedUsers, { revalidate: false }),
               mutate('/api/users?', updatedUsers, { revalidate: false }),
               mutate(apiUrl, updatedUsers, { revalidate: false }),
             ])
           }}
+        />
+      )}
+
+      {/* Detail Modal */}
+      {selectedUserId && (
+        <UserDetailModal
+          userId={selectedUserId}
+          open={detailModalOpen}
+          onClose={() => {
+            setDetailModalOpen(false)
+            setSelectedUserId(null)
+            setSelectedUserData(null)
+          }}
+          initialData={selectedUserData || undefined}
         />
       )}
     </div>
