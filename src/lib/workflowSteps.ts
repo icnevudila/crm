@@ -6,6 +6,8 @@
 export function getDealWorkflowSteps(currentStage: string) {
   const stages = ['LEAD', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST']
   const currentIndex = stages.indexOf(currentStage)
+  const isLost = currentStage === 'LOST'
+  const isWon = currentStage === 'WON'
 
   return [
     {
@@ -77,14 +79,29 @@ export function getDealWorkflowSteps(currentStage: string) {
       label: 'Kazanıldı',
       description: 'Fırsat kazanıldı',
       status:
-        currentStage === 'WON'
+        isWon
           ? 'current'
-          : currentStage === 'LOST'
+          : isLost
           ? 'locked'
           : 'upcoming',
       requirements:
         currentStage === 'NEGOTIATION'
           ? ['Fırsat değerini (value) girin', 'Sözleşme imzalatın']
+          : undefined,
+    },
+    {
+      id: 'lost',
+      label: 'Kaybedildi',
+      description: 'Fırsat kaybedildi',
+      status:
+        isLost
+          ? 'current'
+          : isWon
+          ? 'locked'
+          : 'upcoming',
+      requirements:
+        currentStage === 'LOST'
+          ? ['Kayıp sebebini belirtin', 'Gelecek fırsatlar için notlar ekleyin']
           : undefined,
     },
   ]

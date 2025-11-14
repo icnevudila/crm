@@ -297,7 +297,7 @@ export default function DealDetailModal({
           {/* Workflow Stepper */}
           <WorkflowStepper
             steps={getDealWorkflowSteps(displayDeal?.stage)}
-            currentStep={['LEAD', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION', 'WON'].indexOf(displayDeal?.stage)}
+            currentStep={['LEAD', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'].indexOf(displayDeal?.stage)}
             title="Fırsat İş Akışı"
           />
 

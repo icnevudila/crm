@@ -1992,10 +1992,39 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
 
-            {/* Clear Filters */}
+            {/* Clear Filters & Apply Date Filters */}
 
 
-            <div className="mt-4 flex justify-end">
+            <div className="mt-4 flex justify-end gap-2">
+
+
+              <Button
+
+
+                variant="default"
+
+
+                size="sm"
+
+
+                onClick={() => {
+
+
+                  // Tarih filtrelerini uygula - query'leri yeniden fetch et
+                  queryClient.invalidateQueries({ queryKey: ['deals'] })
+                  queryClient.invalidateQueries({ queryKey: ['kanban-deals'] })
+
+
+                }}
+
+
+              >
+
+
+                Tarihleri Uygula
+
+
+              </Button>
 
 
               <Button
@@ -2041,6 +2070,11 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
                   router.push(`?${params.toString()}`)
+
+
+                  // Filtreleri temizledikten sonra query'leri yeniden fetch et
+                  queryClient.invalidateQueries({ queryKey: ['deals'] })
+                  queryClient.invalidateQueries({ queryKey: ['kanban-deals'] })
 
 
                 }}

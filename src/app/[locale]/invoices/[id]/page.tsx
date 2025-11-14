@@ -1,9 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
+import { useData } from '@/hooks/useData'
 import { ArrowLeft, Edit, FileText, FileText as QuoteIcon, Truck, Trash2, Users, Plus, Package, AlertTriangle, Phone, Mail } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -41,24 +41,6 @@ const InvoiceItemForm = dynamic(() => import('@/components/invoices/InvoiceItemF
   loading: () => null,
 })
 
-async function fetchInvoice(id: string) {
-  try {
-    const res = await fetch(`/api/invoices/${id}`, {
-      cache: 'no-store',
-    })
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}))
-      throw new Error(errorData.error || 'Failed to fetch invoice')
-    }
-    return res.json()
-  } catch (error: any) {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('fetchInvoice error:', error)
-    }
-    throw error
-  }
-}
-
 const statusColors: Record<string, string> = {
   DRAFT: 'bg-gray-100 text-gray-800',
   SENT: 'bg-blue-100 text-blue-800',
@@ -88,12 +70,13 @@ export default function InvoiceDetailPage() {
   const [itemFormOpen, setItemFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
-  const { data: invoice, isLoading, error, refetch } = useQuery({
-    queryKey: ['invoice', id],
-    queryFn: () => fetchInvoice(id),
-    retry: 1,
-    retryDelay: 500,
-  })
+  const { data: invoice, isLoading, error, mutate: refetch } = useData<any>(
+    id ? `/api/invoices/${id}` : null,
+    {
+      dedupingInterval: 5000,
+      revalidateOnFocus: false,
+    }
+  )
 
   if (isLoading) {
     return <SkeletonDetail />
