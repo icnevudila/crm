@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getSupabase } from '@/lib/supabase'
-import { getSafeSession } from '@/lib/auth'
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { getSafeSession } from '@/lib/safe-session'
 
 /**
  * Global Search API - Tüm modüllerde arama
