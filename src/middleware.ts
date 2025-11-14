@@ -18,8 +18,8 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Login ve landing sayfaları - locale prefix kullanmadan direkt erişim
-  if (pathname === '/login' || pathname.startsWith('/login/') || pathname === '/landing' || pathname.startsWith('/landing/')) {
+  // Login ve landing sayfaları - locale prefix kullanmadan direkt erişim (önce kontrol et)
+  if (pathname === '/login' || pathname === '/landing' || pathname.startsWith('/login/') || pathname.startsWith('/landing/')) {
     return NextResponse.next()
   }
 
@@ -87,7 +87,14 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!api/auth|_next|_vercel|.*\\..*).*)',
-    '/(tr|en)/:path*',
+    /*
+     * Match all request paths except:
+     * - api routes
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - public files (public folder)
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\..*|login|landing).*)',
   ],
 }

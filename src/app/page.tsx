@@ -5,6 +5,6 @@ export const fetchCache = 'force-no-store'
 import { redirect } from 'next/navigation'
 
 export default function HomePage() {
-  // Landing page'e yönlendir (locale olmadan)
+  // Landing page'e yönlendir (locale olmadan) - Vercel cache bypass için
   redirect('/landing')
 }
