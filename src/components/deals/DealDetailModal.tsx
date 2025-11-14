@@ -21,7 +21,7 @@ import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import dynamic from 'next/dynamic'
 import jsPDF from 'jspdf'
-import { formatCurrency, formatDate, encodeTurkish, PDFStyles, drawHeader, drawTitle, drawSectionBox, drawFooter, drawSignatureArea } from '@/lib/pdf-utils'
+import { formatDate, encodeTurkish, PDFStyles, drawHeader, drawTitle, drawSectionBox, drawFooter, drawSignatureArea } from '@/lib/pdf-utils'
 
 const DealForm = dynamic(() => import('./DealForm'), {
   ssr: false,
