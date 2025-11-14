@@ -3383,7 +3383,7 @@ export default function ShipmentList() {
 
 
 
-                                <p><strong>Toplam:</strong> {formatCurrency(shipment.Invoice.totalAmount || 0)}</p>
+                                <p><strong>Toplam:</strong> {formatCurrency(shipment.Invoice.total || 0)}</p>
 
 
 
@@ -4335,7 +4335,7 @@ export default function ShipmentList() {
 
 
 
-                      const finalTotal = (detailShipment.Invoice as any).totalAmount || totalWithTax
+                      const finalTotal = (detailShipment.Invoice as any).total || totalWithTax
 
 
 

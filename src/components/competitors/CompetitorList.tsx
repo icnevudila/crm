@@ -18,10 +18,11 @@ interface Competitor {
   name: string
   description: string | null
   website: string | null
-  strengths: string | null
-  weaknesses: string | null
+  strengths: string | string[] | null
+  weaknesses: string | string[] | null
   pricingStrategy: string | null
   marketShare: number | null
+  averagePrice: number | null
   createdAt: string
 }
 
