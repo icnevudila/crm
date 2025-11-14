@@ -32,6 +32,7 @@ import { useSession } from '@/hooks/useSession'
 import { formatCurrency } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import dynamic from 'next/dynamic'
+import RefreshButton from '@/components/ui/RefreshButton'
 
 // Lazy load MeetingForm - performans için
 const MeetingForm = dynamic(() => import('./MeetingForm'), {
@@ -150,8 +151,6 @@ export default function MeetingList() {
   const { data: meetings = [], isLoading, error, mutate: mutateMeetings } = useData<Meeting[]>(apiUrl, {
     dedupingInterval: 5000, // 5 saniye cache (daha kısa - güncellemeler daha hızlı)
     revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
-    keepPreviousData: true, // Hata durumunda önceki veriyi göster
-    fallbackData: [], // İlk yüklemede boş array göster
   })
 
   // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap

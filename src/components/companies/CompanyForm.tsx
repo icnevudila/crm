@@ -479,6 +479,11 @@ export default function CompanyForm({
     }
   }
 
+  // Form validation errors için onError handler
+  const onError = (errors: any) => {
+    handleFormValidationErrors(errors, formRef)
+  }
+
   // Logo yükleme handler (gelecekte Supabase Storage'a yüklenecek)
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

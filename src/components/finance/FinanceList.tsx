@@ -38,6 +38,7 @@ import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import dynamic from 'next/dynamic'
 import { Card } from '@/components/ui/card'
+import RefreshButton from '@/components/ui/RefreshButton'
 
 // Lazy load grafikler ve form - performans için
 const FinanceForm = dynamic(() => import('./FinanceForm'), {
