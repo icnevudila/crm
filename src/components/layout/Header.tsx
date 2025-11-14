@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation'
 import NotificationMenu from '@/components/NotificationMenu'
 import Breadcrumbs from '@/components/layout/Breadcrumbs'
 import LocaleSwitcher from '@/components/layout/LocaleSwitcher'
+import { FEATURE_FLAGS } from '@/lib/feature-flags'
+import GlobalSearchBar from '@/components/search/GlobalSearchBar'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -44,6 +46,11 @@ export default function Header() {
       </div>
 
       <div className="flex items-center gap-3">
+        {/* Global Search - Feature Flag ile */}
+        {FEATURE_FLAGS.GLOBAL_SEARCH && (
+          <GlobalSearchBar />
+        )}
+        
         {/* Bildirimler */}
         {session?.user?.id && (
           <NotificationMenu userId={session.user.id} />
