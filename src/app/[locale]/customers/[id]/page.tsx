@@ -21,6 +21,9 @@ const CustomerForm = dynamic(() => import('@/components/customers/CustomerForm')
   loading: () => null,
 })
 
+import SendEmailButton from '@/components/integrations/SendEmailButton'
+import { toastError, toastSuccess, toastWithUndo } from '@/lib/toast'
+
 async function fetchCustomer(id: string) {
   const res = await fetch(`/api/customers/${id}`)
   if (!res.ok) throw new Error('Failed to fetch customer')
@@ -82,6 +85,30 @@ export default function CustomerDetailPage() {
             <Edit className="mr-2 h-4 w-4" />
             Düzenle
           </Button>
+          {customer.email && (
+            <SendEmailButton
+              to={customer.email}
+              subject={`Müşteri: ${customer.name}`}
+              html={`
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                  <h2 style="color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px;">
+                    Müşteri Bilgileri
+                  </h2>
+                  <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                    <p><strong>Müşteri:</strong> ${customer.name}</p>
+                    ${customer.email ? `<p><strong>E-posta:</strong> ${customer.email}</p>` : ''}
+                    ${customer.phone ? `<p><strong>Telefon:</strong> ${customer.phone}</p>` : ''}
+                    ${customer.address ? `<p><strong>Adres:</strong> ${customer.address}</p>` : ''}
+                    ${customer.city ? `<p><strong>Şehir:</strong> ${customer.city}</p>` : ''}
+                    ${customer.sector ? `<p><strong>Sektör:</strong> ${customer.sector}</p>` : ''}
+                  </div>
+                  <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">
+                    Bu e-posta CRM Enterprise V3 sisteminden gönderilmiştir.
+                  </p>
+                </div>
+              `}
+            />
+          )}
           <Button
             variant="outline"
             className="text-red-600 hover:text-red-700 hover:bg-red-50"
@@ -90,14 +117,42 @@ export default function CustomerDetailPage() {
                 return
               }
               setDeleteLoading(true)
+              
+              // Optimistic update için müşteri bilgisini sakla
+              const deletedCustomer = customer
+              
               try {
                 const res = await fetch(`/api/customers/${id}`, {
                   method: 'DELETE',
                 })
                 if (!res.ok) throw new Error('Silme işlemi başarısız')
+                
+                // Başarı toast'ı - undo özelliği ile
+                toastWithUndo(
+                  `${deletedCustomer.name} müşterisi başarıyla silindi`,
+                  async () => {
+                    // Undo işlemi - müşteriyi geri yükle
+                    try {
+                      const restoreRes = await fetch(`/api/customers`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(deletedCustomer),
+                      })
+                      if (restoreRes.ok) {
+                        toastSuccess('Müşteri geri yüklendi')
+                        router.refresh()
+                      } else {
+                        toastError('Müşteri geri yüklenemedi')
+                      }
+                    } catch (error) {
+                      toastError('Müşteri geri yüklenemedi')
+                    }
+                  }
+                )
+                
                 router.push(`/${locale}/customers`)
               } catch (error: any) {
-                alert(error?.message || 'Silme işlemi başarısız oldu')
+                toastError('Silme işlemi başarısız oldu', error?.message)
               } finally {
                 setDeleteLoading(false)
               }

@@ -89,3 +89,5 @@ SELECT
     WHERE "status" = 'CLOSED'
   ) AS closed_count;
 
+
+

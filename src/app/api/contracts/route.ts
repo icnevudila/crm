@@ -25,11 +25,16 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseWithServiceRole()
     const { searchParams } = new URL(request.url)
 
+    // SuperAdmin kontrolü
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    const companyId = session.user.companyId
+
     // Filters
     const search = searchParams.get('search') || ''
     const status = searchParams.get('status') || ''
     const type = searchParams.get('type') || ''
     const customerId = searchParams.get('customerId') || ''
+    const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '20')
     const offset = (page - 1) * limit
@@ -43,8 +48,16 @@ export async function GET(request: NextRequest) {
         customerCompany:CustomerCompany(id, name),
         deal:Deal(id, title)
       `, { count: 'exact' })
-      .eq('companyId', session.user.companyId)
       .order('createdAt', { ascending: false })
+
+    // SuperAdmin değilse companyId filtresi ekle
+    if (!isSuperAdmin) {
+      query = query.eq('companyId', companyId)
+    } else if (filterCompanyId) {
+      // SuperAdmin ise ve firma filtresi varsa, o firmaya göre filtrele
+      query = query.eq('companyId', filterCompanyId)
+    }
+    // SuperAdmin ise ve firma filtresi yoksa, tüm şirketlerin contract'larını göster
 
     // Search
     if (search) {

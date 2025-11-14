@@ -373,21 +373,19 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
                             
                             if (!customerExists && customerCheck.status === 404) {
                               // Müşteri bulunamadı - yeni müşteri oluştur sayfasına yönlendir
-                              toast.info(
-                                'Müşteri bulunamadı',
-                                'Bu fırsat için müşteri kaydı bulunamadı. Yeni müşteri oluşturmanız gerekiyor.',
-                                {
+                              toast.info('Müşteri bulunamadı', {
+                                description: 'Bu fırsat için müşteri kaydı bulunamadı. Yeni müşteri oluşturmanız gerekiyor.',
+                                action: {
                                   label: 'Yeni Müşteri Oluştur',
                                   onClick: () => window.open(`/${locale}/customers/new?dealId=${deal.id}`, '_blank'),
-                                }
-                              )
+                                },
+                              })
                             } else if (!customerExists) {
                               // Başka bir hata var
                               const errorData = await customerCheck.json().catch(() => ({}))
-                              toast.error(
-                                'Müşteri kontrolü başarısız',
-                                errorData.message || 'Müşteri bilgilerine erişirken bir hata oluştu.'
-                              )
+                              toast.error('Müşteri kontrolü başarısız', {
+                                description: errorData.message || 'Müşteri bilgilerine erişirken bir hata oluştu.',
+                              })
                             }
                           } catch (err) {
                             // Network hatası veya başka bir hata
@@ -395,33 +393,30 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
                             if (process.env.NODE_ENV === 'development') {
                               console.warn('Customer check error:', err)
                             }
-                            toast.error(
-                              'Müşteri kontrolü başarısız',
-                              'Müşteri bilgilerine erişirken bir hata oluştu. Yeni müşteri oluşturmayı deneyin.'
-                            )
+                            toast.error('Müşteri kontrolü başarısız', {
+                              description: 'Müşteri bilgilerine erişirken bir hata oluştu. Yeni müşteri oluşturmayı deneyin.',
+                            })
                           }
                         }
                         
                         // Müşteri varsa detay sayfasına yönlendir
                         if (customerId && customerExists) {
-                          toast.info(
-                            'Müşteri sayfasına yönlendiriliyorsunuz...',
-                            'Müşteri bilgilerini kontrol edip iletişime geçebilirsiniz.',
-                            {
+                          toast.info('Müşteri sayfasına yönlendiriliyorsunuz...', {
+                            description: 'Müşteri bilgilerini kontrol edip iletişime geçebilirsiniz.',
+                            action: {
                               label: 'Müşteri Sayfasına Git',
                               onClick: () => window.open(`/${locale}/customers/${customerId}`, '_blank'),
-                            }
-                          )
+                            },
+                          })
                         } else if (!customerId) {
                           // customerId yoksa direkt yeni müşteri oluştur sayfasına yönlendir
-                          toast.info(
-                            'Yeni müşteri oluşturun',
-                            'Bu fırsat için önce müşteri kaydı oluşturmanız gerekiyor.',
-                            {
+                          toast.info('Yeni müşteri oluşturun', {
+                            description: 'Bu fırsat için önce müşteri kaydı oluşturmanız gerekiyor.',
+                            action: {
                               label: 'Yeni Müşteri Oluştur',
                               onClick: () => window.open(`/${locale}/customers/new?dealId=${deal.id}`, '_blank'),
-                            }
-                          )
+                            },
+                          })
                         }
                         
                         // Sonra deal'ın stage'ini CONTACTED'a taşı
@@ -435,7 +430,7 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
                           if (!res.ok) {
                             const errorData = await res.json().catch(() => ({}))
                             const errorMessage = errorData.message || errorData.error || 'Bir hata oluştu.'
-                            toast.error('Aşama değiştirilemedi', errorMessage)
+                            toast.error('Aşama değiştirilemedi', { description: errorMessage })
                             return
                           }
                           
@@ -445,14 +440,13 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
                           // onStageChange callback'ini çağır (parent component cache'i güncelleyecek)
                           if (onStageChange) {
                             await onStageChange(deal.id, 'CONTACTED')
-                            toast.success(
-                              'Fırsat aşaması güncellendi',
-                              `Fırsat "${deal.title}" başarıyla "İletişimde" aşamasına taşındı.`
-                            )
+                            toast.success('Fırsat aşaması güncellendi', {
+                              description: `Fırsat "${deal.title}" başarıyla "İletişimde" aşamasına taşındı.`,
+                            })
                           }
                         } catch (error: any) {
                           console.error('Stage change error:', error)
-                          toast.error('Aşama değiştirilemedi', error?.message || 'Bir hata oluştu.')
+                          toast.error('Aşama değiştirilemedi', { description: error?.message || 'Bir hata oluştu.' })
                         }
                       }}
                     >
@@ -903,12 +897,12 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
       } catch (error: any) {
           // Hata durumunda eski haline geri dön
           setLocalData(data)
-          toast.error('Aşama değiştirilemedi', error?.message || 'Bir hata oluştu.')
+          toast.error('Aşama değiştirilemedi', { description: error?.message || 'Bir hata oluştu.' })
         }
       } else {
         // onStageChange yoksa hata göster
         setLocalData(data) // Optimistic update'i geri al
-        toast.error('Aşama değiştirilemedi', 'onStageChange callback tanımlı değil')
+        toast.error('Aşama değiştirilemedi', { description: 'onStageChange callback tanımlı değil' })
       }
     } else {
       // Aynı stage içinde sıralama değişikliği
@@ -1195,7 +1189,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
               className="bg-green-600 hover:bg-green-700"
               onClick={async () => {
                 if (!winningDealId) {
-                  toast.error('Hata', 'Fırsat ID bulunamadı.')
+                  toast.error('Hata', { description: 'Fırsat ID bulunamadı.' })
                   setWonDialogOpen(false)
                   return
                 }
@@ -1223,14 +1217,57 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
                   const updatedDeal = await res.json()
                   
                   // Toast mesajı - sözleşme oluşturulduğunu bildir
-                  toast.success(
-                    'Fırsat kazanıldı!',
-                    'Fırsat kazanıldı. Sözleşme otomatik olarak oluşturuldu. Sözleşmeler sayfasından kontrol edebilirsiniz.',
-                    {
+                  toast.success('Fırsat kazanıldı!', {
+                    description: 'Fırsat kazanıldı. Sözleşme otomatik olarak oluşturuldu. Sözleşmeler sayfasından kontrol edebilirsiniz.',
+                    action: {
                       label: 'Sözleşmeler Sayfasına Git',
                       onClick: () => window.location.href = `/${locale}/contracts`,
-                    }
-                  )
+                    },
+                  })
+
+                  // Optimistic update - deal'i WON kolonuna taşı
+                  const dealToMove = localData
+                    .flatMap((col) => col.deals)
+                    .find((d) => d.id === dealId)
+                  
+                  if (dealToMove) {
+                    const newData = localData.map((col) => {
+                      if (col.stage !== 'WON' && col.deals.some((d) => d.id === dealId)) {
+                        // Eski stage'den kaldır
+                        const updatedDeals = col.deals.filter((d) => d.id !== dealId)
+                        const updatedTotalValue = updatedDeals.reduce((sum: number, d: any) => {
+                          const dealValue = typeof d.value === 'string' ? parseFloat(d.value) || 0 : (d.value || 0)
+                          return sum + dealValue
+                        }, 0)
+                        return {
+                          ...col,
+                          deals: updatedDeals,
+                          count: Math.max(0, col.count - 1),
+                          totalValue: updatedTotalValue,
+                        }
+                      }
+                      if (col.stage === 'WON') {
+                        // WON kolonuna ekle (eğer zaten yoksa)
+                        const dealExists = col.deals.some((d) => d.id === dealId)
+                        if (!dealExists) {
+                          const updatedDeal = { ...dealToMove, stage: 'WON' }
+                          const updatedDeals = [updatedDeal, ...col.deals]
+                          const updatedTotalValue = updatedDeals.reduce((sum: number, d: any) => {
+                            const dealValue = typeof d.value === 'string' ? parseFloat(d.value) || 0 : (d.value || 0)
+                            return sum + dealValue
+                          }, 0)
+                          return {
+                            ...col,
+                            deals: updatedDeals,
+                            count: col.count + 1,
+                            totalValue: updatedTotalValue,
+                          }
+                        }
+                      }
+                      return col
+                    })
+                    setLocalData(newData)
+                  }
 
                   // onStageChange callback'ini çağır (parent component cache'i güncelleyecek)
                   if (onStageChange) {
@@ -1238,7 +1275,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
                   }
                 } catch (error: any) {
                   console.error('Won error:', error)
-                  toast.error('Kazanıldı işaretleme başarısız', error?.message || 'Fırsat kazanıldı olarak işaretlenemedi.')
+                  toast.error('Kazanıldı işaretleme başarısız', { description: error?.message || 'Fırsat kazanıldı olarak işaretlenemedi.' })
                 }
               }}
             >
@@ -1287,12 +1324,12 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
               variant="destructive"
               onClick={async () => {
                 if (!lostReason.trim()) {
-                  toast.error('Sebep gerekli', 'Lütfen kayıp sebebini belirtin.')
+                  toast.error('Sebep gerekli', { description: 'Lütfen kayıp sebebini belirtin.' })
                   return
                 }
 
                 if (!losingDealId) {
-                  toast.error('Hata', 'Fırsat ID bulunamadı.')
+                  toast.error('Hata', { description: 'Fırsat ID bulunamadı.' })
                   setLostDialogOpen(false)
                   return
                 }
@@ -1323,14 +1360,57 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
                   const updatedDeal = await res.json()
                   
                   // Toast mesajı - analiz görevi oluşturulduğunu bildir
-                  toast.success(
-                    'Fırsat kaybedildi olarak işaretlendi',
-                    'Fırsat kaybedildi. Analiz görevi otomatik olarak oluşturuldu. Görevler sayfasından kontrol edebilirsiniz.',
-                    {
+                  toast.success('Fırsat kaybedildi olarak işaretlendi', {
+                    description: 'Fırsat kaybedildi. Analiz görevi otomatik olarak oluşturuldu. Görevler sayfasından kontrol edebilirsiniz.',
+                    action: {
                       label: 'Görevler Sayfasına Git',
                       onClick: () => window.location.href = `/${locale}/tasks`,
-                    }
-                  )
+                    },
+                  })
+
+                  // Optimistic update - deal'i LOST kolonuna taşı
+                  const dealToMove = localData
+                    .flatMap((col) => col.deals)
+                    .find((d) => d.id === dealId)
+                  
+                  if (dealToMove) {
+                    const newData = localData.map((col) => {
+                      if (col.stage !== 'LOST' && col.deals.some((d) => d.id === dealId)) {
+                        // Eski stage'den kaldır
+                        const updatedDeals = col.deals.filter((d) => d.id !== dealId)
+                        const updatedTotalValue = updatedDeals.reduce((sum: number, d: any) => {
+                          const dealValue = typeof d.value === 'string' ? parseFloat(d.value) || 0 : (d.value || 0)
+                          return sum + dealValue
+                        }, 0)
+                        return {
+                          ...col,
+                          deals: updatedDeals,
+                          count: Math.max(0, col.count - 1),
+                          totalValue: updatedTotalValue,
+                        }
+                      }
+                      if (col.stage === 'LOST') {
+                        // LOST kolonuna ekle (eğer zaten yoksa)
+                        const dealExists = col.deals.some((d) => d.id === dealId)
+                        if (!dealExists) {
+                          const updatedDeal = { ...dealToMove, stage: 'LOST', lostReason: reason }
+                          const updatedDeals = [updatedDeal, ...col.deals]
+                          const updatedTotalValue = updatedDeals.reduce((sum: number, d: any) => {
+                            const dealValue = typeof d.value === 'string' ? parseFloat(d.value) || 0 : (d.value || 0)
+                            return sum + dealValue
+                          }, 0)
+                          return {
+                            ...col,
+                            deals: updatedDeals,
+                            count: col.count + 1,
+                            totalValue: updatedTotalValue,
+                          }
+                        }
+                      }
+                      return col
+                    })
+                    setLocalData(newData)
+                  }
 
                   // onStageChange callback'ini çağır (parent component cache'i güncelleyecek)
                   if (onStageChange) {
@@ -1338,7 +1418,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
                   }
                 } catch (error: any) {
                   console.error('Lost error:', error)
-                  toast.error('Kayıp işaretleme başarısız', error?.message || 'Fırsat kaybedildi olarak işaretlenemedi.')
+                  toast.error('Kayıp işaretleme başarısız', { description: error?.message || 'Fırsat kaybedildi olarak işaretlenemedi.' })
                 }
               }}
               disabled={!lostReason.trim()}

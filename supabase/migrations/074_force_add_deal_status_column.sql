@@ -73,3 +73,5 @@ SELECT
     FROM "Deal"
   ) AS total_deals;
 
+
+

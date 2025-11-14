@@ -18,6 +18,8 @@ import NextStepButtons from '@/components/workflow/NextStepButtons'
 import RelatedRecordsSuggestions from '@/components/workflow/RelatedRecordsSuggestions'
 import { Calendar } from 'lucide-react'
 import QuoteForm from '@/components/quotes/QuoteForm'
+import SendEmailButton from '@/components/integrations/SendEmailButton'
+import { formatCurrency } from '@/lib/utils'
 
 interface Quote {
   id: string
@@ -157,6 +159,31 @@ export default function QuoteDetailPage() {
             <Edit className="mr-2 h-4 w-4" />
             Düzenle
           </Button>
+          {(quote.customer?.email || quote.Deal?.Customer?.email) && (
+            <SendEmailButton
+              to={quote.customer?.email || quote.Deal?.Customer?.email || ''}
+              subject={`Teklif: ${quote.title}`}
+              html={`
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                  <h2 style="color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px;">
+                    Teklif Bilgileri
+                  </h2>
+                  <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                    <p><strong>Teklif:</strong> ${quote.title}</p>
+                    <p><strong>Teklif No:</strong> ${quote.quoteNumber}</p>
+                    <p><strong>Versiyon:</strong> ${quote.version}</p>
+                    <p><strong>Durum:</strong> ${statusLabels[quote.status] || quote.status}</p>
+                    ${quote.totalAmount ? `<p><strong>Toplam:</strong> ${formatCurrency(quote.totalAmount)}</p>` : ''}
+                    ${quote.Deal?.title ? `<p><strong>İlgili Fırsat:</strong> ${quote.Deal.title}</p>` : ''}
+                    ${quote.notes ? `<p><strong>Notlar:</strong><br>${quote.notes.replace(/\n/g, '<br>')}</p>` : ''}
+                  </div>
+                  <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">
+                    Bu e-posta CRM Enterprise V3 sisteminden gönderilmiştir.
+                  </p>
+                </div>
+              `}
+            />
+          )}
           <Button
             variant="outline"
             className="text-red-600 hover:text-red-700 hover:bg-red-50"

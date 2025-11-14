@@ -38,6 +38,7 @@ import {
 import { useSession } from '@/hooks/useSession'
 import { useData } from '@/hooks/useData'
 import { OnboardingButton } from '@/components/onboarding/OnboardingButton'
+import { getMenuPriorityByRole } from '@/lib/workflows'
 
 // Modül mapping - href'den modül koduna
 const MODULE_MAP: Record<string, string> = {
@@ -72,6 +73,9 @@ interface SidebarItem {
   label: string
   icon: React.ComponentType<{ className?: string }>
   module?: string
+  badge?: number // Bildirim sayısı
+  priority?: 'high' | 'medium' | 'low' // Öncelik (context-aware için)
+  workflow?: string // Hangi workflow'a ait
 }
 
 interface SidebarSection {
@@ -191,6 +195,13 @@ function Sidebar() {
     },
   ], [t])
   
+  // Context-aware navigation: Rol bazlı önceliklendirme
+  // Hook'lar component'in en üst seviyesinde olmalı - Rules of Hooks
+  const menuPriorities = React.useMemo(() => {
+    if (!mounted || status !== 'authenticated') return {}
+    return getMenuPriorityByRole(userRole)
+  }, [mounted, status, userRole])
+
   // Admin ve SuperAdmin linklerini dinamik olarak ekle
   // SSR-safe: Sadece client-side'da admin linklerini ekle
   const { sections: sidebarSections, flatItems } = React.useMemo(() => {
@@ -205,23 +216,37 @@ function Sidebar() {
       }
     }
 
-    // Yetki kontrolü yaparak menü öğelerini filtrele
+    // Yetki kontrolü yaparak menü öğelerini filtrele ve önceliklendir
     const filteredSections: SidebarSection[] = SIDEBAR_SECTIONS.map((section) => {
-      const visibleItems = section.items.filter((item) => {
-      if (!item.module) {
-        return true
-      }
+      const visibleItems = section.items
+        .filter((item) => {
+          if (!item.module) {
+            return true
+          }
 
-      if (isSuperAdmin || isAdmin) {
-        return true
-      }
+          if (isSuperAdmin || isAdmin) {
+            return true
+          }
 
-      if (allPermissions && allPermissions[item.module]) {
-        return allPermissions[item.module].canRead === true
-      }
+          if (allPermissions && allPermissions[item.module]) {
+            return allPermissions[item.module].canRead === true
+          }
 
-      return true
-    })
+          return true
+        })
+        .map((item) => {
+          // Context-aware: Rol bazlı öncelik ekle
+          const priority = item.module ? menuPriorities[item.module] : undefined
+          return {
+            ...item,
+            priority: priority || 'medium',
+          }
+        })
+        // Önceliğe göre sırala: high → medium → low
+        .sort((a, b) => {
+          const priorityOrder = { high: 0, medium: 1, low: 2 }
+          return priorityOrder[a.priority || 'medium'] - priorityOrder[b.priority || 'medium']
+        })
 
       return { ...section, items: visibleItems }
     }).filter((section) => section.items.length > 0)
@@ -246,7 +271,7 @@ function Sidebar() {
     const flattenedItems = filteredSections.flatMap((section) => section.items)
 
     return { sections: filteredSections, flatItems: flattenedItems }
-  }, [isAdmin, isSuperAdmin, mounted, status, allPermissions, SIDEBAR_SECTIONS, t])
+  }, [isAdmin, isSuperAdmin, mounted, status, allPermissions, SIDEBAR_SECTIONS, t, menuPriorities])
 
   const prefetchedUrlsRef = React.useRef<Set<string>>(new Set())
 
@@ -568,7 +593,7 @@ function Sidebar() {
                             {/* Yazı için geçişli renk efekti - sadece aktif sekmede */}
                             <motion.span
                               className={cn(
-                                'relative z-10 font-medium transition-colors duration-500',
+                                'relative z-10 font-medium transition-colors duration-500 flex-1',
                                 iconColors[item.href] && isActive
                                   ? iconColors[item.href].active
                                   : isActive
@@ -586,6 +611,28 @@ function Sidebar() {
                     >
                       {item.label}
                     </motion.span>
+                    
+                    {/* Badge - Bildirim sayısı */}
+                    {item.badge && item.badge > 0 && (
+                      <motion.span
+                        className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-indigo-500 px-1.5 text-[10px] font-semibold text-white"
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+                      >
+                        {item.badge > 99 ? '99+' : item.badge}
+                      </motion.span>
+                    )}
+                    
+                    {/* Priority indicator - Sadece high priority için */}
+                    {item.priority === 'high' && !isActive && (
+                      <motion.div
+                        className="h-1.5 w-1.5 rounded-full bg-indigo-500"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: [0.5, 1, 0.5] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                      />
+                    )}
                     
                             {/* Aktif sekme için geçişli arka plan glow efekti */}
                             {isActive && iconColors[item.href] && (

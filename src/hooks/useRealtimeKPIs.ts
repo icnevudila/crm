@@ -30,6 +30,7 @@ export function useRealtimeKPIs(initialData: KPIData) {
   const { data: session } = useSession()
   const [kpis, setKpis] = useState<KPIData>(initialData)
   const channelsRef = useRef<any[]>([])
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
   // Initial data'yı serialize edip karşılaştır (deep compare için)
   const initialDataKey = useMemo(() => {
@@ -53,10 +54,11 @@ export function useRealtimeKPIs(initialData: KPIData) {
       const companyId = session.user.companyId
 
       // Debounced KPI fetch - çok sık çağrılmaz
-      let fetchTimeout: NodeJS.Timeout
       const debouncedFetchKPIs = () => {
-        clearTimeout(fetchTimeout)
-        fetchTimeout = setTimeout(() => {
+        if (fetchTimeoutRef.current) {
+          clearTimeout(fetchTimeoutRef.current)
+        }
+        fetchTimeoutRef.current = setTimeout(() => {
           fetch('/api/analytics/kpis')
             .then((res) => res.json())
             .then((data) => setKpis(data))
@@ -113,23 +115,55 @@ export function useRealtimeKPIs(initialData: KPIData) {
 
       // Channels'ı sakla cleanup için
       channelsRef.current = [invoiceChannel, quoteChannel, activityChannel]
-
-      // Cleanup timeout'u da sakla
-      return () => {
-        clearTimeout(fetchTimeout)
-      }
     }, 2000) // 2 saniye sonra realtime başlat (dashboard önce yüklensin)
 
     return () => {
+      // Timeout'u iptal et
       clearTimeout(timeoutId)
-      // Channels'ları temizle
-      const supabase = createClientSupabase()
-      channelsRef.current.forEach((channel) => {
-        if (channel) {
-          supabase.removeChannel(channel)
-        }
-      })
-      channelsRef.current = []
+      
+      // Fetch timeout'u temizle
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current)
+        fetchTimeoutRef.current = null
+      }
+      
+      // Channels'ları temizle - güvenli cleanup
+      // Timeout henüz çalışmadıysa channel'lar oluşmamış olabilir
+      if (channelsRef.current && channelsRef.current.length > 0) {
+        const supabase = createClientSupabase()
+        channelsRef.current.forEach((channel) => {
+          try {
+            if (channel && typeof channel === 'object' && channel !== null) {
+              // Channel unsubscribe et (eğer varsa)
+              if (typeof channel.unsubscribe === 'function') {
+                channel.unsubscribe().catch(() => {
+                  // Unsubscribe hatası kritik değil
+                })
+              }
+              // destroy() metodu varsa çağır (bazı Supabase versiyonlarında)
+              if (typeof (channel as any).destroy === 'function') {
+                try {
+                  (channel as any).destroy()
+                } catch {
+                  // destroy hatası kritik değil
+                }
+              }
+              // Channel'ı kaldır
+              try {
+                supabase.removeChannel(channel)
+              } catch {
+                // removeChannel hatası kritik değil
+              }
+            }
+          } catch (error) {
+            // Cleanup hatası kritik değil, sessizce ignore et
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('Channel cleanup error:', error)
+            }
+          }
+        })
+        channelsRef.current = []
+      }
     }
   }, [session?.user?.companyId])
 

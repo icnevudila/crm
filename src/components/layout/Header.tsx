@@ -46,7 +46,7 @@ export default function Header() {
       </div>
 
       <div className="flex items-center gap-3">
-        {/* Global Search - Feature Flag ile */}
+        {/* Global Search */}
         {FEATURE_FLAGS.GLOBAL_SEARCH && (
           <GlobalSearchBar />
         )}

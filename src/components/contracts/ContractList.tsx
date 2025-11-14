@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
+import { useSession } from '@/hooks/useSession'
 import { Plus, Search, Edit, Trash2, Eye, FileText, Calendar, DollarSign } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -53,14 +54,29 @@ export default function ContractList() {
   const locale = useLocale()
   const t = useTranslations('contracts')
   const tCommon = useTranslations('common')
+  const { data: session } = useSession()
+  
+  // SuperAdmin kontrolü
+  const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+  
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [type, setType] = useState('')
+  const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin için firma filtresi
   const [formOpen, setFormOpen] = useState(false)
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null)
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null)
   const [selectedContractData, setSelectedContractData] = useState<Contract | null>(null)
+
+  // SuperAdmin için firmaları çek
+  const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
+    isSuperAdmin ? '/api/superadmin/companies' : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
+  const companies = (companiesData?.companies || []).filter(
+    (company, index, self) => index === self.findIndex((c) => c.id === company.id)
+  )
 
   // Debounced search
   const [debouncedSearch, setDebouncedSearch] = useState(search)
@@ -78,6 +94,7 @@ export default function ContractList() {
   if (debouncedSearch) params.append('search', debouncedSearch)
   if (status) params.append('status', status)
   if (type) params.append('type', type)
+  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
   
   const apiUrl = `/api/contracts?${params.toString()}`
   const { data: response, isLoading, error, mutate: mutateContracts } = useData<{ data: Contract[] }>(apiUrl, {
@@ -270,6 +287,21 @@ export default function ContractList() {
             className="pl-10"
           />
         </div>
+        {isSuperAdmin && (
+          <Select value={filterCompanyId || 'all'} onValueChange={(value) => setFilterCompanyId(value === 'all' ? '' : value)}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Tüm Firmalar" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tüm Firmalar</SelectItem>
+              {companies.map((company) => (
+                <SelectItem key={company.id} value={company.id}>
+                  {company.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Select value={status || 'all'} onValueChange={(value) => setStatus(value === 'all' ? '' : value)}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder={t('selectStatus')} />

@@ -239,3 +239,5 @@ COMMENT ON FUNCTION notify_ticket_assigned() IS 'Destek talebi atandığında bi
 COMMENT ON FUNCTION notify_invoice_assigned() IS 'Fatura atandığında bildirim oluşturur. SuperAdmin için kullanıcının kendi companyId''sini kullanır.';
 COMMENT ON FUNCTION notify_meeting_assigned() IS 'Görüşme atandığında bildirim oluşturur. SuperAdmin için kullanıcının kendi companyId''sini kullanır.';
 
+
+

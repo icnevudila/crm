@@ -188,6 +188,7 @@ export async function PUT(
     if (body.isPrimary !== undefined) contactData.isPrimary = body.isPrimary
     if (body.status !== undefined) contactData.status = body.status
     if (body.customerCompanyId !== undefined) contactData.customerCompanyId = body.customerCompanyId
+    if (body.imageUrl !== undefined) contactData.imageUrl = body.imageUrl?.trim() || null
 
     const { data: updatedContact, error: updateError } = await supabase
       .from('Contact')

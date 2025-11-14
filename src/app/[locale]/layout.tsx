@@ -5,6 +5,7 @@ import { locales } from '@/lib/i18n'
 import SessionProvider from '@/components/providers/SessionProvider'
 import QueryProvider from '@/components/providers/QueryProvider'
 import { NavigationProvider } from '@/components/providers/NavigationProvider'
+import UndoStackProvider from '@/components/providers/UndoStackProvider'
 import ConditionalLayout from '@/components/layout/ConditionalLayout'
 import { Toaster } from 'sonner'
 
@@ -52,11 +53,12 @@ export default async function LocaleLayout({
     <NextIntlClientProvider locale={locale} messages={messages}>
       <SessionProvider>
         <QueryProvider>
-          <NavigationProvider>
-            <ConditionalLayout>
-              {children}
-            </ConditionalLayout>
-          <Toaster 
+          <UndoStackProvider>
+            <NavigationProvider>
+              <ConditionalLayout>
+                {children}
+              </ConditionalLayout>
+            <Toaster 
             position="top-right" 
             expand={false}
             richColors
@@ -82,7 +84,8 @@ export default async function LocaleLayout({
               }
             }}
           />
-          </NavigationProvider>
+            </NavigationProvider>
+          </UndoStackProvider>
         </QueryProvider>
       </SessionProvider>
     </NextIntlClientProvider>

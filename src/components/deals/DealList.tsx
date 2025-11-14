@@ -2445,6 +2445,9 @@ export default function DealList({ isOpen = true }: DealListProps) {
               <TableHead>Lead Score</TableHead>
 
 
+              <TableHead>Öncelik Skoru</TableHead>
+
+
               <TableHead>Kaynak</TableHead>
 
 
@@ -2469,7 +2472,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
               <TableRow>
 
 
-                <TableCell colSpan={isSuperAdmin ? 10 : 9} className="text-center py-8 text-gray-500">
+                <TableCell colSpan={isSuperAdmin ? 11 : 10} className="text-center py-8 text-gray-500">
 
 
                   {t('noDealsFound')}
@@ -2667,6 +2670,24 @@ export default function DealList({ isOpen = true }: DealListProps) {
                     </div>
 
 
+                  </TableCell>
+
+
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {deal.priorityScore !== undefined && deal.priorityScore !== null ? (
+                        <span className="font-semibold text-indigo-600">
+                          {Math.round(deal.priorityScore)}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                      {deal.isPriority && (
+                        <Badge className="bg-red-100 text-red-800 border-red-300">
+                          🔥 Öncelikli
+                        </Badge>
+                      )}
+                    </div>
                   </TableCell>
 
 

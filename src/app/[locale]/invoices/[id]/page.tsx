@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { useData } from '@/hooks/useData'
-import { ArrowLeft, Edit, FileText, FileText as QuoteIcon, Truck, Trash2, Users, Plus, Package, AlertTriangle, Phone, Mail } from 'lucide-react'
+import { ArrowLeft, Edit, FileText, FileText as QuoteIcon, Truck, Trash2, Users, Plus, Package, AlertTriangle, Phone } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +20,7 @@ import { getInvoiceWorkflowSteps } from '@/lib/workflowSteps'
 import StatusInfoNote from '@/components/workflow/StatusInfoNote'
 import NextStepButtons from '@/components/workflow/NextStepButtons'
 import RelatedRecordsSuggestions from '@/components/workflow/RelatedRecordsSuggestions'
+import SendEmailButton from '@/components/integrations/SendEmailButton'
 import {
   Table,
   TableBody,
@@ -129,6 +130,30 @@ export default function InvoiceDetailPage() {
               <Edit className="mr-2 h-4 w-4" />
               Düzenle
             </Button>
+          )}
+          {invoice.Customer?.email && (
+            <SendEmailButton
+              to={invoice.Customer.email}
+              subject={`Fatura: ${invoice.title}`}
+              html={`
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                  <h2 style="color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px;">
+                    Fatura Bilgileri
+                  </h2>
+                  <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                    <p><strong>Fatura:</strong> ${invoice.title}</p>
+                    ${invoice.invoiceNumber ? `<p><strong>Fatura No:</strong> ${invoice.invoiceNumber}</p>` : ''}
+                    <p><strong>Durum:</strong> ${statusLabels[invoice.status] || invoice.status}</p>
+                    ${invoice.total ? `<p><strong>Toplam:</strong> ${formatCurrency(invoice.total)}</p>` : ''}
+                    ${invoice.Quote?.title ? `<p><strong>İlgili Teklif:</strong> ${invoice.Quote.title}</p>` : ''}
+                    ${invoice.notes ? `<p><strong>Notlar:</strong><br>${invoice.notes.replace(/\n/g, '<br>')}</p>` : ''}
+                  </div>
+                  <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">
+                    Bu e-posta CRM Enterprise V3 sisteminden gönderilmiştir.
+                  </p>
+                </div>
+              `}
+            />
           )}
           <Button
             className="bg-gradient-primary text-white"

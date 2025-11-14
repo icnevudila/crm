@@ -1,133 +1,139 @@
-// Toast helper functions
-// Sonner kullanarak tüm bildirimler için merkezi toast sistemi
+/**
+ * Toast Notification Helper
+ * alert() yerine kullanılacak - performans odaklı, optimistic updates destekli
+ */
 
 import { toast as sonnerToast } from 'sonner'
 
-// Success toast (yeşil)
-export const toast = {
-  success: (
-    message: string,
-    description?: string,
-    options?: { label?: string; onClick?: () => void }
-  ) => {
-    sonnerToast.success(message, {
-      description,
-      duration: 3000,
-      ...(options?.label && options?.onClick ? {
-        action: {
-          label: options.label,
-          onClick: options.onClick,
-        },
-      } : {}),
-    })
-  },
+// Export toast objesi - doğrudan kullanım için
+export const toast = sonnerToast
 
-  // Error toast (kırmızı)
-  error: (message: string, description?: string) => {
-    sonnerToast.error(message, {
-      description,
-      duration: 4000, // Hata mesajları biraz daha uzun görünsün
-    })
-  },
-
-  // Info toast (mavi)
-  info: (
-    message: string,
-    description?: string,
-    options?: { label?: string; onClick?: () => void }
-  ) => {
-    sonnerToast.info(message, {
-      description,
-      duration: 3000,
-      ...(options?.label && options?.onClick ? {
-        action: {
-          label: options.label,
-          onClick: options.onClick,
-        },
-      } : {}),
-    })
-  },
-
-  // Warning toast (sarı)
-  warning: (message: string, description?: string) => {
-    sonnerToast.warning(message, {
-      description,
-      duration: 3500,
-    })
-  },
-
-  // Loading toast (spinner)
-  loading: (message: string) => {
-    return sonnerToast.loading(message)
-  },
-
-  // Promise toast (loading → success/error)
-  promise: <T,>(
-    promise: Promise<T>,
-    messages: {
-      loading: string
-      success: string | ((data: T) => string)
-      error: string | ((error: any) => string)
-    }
-  ) => {
-    return sonnerToast.promise(promise, messages)
-  },
-
-  // Dismiss a toast
-  dismiss: (toastId?: string | number) => {
-    sonnerToast.dismiss(toastId)
-  },
+export interface ToastOptions {
+  duration?: number
+  action?: {
+    label: string
+    onClick: () => void
+  }
+  cancel?: {
+    label: string
+    onClick?: () => void
+  }
+  onDismiss?: () => void
+  onAutoClose?: () => void
 }
 
 /**
- * API hatasını toast notification olarak göster
- * Forbidden (403) hataları için özel mesaj kullanır
+ * Başarı mesajı gösterir
  */
-export function handleApiError(error: any, defaultTitle: string = 'İşlem Başarısız', defaultMessage?: string) {
-  const errorMessage = error?.message || error?.error || defaultMessage || 'İşlem sırasında bir hata oluştu.'
-  
-  // Forbidden veya yetki hatası için özel mesaj
-  if (
-    error?.status === 403 || 
-    error?.response?.status === 403 ||
-    errorMessage?.includes('Forbidden') ||
-    errorMessage?.toLowerCase().includes('yetkiniz') ||
-    errorMessage?.toLowerCase().includes('yetki')
-  ) {
-    toast.error(
-      'Yetkisiz İşlem',
-      'Bu işlemi gerçekleştirmek için yetkiniz bulunmuyor. Lütfen kurum yöneticinizle veya bilgi işlem ekibiyle iletişime geçin.'
-    )
-  } else {
-    toast.error(defaultTitle, errorMessage)
-  }
+export function toastSuccess(
+  message: string,
+  description?: string,
+  options?: ToastOptions
+) {
+  return sonnerToast.success(message, {
+    description,
+    duration: options?.duration || 4000,
+    action: options?.action,
+    cancel: options?.cancel,
+    onDismiss: options?.onDismiss,
+    onAutoClose: options?.onAutoClose,
+  })
 }
 
-// ✅ Modern toast-based confirm - window.confirm yerine kullan
-// ÖNEMLİ: Promise döndürür - async/await ile kullanılmalı
-export const confirm = (message: string, description?: string): Promise<boolean> => {
-  return new Promise((resolve) => {
-    const toastId = sonnerToast(message, {
-      description,
-      duration: Infinity, // Kullanıcı seçim yapana kadar açık kal
-      action: {
-        label: 'Evet',
-        onClick: () => {
-          sonnerToast.dismiss(toastId)
-          resolve(true)
-        },
-      },
-      cancel: {
-        label: 'İptal',
-        onClick: () => {
-          sonnerToast.dismiss(toastId)
-          resolve(false)
-        },
-      },
-    })
-    
-    // Toast kapanırsa (X butonuna tıklanırsa) false döndür
-    // Sonner'da onDismiss callback'i yok, bu yüzden setTimeout ile kontrol ediyoruz
-    // Ancak daha iyi bir çözüm için sonner'ın onDismiss özelliğini kullanabiliriz
+/**
+ * Hata mesajı gösterir
+ */
+export function toastError(
+  message: string,
+  description?: string,
+  options?: ToastOptions
+) {
+  return sonnerToast.error(message, {
+    description,
+    duration: options?.duration || 5000,
+    action: options?.action,
+    cancel: options?.cancel,
+    onDismiss: options?.onDismiss,
+    onAutoClose: options?.onAutoClose,
+  })
+}
+
+/**
+ * Uyarı mesajı gösterir
+ */
+export function toastWarning(
+  message: string,
+  description?: string,
+  options?: ToastOptions
+) {
+  return sonnerToast.warning(message, {
+    description,
+    duration: options?.duration || 4000,
+    action: options?.action,
+    cancel: options?.cancel,
+    onDismiss: options?.onDismiss,
+    onAutoClose: options?.onAutoClose,
+  })
+}
+
+/**
+ * Bilgi mesajı gösterir
+ */
+export function toastInfo(
+  message: string,
+  description?: string,
+  options?: ToastOptions
+) {
+  return sonnerToast.info(message, {
+    description,
+    duration: options?.duration || 4000,
+    action: options?.action,
+    cancel: options?.cancel,
+    onDismiss: options?.onDismiss,
+    onAutoClose: options?.onAutoClose,
+  })
+}
+
+/**
+ * Geri alma (Undo) özellikli toast
+ * Silinen kayıtları geri almak için kullanılır
+ */
+export function toastWithUndo(
+  message: string,
+  onUndo: () => void,
+  options?: Omit<ToastOptions, 'action'>
+) {
+  return sonnerToast.success(message, {
+    duration: 6000, // Undo için daha uzun süre
+    action: {
+      label: 'Geri Al',
+      onClick: onUndo,
+    },
+    ...options,
+  })
+}
+
+/**
+ * Promise toast - async işlemler için
+ * Loading → Success/Error otomatik geçiş
+ */
+export function toastPromise<T>(
+  promise: Promise<T>,
+  messages: {
+    loading: string
+    success: string | ((data: T) => string)
+    error: string | ((error: any) => string)
+  }
+) {
+  return sonnerToast.promise(promise, {
+    loading: messages.loading,
+    success: (data) =>
+      typeof messages.success === 'function'
+        ? messages.success(data)
+        : messages.success,
+    error: (error) =>
+      typeof messages.error === 'function'
+        ? messages.error(error)
+        : messages.error,
   })
 }

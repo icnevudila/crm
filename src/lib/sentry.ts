@@ -7,12 +7,24 @@
  * Kurulum:
  * 1. Sentry hesabı oluşturun: https://sentry.io
  * 2. Proje oluşturun ve DSN'i alın
- * 3. .env.local dosyasına ekleyin:
+ * 3. Paketi yükleyin: npm install @sentry/nextjs
+ * 4. .env.local dosyasına ekleyin:
  *    NEXT_PUBLIC_SENTRY_DSN=your-sentry-dsn
  *    SENTRY_AUTH_TOKEN=your-auth-token (source maps için)
+ * 
+ * NOT: Paket yüklü değilse Sentry devre dışı kalır, uygulama çalışmaya devam eder.
  */
 
-import * as Sentry from '@sentry/nextjs'
+// Sentry'yi opsiyonel olarak import et (paket yoksa hata vermez)
+let Sentry: any = null
+try {
+  Sentry = require('@sentry/nextjs')
+} catch (error) {
+  // Paket yüklü değilse Sentry devre dışı
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('Sentry paketi yüklü değil. Hata takibi devre dışı. Yüklemek için: npm install @sentry/nextjs')
+  }
+}
 
 const SENTRY_DSN = process.env.NEXT_PUBLIC_SENTRY_DSN
 
@@ -20,6 +32,9 @@ const SENTRY_DSN = process.env.NEXT_PUBLIC_SENTRY_DSN
  * Sentry'yi başlat (sadece production'da)
  */
 export function initSentry() {
+  // Sentry paketi yüklü değilse hiçbir şey yapma
+  if (!Sentry) return
+  
   if (typeof window === 'undefined') {
     // Server-side
     if (process.env.NODE_ENV === 'production' && SENTRY_DSN) {
@@ -86,6 +101,12 @@ export function initSentry() {
  * Hata yakalama ve Sentry'ye gönderme
  */
 export function captureException(error: Error, context?: Record<string, any>) {
+  if (!Sentry) {
+    // Sentry yoksa sadece console'a yazdır
+    console.error('Error captured:', error, context)
+    return
+  }
+  
   if (process.env.NODE_ENV === 'production' && SENTRY_DSN) {
     Sentry.captureException(error, {
       extra: context,
@@ -99,7 +120,12 @@ export function captureException(error: Error, context?: Record<string, any>) {
 /**
  * Mesaj yakalama (non-error events)
  */
-export function captureMessage(message: string, level: Sentry.SeverityLevel = 'info') {
+export function captureMessage(message: string, level: 'info' | 'warning' | 'error' | 'debug' | 'fatal' = 'info') {
+  if (!Sentry) {
+    console.log(`[${level}]:`, message)
+    return
+  }
+  
   if (process.env.NODE_ENV === 'production' && SENTRY_DSN) {
     Sentry.captureMessage(message, level)
   } else if (process.env.NODE_ENV === 'development') {
@@ -111,6 +137,8 @@ export function captureMessage(message: string, level: Sentry.SeverityLevel = 'i
  * Kullanıcı bilgilerini Sentry'ye ekle
  */
 export function setUser(user: { id: string; email?: string; companyId?: string }) {
+  if (!Sentry) return
+  
   if (process.env.NODE_ENV === 'production' && SENTRY_DSN) {
     Sentry.setUser({
       id: user.id,
@@ -125,6 +153,8 @@ export function setUser(user: { id: string; email?: string; companyId?: string }
  * Context ekle (ekstra bilgi)
  */
 export function setContext(name: string, context: Record<string, any>) {
+  if (!Sentry) return
+  
   if (process.env.NODE_ENV === 'production' && SENTRY_DSN) {
     Sentry.setContext(name, context)
   }
@@ -134,6 +164,8 @@ export function setContext(name: string, context: Record<string, any>) {
  * Tag ekle (filtreleme için)
  */
 export function setTag(key: string, value: string) {
+  if (!Sentry) return
+  
   if (process.env.NODE_ENV === 'production' && SENTRY_DSN) {
     Sentry.setTag(key, value)
   }

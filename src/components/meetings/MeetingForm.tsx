@@ -67,6 +67,7 @@ export default function MeetingForm({
   const customerCompanyId = customerCompanyIdProp || customerCompanyIdFromUrl
   const [loading, setLoading] = useState(false)
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([])
+  const [creatingVideoMeeting, setCreatingVideoMeeting] = useState(false)
 
   // Schema'yı component içinde oluştur - locale desteği için
   const meetingSchema = z.object({
@@ -75,6 +76,12 @@ export default function MeetingForm({
     meetingDate: z.string().min(1, t('meetingDateRequired')),
     meetingDuration: z.number().min(1, t('meetingDurationMin')).max(1440, t('meetingDurationMax')).optional(),
     location: z.string().max(500, t('locationMaxLength')).optional(),
+    meetingType: z.enum(['IN_PERSON', 'ZOOM', 'GOOGLE_MEET', 'TEAMS', 'OTHER']).default('IN_PERSON'),
+    meetingUrl: z.string().optional().refine(
+      (val) => !val || val === '' || z.string().url().safeParse(val).success,
+      { message: 'Geçerli bir URL giriniz' }
+    ),
+    meetingPassword: z.string().max(100).optional(),
     status: z.enum(['PLANNED', 'DONE', 'CANCELLED']).default('PLANNED'),
     customerId: z.string().optional(),
     dealId: z.string().optional(),
@@ -177,6 +184,9 @@ export default function MeetingForm({
       meetingDate: new Date().toISOString().slice(0, 16),
       meetingDuration: 60,
       location: '',
+      meetingType: 'IN_PERSON',
+      meetingUrl: '',
+      meetingPassword: '',
       status: 'PLANNED',
       customerId: '',
       dealId: '',
@@ -198,6 +208,9 @@ export default function MeetingForm({
           meetingDate: meeting.meetingDate ? new Date(meeting.meetingDate).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
           meetingDuration: meeting.meetingDuration || 60,
           location: meeting.location || '',
+          meetingType: meeting.meetingType || 'IN_PERSON',
+          meetingUrl: meeting.meetingUrl || '',
+          meetingPassword: meeting.meetingPassword || '',
           status: meeting.status || 'PLANNED',
           customerId: meeting.customerId || '',
           dealId: meeting.dealId || '',
@@ -460,6 +473,144 @@ export default function MeetingForm({
               <p className="text-sm text-red-600">{errors.location.message}</p>
             )}
           </div>
+
+          {/* Meeting Type & URL */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Toplantı Tipi</label>
+            <Select
+              value={watch('meetingType') || 'IN_PERSON'}
+              onValueChange={(value) => setValue('meetingType', value as any)}
+              disabled={loading}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Toplantı tipi seçin" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="IN_PERSON">Yüz Yüze</SelectItem>
+                <SelectItem value="ZOOM">Zoom</SelectItem>
+                <SelectItem value="GOOGLE_MEET">Google Meet</SelectItem>
+                <SelectItem value="TEAMS">Microsoft Teams</SelectItem>
+                <SelectItem value="OTHER">Diğer</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Meeting URL (video link) */}
+          {(watch('meetingType') === 'ZOOM' || watch('meetingType') === 'GOOGLE_MEET' || watch('meetingType') === 'TEAMS' || watch('meetingType') === 'OTHER') && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">
+                  {watch('meetingType') === 'ZOOM' ? 'Zoom Linki' :
+                   watch('meetingType') === 'GOOGLE_MEET' ? 'Google Meet Linki' :
+                   watch('meetingType') === 'TEAMS' ? 'Teams Linki' :
+                   'Toplantı Linki'}
+                </label>
+                {(watch('meetingType') === 'ZOOM' || watch('meetingType') === 'GOOGLE_MEET' || watch('meetingType') === 'TEAMS') && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      // Video meeting otomatik oluştur
+                      const meetingType = watch('meetingType')
+                      const title = watch('title')
+                      const meetingDate = watch('meetingDate')
+                      const meetingDuration = watch('meetingDuration') || 60
+
+                      if (!title || title.trim() === '') {
+                        alert('Önce toplantı başlığını girin')
+                        return
+                      }
+
+                      if (!meetingDate) {
+                        alert('Önce toplantı tarihini girin')
+                        return
+                      }
+
+                      setCreatingVideoMeeting(true)
+                      try {
+                        const res = await fetch('/api/meetings/create-video-meeting', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            meetingType,
+                            title,
+                            meetingDate,
+                            meetingDuration,
+                            description: watch('description') || '',
+                            attendees: selectedParticipants.map((userId) => {
+                              const user = users.find((u: any) => u.id === userId)
+                              return user?.email
+                            }).filter(Boolean),
+                            password: watch('meetingPassword') || undefined,
+                          }),
+                        })
+
+                        if (!res.ok) {
+                          const error = await res.json().catch(() => ({}))
+                          throw new Error(error.error || 'Video meeting oluşturulamadı')
+                        }
+
+                        const result = await res.json()
+
+                        // Form'u otomatik doldur
+                        setValue('meetingUrl', result.meetingUrl || result.joinUrl || '')
+                        if (result.password) {
+                          setValue('meetingPassword', result.password)
+                        }
+
+                        toast.success('Başarılı', `${meetingType} meeting başarıyla oluşturuldu!`)
+                      } catch (error: any) {
+                        console.error('Video meeting creation error:', error)
+                        toast.error('Hata', error?.message || 'Video meeting oluşturulamadı')
+                      } finally {
+                        setCreatingVideoMeeting(false)
+                      }
+                    }}
+                    disabled={loading || creatingVideoMeeting || !watch('title') || !watch('meetingDate')}
+                    className="text-xs"
+                  >
+                    {creatingVideoMeeting ? 'Oluşturuluyor...' : 'Otomatik Oluştur'}
+                  </Button>
+                )}
+              </div>
+              <Input
+                {...register('meetingUrl')}
+                placeholder={watch('meetingType') === 'ZOOM' ? 'https://zoom.us/j/...' :
+                             watch('meetingType') === 'GOOGLE_MEET' ? 'https://meet.google.com/...' :
+                             watch('meetingType') === 'TEAMS' ? 'https://teams.microsoft.com/...' :
+                             'https://...'}
+                disabled={loading}
+                type="url"
+              />
+              {errors.meetingUrl && (
+                <p className="text-sm text-red-600">{errors.meetingUrl.message}</p>
+              )}
+              {(watch('meetingType') === 'ZOOM' || watch('meetingType') === 'GOOGLE_MEET' || watch('meetingType') === 'TEAMS') && (
+                <p className="text-xs text-gray-500">
+                  {watch('meetingType') === 'ZOOM' && 'Zoom API credentials gerekli (.env.local: ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET)'}
+                  {watch('meetingType') === 'GOOGLE_MEET' && 'Google OAuth access token gerekli (.env.local: GOOGLE_ACCESS_TOKEN)'}
+                  {watch('meetingType') === 'TEAMS' && 'Microsoft Graph access token gerekli (.env.local: MICROSOFT_ACCESS_TOKEN)'}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Meeting Password (Zoom/Meet için) */}
+          {(watch('meetingType') === 'ZOOM' || watch('meetingType') === 'GOOGLE_MEET' || watch('meetingType') === 'TEAMS') && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Toplantı Şifresi (Opsiyonel)</label>
+              <Input
+                {...register('meetingPassword')}
+                placeholder="Şifre (varsa)"
+                disabled={loading}
+                type="password"
+              />
+              {errors.meetingPassword && (
+                <p className="text-sm text-red-600">{errors.meetingPassword.message}</p>
+              )}
+            </div>
+          )}
 
           {/* Customer & Deal */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

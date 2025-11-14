@@ -13,7 +13,11 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { toast, handleApiError } from '@/lib/toast'
+import SmartAutocomplete from '@/components/autocomplete/SmartAutocomplete'
 import { handleFormValidationErrors } from '@/lib/form-validation'
+import FormProgressBar from '@/components/forms/FormProgressBar'
+import FormTemplateSelector from '@/components/forms/FormTemplateSelector'
+import type { FormTemplate } from '@/hooks/useFormTemplates'
 import {
   Dialog,
   DialogContent,
@@ -219,13 +223,43 @@ export default function CustomerForm({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {customer ? 'Müşteri Düzenle' : 'Yeni Müşteri'}
-          </DialogTitle>
-          <DialogDescription>
-            {customer ? 'Müşteri bilgilerini güncelleyin' : 'Yeni müşteri ekleyin'}
-          </DialogDescription>
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <DialogTitle>
+                {customer ? 'Müşteri Düzenle' : 'Yeni Müşteri'}
+              </DialogTitle>
+              <DialogDescription>
+                {customer ? 'Müşteri bilgilerini güncelleyin' : 'Yeni müşteri ekleyin'}
+              </DialogDescription>
+            </div>
+            {/* Form Template Selector - Sadece yeni kayıt modunda göster */}
+            {!customer && (
+              <FormTemplateSelector
+                formType="customer"
+                onSelectTemplate={(template: FormTemplate) => {
+                  // Şablon verilerini forma yükle
+                  reset({
+                    ...watch(),
+                    ...template.data,
+                  })
+                }}
+                currentFormData={watch()}
+                className="ml-4"
+              />
+            )}
+          </div>
         </DialogHeader>
+
+        {/* Form Progress Bar - Sadece yeni kayıt modunda göster */}
+        {!customer && (
+          <FormProgressBar
+            formValues={watch()}
+            requiredFields={['name']}
+            allFields={['name', 'email', 'phone', 'city', 'address', 'sector', 'website', 'taxNumber', 'notes', 'status', 'customerCompanyId']}
+            minPercentage={10}
+            className="mb-4"
+          />
+        )}
 
         <form ref={formRef} onSubmit={handleSubmit(onSubmit, onError)} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -274,12 +308,41 @@ export default function CustomerForm({
               </div>
             </div>
 
-            {/* Name */}
+            {/* Name - Smart Autocomplete */}
             <div className="space-y-2 md:col-span-2">
               <label className="text-sm font-medium">İsim *</label>
-              <Input
-                {...register('name')}
-                placeholder="Müşteri adı"
+              <SmartAutocomplete
+                apiUrl={
+                  watch('name') && watch('name').length >= 2
+                    ? `/api/customers?search=${encodeURIComponent(watch('name'))}&limit=5`
+                    : null
+                }
+                value={watch('name') || ''}
+                onChange={(value) => setValue('name', value, { shouldValidate: true })}
+                onSelect={(item) => {
+                  setValue('name', item.label, { shouldValidate: true })
+                  // Eğer müşteri seçildiyse, diğer bilgileri de doldur
+                  if (item.value && item.value !== item.label) {
+                    // Müşteri detaylarını çek ve form'u doldur
+                    fetch(`/api/customers/${item.value}`)
+                      .then((res) => res.json())
+                      .then((data) => {
+                        if (data) {
+                          setValue('email', data.email || '')
+                          setValue('phone', data.phone || '')
+                          setValue('city', data.city || '')
+                          setValue('address', data.address || '')
+                          setValue('sector', data.sector || '')
+                        }
+                      })
+                      .catch(() => {}) // Sessizce devam et
+                  }
+                }}
+                placeholder="Müşteri adı (yazmaya başlayın...)"
+                minChars={2}
+                labelField="name"
+                valueField="id"
+                className={errors.name ? 'border-red-500' : ''}
                 disabled={loading}
               />
               {errors.name && (
@@ -321,12 +384,27 @@ export default function CustomerForm({
               />
             </div>
 
-            {/* City */}
+            {/* City - Smart Autocomplete */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Şehir</label>
-              <Input
-                {...register('city')}
-                placeholder="İstanbul"
+              <SmartAutocomplete
+                suggestions={[
+                  { id: 'istanbul', label: 'İstanbul', value: 'İstanbul' },
+                  { id: 'ankara', label: 'Ankara', value: 'Ankara' },
+                  { id: 'izmir', label: 'İzmir', value: 'İzmir' },
+                  { id: 'bursa', label: 'Bursa', value: 'Bursa' },
+                  { id: 'antalya', label: 'Antalya', value: 'Antalya' },
+                  { id: 'adana', label: 'Adana', value: 'Adana' },
+                  { id: 'gaziantep', label: 'Gaziantep', value: 'Gaziantep' },
+                  { id: 'konya', label: 'Konya', value: 'Konya' },
+                  { id: 'kayseri', label: 'Kayseri', value: 'Kayseri' },
+                  { id: 'eskisehir', label: 'Eskişehir', value: 'Eskişehir' },
+                ]}
+                value={watch('city') || ''}
+                onChange={(value) => setValue('city', value)}
+                placeholder="Şehir (yazmaya başlayın...)"
+                minChars={1}
+                className=""
                 disabled={loading}
               />
             </div>

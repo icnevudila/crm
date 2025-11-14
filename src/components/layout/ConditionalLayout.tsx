@@ -5,6 +5,9 @@ import { useEffect, useState } from 'react'
 import Sidebar from '@/components/layout/Sidebar'
 import Header from '@/components/layout/Header'
 import Footer from '@/components/layout/Footer'
+import KeyboardShortcuts from '@/components/keyboard/KeyboardShortcuts'
+import SmartNotificationProvider from '@/components/notifications/SmartNotificationProvider'
+import StickyNotesProvider from '@/components/sticky-notes/StickyNotesProvider'
 
 interface ConditionalLayoutProps {
   children: React.ReactNode
@@ -37,16 +40,21 @@ export default function ConditionalLayout({ children }: ConditionalLayoutProps) 
 
   // Diğer sayfalar - sidebar, navbar ve footer VAR
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
-      <Sidebar />
-      <div className="flex-1 ml-64 pt-16 flex flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto flex flex-col">
-          <div className="flex-1">{children}</div>
-          <Footer />
-        </main>
+    <>
+      <KeyboardShortcuts />
+      <SmartNotificationProvider />
+      <StickyNotesProvider />
+      <div className="flex h-screen bg-gray-50 overflow-hidden">
+        <Sidebar />
+        <div className="flex-1 ml-64 pt-16 flex flex-col overflow-hidden">
+          <Header />
+          <main className="flex-1 overflow-y-auto flex flex-col">
+            <div className="flex-1">{children}</div>
+            <Footer />
+          </main>
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 

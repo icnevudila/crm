@@ -147,6 +147,28 @@
     "profile": "Profil",
     "help": "Yardım"
   },
+  "roles": {
+    "SUPER_ADMIN": "Süper Admin",
+    "ADMIN": "Yönetici",
+    "SALES": "Satış Temsilcisi",
+    "USER": "Kullanıcı",
+    "MANAGER": "Müdür",
+    "ACCOUNTANT": "Muhasebeci",
+    "SUPPORT": "Destek",
+    "MARKETING": "Pazarlama",
+    "PURCHASE": "Satın Alma",
+    "WAREHOUSE": "Depo",
+    "SUPER_ADMIN_description": "Sistem yöneticisi - tüm yetkilere sahip",
+    "ADMIN_description": "Şirket yöneticisi - şirket içi tüm yetkilere sahip",
+    "SALES_description": "Satış işlemleri yapabilir",
+    "USER_description": "Temel kullanıcı - sınırlı yetkiler",
+    "MANAGER_description": "Yönetici - ekibi yönetebilir",
+    "ACCOUNTANT_description": "Muhasebe işlemleri yapabilir",
+    "SUPPORT_description": "Müşteri desteği sağlayabilir",
+    "MARKETING_description": "Pazarlama işlemleri yapabilir",
+    "PURCHASE_description": "Satın alma işlemleri yapabilir",
+    "WAREHOUSE_description": "Depo işlemleri yapabilir"
+  },
   "dashboard": {
     "title": "Gösterge Paneli",
     "welcome": "Hoş geldiniz",

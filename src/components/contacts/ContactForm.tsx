@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -8,6 +8,8 @@ import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import Image from 'next/image'
+import { Upload, X } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -37,6 +39,10 @@ const contactSchema = z.object({
   isPrimary: z.boolean().default(false),
   status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
   customerCompanyId: z.string().optional(),
+  imageUrl: z.union([
+    z.string().url('Geçerli bir URL girin'),
+    z.literal(''),
+  ]).optional(),
 })
 
 type ContactFormData = z.infer<typeof contactSchema>
@@ -55,6 +61,9 @@ export default function ContactForm({
   onSuccess,
 }: ContactFormProps) {
   const [loading, setLoading] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Müşteri firmalarını çek
   const { data: customerCompaniesData } = useQuery({
@@ -89,6 +98,7 @@ export default function ContactForm({
       isPrimary: false,
       status: 'ACTIVE',
       customerCompanyId: '',
+      imageUrl: '',
     },
   })
 
@@ -108,7 +118,10 @@ export default function ContactForm({
           isPrimary: contact.isPrimary || false,
           status: contact.status || 'ACTIVE',
           customerCompanyId: contact.customerCompanyId || '',
+          imageUrl: contact.imageUrl || '',
         })
+        // Fotoğraf preview'ını ayarla
+        setImagePreview(contact.imageUrl || null)
       } else {
         reset({
           firstName: '',
@@ -122,10 +135,84 @@ export default function ContactForm({
           isPrimary: false,
           status: 'ACTIVE',
           customerCompanyId: '',
+          imageUrl: '',
         })
+        setImagePreview(null)
       }
     }
   }, [contact, open, reset])
+
+  // Fotoğraf yükleme handler
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Dosya tipi kontrolü (sadece resim)
+    if (!file.type.startsWith('image/')) {
+      toast.error('Hata', 'Lütfen geçerli bir resim dosyası seçin')
+      return
+    }
+
+    // Dosya boyutu kontrolü (5MB max)
+    const maxSize = 5 * 1024 * 1024 // 5MB
+    if (file.size > maxSize) {
+      toast.error('Hata', 'Resim boyutu 5MB\'dan büyük olamaz')
+      return
+    }
+
+    setUploadingImage(true)
+    try {
+      // Önce preview göster
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+
+      // Supabase Storage'a yükle
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('entityType', 'Contact')
+      if (contact?.id) {
+        formData.append('entityId', contact.id)
+      }
+
+      const res = await fetch('/api/files/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        throw new Error(error.error || 'Fotoğraf yüklenemedi')
+      }
+
+      const { file: uploadedFile } = await res.json()
+      
+      // Form'a imageUrl'i set et
+      setValue('imageUrl', uploadedFile.url)
+      
+      toast.success('Başarılı', 'Fotoğraf başarıyla yüklendi')
+    } catch (error: any) {
+      console.error('Image upload error:', error)
+      toast.error('Hata', error?.message || 'Fotoğraf yüklenemedi')
+      setImagePreview(null)
+    } finally {
+      setUploadingImage(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  // Fotoğrafı kaldır
+  const handleRemoveImage = () => {
+    setImagePreview(null)
+    setValue('imageUrl', '')
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
 
   const isPrimary = watch('isPrimary')
   const status = watch('status')
@@ -232,6 +319,94 @@ export default function ContactForm({
               {errors.linkedin && (
                 <p className="text-red-500 text-sm mt-1">{errors.linkedin.message}</p>
               )}
+            </div>
+
+            {/* Profil Fotoğrafı */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium mb-2">Profil Fotoğrafı</label>
+              
+              {/* Fotoğraf Preview */}
+              {imagePreview && (
+                <div className="relative inline-block mb-2">
+                  <div className="relative w-32 h-32 rounded-full overflow-hidden border-2 border-gray-200">
+                    <Image
+                      src={imagePreview}
+                      alt="Profil fotoğrafı"
+                      fill
+                      className="object-cover"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                    onClick={handleRemoveImage}
+                    disabled={loading || uploadingImage}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
+
+              {/* Fotoğraf Yükleme Butonu */}
+              <div className="flex gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  disabled={loading || uploadingImage}
+                  className="hidden"
+                  id="contact-image-upload"
+                />
+                <label
+                  htmlFor="contact-image-upload"
+                  className={`flex items-center gap-2 px-4 py-2 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                    uploadingImage || loading
+                      ? 'border-gray-300 bg-gray-50 cursor-not-allowed'
+                      : 'border-indigo-300 hover:border-indigo-500 hover:bg-indigo-50'
+                  }`}
+                >
+                  {uploadingImage ? (
+                    <>
+                      <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full" />
+                      <span className="text-sm text-gray-600">Yükleniyor...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 text-indigo-600" />
+                      <span className="text-sm text-indigo-600">
+                        {imagePreview ? 'Fotoğrafı Değiştir' : 'Fotoğraf Yükle'}
+                      </span>
+                    </>
+                  )}
+                </label>
+              </div>
+
+              {/* Manuel URL Girişi (Opsiyonel) */}
+              <div className="mt-2">
+                <Input
+                  type="url"
+                  {...register('imageUrl')}
+                  placeholder="Veya resim URL'si girin (https://example.com/image.jpg)"
+                  disabled={loading || uploadingImage}
+                  onChange={(e) => {
+                    setValue('imageUrl', e.target.value)
+                    if (e.target.value) {
+                      setImagePreview(e.target.value)
+                    } else {
+                      setImagePreview(null)
+                    }
+                  }}
+                />
+                {errors.imageUrl && (
+                  <p className="text-sm text-red-600 mt-1">{errors.imageUrl.message}</p>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Maksimum dosya boyutu: 5MB. Desteklenen formatlar: JPG, PNG, GIF, WebP
+                </p>
+              </div>
             </div>
           </div>
 

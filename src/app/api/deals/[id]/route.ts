@@ -228,18 +228,10 @@ export async function PUT(
     if (body.title !== undefined) updateData.title = body.title
     if (body.stage !== undefined) {
       updateData.stage = body.stage
-      // ✅ ÇÖZÜM: Stage değiştiğinde status'u otomatik güncelle
-      // WON veya LOST → CLOSED, diğerleri → OPEN
-      if (body.stage === 'WON' || body.stage === 'LOST') {
-        updateData.status = 'CLOSED'
-      } else {
-        updateData.status = 'OPEN'
-      }
+      // NOT: Status kolonu opsiyonel - kolon yoksa hata vermemesi için status'u updateData'ya ekleme
+      // Status kolonu varsa ayrı bir update ile güncellenecek (aşağıda)
     }
-    // Status kolonu güncelle (eğer stage değişmemişse)
-    if (body.status !== undefined && body.stage === undefined) {
-      updateData.status = body.status
-    }
+    // NOT: Status kolonu güncelleme kaldırıldı - kolon yoksa hata vermemesi için
     if (body.value !== undefined) updateData.value = typeof body.value === 'string' ? parseFloat(body.value) || 0 : (body.value || 0)
     if (body.customerId !== undefined) updateData.customerId = body.customerId || null
     // lostReason: LOST stage'inde gönderilirse ekle (kolon yoksa hata vermemesi için try-catch ile)
@@ -271,58 +263,24 @@ export async function PUT(
     let error: any = null
     
     // Status kolonunu updateData'dan ayır (kolon yoksa hata vermemesi için)
-    const { status: statusValue, ...updateDataWithoutStatus } = updateData
+    // NOT: Status kolonu hiç eklenmediği için ayırma işlemi gerekmiyor
+    const updateDataFinal = { ...updateData }
+    delete updateDataFinal.status // Status kolonunu kaldır (yoksa hata vermemesi için)
     
-    // Önce status olmadan update yap
+    // Update yap
     let retryQuery = supabase
       .from('Deal')
-      .update(updateDataWithoutStatus)
+      .update(updateDataFinal)
       .eq('id', id)
     
     if (!isSuperAdmin) {
       retryQuery = retryQuery.eq('companyId', companyId)
     }
     
-    // Status olmadan update yap ve select et
+    // Update yap ve select et
     const retryResult = await retryQuery.select('id, title, stage, value, customerId, companyId, updatedAt').single()
     error = retryResult.error
     updatedDealData = retryResult.data
-    
-    // Eğer status kolonu varsa ve statusValue varsa, status'u ayrı bir update ile güncelle
-    if (!error && statusValue !== undefined) {
-      // Status kolonunu kontrol et - önce status ile select deneyelim
-      const statusCheckQuery = supabase
-        .from('Deal')
-        .select('id, status')
-        .eq('id', id)
-        .limit(1)
-      
-      if (!isSuperAdmin) {
-        statusCheckQuery.eq('companyId', companyId)
-      }
-      
-      const statusCheckResult = await statusCheckQuery.single()
-      
-      // Eğer status kolonu varsa (hata yoksa), status'u güncelle
-      if (!statusCheckResult.error) {
-        const statusUpdateQuery = supabase
-          .from('Deal')
-          .update({ status: statusValue })
-          .eq('id', id)
-        
-        if (!isSuperAdmin) {
-          statusUpdateQuery.eq('companyId', companyId)
-        }
-        
-        // Status update'i yap (select yapmadan)
-        await statusUpdateQuery
-        
-        // updatedDealData'ya status'u ekle
-        if (updatedDealData) {
-          updatedDealData.status = statusValue
-        }
-      }
-    }
     
     // Eğer hala hata varsa ve status kolonu hatası değilse, hatayı döndür
     if (error && !(error.message?.includes('status') || (error.message?.includes('column') && error.message?.includes('does not exist')))) {
@@ -468,8 +426,11 @@ export async function PUT(
     // Otomasyon bilgilerini sakla (response'a eklemek için)
     const automationInfo: any = {}
     
-    // ÖNEMLİ: Deal WON olduğunda otomatik Quote oluştur
+    // ÖNEMLİ: Deal WON olduğunda otomatik Quote ve Contract oluştur
     if (body.stage === 'WON' && (existingDeal as any)?.stage !== 'WON') {
+      let newQuote: any = null
+      let newContract: any = null
+      
       try {
         const dealTitle = body.title || (existingDeal as any)?.title || 'Fırsat'
         const dealValue = body.value !== undefined ? body.value : ((existingDeal as any)?.value || 0)
@@ -496,7 +457,7 @@ export async function PUT(
         // Quote oluştur
         // ÖNEMLİ: customerCompanyId kolonu Quote tablosunda olmayabilir, kullanma
         // @ts-ignore - Supabase type inference issue with dynamic table names
-        const { data: newQuote, error: quoteError } = await (supabase.from('Quote') as any)
+        const { data: quoteData, error: quoteError } = await (supabase.from('Quote') as any)
           .insert([
             {
               title: quoteTitle,
@@ -513,7 +474,8 @@ export async function PUT(
           .select()
           .single()
         
-        if (!quoteError && newQuote) {
+        if (!quoteError && quoteData) {
+          newQuote = quoteData
           // Otomasyon bilgilerini sakla
           automationInfo.quoteId = (newQuote as any).id
           automationInfo.quoteCreated = true
@@ -548,10 +510,122 @@ export async function PUT(
             relatedTo: 'Quote',
             relatedId: (newQuote as any).id,
           })
-        } else if (process.env.NODE_ENV !== 'production') {
+        } else if (process.env.NODE_ENV === 'development') {
           console.error('Deal WON → Quote creation error:', quoteError)
-        } else if (newQuote) {
-          // ✅ Email otomasyonu: Deal WON → Müşteriye email gönder
+        }
+        
+        // ✅ Otomatik Contract oluştur (Deal WON olduğunda)
+        // Zaten Contract var mı kontrol et (idempotent - tekrar oluşturma)
+        const { data: existingContract } = await supabase
+          .from('Contract')
+          .select('id, contractNumber')
+          .eq('dealId', id)
+          .eq('companyId', session.user.companyId)
+          .limit(1)
+          .maybeSingle()
+        
+        if (!existingContract) {
+          // Contract number oluştur
+          const contractYear = new Date().getFullYear()
+          const { data: lastContract } = await supabase
+            .from('Contract')
+            .select('contractNumber')
+            .eq('companyId', session.user.companyId)
+            .order('createdAt', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          
+          let nextNum = 1
+          if (lastContract?.contractNumber) {
+            const match = lastContract.contractNumber.match(/SOZL-\d{4}-(\d+)/)
+            if (match) {
+              nextNum = parseInt(match[1]) + 1
+            }
+          }
+          
+          const contractNumber = `SOZL-${contractYear}-${String(nextNum).padStart(4, '0')}`
+          const contractTitle = `Sözleşme - ${dealTitle}`
+          
+          // Calculate totalValue (KDV dahil)
+          const taxRate = 18
+          const totalValue = dealValue + (dealValue * taxRate / 100)
+          
+          // Contract oluştur
+          // @ts-ignore - Supabase type inference issue with dynamic table names
+          const { data: contractData, error: contractError } = await (supabase.from('Contract') as any)
+            .insert([
+              {
+                contractNumber,
+                title: contractTitle,
+                description: `Deal ${dealTitle} kazanıldı, otomatik oluşturuldu`,
+                customerId: dealCustomerId,
+                dealId: id,
+                type: 'SERVICE',
+                startDate: new Date().toISOString().split('T')[0],
+                endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 1 yıl sonra
+                value: dealValue,
+                currency: 'TRY',
+                taxRate: taxRate,
+                totalValue: totalValue,
+                status: 'DRAFT',
+                notes: `Deal ${dealTitle} kazanıldı, otomatik oluşturuldu`,
+                companyId: session.user.companyId,
+              },
+            ])
+            .select()
+            .single()
+          
+          if (!contractError && contractData) {
+            newContract = contractData
+            // Otomasyon bilgilerini sakla
+            automationInfo.contractId = (newContract as any).id
+            automationInfo.contractCreated = true
+            automationInfo.contractNumber = contractNumber
+            automationInfo.contractTitle = contractTitle
+            
+            // ActivityLog: Otomatik Contract oluşturuldu
+            // @ts-ignore - Supabase type inference issue with dynamic table names
+            await (supabase.from('ActivityLog') as any).insert([
+              {
+                entity: 'Contract',
+                action: 'CREATE',
+                description: `Fırsat kazanıldığı için otomatik sözleşme oluşturuldu: ${contractNumber}`,
+                meta: { 
+                  entity: 'Contract', 
+                  action: 'auto_created_from_deal', 
+                  contractId: (newContract as any).id,
+                  contractNumber,
+                  dealId: id,
+                  dealTitle,
+                },
+                userId: session.user.id,
+                companyId: session.user.companyId,
+              },
+            ])
+            
+            // Bildirim: Otomatik Contract oluşturuldu
+            const { createNotificationForRole } = await import('@/lib/notification-helper')
+            await createNotificationForRole({
+              companyId: session.user.companyId,
+              role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+              title: 'Otomatik Sözleşme Oluşturuldu',
+              message: `${dealTitle} fırsatı kazanıldı. Otomatik olarak ${contractNumber} sözleşmesi oluşturuldu.`,
+              type: 'success',
+              relatedTo: 'Contract',
+              relatedId: (newContract as any).id,
+            })
+          } else if (process.env.NODE_ENV === 'development') {
+            console.error('Deal WON → Contract creation error:', contractError)
+          }
+        } else {
+          // Contract zaten var - otomasyon bilgilerini güncelle
+          automationInfo.contractId = existingContract.id
+          automationInfo.contractCreated = true
+          automationInfo.contractNumber = existingContract.contractNumber
+        }
+        
+        // ✅ Email otomasyonu: Deal WON → Müşteriye email gönder
+        if (newQuote) {
           try {
             const { getAndRenderEmailTemplate, getTemplateVariables } = await import('@/lib/template-renderer')
             const { sendEmail } = await import('@/lib/email-service')
@@ -594,10 +668,10 @@ export async function PUT(
             }
           }
         }
-      } catch (autoQuoteError) {
-        // Otomatik Quote oluşturma hatası ana işlemi engellemez
+      } catch (autoError) {
+        // Otomatik işlemler hatası ana işlemi engellemez
         if (process.env.NODE_ENV === 'development') {
-          console.error('Deal WON → Auto Quote error:', autoQuoteError)
+          console.error('Deal WON → Auto Quote/Contract error:', autoError)
         }
       }
     }

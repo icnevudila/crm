@@ -650,3 +650,5 @@ COMMENT ON FUNCTION handle_approval_approved_automations IS 'Onay talebi onaylan
 
 
 
+
+

@@ -53,6 +53,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import QuickFilters from '@/components/filters/QuickFilters'
+import FilterChips from '@/components/filters/FilterChips'
 
 // Lazy load CustomerForm - performans için
 const CustomerForm = dynamic(() => import('./CustomerForm'), {
@@ -143,6 +145,49 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
   const [city, setCity] = useState(cityFromUrl)
   const [customerCompanyId, setCustomerCompanyId] = useState('') // Müşteri firması filtresi
   const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin için firma filtresi
+
+  // Mevcut filtreleri obje olarak topla
+  const currentFilters = useMemo(() => {
+    const filters: Record<string, any> = {}
+    if (status) filters.status = status
+    if (sector) filters.sector = sector
+    if (city) filters.city = city
+    if (customerCompanyId) filters.customerCompanyId = customerCompanyId
+    if (isSuperAdmin && filterCompanyId) filters.filterCompanyId = filterCompanyId
+    return filters
+  }, [status, sector, city, customerCompanyId, isSuperAdmin, filterCompanyId])
+
+  // Filtre değişikliği handler'ı
+  const handleFilterChange = useCallback((newFilters: Record<string, any>) => {
+    setStatus(newFilters.status || '')
+    setSector(newFilters.sector || '')
+    setCity(newFilters.city || '')
+    setCustomerCompanyId(newFilters.customerCompanyId || '')
+    if (isSuperAdmin) {
+      setFilterCompanyId(newFilters.filterCompanyId || '')
+    }
+    setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+  }, [isSuperAdmin])
+
+  // Filtre kaldır
+  const handleRemoveFilter = useCallback((key: string) => {
+    if (key === 'status') setStatus('')
+    else if (key === 'sector') setSector('')
+    else if (key === 'city') setCity('')
+    else if (key === 'customerCompanyId') setCustomerCompanyId('')
+    else if (key === 'filterCompanyId') setFilterCompanyId('')
+    setCurrentPage(1)
+  }, [])
+
+  // Tüm filtreleri temizle
+  const handleClearAllFilters = useCallback(() => {
+    setStatus('')
+    setSector('')
+    setCity('')
+    setCustomerCompanyId('')
+    setFilterCompanyId('')
+    setCurrentPage(1)
+  }, [])
   
   // SuperAdmin için firmaları çek
   const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
@@ -611,6 +656,30 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
             {t('newCustomer')}
           </Button>
         </div>
+      </div>
+
+      {/* Quick Filters & Filter Chips */}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <QuickFilters
+            module="customers"
+            currentFilters={currentFilters}
+            onFilterChange={handleFilterChange}
+            quickFilterOptions={[]}
+          />
+        </div>
+        <FilterChips
+          filters={currentFilters}
+          onRemove={handleRemoveFilter}
+          onClearAll={handleClearAllFilters}
+          labels={{
+            status: t('status'),
+            sector: t('sector'),
+            city: t('city'),
+            customerCompanyId: t('customerCompany'),
+            filterCompanyId: t('company'),
+          }}
+        />
       </div>
 
       {/* Filters */}

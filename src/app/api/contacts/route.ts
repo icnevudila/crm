@@ -131,7 +131,8 @@ export async function GET(request: Request) {
         isPrimary,
         linkedin,
         notes,
-        status, 
+        status,
+        imageUrl,
         createdAt,
         customerCompanyId,
         CustomerCompany (
@@ -264,6 +265,7 @@ export async function POST(request: Request) {
     if (body.linkedin) contactData.linkedin = body.linkedin.trim()
     if (body.notes) contactData.notes = body.notes
     if (body.customerCompanyId) contactData.customerCompanyId = body.customerCompanyId
+    if (body.imageUrl) contactData.imageUrl = body.imageUrl.trim()
 
     const supabase = getSupabaseWithServiceRole()
     const { data: created, error: insertError } = await supabase

@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/accordion'
 import { useData } from '@/hooks/useData'
 import type { DashboardSpotlightResponse } from '@/types/dashboard'
+import ErrorBoundary from '@/components/ErrorBoundary'
 
 const SectionSkeleton = () => (
   <div className="h-48 animate-pulse rounded-2xl border border-dashed border-slate-200 bg-slate-100/60" />
@@ -42,6 +43,14 @@ const SmartReminder = dynamic(
     loading: () => (
       <div className="h-32 animate-pulse rounded-3xl bg-slate-100/70" />
     ),
+  }
+)
+
+const NextBestAction = dynamic(
+  () => import('@/components/suggestions/NextBestAction'),
+  {
+    ssr: false,
+    loading: () => null,
   }
 )
 
@@ -207,6 +216,9 @@ export default function DashboardPage() {
 
         <DashboardSpotlight />
 
+        {/* Next Best Action - Akıllı Öneriler */}
+        <NextBestAction />
+
         <Accordion
           type="multiple"
           value={openSections}
@@ -251,7 +263,15 @@ export default function DashboardPage() {
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="px-3 sm:px-4 pb-4 sm:pb-6 pt-0 md:px-6">
-                    <Component isOpen={isOpen} />
+                    <ErrorBoundary
+                      fallback={
+                        <div className="p-4 text-center text-sm text-gray-500">
+                          Bu bölüm yüklenirken bir hata oluştu. Lütfen sayfayı yenileyin.
+                        </div>
+                      }
+                    >
+                      <Component isOpen={isOpen} />
+                    </ErrorBoundary>
                   </AccordionContent>
                 </AccordionItem>
               )
