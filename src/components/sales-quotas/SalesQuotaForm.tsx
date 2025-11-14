@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { toast } from '@/lib/toast'
 
 const quotaSchema = z.object({
   userId: z.string().min(1, 'Kullanıcı seçmelisiniz'),
@@ -105,6 +106,14 @@ export default function SalesQuotaForm({
       }
 
       const savedQuota = await res.json()
+
+      // Success toast göster
+      const user = users.find(u => u.id === data.userId)
+      const userName = user?.name || 'Kullanıcı'
+      toast.success(
+        quota ? 'Satış kotası güncellendi' : 'Satış kotası kaydedildi',
+        quota ? `${userName} için kota başarıyla güncellendi.` : `${userName} için kota başarıyla eklendi.`
+      )
 
       if (onSuccess) {
         onSuccess(savedQuota)

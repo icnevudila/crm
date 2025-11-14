@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { toast, handleApiError } from '@/lib/toast'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -10,6 +10,9 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { handleFormValidationErrors } from '@/lib/form-validation'
+import Image from 'next/image'
+import { Upload, X, Image as ImageIcon } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -81,6 +84,9 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
   const router = useRouter()
   const queryClient = useQueryClient()
   const [loading, setLoading] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: vendors = [] } = useQuery({
     queryKey: ['vendors'],
@@ -103,6 +109,8 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
     )
   ).sort() as string[]
 
+  const formRef = useRef<HTMLFormElement>(null)
+  
   const {
     register,
     handleSubmit,
@@ -153,6 +161,8 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
           weight: product.weight || 0,
           dimensions: product.dimensions || '',
         })
+        // Fotoğraf preview'ını ayarla
+        setImagePreview(product.imageUrl || null)
       } else {
         // Yeni kayıt modu - form'u temizle
         reset({
@@ -172,9 +182,82 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
           weight: 0,
           dimensions: '',
         })
+        setImagePreview(null)
       }
     }
   }, [product, open, reset])
+
+  // Fotoğraf yükleme handler
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Dosya tipi kontrolü (sadece resim)
+    if (!file.type.startsWith('image/')) {
+      toast.error('Hata', 'Lütfen geçerli bir resim dosyası seçin')
+      return
+    }
+
+    // Dosya boyutu kontrolü (5MB max)
+    const maxSize = 5 * 1024 * 1024 // 5MB
+    if (file.size > maxSize) {
+      toast.error('Hata', 'Resim boyutu 5MB\'dan büyük olamaz')
+      return
+    }
+
+    setUploadingImage(true)
+    try {
+      // Önce preview göster
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+
+      // Supabase Storage'a yükle
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('entityType', 'Product')
+      if (product?.id) {
+        formData.append('entityId', product.id)
+      }
+
+      const res = await fetch('/api/files/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        throw new Error(error.error || 'Fotoğraf yüklenemedi')
+      }
+
+      const { file: uploadedFile } = await res.json()
+      
+      // Form'a imageUrl'i set et
+      setValue('imageUrl', uploadedFile.url)
+      
+      toast.success('Başarılı', 'Fotoğraf başarıyla yüklendi')
+    } catch (error: any) {
+      console.error('Image upload error:', error)
+      toast.error('Hata', error?.message || 'Fotoğraf yüklenemedi')
+      setImagePreview(null)
+    } finally {
+      setUploadingImage(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+    }
+  }
+
+  // Fotoğrafı kaldır
+  const handleRemoveImage = () => {
+    setImagePreview(null)
+    setValue('imageUrl', '')
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
 
   const mutation = useMutation({
     mutationFn: async (data: ProductFormData) => {
@@ -195,6 +278,12 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
       return res.json()
     },
     onSuccess: (result) => {
+      // Success toast göster
+      toast.success(
+        product ? 'Ürün güncellendi' : 'Ürün kaydedildi',
+        product ? `${result.name} başarıyla güncellendi.` : `${result.name} başarıyla eklendi.`
+      )
+      
       // Parent component'e callback gönder - optimistic update için
       if (onSuccess) {
         onSuccess(result)
@@ -203,6 +292,11 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
       onClose()
     },
   })
+
+  const onError = (errors: any) => {
+    // Form validation hatalarını göster ve scroll yap
+    handleFormValidationErrors(errors, formRef)
+  }
 
   const onSubmit = async (data: ProductFormData) => {
     setLoading(true)
@@ -228,7 +322,7 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form ref={formRef} onSubmit={handleSubmit(onSubmit, onError)} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Name */}
             <div className="space-y-2 md:col-span-2">
@@ -449,18 +543,92 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
               />
             </div>
 
-            {/* Image URL */}
+            {/* Image Upload */}
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">Resim URL</label>
-              <Input
-                type="url"
-                {...register('imageUrl')}
-                placeholder="https://example.com/image.jpg"
-                disabled={loading}
-              />
-              {errors.imageUrl && (
-                <p className="text-sm text-red-600">{errors.imageUrl.message}</p>
+              <label className="text-sm font-medium">Ürün Fotoğrafı</label>
+              
+              {/* Fotoğraf Preview */}
+              {imagePreview && (
+                <div className="relative inline-block mb-2">
+                  <div className="relative w-32 h-32 rounded-lg overflow-hidden border-2 border-gray-200">
+                    <Image
+                      src={imagePreview}
+                      alt="Ürün fotoğrafı"
+                      fill
+                      className="object-cover"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute -top-2 -right-2 h-6 w-6 rounded-full"
+                    onClick={handleRemoveImage}
+                    disabled={loading || uploadingImage}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
               )}
+
+              {/* Fotoğraf Yükleme Butonu */}
+              <div className="flex gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  disabled={loading || uploadingImage}
+                  className="hidden"
+                  id="product-image-upload"
+                />
+                <label
+                  htmlFor="product-image-upload"
+                  className={`flex items-center gap-2 px-4 py-2 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                    uploadingImage || loading
+                      ? 'border-gray-300 bg-gray-50 cursor-not-allowed'
+                      : 'border-indigo-300 hover:border-indigo-500 hover:bg-indigo-50'
+                  }`}
+                >
+                  {uploadingImage ? (
+                    <>
+                      <div className="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full" />
+                      <span className="text-sm text-gray-600">Yükleniyor...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 text-indigo-600" />
+                      <span className="text-sm text-indigo-600">
+                        {imagePreview ? 'Fotoğrafı Değiştir' : 'Fotoğraf Yükle'}
+                      </span>
+                    </>
+                  )}
+                </label>
+              </div>
+
+              {/* Manuel URL Girişi (Opsiyonel) */}
+              <div className="mt-2">
+                <Input
+                  type="url"
+                  {...register('imageUrl')}
+                  placeholder="Veya resim URL'si girin (https://example.com/image.jpg)"
+                  disabled={loading || uploadingImage}
+                  onChange={(e) => {
+                    setValue('imageUrl', e.target.value)
+                    if (e.target.value) {
+                      setImagePreview(e.target.value)
+                    } else {
+                      setImagePreview(null)
+                    }
+                  }}
+                />
+                {errors.imageUrl && (
+                  <p className="text-sm text-red-600 mt-1">{errors.imageUrl.message}</p>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Maksimum dosya boyutu: 5MB. Desteklenen formatlar: JPG, PNG, GIF, WebP
+                </p>
+              </div>
             </div>
 
             {/* Description */}
@@ -476,18 +644,19 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
           </div>
 
           {/* Buttons */}
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
               disabled={loading}
+              className="w-full sm:w-auto"
             >
               İptal
             </Button>
             <Button
               type="submit"
-              className="bg-gradient-primary text-white"
+              className="bg-gradient-primary text-white w-full sm:w-auto"
               disabled={loading}
             >
               {loading ? 'Kaydediliyor...' : product ? 'Güncelle' : 'Kaydet'}

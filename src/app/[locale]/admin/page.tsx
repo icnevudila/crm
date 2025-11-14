@@ -323,22 +323,22 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-            <Shield className="h-8 w-8 text-indigo-600" />
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-2">
+            <Shield className="h-6 w-6 sm:h-8 sm:w-8 text-indigo-600" />
             Admin Paneli
           </h1>
-          <p className="mt-2 text-gray-600">
+          <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600">
             Kurum içi kullanıcı yetkilerini detaylı yönetin
           </p>
         </div>
       </div>
 
       <Tabs defaultValue="metrics" className="space-y-4">
-        <TabsList>
+        <TabsList className="w-full sm:w-auto flex-wrap">
           <TabsTrigger value="metrics">
             <Settings className="h-4 w-4 mr-2" />
             Metrikler
@@ -370,7 +370,7 @@ export default function AdminPage() {
                   ))}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                   <Card className="p-6 bg-gradient-to-br from-primary-50 to-primary-100">
                     <div className="flex items-center justify-between mb-4">
                       <div className="p-3 bg-primary-600 rounded-lg">
@@ -452,12 +452,12 @@ export default function AdminPage() {
         <TabsContent value="users" className="space-y-4">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
                 <div>
-                  <CardTitle>
+                  <CardTitle className="text-lg sm:text-xl">
                     {isSuperAdmin ? 'Tüm Kurumların Kullanıcıları' : 'Kurum İçi Kullanıcılar'}
                   </CardTitle>
-                  <CardDescription>
+                  <CardDescription className="text-xs sm:text-sm">
                     {isSuperAdmin 
                       ? 'Tüm kurumların kullanıcılarını görüntüleyin ve yönetin'
                       : 'Şirketinizdeki tüm kullanıcıları görüntüleyin ve yönetin'}
@@ -469,7 +469,7 @@ export default function AdminPage() {
                       setEditingUser(null)
                       setFormOpen(true)
                     }}
-                    className="bg-gradient-primary text-white"
+                    className="bg-gradient-primary text-white w-full sm:w-auto"
                   >
                     <Plus className="mr-2 h-4 w-4" />
                     Yeni Kullanıcı
@@ -703,16 +703,17 @@ export default function AdminPage() {
               ) : (
                 <div className="space-y-6">
                   {/* Seçili Kullanıcı Bilgisi */}
-                  <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200">
-                    <div className="flex items-center justify-between">
+                  <div className="bg-indigo-50 p-3 sm:p-4 rounded-lg border border-indigo-200">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
                       <div>
-                        <h3 className="font-semibold text-indigo-900">{selectedUser.name}</h3>
-                        <p className="text-sm text-indigo-700">{selectedUser.email}</p>
+                        <h3 className="text-sm sm:text-base font-semibold text-indigo-900">{selectedUser.name}</h3>
+                        <p className="text-xs sm:text-sm text-indigo-700">{selectedUser.email}</p>
                       </div>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => setSelectedUser(null)}
+                        className="w-full sm:w-auto"
                       >
                         Kapat
                       </Button>
@@ -942,7 +943,7 @@ export default function AdminPage() {
                   )}
 
                   {/* Kaydet Butonu */}
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-col sm:flex-row sm:justify-end gap-2">
                     <Button 
                       variant="outline" 
                       onClick={() => {
@@ -950,12 +951,13 @@ export default function AdminPage() {
                         setError(null)
                       }}
                       disabled={saving}
+                      className="w-full sm:w-auto"
                     >
                       İptal
                     </Button>
                     <Button 
                       onClick={handleSavePermissions} 
-                      className="bg-gradient-primary"
+                      className="bg-gradient-primary w-full sm:w-auto"
                       disabled={saving}
                     >
                       {saving ? (

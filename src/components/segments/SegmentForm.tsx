@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { toast } from '@/lib/toast'
 
 const segmentSchema = z.object({
   name: z.string().min(1, 'Segment adı gereklidir'),
@@ -82,12 +83,20 @@ export default function SegmentForm({ segment, open, onClose, onSuccess }: Segme
       if (!res.ok) throw new Error('Save failed')
 
       const saved = await res.json()
+      
+      // Success toast göster
+      toast.success(
+        segment ? 'Segment güncellendi' : 'Segment kaydedildi',
+        segment ? `${data.name} başarıyla güncellendi.` : `${data.name} başarıyla eklendi.`
+      )
+      
       if (onSuccess) onSuccess(saved)
 
       reset()
       onClose()
-    } catch (error) {
-      toast.warning('Kaydedilemedi')
+    } catch (error: any) {
+      console.error('Error:', error)
+      toast.error('Kaydedilemedi', error?.message || 'Segment kaydetme işlemi başarısız oldu.')
     } finally {
       setLoading(false)
     }

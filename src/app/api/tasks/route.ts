@@ -193,15 +193,15 @@ export async function POST(request: Request) {
     )
 
     // Eğer görev bir kullanıcıya atandıysa bildirim gönder
-    if (body.assignedTo && body.assignedTo !== session.user.id) {
+    // SuperAdmin kendi işlemlerini görmek için bildirim alabilir
+    if (body.assignedTo) {
       try {
-        await notifyTaskAssignment(
-          body.assignedTo,
-          session.user.companyId,
-          (data as any).id,
-          body.title,
-          session.user.name || 'Sistem'
-        )
+        await notifyTaskAssignment({
+          userId: body.assignedTo,
+          companyId: session.user.companyId,
+          taskId: (data as any).id,
+          taskTitle: body.title,
+        })
       } catch (notifError) {
         // Bildirim hatası ana işlemi engellemez
         if (process.env.NODE_ENV === 'development') {

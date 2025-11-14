@@ -5,9 +5,9 @@ import { getSupabaseWithServiceRole } from '@/lib/supabase'
 export const dynamic = 'force-dynamic'
 
 // ENTERPRISE: Teklif analizi - gerçekleşen/bekleyen, başarı oranı, red nedeni
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const { session, error: sessionError } = await getSafeSession()
+    const { session, error: sessionError } = await getSafeSession(request)
     if (sessionError) {
       return sessionError
     }

@@ -111,6 +111,12 @@ export default function EmailCampaignForm({
 
       const savedCampaign = await res.json()
 
+      // Success toast göster
+      toast.success(
+        campaign ? 'Email kampanyası güncellendi' : 'Email kampanyası kaydedildi',
+        campaign ? `${data.name} başarıyla güncellendi.` : `${data.name} başarıyla eklendi.`
+      )
+
       if (onSuccess) {
         onSuccess(savedCampaign)
       }

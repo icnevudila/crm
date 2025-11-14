@@ -94,6 +94,8 @@ export default function ContractForm({
   const { data: companiesData } = useData<any[]>('/api/customer-companies')
   const customerCompanies = companiesData || []
 
+  const formRef = useRef<HTMLFormElement>(null)
+  
   const { register, handleSubmit, formState: { errors }, reset, setValue, watch } = useForm<ContractFormData>({
     resolver: zodResolver(contractSchema),
     defaultValues: {
@@ -185,6 +187,11 @@ export default function ContractForm({
     }
   }, [contract, open, reset])
 
+  const onError = (errors: any) => {
+    // Form validation hatalarını göster ve scroll yap
+    handleFormValidationErrors(errors, formRef)
+  }
+
   const onSubmit = async (data: ContractFormData) => {
     setLoading(true)
     try {
@@ -273,7 +280,7 @@ export default function ContractForm({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+        <form ref={formRef} onSubmit={handleSubmit(onSubmit, onError)} className="space-y-6">
           {/* Temel Bilgiler */}
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">

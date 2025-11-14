@@ -486,6 +486,7 @@
     "vendor": "Tedarikçi"
   },
   "status": {
+    "status": "Durum",
     "draft": "Taslak",
     "sent": "Gönderildi",
     "accepted": "Kabul Edildi",

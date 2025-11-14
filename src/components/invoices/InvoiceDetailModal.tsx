@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { Edit, Trash2, FileText, Phone, Mail, AlertTriangle, Package, Truck } from 'lucide-react'
+import { Edit, Trash2, FileText, Phone, Mail, AlertTriangle, Package, Truck, Download } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +21,8 @@ import DetailModal from '@/components/ui/DetailModal'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import dynamic from 'next/dynamic'
+import jsPDF from 'jspdf'
+import { formatCurrency, formatDate, encodeTurkish, PDFStyles, drawHeader, drawTitle, drawSectionBox, drawFooter, drawSignatureArea } from '@/lib/pdf-utils'
 import {
   Table,
   TableBody,
@@ -89,6 +91,285 @@ export default function InvoiceDetailModal({
   )
 
   const displayInvoice = invoice || initialData
+
+  // Client-side PDF generation - jsPDF ile (Türkiye Fatura Mevzuatına Uygun)
+  const handleDownloadPDF = () => {
+    if (!displayInvoice) {
+      toast.error('PDF oluşturulamadı', 'Fatura verisi bulunamadı')
+      return
+    }
+
+    try {
+      const doc = new jsPDF()
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
+      let yPos = 25
+
+      // Header - Üst çizgi
+      doc.setDrawColor(...PDFStyles.colors.primary)
+      doc.setLineWidth(2)
+      doc.line(PDFStyles.spacing.margin, 18, pageWidth - PDFStyles.spacing.margin, 18)
+
+      // İki sütunlu header: Satıcı (sol) ve Alıcı (sağ)
+      // Satıcı Bilgileri (Sol)
+      doc.setFontSize(20)
+      doc.setTextColor(...PDFStyles.colors.primary)
+      doc.setFont('helvetica', 'bold')
+      doc.text(encodeTurkish(displayInvoice.Company?.name || 'Şirket Adı'), PDFStyles.spacing.margin, yPos)
+      yPos += 8
+
+      doc.setFontSize(PDFStyles.fonts.small)
+      doc.setTextColor(...PDFStyles.colors.gray)
+      doc.setFont('helvetica', 'normal')
+      const companyInfo = []
+      if (displayInvoice.Company?.taxNumber) companyInfo.push(`VKN: ${displayInvoice.Company.taxNumber}`)
+      if (displayInvoice.Company?.address) companyInfo.push(encodeTurkish(displayInvoice.Company.address))
+      if (displayInvoice.Company?.city) companyInfo.push(encodeTurkish(displayInvoice.Company.city))
+      if (displayInvoice.Company?.phone) companyInfo.push(`Tel: ${displayInvoice.Company.phone}`)
+      if (displayInvoice.Company?.email) companyInfo.push(`E-posta: ${displayInvoice.Company.email}`)
+
+      companyInfo.forEach((info) => {
+        doc.text(info, PDFStyles.spacing.margin, yPos)
+        yPos += 4
+      })
+
+      // Alıcı Bilgileri (Sağ)
+      const customer = displayInvoice.Quote?.Deal?.Customer || displayInvoice.Customer
+      if (customer) {
+        let customerYPos = 25
+        doc.setFontSize(16)
+        doc.setTextColor(0, 0, 0)
+        doc.setFont('helvetica', 'bold')
+        const customerTitle = encodeTurkish('ALICI')
+        const customerTitleWidth = doc.getTextWidth(customerTitle)
+        doc.text(customerTitle, pageWidth - PDFStyles.spacing.margin - customerTitleWidth, customerYPos)
+        customerYPos += 8
+
+        doc.setFontSize(PDFStyles.fonts.small)
+        doc.setTextColor(...PDFStyles.colors.gray)
+        doc.setFont('helvetica', 'normal')
+        const customerInfo = []
+        if (customer.name) customerInfo.push(encodeTurkish(customer.name))
+        if (customer.CustomerCompany?.name) customerInfo.push(encodeTurkish(customer.CustomerCompany.name))
+        if (customer.taxNumber || customer.CustomerCompany?.taxNumber) {
+          customerInfo.push(`VKN/TCKN: ${customer.taxNumber || customer.CustomerCompany?.taxNumber}`)
+        }
+        if (customer.address || customer.CustomerCompany?.address) {
+          customerInfo.push(encodeTurkish(customer.address || customer.CustomerCompany?.address))
+        }
+        if (customer.city || customer.CustomerCompany?.city) {
+          customerInfo.push(encodeTurkish(customer.city || customer.CustomerCompany?.city))
+        }
+        if (customer.phone) customerInfo.push(`Tel: ${customer.phone}`)
+        if (customer.email) customerInfo.push(`E-posta: ${customer.email}`)
+
+        customerInfo.forEach((info) => {
+          const infoWidth = doc.getTextWidth(info)
+          doc.text(info, pageWidth - PDFStyles.spacing.margin - infoWidth, customerYPos)
+          customerYPos += 4
+        })
+      }
+
+      yPos += 15
+
+      // Başlık
+      yPos = drawTitle(doc, pageWidth, 'FATURA', yPos)
+
+      // Fatura Bilgileri
+      const invoiceInfo: Array<[string, string]> = [
+        ['Fatura No:', displayInvoice.invoiceNumber || displayInvoice.id?.substring(0, 8).toUpperCase() || ''],
+        ['Başlık:', encodeTurkish(displayInvoice.title || '')],
+        ['Tarih:', formatDate(displayInvoice.createdAt || '')],
+        ['Fatura Tipi:', encodeTurkish(displayInvoice.invoiceType === 'SALES' ? 'Satış Faturası' : displayInvoice.invoiceType === 'PURCHASE' ? 'Alış Faturası' : 'Genel')],
+        ['Durum:', encodeTurkish(statusLabels[displayInvoice.status] || displayInvoice.status || '')],
+      ]
+
+      if (displayInvoice.dueDate) {
+        invoiceInfo.push(['Vade Tarihi:', formatDate(displayInvoice.dueDate)])
+      }
+
+      yPos = drawSectionBox(doc, pageWidth, yPos, 'Fatura Bilgileri', invoiceInfo, 70)
+
+      // Ürün/Hizmet Listesi ve Toplamlar
+      if (yPos > pageHeight - 150) {
+        doc.addPage()
+        yPos = 25
+      }
+
+      const invoiceItems = displayInvoice.InvoiceItem || []
+      const totalAmount = displayInvoice.totalAmount || displayInvoice.total || 0
+      const taxRate = displayInvoice.taxRate || 18
+      const subtotal = totalAmount / (1 + taxRate / 100)
+      const kdv = totalAmount - subtotal
+      const total = totalAmount
+
+      // Ürün/Hizmet Tablosu
+      doc.setFillColor(...PDFStyles.colors.background)
+      const tableHeight = Math.min(60 + invoiceItems.length * 8, 100)
+      doc.roundedRect(
+        PDFStyles.spacing.margin,
+        yPos - 10,
+        pageWidth - PDFStyles.spacing.margin * 2,
+        tableHeight,
+        3,
+        3,
+        'FD'
+      )
+
+      doc.setFontSize(PDFStyles.fonts.subtitle)
+      doc.setTextColor(...PDFStyles.colors.primary)
+      doc.setFont('helvetica', 'bold')
+      doc.text(encodeTurkish('Ürün/Hizmet Detayları'), PDFStyles.spacing.margin + 5, yPos)
+      yPos += 12
+
+      // Tablo header
+      doc.setFontSize(PDFStyles.fonts.body)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(0, 0, 0)
+      doc.text(encodeTurkish('Açıklama'), PDFStyles.spacing.margin + 5, yPos)
+      doc.text(encodeTurkish('Miktar'), 100, yPos)
+      doc.text(encodeTurkish('Birim Fiyat'), 125, yPos)
+      doc.text(encodeTurkish('KDV %'), 150, yPos)
+      doc.text(encodeTurkish('Toplam'), 165, yPos)
+      yPos += 8
+
+      // Header alt çizgi
+      doc.setDrawColor(...PDFStyles.colors.border)
+      doc.line(PDFStyles.spacing.margin + 5, yPos - 3, pageWidth - PDFStyles.spacing.margin - 5, yPos - 3)
+      yPos += 5
+
+      // Ürün satırları
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      if (invoiceItems.length > 0) {
+        invoiceItems.forEach((item: any) => {
+          const itemDescription = encodeTurkish(item.description || item.product?.name || 'Ürün/Hizmet')
+          const itemQuantity = item.quantity || 1
+          const itemUnitPrice = item.unitPrice || item.total || 0
+          const itemTaxRate = item.taxRate || taxRate
+          const itemTotal = item.total || (itemUnitPrice * itemQuantity)
+
+          const descriptionLines = doc.splitTextToSize(itemDescription, 80)
+          descriptionLines.forEach((line: string, index: number) => {
+            doc.text(line, PDFStyles.spacing.margin + 5, yPos + (index * 4))
+          })
+          const maxLines = Math.max(1, descriptionLines.length)
+          doc.text(String(itemQuantity), 100, yPos)
+          doc.text(formatCurrency(itemUnitPrice), 125, yPos)
+          doc.text(`%${itemTaxRate}`, 150, yPos)
+          doc.text(formatCurrency(itemTotal), 165, yPos)
+          yPos += maxLines * 4 + 3
+        })
+      } else {
+        // Ürün yoksa tek satır göster
+        doc.text(encodeTurkish(displayInvoice.title || 'Fatura'), PDFStyles.spacing.margin + 5, yPos)
+        doc.text('1', 100, yPos)
+        doc.text(formatCurrency(subtotal), 125, yPos)
+        doc.text(`%${taxRate}`, 150, yPos)
+        doc.text(formatCurrency(subtotal), 165, yPos)
+        yPos += 7
+      }
+
+      yPos += 10
+
+      // Toplamlar
+      doc.setFontSize(PDFStyles.fonts.body)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...PDFStyles.colors.gray)
+      doc.text(encodeTurkish('Ara Toplam (KDV Hariç):'), 135, yPos)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(0, 0, 0)
+      doc.text(formatCurrency(subtotal), 165, yPos)
+      yPos += 7
+
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...PDFStyles.colors.gray)
+      doc.text(encodeTurkish(`KDV (%${taxRate}):`), 135, yPos)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(0, 0, 0)
+      doc.text(formatCurrency(kdv), 165, yPos)
+      yPos += 10
+
+      // Genel Toplam
+      doc.setDrawColor(...PDFStyles.colors.primary)
+      doc.line(135, yPos - 3, pageWidth - PDFStyles.spacing.margin - 5, yPos - 3)
+      yPos += 5
+      doc.setFontSize(PDFStyles.fonts.subtitle)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...PDFStyles.colors.primary)
+      doc.text(encodeTurkish('GENEL TOPLAM (KDV Dahil):'), 135, yPos)
+      doc.setFontSize(PDFStyles.fonts.title - 4)
+      doc.text(formatCurrency(total), 165, yPos)
+      yPos += 15
+
+      // Ödeme Bilgileri (varsa)
+      if (displayInvoice.paymentMethod || displayInvoice.paymentDate) {
+        if (yPos > pageHeight - 60) {
+          doc.addPage()
+          yPos = 25
+        }
+
+        const paymentInfo: Array<[string, string]> = []
+        if (displayInvoice.paymentMethod) {
+          paymentInfo.push(['Ödeme Yöntemi:', encodeTurkish(displayInvoice.paymentMethod)])
+        }
+        if (displayInvoice.paymentDate) {
+          paymentInfo.push(['Ödeme Tarihi:', formatDate(displayInvoice.paymentDate)])
+        }
+
+        if (paymentInfo.length > 0) {
+          yPos = drawSectionBox(doc, pageWidth, yPos, 'Ödeme Bilgileri', paymentInfo, 30)
+        }
+      }
+
+      // Notlar (varsa)
+      if (displayInvoice.notes) {
+        if (yPos > pageHeight - 60) {
+          doc.addPage()
+          yPos = 25
+        }
+
+        doc.setFontSize(PDFStyles.fonts.subtitle)
+        doc.setTextColor(...PDFStyles.colors.primary)
+        doc.setFont('helvetica', 'bold')
+        doc.text(encodeTurkish('Notlar'), PDFStyles.spacing.margin, yPos)
+        yPos += 8
+
+        doc.setFontSize(PDFStyles.fonts.body)
+        doc.setTextColor(0, 0, 0)
+        doc.setFont('helvetica', 'normal')
+        const notesLines = doc.splitTextToSize(encodeTurkish(displayInvoice.notes), pageWidth - 40)
+        notesLines.forEach((line: string) => {
+          doc.text(line, PDFStyles.spacing.margin, yPos)
+          yPos += 5
+        })
+
+        yPos += 10
+      }
+
+      // İmza Alanı
+      if (yPos > pageHeight - 55) {
+        doc.addPage()
+        yPos = pageHeight - 55
+      } else {
+        yPos = pageHeight - 55
+      }
+
+      drawSignatureArea(doc, pageWidth, yPos)
+
+      // Footer
+      const reportDate = formatDate(displayInvoice.createdAt || new Date().toISOString())
+      drawFooter(doc, pageWidth, pageHeight, reportDate)
+
+      // PDF'i indir
+      const fileName = `fatura-${displayInvoice.invoiceNumber || displayInvoice.id?.substring(0, 8) || 'rapor'}.pdf`
+      doc.save(fileName)
+      toast.success('PDF başarıyla indirildi')
+    } catch (error: any) {
+      console.error('PDF generation error:', error)
+      toast.error('PDF oluşturulamadı', error?.message || 'Beklenmeyen bir hata oluştu')
+    }
+  }
 
   const handleDelete = async () => {
     if (!displayInvoice || !confirm(`${displayInvoice.title} faturasını silmek istediğinize emin misiniz?`)) {
@@ -167,29 +448,27 @@ export default function InvoiceDetailModal({
       >
         <div className="space-y-6">
           {/* Header Actions */}
-          <div className="flex justify-end gap-2 pb-4 border-b">
+          <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pb-4 border-b">
             <Badge className={statusColors[displayInvoice?.status] || 'bg-gray-600 text-white border-gray-700'}>
               {statusLabels[displayInvoice?.status] || displayInvoice?.status}
             </Badge>
             {!isFromQuote && !isShipped && !isReceived && (
-              <Button variant="outline" onClick={() => setFormOpen(true)}>
+              <Button variant="outline" onClick={() => setFormOpen(true)} className="w-full sm:w-auto">
                 <Edit className="mr-2 h-4 w-4" />
                 Düzenle
               </Button>
             )}
             <Button
-              className="bg-gradient-primary text-white"
-              onClick={() => {
-                window.open(`/api/pdf/invoice/${invoiceId}`, '_blank')
-              }}
+              className="bg-gradient-primary text-white w-full sm:w-auto"
+              onClick={handleDownloadPDF}
             >
-              <FileText className="mr-2 h-4 w-4" />
+              <Download className="mr-2 h-4 w-4" />
               PDF İndir
             </Button>
             {!isFromQuote && !isShipped && !isReceived && displayInvoice?.status !== 'PAID' && (
               <Button
                 variant="outline"
-                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                className="text-red-600 hover:text-red-700 hover:bg-red-50 w-full sm:w-auto"
                 onClick={handleDelete}
                 disabled={deleteLoading}
               >

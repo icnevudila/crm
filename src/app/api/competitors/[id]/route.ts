@@ -72,10 +72,57 @@ export async function PUT(
     const body = await request.json()
     const { id } = await params
 
+    // ✅ ÇÖZÜM: strengths ve weaknesses JSON string ise parse et, TEXT[] formatına dönüştür
+    const updateData: any = { ...body }
+    
+    if (body.strengths !== undefined) {
+      if (typeof body.strengths === 'string') {
+        try {
+          updateData.strengths = JSON.parse(body.strengths)
+        } catch {
+          // JSON parse edilemezse direkt array olarak kullan
+          updateData.strengths = [body.strengths]
+        }
+      } else if (Array.isArray(body.strengths)) {
+        updateData.strengths = body.strengths
+      } else if (body.strengths === null) {
+        updateData.strengths = null
+      }
+    }
+    
+    if (body.weaknesses !== undefined) {
+      if (typeof body.weaknesses === 'string') {
+        try {
+          updateData.weaknesses = JSON.parse(body.weaknesses)
+        } catch {
+          // JSON parse edilemezse direkt array olarak kullan
+          updateData.weaknesses = [body.weaknesses]
+        }
+      } else if (Array.isArray(body.weaknesses)) {
+        updateData.weaknesses = body.weaknesses
+      } else if (body.weaknesses === null) {
+        updateData.weaknesses = null
+      }
+    }
+
+    // ✅ ÇÖZÜM: averagePrice undefined ise null gönder, 0 geçerli bir değer
+    if (body.averagePrice !== undefined) {
+      updateData.averagePrice = body.averagePrice !== null 
+        ? (isNaN(parseFloat(body.averagePrice)) ? null : parseFloat(body.averagePrice))
+        : null
+    }
+
+    // ✅ ÇÖZÜM: marketShare undefined ise null gönder, 0 geçerli bir değer
+    if (body.marketShare !== undefined) {
+      updateData.marketShare = body.marketShare !== null 
+        ? (isNaN(parseFloat(body.marketShare)) ? null : parseFloat(body.marketShare))
+        : null
+    }
+
     const supabase = getSupabaseWithServiceRole()
     const { data, error } = await supabase
       .from('Competitor')
-      .update(body)
+      .update(updateData)
       .eq('id', id)
       .eq('companyId', session.user.companyId)
       .select()

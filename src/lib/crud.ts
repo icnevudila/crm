@@ -29,10 +29,12 @@ export interface CrudOptions {
  */
 export async function getRecords(options: CrudOptions) {
   const session = await getServerSession()
-  if (!session?.user?.companyId) {
+  if (!session?.user) {
     throw new Error('Unauthorized')
   }
 
+  // SuperAdmin kontrolü
+  const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
   const companyId = session.user.companyId
 
   // Service role key ile RLS bypass (infinite recursion sorununu çözmek için)
@@ -53,8 +55,14 @@ export async function getRecords(options: CrudOptions) {
     .order(orderBy, { ascending: orderDirection === 'asc' })
     .limit(limit || 500) // Performans için limit (max 500 kayıt - daha hızlı)
   
-  // MUTLAKA companyId filtresi uygula - multi-tenant güvenlik için kritik
-  query = query.eq('companyId', companyId)
+  // SuperAdmin tüm şirketlerin verilerini görebilir, diğerleri sadece kendi şirketlerini
+  if (!isSuperAdmin) {
+    if (!companyId) {
+      throw new Error('Unauthorized: Company ID required')
+    }
+    // MUTLAKA companyId filtresi uygula - multi-tenant güvenlik için kritik
+    query = query.eq('companyId', companyId)
+  }
 
   // Arama filtresi
   if (filters.search) {

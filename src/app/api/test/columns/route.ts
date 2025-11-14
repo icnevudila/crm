@@ -4,7 +4,7 @@ import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 // Test endpoint - veritabanındaki kolon adlarını kontrol et
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { session, error: sessionError } = await getSafeSession(request)
     if (sessionError) {

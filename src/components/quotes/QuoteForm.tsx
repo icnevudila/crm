@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/lib/toast'
 import { getStageMessage } from '@/lib/stageTranslations'
+import { handleFormValidationErrors } from '@/lib/form-validation'
 import {
   Dialog,
   DialogContent,
@@ -131,6 +132,8 @@ export default function QuoteForm({
     : deals
   const vendors = Array.isArray(vendorsData) ? vendorsData : []
 
+  const formRef = useRef<HTMLFormElement>(null)
+  
   const {
     register,
     handleSubmit,
@@ -321,6 +324,11 @@ export default function QuoteForm({
     },
   })
 
+  const onError = (errors: any) => {
+    // Form validation hatalarını göster ve scroll yap
+    handleFormValidationErrors(errors, formRef)
+  }
+
   const onSubmit = async (data: QuoteFormData) => {
     setLoading(true)
     try {
@@ -364,7 +372,7 @@ export default function QuoteForm({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form ref={formRef} onSubmit={handleSubmit(onSubmit, onError)} className="space-y-4">
           {customerCompanyId && (
             <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3 text-sm text-indigo-700">
               <p className="font-semibold">
@@ -611,18 +619,19 @@ export default function QuoteForm({
           </div>
 
           {/* Buttons */}
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
               disabled={loading || isProtected}
+              className="w-full sm:w-auto"
             >
               {t('cancel')}
             </Button>
             <Button
               type="submit"
-              className="bg-gradient-primary text-white"
+              className="bg-gradient-primary text-white w-full sm:w-auto"
               disabled={loading || isProtected}
             >
               {loading ? t('saving') : quote ? (isProtected ? t('cannotEdit') : t('update')) : t('save')}

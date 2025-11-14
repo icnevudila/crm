@@ -462,13 +462,13 @@ function Sidebar() {
             {sidebarSections.map((section) => (
               <div key={section.key} className="space-y-2">
                 <motion.div
-                  className="mx-2 flex items-center gap-2 rounded-full border border-slate-100/60 bg-gradient-to-r from-sky-400/18 via-indigo-500/16 to-purple-500/14 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.26em] text-slate-500 shadow-[0_10px_30px_-18px_rgba(45,134,245,0.55)]"
+                  className="mx-2 flex items-center gap-2 rounded-full border border-slate-100/60 bg-gradient-to-r from-sky-400/18 via-indigo-500/16 to-purple-500/14 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.26em] shadow-[0_10px_30px_-18px_rgba(45,134,245,0.55)]"
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.6 }}
                 >
                   <span className="h-[7px] w-[7px] rounded-full bg-gradient-to-br from-sky-400 via-indigo-500 to-purple-500 shadow-[0_0_6px_rgba(45,134,245,0.75)]" />
-                  <span>{section.title}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-[0.26em] text-slate-600">{section.title}</span>
                 </motion.div>
           <AnimatePresence mode="popLayout">
                   {section.items.map((item, index) => {

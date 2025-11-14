@@ -36,6 +36,7 @@ import {
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import ModuleStats from '@/components/stats/ModuleStats'
 import { AutomationInfo } from '@/components/automation/AutomationInfo'
+import RefreshButton from '@/components/ui/RefreshButton'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
 import dynamic from 'next/dynamic'
@@ -90,11 +91,12 @@ const statusColors: Record<string, string> = {
   CANCELLED: 'bg-yellow-100 text-yellow-800',
 }
 
-async function fetchKanbanInvoices(search: string, quoteId: string, invoiceType: string) {
+async function fetchKanbanInvoices(search: string, quoteId: string, invoiceType: string, filterCompanyId?: string) {
   const params = new URLSearchParams()
   if (search) params.append('search', search)
   if (quoteId) params.append('quoteId', quoteId)
   if (invoiceType && invoiceType !== 'ALL') params.append('invoiceType', invoiceType)
+  if (filterCompanyId) params.append('filterCompanyId', filterCompanyId)
 
   const res = await fetch(`/api/analytics/invoice-kanban?${params.toString()}`)
   if (!res.ok) throw new Error('Failed to fetch kanban invoices')
@@ -120,7 +122,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
     CANCELLED: tStatus('cancelled'),
   }
   
-  // SuperAdmin kontrolÃ¼
+  // SuperAdmin kontrolü
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
   
   // URL parametrelerinden filtreleri oku
@@ -206,9 +208,21 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
   // Kanban view için TanStack Query kullanıyoruz (kanban özel endpoint)
   // ÖNEMLİ: Her zaman çalıştır (viewMode ne olursa olsun) - silme/güncelleme için gerekli
   const queryClient = useQueryClient()
+
+  // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
+  const handleRefresh = async () => {
+    await Promise.all([
+      mutateInvoices(undefined, { revalidate: true }),
+      mutate('/api/invoices', undefined, { revalidate: true }),
+      mutate('/api/invoices?', undefined, { revalidate: true }),
+      mutate(apiUrl || '/api/invoices', undefined, { revalidate: true }),
+      queryClient.invalidateQueries({ queryKey: ['invoice-kanban'] }),
+      queryClient.invalidateQueries({ queryKey: ['kanban-invoices'] }),
+    ])
+  }
   const { data: kanbanDataRaw = [], isLoading: isLoadingKanban } = useQuery({
     queryKey: ['kanban-invoices', debouncedSearch, quoteId, invoiceType, filterCompanyId],
-    queryFn: () => fetchKanbanInvoices(debouncedSearch, quoteId, invoiceType, filterCompanyId || undefined),
+    queryFn: () => fetchKanbanInvoices(debouncedSearch, quoteId, invoiceType, filterCompanyId),
     staleTime: 5 * 60 * 1000, // 5 dakika cache
     gcTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -277,7 +291,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
               ...col,
               invoices: updatedInvoices,
               count: Math.max(0, (col.count || 0) - 1),
-              totalValue: updatedTotalValue, // Toplam tutarÄ± gÃ¼ncelle
+              totalValue: updatedTotalValue, // Toplam tutarı güncelle
             }
           }
           return col
@@ -324,7 +338,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
       })
       
       // ÖNEMLİ: kanban-invoices query'sini invalidate ve refetch ETME - optimistic update'i koru
-      // setQueryData ile cache'i gÃ¼ncelledik, bu yeterli - invalidate etmek refetch tetikler ve eski veriyi geri getirir
+      // setQueryData ile cache'i güncelledik, bu yeterli - invalidate etmek refetch tetikler ve eski veriyi geri getirir
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
@@ -371,7 +385,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
 
   return (
     <div className="space-y-6">
-      {/* Ä°statistikler */}
+      {/* İstatistikler */}
       <ModuleStats 
         module="invoices" 
         statsUrl="/api/stats/invoices"
@@ -424,29 +438,32 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
       />
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Faturalar</h1>
-          <p className="mt-2 text-gray-600">Toplam {totalInvoices} fatura</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Faturalar</h1>
+          <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600">Toplam {totalInvoices} fatura</p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant={viewMode === 'table' ? 'default' : 'outline'}
-            size="icon"
-            onClick={() => setViewMode('table')}
-          >
-            <TableIcon className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={viewMode === 'kanban' ? 'default' : 'outline'}
-            size="icon"
-            onClick={() => setViewMode('kanban')}
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <div className="flex gap-2 flex-1 sm:flex-initial">
+            <RefreshButton onRefresh={handleRefresh} />
+            <Button
+              variant={viewMode === 'table' ? 'default' : 'outline'}
+              size="icon"
+              onClick={() => setViewMode('table')}
+            >
+              <TableIcon className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'kanban' ? 'default' : 'outline'}
+              size="icon"
+              onClick={() => setViewMode('kanban')}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+          </div>
           <Button
             onClick={handleAdd}
-            className="bg-gradient-primary text-white"
+            className="bg-gradient-primary text-white w-full sm:w-auto"
           >
             <Plus className="mr-2 h-4 w-4" />
             Yeni Fatura
@@ -464,24 +481,24 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
       </Tabs>
 
       {/* Filters */}
-      <div className="flex gap-4 items-center flex-wrap">
-        <div className="flex-1 relative min-w-[200px]">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-center">
+        <div className="flex-1 relative w-full sm:min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             type="search"
             placeholder="Ara..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
+            className="pl-10 w-full"
           />
         </div>
         {isSuperAdmin && (
           <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Firma SeÃ§" />
+            <SelectTrigger className="w-full sm:w-48">
+              <SelectValue placeholder="Firma Seç" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">TÃ¼m Firmalar</SelectItem>
+              <SelectItem value="all">Tüm Firmalar</SelectItem>
               {companies.map((company) => (
                 <SelectItem key={company.id} value={company.id}>
                   {company.name}
@@ -492,7 +509,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
         )}
         {/* Status filtresi - hem table hem kanban view'da göster */}
         <Select value={status || 'all'} onValueChange={(v) => setStatus(v === 'all' ? '' : v)}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder="Durum" />
           </SelectTrigger>
           <SelectContent>
@@ -522,6 +539,10 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
       {/* Content */}
       {viewMode === 'kanban' ? (
         <InvoiceKanbanChart
+          onView={(invoiceId) => {
+            setSelectedInvoiceId(invoiceId)
+            setDetailModalOpen(true)
+          }} // ✅ ÇÖZÜM: Modal açmak için callback
           key={`kanban-${kanbanData.reduce((sum: number, col: any) => sum + (col.invoices?.length || 0), 0)}-${kanbanData.reduce((sum: number, col: any) => sum + (col.totalValue || 0), 0)}`}
           data={kanbanData}
           onEdit={handleEdit}

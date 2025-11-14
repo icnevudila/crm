@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { toast } from '@/lib/toast'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -13,6 +13,7 @@ import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { handleFormValidationErrors } from '@/lib/form-validation'
 import {
   Dialog,
   DialogContent,
@@ -72,179 +73,179 @@ const SECTORS = [
   'Lojistik',
   'Turizm',
   'Medya',
-  'DanÄ±ÅŸmanlÄ±k',
-  'Ãœretim',
-  'TarÄ±m',
+  'Danışmanlık',
+  'Üretim',
+  'Tarım',
   'Kimya',
   'Tekstil',
-  'Ä°laÃ§',
-  'TelekomÃ¼nikasyon',
+  'İlaç',
+  'Telekomünikasyon',
   'Gayrimenkul',
   'Emlak',
   'Hukuk',
   'Muhasebe',
   'Pazarlama',
   'Reklam',
-  'TasarÄ±m',
-  'MimarlÄ±k',
-  'MÃ¼hendislik',
-  'DiÄŸer',
+  'Tasarım',
+  'Mimarlık',
+  'Mühendislik',
+  'Diğer',
 ]
 
-// TÃ¼rkiye ÅŸehirleri
+// Türkiye şehirleri
 const CITIES = [
-  'Adana', 'AdÄ±yaman', 'Afyonkarahisar', 'AÄŸrÄ±', 'Amasya', 'Ankara', 'Antalya', 'Artvin',
-  'AydÄ±n', 'BalÄ±kesir', 'Bilecik', 'BingÃ¶l', 'Bitlis', 'Bolu', 'Burdur', 'Bursa',
-  'Ã‡anakkale', 'Ã‡ankÄ±rÄ±', 'Ã‡orum', 'Denizli', 'DiyarbakÄ±r', 'Edirne', 'ElazÄ±ÄŸ', 'Erzincan',
-  'Erzurum', 'EskiÅŸehir', 'Gaziantep', 'Giresun', 'GÃ¼mÃ¼ÅŸhane', 'Hakkari', 'Hatay', 'Isparta',
-  'Ä°Ã§el (Mersin)', 'Ä°stanbul', 'Ä°zmir', 'Kars', 'Kastamonu', 'Kayseri', 'KÄ±rklareli', 'KÄ±rÅŸehir',
-  'Kocaeli', 'Konya', 'KÃ¼tahya', 'Malatya', 'Manisa', 'KahramanmaraÅŸ', 'Mardin', 'MuÄŸla',
-  'MuÅŸ', 'NevÅŸehir', 'NiÄŸde', 'Ordu', 'Rize', 'Sakarya', 'Samsun', 'Siirt',
-  'Sinop', 'Sivas', 'TekirdaÄŸ', 'Tokat', 'Trabzon', 'Tunceli', 'ÅanlÄ±urfa', 'UÅŸak',
-  'Van', 'Yozgat', 'Zonguldak', 'Aksaray', 'Bayburt', 'Karaman', 'KÄ±rÄ±kkale', 'Batman',
-  'ÅÄ±rnak', 'BartÄ±n', 'Ardahan', 'IÄŸdÄ±r', 'Yalova', 'KarabÃ¼k', 'Kilis', 'Osmaniye', 'DÃ¼zce'
+  'Adana', 'Adıyaman', 'Afyonkarahisar', 'Ağrı', 'Amasya', 'Ankara', 'Antalya', 'Artvin',
+  'Aydın', 'Balıkesir', 'Bilecik', 'Bingöl', 'Bitlis', 'Bolu', 'Burdur', 'Bursa',
+  'Çanakkale', 'Çankırı', 'Çorum', 'Denizli', 'Diyarbakır', 'Edirne', 'Elazığ', 'Erzincan',
+  'Erzurum', 'Eskişehir', 'Gaziantep', 'Giresun', 'Gümüşhane', 'Hakkari', 'Hatay', 'Isparta',
+  'İçel (Mersin)', 'İstanbul', 'İzmir', 'Kars', 'Kastamonu', 'Kayseri', 'Kırklareli', 'Kırşehir',
+  'Kocaeli', 'Konya', 'Kütahya', 'Malatya', 'Manisa', 'Kahramanmaraş', 'Mardin', 'Muğla',
+  'Muş', 'Nevşehir', 'Niğde', 'Ordu', 'Rize', 'Sakarya', 'Samsun', 'Siirt',
+  'Sinop', 'Sivas', 'Tekirdağ', 'Tokat', 'Trabzon', 'Tunceli', 'Şanlıurfa', 'Uşak',
+  'Van', 'Yozgat', 'Zonguldak', 'Aksaray', 'Bayburt', 'Karaman', 'Kırıkkale', 'Batman',
+  'Şırnak', 'Bartın', 'Ardahan', 'Iğdır', 'Yalova', 'Karabük', 'Kilis', 'Osmaniye', 'Düzce'
 ]
 
-// Åehirlere gÃ¶re ilÃ§eler (en popÃ¼ler ilÃ§eler)
+// Şehirlere göre ilçeler (en popüler ilçeler)
 const DISTRICTS_BY_CITY: Record<string, string[]> = {
-  'Ä°stanbul': [
-    'Adalar', 'ArnavutkÃ¶y', 'AtaÅŸehir', 'AvcÄ±lar', 'BaÄŸcÄ±lar', 'BahÃ§elievler', 'BakÄ±rkÃ¶y',
-    'BaÅŸakÅŸehir', 'BayrampaÅŸa', 'BeÅŸiktaÅŸ', 'Beykoz', 'BeylikdÃ¼zÃ¼', 'BeyoÄŸlu', 'BÃ¼yÃ¼kÃ§ekmece',
-    'Ã‡atalca', 'Ã‡ekmekÃ¶y', 'Esenler', 'Esenyurt', 'EyÃ¼psultan', 'Fatih', 'GaziosmanpaÅŸa',
-    'GÃ¼ngÃ¶ren', 'KadÄ±kÃ¶y', 'KaÄŸÄ±thane', 'Kartal', 'KÃ¼Ã§Ã¼kÃ§ekmece', 'Maltepe', 'Pendik',
-    'Sancaktepe', 'SarÄ±yer', 'Silivri', 'Sultanbeyli', 'Sultangazi', 'Åile', 'ÅiÅŸli',
-    'Tuzla', 'Ãœmraniye', 'ÃœskÃ¼dar', 'Zeytinburnu'
+  'İstanbul': [
+    'Adalar', 'Arnavutköy', 'Ataşehir', 'Avcılar', 'Bağcılar', 'Bahçelievler', 'Bakırköy',
+    'Başakşehir', 'Bayrampaşa', 'Beşiktaş', 'Beykoz', 'Beylikdüzü', 'Beyoğlu', 'Büyükçekmece',
+    'Çatalca', 'Çekmeköy', 'Esenler', 'Esenyurt', 'Eyüpsultan', 'Fatih', 'Gaziosmanpaşa',
+    'Güngören', 'Kadıköy', 'Kağıthane', 'Kartal', 'Küçükçekmece', 'Maltepe', 'Pendik',
+    'Sancaktepe', 'Sarıyer', 'Silivri', 'Sultanbeyli', 'Sultangazi', 'Şile', 'Şişli',
+    'Tuzla', 'Ümraniye', 'Üsküdar', 'Zeytinburnu'
   ],
   'Ankara': [
-    'AltÄ±ndaÄŸ', 'AyaÅŸ', 'Bala', 'BeypazarÄ±', 'Ã‡amlÄ±dere', 'Ã‡ankaya', 'Ã‡ubuk', 'ElmadaÄŸ',
-    'GÃ¼dÃ¼l', 'Haymana', 'Kalecik', 'KÄ±zÄ±lcahamam', 'NallÄ±han', 'PolatlÄ±', 'ÅereflikoÃ§hisar',
-    'Yenimahalle', 'Akyurt', 'Etimesgut', 'Evren', 'GÃ¶lbaÅŸÄ±', 'KeÃ§iÃ¶ren', 'Mamak', 'Sincan',
+    'Altındağ', 'Ayaş', 'Bala', 'Beypazarı', 'Çamlıdere', 'Çankaya', 'Çubuk', 'Elmadağ',
+    'Güdül', 'Haymana', 'Kalecik', 'Kızılcahamam', 'Nallıhan', 'Polatlı', 'Şereflikoçhisar',
+    'Yenimahalle', 'Akyurt', 'Etimesgut', 'Evren', 'Gölbaşı', 'Keçiören', 'Mamak', 'Sincan',
     'Kazan', 'Pursaklar'
   ],
-  'Ä°zmir': [
-    'AliaÄŸa', 'BayÄ±ndÄ±r', 'Bergama', 'Bornova', 'Ã‡eÅŸme', 'Dikili', 'FoÃ§a', 'Karaburun',
-    'KarÅŸÄ±yaka', 'KemalpaÅŸa', 'KÄ±nÄ±k', 'Kiraz', 'Menemen', 'Ã–demiÅŸ', 'Seferihisar', 'SelÃ§uk',
-    'Tire', 'TorbalÄ±', 'Urla', 'BeydaÄŸ', 'Buca', 'Konak', 'Menderes', 'BalÃ§ova', 'Ã‡iÄŸli',
-    'Gaziemir', 'NarlÄ±dere', 'GÃ¼zelbahÃ§e', 'BayraklÄ±', 'KarabaÄŸlar'
+  'İzmir': [
+    'Aliağa', 'Bayındır', 'Bergama', 'Bornova', 'Çeşme', 'Dikili', 'Foça', 'Karaburun',
+    'Karşıyaka', 'Kemalpaşa', 'Kınık', 'Kiraz', 'Menemen', 'Ödemiş', 'Seferihisar', 'Selçuk',
+    'Tire', 'Torbalı', 'Urla', 'Beydağ', 'Buca', 'Konak', 'Menderes', 'Balçova', 'Çiğli',
+    'Gaziemir', 'Narlıdere', 'Güzelbahçe', 'Bayraklı', 'Karabağlar'
   ],
   'Bursa': [
-    'BÃ¼yÃ¼korhan', 'Gemlik', 'GÃ¼rsu', 'HarmancÄ±k', 'Ä°negÃ¶l', 'Ä°znik', 'Karacabey', 'Keles',
-    'Kestel', 'Mudanya', 'MustafakemalpaÅŸa', 'NilÃ¼fer', 'Orhaneli', 'Orhangazi', 'Osmangazi',
-    'YeniÅŸehir', 'YÄ±ldÄ±rÄ±m'
+    'Büyükorhan', 'Gemlik', 'Gürsu', 'Harmancık', 'İnegöl', 'İznik', 'Karacabey', 'Keles',
+    'Kestel', 'Mudanya', 'Mustafakemalpaşa', 'Nilüfer', 'Orhaneli', 'Orhangazi', 'Osmangazi',
+    'Yenişehir', 'Yıldırım'
   ],
   'Antalya': [
-    'Akseki', 'Alanya', 'ElmalÄ±', 'Finike', 'GazipaÅŸa', 'GÃ¼ndoÄŸmuÅŸ', 'KaÅŸ', 'Kemer',
-    'Korkuteli', 'Kumluca', 'Manavgat', 'Serik', 'Demre', 'Ä°bradÄ±', 'Kale', 'Aksu',
-    'DÃ¶ÅŸemealtÄ±', 'Kepez', 'KonyaaltÄ±', 'MuratpaÅŸa'
+    'Akseki', 'Alanya', 'Elmalı', 'Finike', 'Gazipaşa', 'Gündoğmuş', 'Kaş', 'Kemer',
+    'Korkuteli', 'Kumluca', 'Manavgat', 'Serik', 'Demre', 'İbradı', 'Kale', 'Aksu',
+    'Döşemealtı', 'Kepez', 'Konyaaltı', 'Muratpaşa'
   ],
   'Adana': [
-    'AladaÄŸ', 'Ceyhan', 'Feke', 'KaraisalÄ±', 'KarataÅŸ', 'Kozan', 'PozantÄ±', 'Saimbeyli',
-    'Tufanbeyli', 'YumurtalÄ±k', 'YÃ¼reÄŸir', 'SarÄ±Ã§am', 'Ã‡ukurova', 'Seyhan', 'Ä°mamoÄŸlu'
+    'Aladağ', 'Ceyhan', 'Feke', 'Karaisalı', 'Karataş', 'Kozan', 'Pozantı', 'Saimbeyli',
+    'Tufanbeyli', 'Yumurtalık', 'Yüreğir', 'Sarıçam', 'Çukurova', 'Seyhan', 'İmamoğlu'
   ],
   'Kocaeli': [
-    'BaÅŸiskele', 'Ã‡ayÄ±rova', 'DarÄ±ca', 'Derince', 'DilovasÄ±', 'Gebze', 'GÃ¶lcÃ¼k', 'Ä°zmit',
-    'KandÄ±ra', 'KaramÃ¼rsel', 'Kartepe', 'KÃ¶rfez'
+    'Başiskele', 'Çayırova', 'Darıca', 'Derince', 'Dilovası', 'Gebze', 'Gölcük', 'İzmit',
+    'Kandıra', 'Karamürsel', 'Kartepe', 'Körfez'
   ],
   'Gaziantep': [
-    'Araban', 'Ä°slahiye', 'KarkamÄ±ÅŸ', 'Nizip', 'NurdaÄŸÄ±', 'OÄŸuzeli', 'Åahinbey', 'Åehitkamil',
-    'Yavuzeli', 'Ä°slahiye', 'Kilis'
+    'Araban', 'İslahiye', 'Karkamış', 'Nizip', 'Nurdağı', 'OİŸuzeli', 'Şahinbey', 'Şehitkamil',
+    'Yavuzeli', 'İslahiye', 'Kilis'
   ],
   'Konya': [
-    'AhÄ±rlÄ±', 'AkÃ¶ren', 'AkÅŸehir', 'AltÄ±nekin', 'BeyÅŸehir', 'BozkÄ±r', 'Cihanbeyli', 'Ã‡eltik',
-    'Ã‡umra', 'Derbent', 'Derebucak', 'DoÄŸanhisar', 'Emirgazi', 'EreÄŸli', 'GÃ¼neysinir', 'Hadim',
-    'HalkapÄ±nar', 'HÃ¼yÃ¼k', 'IlgÄ±n', 'KadÄ±nhanÄ±', 'KarapÄ±nar', 'Karatay', 'Kulu', 'Meram',
-    'SarayÃ¶nÃ¼', 'SelÃ§uklu', 'SeydiÅŸehir', 'TaÅŸkent', 'TuzlukÃ§u', 'YalÄ±hÃ¼yÃ¼k', 'Yunak'
+    'Ahırlı', 'Akören', 'Akşehir', 'Altınekin', 'Beyşehir', 'Bozkır', 'Cihanbeyli', 'Çeltik',
+    'Çumra', 'Derbent', 'Derebucak', 'Doğanhisar', 'Emirgazi', 'Ereğli', 'Güneysinir', 'Hadim',
+    'Halkapınar', 'Hüyük', 'Ilgın', 'Kadınhanı', 'Karapınar', 'Karatay', 'Kulu', 'Meram',
+    'Sarayönü', 'Selçuklu', 'Seydişehir', 'Taşkent', 'Tuzlukçu', 'Yalıhüyük', 'Yunak'
   ],
   'Mersin': [
-    'Anamur', 'AydÄ±ncÄ±k', 'BozyazÄ±', 'Ã‡amlÄ±yayla', 'Erdemli', 'GÃ¼lnar', 'Mut', 'Silifke',
-    'Tarsus', 'Akdeniz', 'Mezitli', 'Toroslar', 'YeniÅŸehir'
+    'Anamur', 'Aydıncık', 'Bozyazı', 'Çamlıyayla', 'Erdemli', 'Gülnar', 'Mut', 'Silifke',
+    'Tarsus', 'Akdeniz', 'Mezitli', 'Toroslar', 'Yenişehir'
   ],
-  'DiyarbakÄ±r': [
-    'Bismil', 'Ã‡ermik', 'Ã‡Ä±nar', 'Ã‡Ã¼ngÃ¼ÅŸ', 'Dicle', 'EÄŸil', 'Ergani', 'Hani', 'Hazro',
-    'KocakÃ¶y', 'Kulp', 'Lice', 'Silvan', 'Sur', 'YeniÅŸehir', 'BaÄŸlar', 'KayapÄ±nar'
+  'Diyarbakır': [
+    'Bismil', 'Çermik', 'Çınar', 'Çüngüş', 'Dicle', 'Eğil', 'Ergani', 'Hani', 'Hazro',
+    'Kocaköy', 'Kulp', 'Lice', 'Silvan', 'Sur', 'Yenişehir', 'Bağlar', 'Kayapınar'
   ],
   'Hatay': [
-    'AltÄ±nÃ¶zÃ¼', 'Antakya', 'Belen', 'DÃ¶rtyol', 'Erzin', 'Hassa', 'Ä°skenderun', 'KÄ±rÄ±khan',
-    'Kumlu', 'ReyhanlÄ±', 'SamandaÄŸ', 'YayladaÄŸÄ±', 'Arsuz', 'Defne', 'Payas'
+    'Altınözü', 'Antakya', 'Belen', 'Dörtyol', 'Erzin', 'Hassa', 'İskenderun', 'Kırıkhan',
+    'Kumlu', 'Reyhanlı', 'SamandaİŸ', 'YayladaİŸı', 'Arsuz', 'Defne', 'Payas'
   ],
   'Manisa': [
-    'Ahmetli', 'Akhisar', 'AlaÅŸehir', 'Demirci', 'GÃ¶lmarmara', 'GÃ¶rdes', 'KÄ±rkaÄŸaÃ§', 'KÃ¶prÃ¼baÅŸÄ±',
-    'Kula', 'Salihli', 'SarÄ±gÃ¶l', 'SaruhanlÄ±', 'Selendi', 'Soma', 'Åehzadeler', 'Turgutlu',
+    'Ahmetli', 'Akhisar', 'Alaşehir', 'Demirci', 'Gölmarmara', 'Gördes', 'KırkaİŸaç', 'Köprübaşı',
+    'Kula', 'Salihli', 'Sarıgöl', 'Saruhanlı', 'Selendi', 'Soma', 'Şehzadeler', 'Turgutlu',
     'Yunusemre', 'Akhisar', 'Soma'
   ],
   'Kayseri': [
-    'AkkÄ±ÅŸla', 'BÃ¼nyan', 'Develi', 'Felahiye', 'Ä°ncesu', 'PÄ±narbaÅŸÄ±', 'SarÄ±oÄŸlan', 'SarÄ±z',
-    'Tomarza', 'YahyalÄ±', 'YeÅŸilhisar', 'Melikgazi', 'Kocasinan', 'Talas', 'HacÄ±lar', 'Ã–zvatan'
+    'Akkışla', 'Bünyan', 'Develi', 'Felahiye', 'İ°ncesu', 'Pınarbaşı', 'SarıoİŸlan', 'Sarız',
+    'Tomarza', 'Yahyalı', 'Yeşilhisar', 'Melikgazi', 'Kocasinan', 'Talas', 'Hacılar', 'Özvatan'
   ],
   'Samsun': [
-    'AlaÃ§am', 'AsarcÄ±k', 'AyvacÄ±k', 'Bafra', 'Ã‡arÅŸamba', 'Havza', 'Kavak', 'Ladik', 'OndokuzmayÄ±s',
-    'SalÄ±pazarÄ±', 'TekkekÃ¶y', 'Terme', 'VezirkÃ¶prÃ¼', 'Yakakent', 'Atakum', 'Canik', 'Ä°lkadÄ±m'
+    'Alaçam', 'Asarcık', 'Ayvacık', 'Bafra', 'Çarşamba', 'Havza', 'Kavak', 'Ladik', 'Ondokuzmayıs',
+    'Salıpazarı', 'Tekkeköy', 'Terme', 'Vezirköprü', 'Yakakent', 'Atakum', 'Canik', 'İ°lkadım'
   ],
-  'BalÄ±kesir': [
-    'AltÄ±eylÃ¼l', 'AyvalÄ±k', 'Balya', 'BandÄ±rma', 'BigadiÃ§', 'Burhaniye', 'Dursunbey', 'Edremit',
-    'Erdek', 'GÃ¶meÃ§', 'GÃ¶nen', 'Havran', 'Ä°vrindi', 'Karesi', 'Kepsut', 'Manyas', 'Marmara',
-    'SavaÅŸtepe', 'SÄ±ndÄ±rgÄ±', 'Susurluk'
+  'Balıkesir': [
+    'Altıeylül', 'Ayvalık', 'Balya', 'Bandırma', 'Bigadiç', 'Burhaniye', 'Dursunbey', 'Edremit',
+    'Erdek', 'Gömeç', 'Gönen', 'Havran', 'İ°vrindi', 'Karesi', 'Kepsut', 'Manyas', 'Marmara',
+    'Savaştepe', 'Sındırgı', 'Susurluk'
   ],
-  'KahramanmaraÅŸ': [
-    'AfÅŸin', 'AndÄ±rÄ±n', 'Ã‡aÄŸlayancerit', 'EkinÃ¶zÃ¼', 'Elbistan', 'GÃ¶ksun', 'Nurhak', 'PazarcÄ±k',
-    'TÃ¼rkoÄŸlu', 'OnikiÅŸubat', 'DulkadiroÄŸlu'
+  'Kahramanmaraş': [
+    'Afşin', 'Andırın', 'ÇaİŸlayancerit', 'Ekinözü', 'Elbistan', 'Göksun', 'Nurhak', 'Pazarcık',
+    'TürkoİŸlu', 'Onikişubat', 'DulkadiroİŸlu'
   ],
   'Van': [
-    'BahÃ§esaray', 'BaÅŸkale', 'Ã‡aldÄ±ran', 'Ã‡atak', 'Edremit', 'ErciÅŸ', 'GevaÅŸ', 'GÃ¼rpÄ±nar',
-    'Muradiye', 'Ã–zalp', 'Saray', 'Ä°pekyolu', 'TuÅŸba'
+    'Bahçesaray', 'Başkale', 'Çaldıran', 'Çatak', 'Edremit', 'Erciş', 'Gevaş', 'Gürpınar',
+    'Muradiye', 'Özalp', 'Saray', 'İ°pekyolu', 'Tuşba'
   ],
-  'AydÄ±n': [
-    'BozdoÄŸan', 'Buharkent', 'Ã‡ine', 'Didim', 'Efeler', 'Germencik', 'Ä°ncirliova', 'Karacasu',
-    'Karpuzlu', 'KoÃ§arlÄ±', 'KÃ¶ÅŸk', 'KuÅŸadasÄ±', 'Kuyucak', 'Nazilli', 'SÃ¶ke', 'Sultanhisar', 'Yenipazar'
+  'Aydın': [
+    'BozdoİŸan', 'Buharkent', 'Çine', 'Didim', 'Efeler', 'Germencik', 'İ°ncirliova', 'Karacasu',
+    'Karpuzlu', 'Koçarlı', 'Köşk', 'Kuşadası', 'Kuyucak', 'Nazilli', 'Söke', 'Sultanhisar', 'Yenipazar'
   ],
-  'TekirdaÄŸ': [
-    'Ã‡erkezkÃ¶y', 'Ã‡orlu', 'Ergene', 'Hayrabolu', 'KapaklÄ±', 'Malkara', 'MarmaraereÄŸlisi',
-    'MuratlÄ±', 'Saray', 'SÃ¼leymanpaÅŸa', 'ÅarkÃ¶y'
+  'Tekirdağ': [
+    'Çerkezköy', 'Çorlu', 'Ergene', 'Hayrabolu', 'Kapaklı', 'Malkara', 'MarmaraereİŸlisi',
+    'Muratlı', 'Saray', 'Süleymanpaşa', 'Şarköy'
   ],
   'Trabzon': [
-    'AkÃ§aabat', 'AraklÄ±', 'Arsin', 'BeÅŸikdÃ¼zÃ¼', 'Ã‡arÅŸÄ±baÅŸÄ±', 'Ã‡aykara', 'DernekpazarÄ±',
-    'DÃ¼zkÃ¶y', 'Hayrat', 'KÃ¶prÃ¼baÅŸÄ±', 'MaÃ§ka', 'Of', 'ÅalpazarÄ±', 'SÃ¼rmene', 'Tonya', 'VakfÄ±kebir',
+    'Akçaabat', 'Araklı', 'Arsin', 'Beşikdüzü', 'Çarşıbaşı', 'Çaykara', 'Dernekpazarı',
+    'Düzköy', 'Hayrat', 'Köprübaşı', 'Maçka', 'Of', 'Şalpazarı', 'Sürmene', 'Tonya', 'Vakfıkebir',
     'Yomra', 'Ortahisar'
   ],
   'Ordu': [
-    'AkkuÅŸ', 'AltÄ±nordu', 'AybastÄ±', 'Ã‡amaÅŸ', 'Ã‡atalpÄ±nar', 'Ã‡aybaÅŸÄ±', 'Fatsa', 'GÃ¶lkÃ¶y',
-    'GÃ¼lyalÄ±', 'GÃ¼rgentepe', 'Ä°kizce', 'KabadÃ¼z', 'KabataÅŸ', 'Korgan', 'Kumru', 'Mesudiye',
-    'PerÅŸembe', 'Ulubey', 'Ãœnye'
+    'Akkuş', 'Altınordu', 'Aybastı', 'Çamaş', 'Çatalpınar', 'Çaybaşı', 'Fatsa', 'Gölköy',
+    'Gülyalı', 'Gürgentepe', 'İ°kizce', 'Kabadüz', 'Kabataş', 'Korgan', 'Kumru', 'Mesudiye',
+    'Perşembe', 'Ulubey', 'Ünye'
   ],
   'Denizli': [
-    'AcÄ±payam', 'BabadaÄŸ', 'Baklan', 'Bekilli', 'BeyaÄŸaÃ§', 'Bozkurt', 'Buldan', 'Ã‡al',
-    'Ã‡ameli', 'Ã‡ardak', 'Ã‡ivril', 'GÃ¼ney', 'Honaz', 'Kale', 'Merkezefendi', 'Pamukkale',
-    'SaraykÃ¶y', 'Serinhisar', 'Tavas'
+    'Acıpayam', 'BabadaİŸ', 'Baklan', 'Bekilli', 'BeyaİŸaç', 'Bozkurt', 'Buldan', 'Çal',
+    'Çameli', 'Çardak', 'Çivril', 'Güney', 'Honaz', 'Kale', 'Merkezefendi', 'Pamukkale',
+    'Sarayköy', 'Serinhisar', 'Tavas'
   ],
   'Malatya': [
-    'AkÃ§adaÄŸ', 'Arapgir', 'Arguvan', 'Battalgazi', 'Darende', 'DoÄŸanÅŸehir', 'DoÄŸanyol',
-    'Hekimhan', 'Kale', 'Kuluncak', 'PÃ¼tÃ¼rge', 'YazÄ±han', 'YeÅŸilyurt'
+    'AkçadaİŸ', 'Arapgir', 'Arguvan', 'Battalgazi', 'Darende', 'DoİŸanŞehir', 'DoİŸanyol',
+    'Hekimhan', 'Kale', 'Kuluncak', 'Pütürge', 'Yazıhan', 'Yeşilyurt'
   ],
   'Erzurum': [
-    'AÅŸkale', 'Aziziye', 'Ã‡at', 'HÄ±nÄ±s', 'Horasan', 'Ä°spir', 'KaraÃ§oban', 'KarayazÄ±',
-    'KÃ¶prÃ¼kÃ¶y', 'Narman', 'Oltu', 'Olur', 'PalandÃ¶ken', 'Pasinler', 'Pazaryolu', 'Åenkaya',
+    'Aşkale', 'Aziziye', 'Çat', 'Hınıs', 'Horasan', 'İ°spir', 'Karaçoban', 'Karayazı',
+    'Köprüköy', 'Narman', 'Oltu', 'Olur', 'Palandöken', 'Pasinler', 'Pazaryolu', 'Şenkaya',
     'Tekman', 'Tortum', 'Uzundere', 'Yakutiye'
   ],
   'Afyonkarahisar': [
-    'BaÅŸmakÃ§Ä±', 'Bayat', 'Bolvadin', 'Ã‡ay', 'Ã‡obanlar', 'DazkÄ±rÄ±', 'Dinar', 'EmirdaÄŸ',
-    'Evciler', 'Hocalar', 'Ä°hsaniye', 'Ä°scehisar', 'KÄ±zÄ±lÃ¶ren', 'Merkez', 'SandÄ±klÄ±',
-    'SinanpaÅŸa', 'SultandaÄŸÄ±', 'Åuhut'
+    'Başmakçı', 'Bayat', 'Bolvadin', 'Çay', 'Çobanlar', 'Dazkırı', 'Dinar', 'EmirdaİŸ',
+    'Evciler', 'Hocalar', 'İ°hsaniye', 'İ°scehisar', 'Kızılören', 'Merkez', 'Sandıklı',
+    'Sinanpaşa', 'SultandaİŸı', 'Şuhut'
   ],
   'Aksaray': [
-    'AÄŸaÃ§Ã¶ren', 'Eskil', 'GÃ¼laÄŸaÃ§', 'GÃ¼zelyurt', 'Merkez', 'OrtakÃ¶y', 'SarÄ±yahÅŸi'
+    'AİŸaçören', 'Eskil', 'GülaİŸaç', 'Güzelyurt', 'Merkez', 'Ortaköy', 'Sarıyahşi'
   ],
   'Amasya': [
-    'GÃ¶ynÃ¼cek', 'GÃ¼mÃ¼ÅŸhacÄ±kÃ¶y', 'HamamÃ¶zÃ¼', 'Merzifon', 'Suluova', 'TaÅŸova'
+    'Göynücek', 'Gümüşhacıköy', 'Hamamözü', 'Merzifon', 'Suluova', 'Taşova'
   ],
   'Artvin': [
-    'ArdanuÃ§', 'Arhavi', 'BorÃ§ka', 'Hopa', 'Murgul', 'ÅavÅŸat', 'Yusufeli', 'Merkez'
+    'Ardanuç', 'Arhavi', 'Borçka', 'Hopa', 'Murgul', 'Şavşat', 'Yusufeli', 'Merkez'
   ]
 }
 
 // Durum etiketleri
 const statusLabels: Record<string, string> = {
   POT: 'Potansiyel',
-  MUS: 'MÃ¼ÅŸteri',
+  MUS: 'Müşteri',
   ALT: 'Alt Bayi',
   PAS: 'Pasif',
 }
@@ -263,6 +264,8 @@ export default function CompanyForm({
   const [countryCode, setCountryCode] = useState(company?.countryCode || '+90')
   const [logoPreview, setLogoPreview] = useState(company?.logoUrl || '')
 
+  const formRef = useRef<HTMLFormElement>(null)
+  
   const {
     register,
     handleSubmit,
@@ -281,7 +284,7 @@ export default function CompanyForm({
       taxNumber: '',
       sector: '',
       city: '',
-      // district kolonu veritabanÄ±nda yok, bu yÃ¼zden kaldÄ±rÄ±ldÄ±
+      // district kolonu veritabanında yok, bu yüzden kaldırıldı
       address: '',
       email: '',
       website: '',
@@ -291,13 +294,13 @@ export default function CompanyForm({
     },
   })
 
-  // Form'u company prop'u ile doldur (edit modu iÃ§in)
-  // open deÄŸiÅŸtiÄŸinde form'u gÃ¼ncelle - sadece modal aÃ§Ä±ldÄ±ÄŸÄ±nda
+  // Form'u company prop'u ile doldur (edit modu için)
+  // open değiştiğinde form'u güncelle - sadece modal açıldığında
   useEffect(() => {
-    if (!open) return // Modal kapalÄ±ysa hiÃ§bir ÅŸey yapma
+    if (!open) return // Modal kapalıysa hiçbir şey yapma
     
     if (company) {
-      // DÃ¼zenleme modu - firma bilgilerini yÃ¼kle
+      // Düzenleme modu - firma bilgilerini yükle
       reset({
         name: company.name || '',
         contactPerson: company.contactPerson || '',
@@ -307,7 +310,7 @@ export default function CompanyForm({
         taxNumber: company.taxNumber || '',
         sector: company.sector || '',
         city: company.city || '',
-        // district kolonu veritabanÄ±nda yok, bu yÃ¼zden kaldÄ±rÄ±ldÄ±
+        // district kolonu veritabanında yok, bu yüzden kaldırıldı
         address: company.address || '',
         email: company.email || '',
         website: company.website || '',
@@ -318,7 +321,7 @@ export default function CompanyForm({
       setCountryCode(company.countryCode || '+90')
       setLogoPreview(company.logoUrl || '')
     } else {
-      // Yeni kayÄ±t modu - form'u temizle
+      // Yeni kayıt modu - form'u temizle
       reset({
         name: '',
         contactPerson: '',
@@ -328,7 +331,7 @@ export default function CompanyForm({
         taxNumber: '',
         sector: '',
         city: '',
-        // district kolonu veritabanÄ±nda yok, bu yÃ¼zden kaldÄ±rÄ±ldÄ±
+        // district kolonu veritabanında yok, bu yüzden kaldırıldı
         address: '',
         email: '',
         website: '',
@@ -339,14 +342,14 @@ export default function CompanyForm({
       setCountryCode('+90')
       setLogoPreview('')
     }
-  }, [open, company, reset]) // open deÄŸiÅŸtiÄŸinde tetikle
+  }, [open, company, reset]) // open değiştiğinde tetikle
 
   const status = watch('status')
   const city = watch('city')
 
   const mutation = useMutation({
     mutationFn: async (data: CompanyFormData) => {
-      // KURUM Ä°Ã‡Ä° FÄ°RMA YÃ–NETÄ°MÄ°: TÃ¼m kullanÄ±cÄ±lar CustomerCompany endpoint'ini kullanÄ±r
+      // KURUM İÇİ FİRMA YÖNETİMİ: Tüm kullanıcılar CustomerCompany endpoint'ini kullanır
       const baseUrl = '/api/customer-companies'
       const url = company
         ? `${baseUrl}/${company.id}`
@@ -364,11 +367,11 @@ export default function CompanyForm({
           method,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(submitData),
-          credentials: 'include', // Session cookie'lerini gÃ¶nder
+          credentials: 'include', // Session cookie'lerini gönder
         })
 
         if (!res.ok) {
-          // Response body'yi parse etmeye Ã§alÄ±ÅŸ
+          // Response body'yi parse etmeye çalış
           let errorData
           try {
             errorData = await res.json()
@@ -377,9 +380,9 @@ export default function CompanyForm({
             errorData = { error: res.statusText || 'Failed to save company' }
           }
           
-          // Duplicate kontrolÃ¼ hatasÄ±
-          if (errorData.error?.includes('vergi dairesi') || errorData.error?.includes('vergi numarasÄ±') || errorData.error?.includes('zaten kayÄ±tlÄ±')) {
-            throw new Error('Bu vergi dairesi ve vergi numarasÄ± kombinasyonu zaten kayÄ±tlÄ±. LÃ¼tfen farklÄ± bir firma girin.')
+          // Duplicate kontrolü hatası
+          if (errorData.error?.includes('vergi dairesi') || errorData.error?.includes('vergi numarası') || errorData.error?.includes('zaten kayıtlı')) {
+            throw new Error('Bu vergi dairesi ve vergi numarası kombinasyonu zaten kayıtlı. Lütfen farklı bir firma girin.')
           }
           
           throw new Error(errorData.error || errorData.message || 'Failed to save company')
@@ -387,7 +390,7 @@ export default function CompanyForm({
 
         return await res.json()
       } catch (fetchError: any) {
-        // Network hatasÄ± veya diÄŸer fetch hatalarÄ±
+        // Network hatası veya diğer fetch hataları
         console.error('CompanyForm fetch error:', fetchError)
         throw new Error(fetchError?.message || 'Network error: Failed to fetch')
       }
@@ -398,7 +401,7 @@ export default function CompanyForm({
         console.log('CompanyForm onSuccess:', savedCompany)
       }
       
-      // Kontak kiÅŸi otomatik mÃ¼ÅŸteri olarak kaydedilsin
+      // Kontak kişi otomatik müşteri olarak kaydedilsin
       if (savedCompany?.contactPerson && savedCompany?.id) {
         try {
           const contactPersonData = {
@@ -406,7 +409,7 @@ export default function CompanyForm({
             phone: savedCompany.phone || '',
             email: savedCompany.email || '',
             city: savedCompany.city || '',
-            customerCompanyId: savedCompany.id, // Hangi firmada Ã§alÄ±ÅŸÄ±yor
+            customerCompanyId: savedCompany.id, // Hangi firmada çalışıyor
             status: 'ACTIVE',
           }
 
@@ -419,10 +422,10 @@ export default function CompanyForm({
 
           if (customerRes.ok) {
             const newCustomer = await customerRes.json()
-            // KullanÄ±cÄ±ya bilgi ver
+            // Kullanıcıya bilgi ver
             toast.info(
-              'Ä°lgili kiÅŸi otomatik oluÅŸturuldu',
-              `${savedCompany.contactPerson} isimli yetkili kiÅŸi, bu firma iÃ§in otomatik olarak mÃ¼ÅŸteriler bÃ¶lÃ¼mÃ¼ne eklendi.`
+              'İlgili kişi otomatik oluşturuldu',
+              `${savedCompany.contactPerson} isimli yetkili kişi, bu firma için otomatik olarak müşteriler bölümüne eklendi.`
             )
             
             // Debug: Development'ta log ekle
@@ -430,21 +433,21 @@ export default function CompanyForm({
               console.log('Auto-created customer:', newCustomer)
             }
           } else {
-            // Hata durumunda sessizce devam et (kritik deÄŸil)
+            // Hata durumunda sessizce devam et (kritik değil)
             if (process.env.NODE_ENV === 'development') {
               console.warn('Failed to auto-create customer:', await customerRes.json())
             }
           }
         } catch (error) {
-          // Hata durumunda sessizce devam et (kritik deÄŸil)
+          // Hata durumunda sessizce devam et (kritik deİŸil)
           if (process.env.NODE_ENV === 'development') {
             console.error('Error auto-creating customer:', error)
           }
         }
       }
       
-      // onSuccess callback'i Ã§aÄŸÄ±r - optimistic update iÃ§in
-      // Ã–nce callback'i Ã§aÄŸÄ±r, sonra form'u kapat
+      // onSuccess callback'i çağır - optimistic update için
+      // Önce callback'i çağır, sonra form'u kapat
       if (onSuccess) {
         await onSuccess(savedCompany)
       }
@@ -453,16 +456,16 @@ export default function CompanyForm({
       reset()
       onClose()
       
-      // Yeni firma kaydedildiÄŸinde detay sayfasÄ±na yÃ¶nlendirme YOK
-      // KullanÄ±cÄ± listede gÃ¶rmek istiyor, detay sayfasÄ±na yÃ¶nlendirme yapmÄ±yoruz
+      // Yeni firma kaydedildiğinde detay sayfasına yönlendirme YOK
+      // Kullanıcı listede görmek istiyor, detay sayfasına yönlendirme yapmıyoruz
     },
     onError: (error: any) => {
       console.error('CompanyForm mutation error:', error)
-      // Daha detaylÄ± hata mesajÄ± gÃ¶ster
-      const errorMessage = error?.message || error?.error || 'Bilinmeyen bir hata oluÅŸtu'
+      // Daha detaylı hata mesajı göster
+      const errorMessage = error?.message || error?.error || 'Bilinmeyen bir hata oluştu'
       toast.error(
         'Firma kaydedilemedi',
-        errorMessage + ' LÃ¼tfen tÃ¼m alanlarÄ± kontrol edip tekrar deneyin.'
+        errorMessage + ' Lütfen tüm alanları kontrol edip tekrar deneyin.'
       )
     },
   })
@@ -476,11 +479,11 @@ export default function CompanyForm({
     }
   }
 
-  // Logo yÃ¼kleme handler (gelecekte Supabase Storage'a yÃ¼klenecek)
+  // Logo yükleme handler (gelecekte Supabase Storage'a yüklenecek)
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      // GeÃ§ici olarak base64 preview gÃ¶ster (gelecekte Supabase Storage'a yÃ¼klenecek)
+      // Geçici olarak base64 preview göster (gelecekte Supabase Storage'a yüklenecek)
       const reader = new FileReader()
       reader.onloadend = () => {
         const base64String = reader.result as string
@@ -496,14 +499,14 @@ export default function CompanyForm({
       <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {company ? 'Firma DÃ¼zenle' : 'Yeni Firma'}
+            {company ? 'Firma Düzenle' : 'Yeni Firma'}
           </DialogTitle>
           <DialogDescription>
-            {company ? 'Firma bilgilerini gÃ¼ncelleyin' : 'Yeni firma ekleyin. Zorunlu alanlar: Firma AdÄ±, Kontak KiÅŸi, Telefon, Vergi Dairesi, Vergi No'}
+            {company ? 'Firma bilgilerini güncelleyin' : 'Yeni firma ekleyin. Zorunlu alanlar: Firma Adı, Kontak Kişi, Telefon, Vergi Dairesi, Vergi No'}
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form ref={formRef} onSubmit={handleSubmit(onSubmit, onError)} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Logo Upload */}
             <div className="space-y-2 md:col-span-2">
@@ -542,7 +545,7 @@ export default function CompanyForm({
                     >
                       <span>
                         <Upload className="mr-2 h-4 w-4" />
-                        Logo YÃ¼kle
+                        Logo Yükle
                       </span>
                     </Button>
                   </label>
@@ -552,10 +555,10 @@ export default function CompanyForm({
 
             {/* Name - ZORUNLU */}
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">Firma AdÄ± *</label>
+              <label className="text-sm font-medium">Firma Adı *</label>
               <Input
                 {...register('name')}
-                placeholder="Firma adÄ±"
+                placeholder="Firma adı"
                 disabled={loading}
               />
               {errors.name && (
@@ -565,10 +568,10 @@ export default function CompanyForm({
 
             {/* Contact Person - ZORUNLU */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Kontak KiÅŸi *</label>
+              <label className="text-sm font-medium">Kontak Kişi *</label>
               <Input
                 {...register('contactPerson')}
-                placeholder="Kontak kiÅŸi adÄ±"
+                placeholder="Kontak kişi adı"
                 disabled={loading}
               />
               {errors.contactPerson && (
@@ -576,7 +579,7 @@ export default function CompanyForm({
               )}
             </div>
 
-            {/* Phone - ZORUNLU (Ãœlke kodu ile) */}
+            {/* Phone - ZORUNLU (Ülke kodu ile) */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Telefon *</label>
               <div className="flex gap-2">
@@ -605,7 +608,7 @@ export default function CompanyForm({
               <label className="text-sm font-medium">Vergi Dairesi *</label>
               <Input
                 {...register('taxOffice')}
-                placeholder="KadÄ±kÃ¶y Vergi Dairesi"
+                placeholder="Kadıköy Vergi Dairesi"
                 disabled={loading}
               />
               {errors.taxOffice && (
@@ -639,7 +642,7 @@ export default function CompanyForm({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="POT">Potansiyel</SelectItem>
-                  <SelectItem value="MUS">MÃ¼ÅŸteri</SelectItem>
+                  <SelectItem value="MUS">Müşteri</SelectItem>
                   <SelectItem value="ALT">Alt Bayi</SelectItem>
                   <SelectItem value="PAS">Pasif</SelectItem>
                 </SelectContent>
@@ -648,17 +651,17 @@ export default function CompanyForm({
 
             {/* Sector */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">SektÃ¶r</label>
+              <label className="text-sm font-medium">Sektör</label>
               <Select
                 value={watch('sector') || 'none'}
                 onValueChange={(value) => setValue('sector', value === 'none' ? '' : value)}
                 disabled={loading}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="SektÃ¶r seÃ§in" />
+                  <SelectValue placeholder="Sektör seçin" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">SektÃ¶r SeÃ§ilmedi</SelectItem>
+                  <SelectItem value="none">Sektör Seçilmedi</SelectItem>
                   {SECTORS.map((sector) => (
                     <SelectItem key={sector} value={sector}>
                       {sector}
@@ -670,7 +673,7 @@ export default function CompanyForm({
 
             {/* City - Dropdown */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Åehir</label>
+              <label className="text-sm font-medium">Şehir</label>
               <Select
                 value={city || 'none'}
                 onValueChange={(value) => {
@@ -679,10 +682,10 @@ export default function CompanyForm({
                 disabled={loading}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Åehir seÃ§in" />
+                  <SelectValue placeholder="Şehir seçin" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Åehir SeÃ§ilmedi</SelectItem>
+                  <SelectItem value="none">Şehir Seçilmedi</SelectItem>
                   {CITIES.map((cityName) => (
                     <SelectItem key={cityName} value={cityName}>
                       {cityName}
@@ -732,10 +735,10 @@ export default function CompanyForm({
 
             {/* Description */}
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">AÃ§Ä±klama</label>
+              <label className="text-sm font-medium">Açıklama</label>
               <Textarea
                 {...register('description')}
-                placeholder="Firma hakkÄ±nda detaylÄ± bilgi"
+                placeholder="Firma hakkında detaylı bilgi"
                 disabled={loading}
                 rows={4}
               />
@@ -750,14 +753,14 @@ export default function CompanyForm({
               onClick={onClose}
               disabled={loading}
             >
-              Ä°ptal
+              İptal
             </Button>
             <Button
               type="submit"
               className="bg-gradient-primary text-white"
               disabled={loading}
             >
-              {loading ? 'Kaydediliyor...' : company ? 'GÃ¼ncelle' : 'Kaydet'}
+              {loading ? 'Kaydediliyor...' : company ? 'Güncelle' : 'Kaydet'}
             </Button>
           </div>
         </form>

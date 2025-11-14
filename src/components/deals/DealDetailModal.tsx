@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { Edit, Trash2, Calendar, DollarSign, User, TrendingUp, Clock, FileText, AlertTriangle } from 'lucide-react'
+import { Edit, Trash2, Calendar, DollarSign, User, TrendingUp, Clock, FileText, AlertTriangle, Download } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +20,8 @@ import DetailModal from '@/components/ui/DetailModal'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import dynamic from 'next/dynamic'
+import jsPDF from 'jspdf'
+import { formatCurrency, formatDate, encodeTurkish, PDFStyles, drawHeader, drawTitle, drawSectionBox, drawFooter, drawSignatureArea } from '@/lib/pdf-utils'
 
 const DealForm = dynamic(() => import('./DealForm'), {
   ssr: false,
@@ -74,6 +76,124 @@ export default function DealDetailModal({
   )
 
   const displayDeal = deal || initialData
+
+  // Client-side PDF generation - jsPDF ile (Premium Tasarım + Türkçe Desteği)
+  const handleDownloadPDF = () => {
+    if (!displayDeal) {
+      toast.error('PDF oluşturulamadı', 'Fırsat verisi bulunamadı')
+      return
+    }
+
+    try {
+      const doc = new jsPDF()
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
+      let yPos = drawHeader(doc, pageWidth, displayDeal.Company?.name || 'Şirket Adı', displayDeal.Company)
+
+      // Başlık
+      yPos = drawTitle(doc, pageWidth, 'FIRSAT RAPORU', yPos)
+
+      // Fırsat Bilgileri
+      const dealInfo: Array<[string, string]> = [
+        ['Fırsat No:', displayDeal.id?.substring(0, 8).toUpperCase() || ''],
+        ['Başlık:', encodeTurkish(displayDeal.title || '')],
+        ['Durum:', encodeTurkish(stageLabels[displayDeal.stage] || displayDeal.stage || '')],
+        ['Değer:', formatCurrency(displayDeal.value || 0)],
+        ['Tarih:', formatDate(displayDeal.createdAt || '')],
+      ]
+
+      if (displayDeal.updatedAt) {
+        dealInfo.push(['Son Güncelleme:', formatDate(displayDeal.updatedAt)])
+      }
+
+      yPos = drawSectionBox(doc, pageWidth, yPos, 'Fırsat Bilgileri', dealInfo, 70)
+
+      // Müşteri Bilgileri
+      if (displayDeal.customer || displayDeal.Customer) {
+        const customer = displayDeal.customer || displayDeal.Customer
+        if (customer?.name) {
+          if (yPos > pageHeight - 80) {
+            doc.addPage()
+            yPos = 25
+          }
+
+          const customerInfo: Array<[string, string]> = [
+            ['Müşteri:', encodeTurkish(customer.name || '')]
+          ]
+          if (customer.email) customerInfo.push(['E-posta:', customer.email])
+          if (customer.phone) customerInfo.push(['Telefon:', customer.phone])
+          if (customer.city) customerInfo.push(['Şehir:', encodeTurkish(customer.city)])
+
+          yPos = drawSectionBox(doc, pageWidth, yPos, 'Müşteri Bilgileri', customerInfo, 40)
+        }
+      }
+
+      // Kayıp Sebebi
+      if (displayDeal.stage === 'LOST' && displayDeal.lostReason) {
+        if (yPos > pageHeight - 70) {
+          doc.addPage()
+          yPos = 25
+        }
+
+        const lostReasonHeight = 45
+        doc.setFillColor(...PDFStyles.colors.redLight)
+        doc.setDrawColor(...PDFStyles.colors.red)
+        doc.roundedRect(
+          PDFStyles.spacing.margin,
+          yPos - 10,
+          pageWidth - PDFStyles.spacing.margin * 2,
+          lostReasonHeight,
+          3,
+          3,
+          'FD'
+        )
+
+        doc.setFontSize(PDFStyles.fonts.subtitle)
+        doc.setTextColor(...PDFStyles.colors.red)
+        doc.setFont('helvetica', 'bold')
+        doc.text(encodeTurkish('Kayıp Sebebi'), PDFStyles.spacing.margin + 5, yPos)
+        yPos += 12
+
+        doc.setFontSize(PDFStyles.fonts.body)
+        doc.setTextColor(0, 0, 0)
+        doc.setFont('helvetica', 'normal')
+        const lostReasonLines = doc.splitTextToSize(
+          encodeTurkish(displayDeal.lostReason || ''),
+          pageWidth - 50
+        )
+        lostReasonLines.forEach((line: string) => {
+          doc.text(line, PDFStyles.spacing.margin + 5, yPos)
+          yPos += 5
+        })
+
+        yPos += 10
+      }
+
+      // İmza Alanı
+      if (yPos > pageHeight - 55) {
+        doc.addPage()
+        yPos = pageHeight - 55
+      } else {
+        yPos = pageHeight - 55
+      }
+
+      drawSignatureArea(doc, pageWidth, yPos)
+
+      // Footer
+      const reportDate = displayDeal.createdAt 
+        ? formatDate(displayDeal.createdAt)
+        : formatDate(new Date().toISOString())
+      drawFooter(doc, pageWidth, pageHeight, reportDate)
+
+      // PDF'i indir
+      const fileName = `firsat-${displayDeal.id?.substring(0, 8) || 'rapor'}.pdf`
+      doc.save(fileName)
+      toast.success('PDF başarıyla indirildi')
+    } catch (error: any) {
+      console.error('PDF generation error:', error)
+      toast.error('PDF oluşturulamadı', error?.message || 'Beklenmeyen bir hata oluştu')
+    }
+  }
 
   const handleDelete = async () => {
     if (!displayDeal || !confirm(`${displayDeal.title} fırsatını silmek istediğinize emin misiniz?`)) {
@@ -148,17 +268,24 @@ export default function DealDetailModal({
       >
         <div className="space-y-6">
           {/* Header Actions */}
-          <div className="flex justify-end gap-2 pb-4 border-b">
+          <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pb-4 border-b">
             <Badge className={stageColors[displayDeal?.stage] || 'bg-gray-600 text-white border-gray-700'}>
               {stageLabels[displayDeal?.stage] || displayDeal?.stage}
             </Badge>
-            <Button variant="outline" onClick={() => setFormOpen(true)}>
+            <Button
+              className="bg-gradient-primary text-white w-full sm:w-auto"
+              onClick={handleDownloadPDF}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              PDF İndir
+            </Button>
+            <Button variant="outline" onClick={() => setFormOpen(true)} className="w-full sm:w-auto">
               <Edit className="mr-2 h-4 w-4" />
               Düzenle
             </Button>
             <Button
               variant="outline"
-              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 w-full sm:w-auto"
               onClick={handleDelete}
               disabled={deleteLoading}
             >

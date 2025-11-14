@@ -353,13 +353,13 @@ export default function ProductDetailPage() {
 
           {/* Satış Geçmişi Tab - Müşteri, firma, fırsat bazlı satış bilgileri */}
           <TabsContent value="sales" className="mt-6">
-            {product.salesHistory && (product.salesHistory.quotes?.length > 0 || product.salesHistory.invoices?.length > 0) ? (
+            {(relatedQuotes.length > 0 || relatedInvoices.length > 0) ? (
               <>
           
           {/* Teklifler */}
-          {product.salesHistory.quotes && product.salesHistory.quotes.length > 0 && (
+          {relatedQuotes.length > 0 && (
             <div className="mb-6">
-              <h3 className="text-lg font-medium mb-3 text-gray-700">Teklifler</h3>
+              <h3 className="text-lg font-medium mb-3 text-gray-700">Teklifler ({relatedQuotes.length})</h3>
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -367,7 +367,6 @@ export default function ProductDetailPage() {
                       <TableHead>Tarih</TableHead>
                       <TableHead>Teklif</TableHead>
                       <TableHead>Müşteri</TableHead>
-                      <TableHead>Fırsat</TableHead>
                       <TableHead>Miktar</TableHead>
                       <TableHead>Birim Fiyat</TableHead>
                       <TableHead>Toplam</TableHead>
@@ -375,37 +374,27 @@ export default function ProductDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {product.salesHistory.quotes.map((item: any) => (
-                      <TableRow key={item.id}>
+                    {relatedQuotes.map((quote: any) => (
+                      <TableRow key={quote.id}>
                         <TableCell>
-                          {new Date(item.createdAt).toLocaleDateString('tr-TR')}
+                          {new Date(quote.createdAt).toLocaleDateString('tr-TR')}
                         </TableCell>
                         <TableCell>
                           <Link 
-                            href={`/${locale}/quotes/${item.Quote?.id}`}
+                            href={`/${locale}/quotes/${quote.id}`}
                             className="text-indigo-600 hover:underline"
                           >
-                            {item.Quote?.title || '-'}
+                            {quote.title || quote.quoteNumber || '-'}
                           </Link>
                         </TableCell>
                         <TableCell>
-                          {item.Quote?.Deal?.Customer?.name || '-'}
+                          {quote.Customer?.name || '-'}
                         </TableCell>
+                        <TableCell>{quote.quantity || '-'}</TableCell>
+                        <TableCell>{formatCurrency(quote.unitPrice || 0)}</TableCell>
+                        <TableCell className="font-semibold">{formatCurrency(quote.total || 0)}</TableCell>
                         <TableCell>
-                          {item.Quote?.Deal?.title ? (
-                            <Link 
-                              href={`/${locale}/deals/${item.Quote.Deal.id}`}
-                              className="text-indigo-600 hover:underline"
-                            >
-                              {item.Quote.Deal.title}
-                            </Link>
-                          ) : '-'}
-                        </TableCell>
-                        <TableCell>{item.quantity}</TableCell>
-                        <TableCell>{formatCurrency(item.unitPrice)}</TableCell>
-                        <TableCell className="font-semibold">{formatCurrency(item.total)}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{item.Quote?.status || '-'}</Badge>
+                          <Badge variant="outline">{quote.status || '-'}</Badge>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -416,9 +405,9 @@ export default function ProductDetailPage() {
           )}
 
           {/* Faturalar */}
-          {product.salesHistory.invoices && product.salesHistory.invoices.length > 0 && (
+          {relatedInvoices.length > 0 && (
             <div>
-              <h3 className="text-lg font-medium mb-3 text-gray-700">Faturalar</h3>
+              <h3 className="text-lg font-medium mb-3 text-gray-700">Faturalar ({relatedInvoices.length})</h3>
               <div className="overflow-x-auto">
                 <Table>
                   <TableHeader>
@@ -427,7 +416,6 @@ export default function ProductDetailPage() {
                       <TableHead>Fatura</TableHead>
                       <TableHead>Fatura No</TableHead>
                       <TableHead>Müşteri</TableHead>
-                      <TableHead>Fırsat</TableHead>
                       <TableHead>Miktar</TableHead>
                       <TableHead>Birim Fiyat</TableHead>
                       <TableHead>Toplam</TableHead>
@@ -435,40 +423,30 @@ export default function ProductDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {product.salesHistory.invoices.map((item: any) => (
-                      <TableRow key={item.id}>
+                    {relatedInvoices.map((invoice: any) => (
+                      <TableRow key={invoice.id}>
                         <TableCell>
-                          {new Date(item.createdAt).toLocaleDateString('tr-TR')}
+                          {new Date(invoice.createdAt).toLocaleDateString('tr-TR')}
                         </TableCell>
                         <TableCell>
                           <Link 
-                            href={`/${locale}/invoices/${item.Invoice?.id}`}
+                            href={`/${locale}/invoices/${invoice.id}`}
                             className="text-indigo-600 hover:underline"
                           >
-                            {item.Invoice?.title || '-'}
+                            {invoice.title || '-'}
                           </Link>
                         </TableCell>
                         <TableCell className="font-mono text-sm">
-                          {item.Invoice?.invoiceNumber || '-'}
+                          {invoice.invoiceNumber || '-'}
                         </TableCell>
                         <TableCell>
-                          {item.Invoice?.Quote?.Deal?.Customer?.name || '-'}
+                          {invoice.Customer?.name || '-'}
                         </TableCell>
+                        <TableCell>{invoice.quantity || '-'}</TableCell>
+                        <TableCell>{formatCurrency(invoice.unitPrice || 0)}</TableCell>
+                        <TableCell className="font-semibold">{formatCurrency(invoice.total || 0)}</TableCell>
                         <TableCell>
-                          {item.Invoice?.Quote?.Deal?.title ? (
-                            <Link 
-                              href={`/${locale}/deals/${item.Invoice.Quote.Deal.id}`}
-                              className="text-indigo-600 hover:underline"
-                            >
-                              {item.Invoice.Quote.Deal.title}
-                            </Link>
-                          ) : '-'}
-                        </TableCell>
-                        <TableCell>{item.quantity}</TableCell>
-                        <TableCell>{formatCurrency(item.unitPrice)}</TableCell>
-                        <TableCell className="font-semibold">{formatCurrency(item.total)}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{item.Invoice?.status || '-'}</Badge>
+                          <Badge variant="outline">{invoice.status || '-'}</Badge>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -480,7 +458,7 @@ export default function ProductDetailPage() {
               </>
             ) : (
               <div className="text-center py-8 text-gray-500">
-                Satış geçmişi bulunamadı
+                Bu ürün için henüz teklif veya fatura kaydı bulunmuyor.
               </div>
             )}
           </TabsContent>

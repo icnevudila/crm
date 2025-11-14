@@ -449,28 +449,29 @@ function LandingPage() {
           }}
           className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"
         >
-          <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+          <div className="grid items-center gap-8 md:gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
             <motion.div
               variants={containerVariants}
               initial="hidden"
               animate="visible"
-              className="space-y-10 text-center lg:text-left"
+              className="space-y-6 md:space-y-10 text-center lg:text-left"
             >
-              <div className="mx-auto w-full max-w-xl rounded-[26px] border border-white/70 bg-white/65 p-8 shadow-[0_35px_65px_-35px_rgba(79,102,183,0.45)] backdrop-blur-xl lg:mx-0">
+              <div className="mx-auto w-full max-w-xl rounded-[20px] md:rounded-[26px] border border-white/70 bg-white/65 p-6 md:p-8 shadow-[0_35px_65px_-35px_rgba(79,102,183,0.45)] backdrop-blur-xl lg:mx-0">
                 {/* Premium Badge */}
                 <motion.div
                   variants={itemVariants}
                   whileHover={{ scale: 1.05, y: -1 }}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 px-5 py-2.5 text-sm font-semibold text-slate-600 shadow-sm transition-all duration-300"
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 px-4 py-2 md:px-5 md:py-2.5 text-xs md:text-sm font-semibold text-slate-600 shadow-sm transition-all duration-300"
                 >
-                  <Sparkles className="h-4 w-4 text-indigo-500" />
-                  CRM & İş Süreçleri Platformu
+                  <Sparkles className="h-3.5 w-3.5 md:h-4 md:w-4 text-indigo-500" />
+                  <span className="hidden sm:inline">CRM & İş Süreçleri Platformu</span>
+                  <span className="sm:hidden">CRM Platformu</span>
                 </motion.div>
 
                 {/* Main Title */}
                 <motion.h1
                   variants={itemVariants}
-                  className="mt-6 text-4xl font-extrabold leading-tight text-slate-900 sm:text-5xl lg:text-[3.4rem] lg:leading-[1.08]"
+                  className="mt-4 md:mt-6 text-3xl sm:text-4xl md:text-5xl font-extrabold leading-tight text-slate-900 lg:text-[3.4rem] lg:leading-[1.08]"
                 >
                   <span className="block text-slate-900/85">Tüm müşteri ve satış süreçleriniz</span>
                   <span className="block bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 bg-clip-text text-transparent">
@@ -481,7 +482,7 @@ function LandingPage() {
                 {/* Subtitle */}
                 <motion.p
                   variants={itemVariants}
-                  className="mt-5 text-lg leading-relaxed text-slate-600 lg:text-[1.1rem]"
+                  className="mt-4 md:mt-5 text-base md:text-lg leading-relaxed text-slate-600 lg:text-[1.1rem] px-2 md:px-0"
                 >
                   Satış ekiplerinizi hızlandırın, müşteri deneyimini güçlendirin ve tüm işinizi gerçek zamanlı olarak görün. Tek bir platformla tekliften faturaya tüm yolculuğu yönetin.
                 </motion.p>
@@ -489,35 +490,24 @@ function LandingPage() {
                 {/* CTA Buttons */}
                 <motion.div
                   variants={itemVariants}
-                  className="mt-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-center lg:justify-start"
+                  className="mt-6 md:mt-8 flex flex-col items-stretch sm:items-center gap-3 sm:gap-4 sm:flex-row sm:justify-center lg:justify-start"
                 >
-                  <motion.div whileHover={{ scale: 1.04, y: -2 }} whileTap={{ scale: 0.98 }}>
+                  <motion.div whileHover={{ scale: 1.04, y: -2 }} whileTap={{ scale: 0.98 }} className="w-full sm:w-auto">
                     <Button
                       size="lg"
+                      variant="outline"
                       onClick={() => scrollToSection('#contact')}
-                      className="group relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-500 via-cyan-500 to-indigo-500 px-10 py-6 text-base font-semibold text-white shadow-[0_25px_60px_-20px_rgba(59,130,246,0.55)] transition-all duration-300 hover:shadow-[0_30px_70px_-20px_rgba(59,130,246,0.65)]"
+                      className="w-full sm:w-auto rounded-2xl border-2 border-slate-300/70 bg-white/90 px-6 py-5 md:px-10 md:py-6 text-sm md:text-base font-semibold text-slate-800 shadow-[0_18px_40px_-25px_rgba(79,102,183,0.55)] backdrop-blur-lg transition-all duration-300 hover:bg-white hover:border-slate-400/70"
                     >
-                      <span className="relative z-10 flex items-center gap-3">
-                        Ücretsiz Başla
-                        <motion.div
-                          animate={{ x: [0, 6, 0] }}
-                          transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
-                        >
-                          <ArrowRight className="h-5 w-5" />
-                        </motion.div>
-                      </span>
-                      <motion.div
-                        className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-                        initial={false}
-                      />
+                      Ücretsiz Başla
                     </Button>
                   </motion.div>
-                  <motion.div whileHover={{ scale: 1.04, y: -2 }} whileTap={{ scale: 0.98 }}>
+                  <motion.div whileHover={{ scale: 1.04, y: -2 }} whileTap={{ scale: 0.98 }} className="w-full sm:w-auto">
                     <Button
                       size="lg"
                       variant="outline"
                       onClick={() => scrollToSection('#features')}
-                      className="rounded-2xl border-2 border-slate-300/70 bg-white/90 px-10 py-6 text-base font-semibold text-slate-800 shadow-[0_18px_40px_-25px_rgba(79,102,183,0.55)] backdrop-blur-lg transition-all duration-300 hover:bg-white hover:border-slate-400/70"
+                      className="w-full sm:w-auto rounded-2xl border-2 border-slate-300/70 bg-white/90 px-6 py-5 md:px-10 md:py-6 text-sm md:text-base font-semibold text-slate-800 shadow-[0_18px_40px_-25px_rgba(79,102,183,0.55)] backdrop-blur-lg transition-all duration-300 hover:bg-white hover:border-slate-400/70"
                     >
                       Daha Fazla Bilgi
                     </Button>
@@ -527,19 +517,21 @@ function LandingPage() {
                 {/* Supporting points */}
                 <motion.div
                   variants={itemVariants}
-                  className="mt-6 flex flex-wrap items-center justify-center gap-4 text-sm text-slate-500 lg:justify-start"
+                  className="mt-5 md:mt-6 flex flex-wrap items-center justify-center gap-3 md:gap-4 text-xs md:text-sm text-slate-500 lg:justify-start"
                 >
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    14 gün ücretsiz deneyin
+                    <CheckCircle2 className="h-3.5 w-3.5 md:h-4 md:w-4 text-emerald-500" />
+                    <span className="hidden sm:inline">14 gün ücretsiz deneyin</span>
+                    <span className="sm:hidden">14 gün ücretsiz</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                    <CheckCircle2 className="h-3.5 w-3.5 md:h-4 md:w-4 text-emerald-500" />
                     Kurulum gerekmez
                   </div>
                   <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                    Gerçek zamanlı raporlama
+                    <CheckCircle2 className="h-3.5 w-3.5 md:h-4 md:w-4 text-emerald-500" />
+                    <span className="hidden sm:inline">Gerçek zamanlı raporlama</span>
+                    <span className="sm:hidden">Gerçek zamanlı</span>
                   </div>
                 </motion.div>
               </div>
@@ -653,7 +645,7 @@ function LandingPage() {
               {
                 title: 'Süreç Otomasyonu',
                 description:
-                  'Hazır otomasyon şablonları ve AI önerileri ile onay, bildirim, hatırlatıcı akışları otomatik ilerler.',
+                  'Hazır otomasyon şablonları ile onay, bildirim, hatırlatıcı akışları otomatik ilerler.',
                 icon: Workflow,
                 gradient: 'info' as const,
               },
@@ -782,9 +774,9 @@ function LandingPage() {
               },
               {
                 icon: Sparkles,
-                title: 'AI Destekli Kararlar',
+                title: 'Akıllı İçgörüler',
                 description:
-                  'Akıllı içgörüler ve öneriler ile fırsatları önceliklendirin, satış dönüşümlerinizi gerçek zamanlı olarak takip edin.',
+                  'Detaylı analiz ve öneriler ile fırsatları önceliklendirin, satış dönüşümlerinizi gerçek zamanlı olarak takip edin.',
               },
               {
                 icon: TrendingUp,
@@ -1796,13 +1788,11 @@ function LandingPage() {
               >
                 <Button
                   size="lg"
+                  variant="outline"
                   onClick={() => scrollToSection('#contact')}
-                  className="bg-white text-blue-600 hover:bg-blue-50 px-10 py-7 text-lg font-bold rounded-2xl shadow-2xl hover:shadow-white/50 transition-all duration-300"
+                  className="bg-white/10 backdrop-blur-xl border-2 border-white/40 text-white hover:bg-white/20 px-10 py-7 text-lg font-bold rounded-2xl transition-all duration-300"
                 >
-                  <span className="flex items-center gap-3">
-                    Ücretsiz Başla
-                    <ArrowRight className="h-5 w-5" />
-                  </span>
+                  Ücretsiz Başla
                 </Button>
               </motion.div>
               <motion.div

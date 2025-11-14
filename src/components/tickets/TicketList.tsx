@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select'
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import { AutomationInfo } from '@/components/automation/AutomationInfo'
+import RefreshButton from '@/components/ui/RefreshButton'
 import Link from 'next/link'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
@@ -119,6 +120,16 @@ export default function TicketList() {
     revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
   })
 
+  // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
+  const handleRefresh = async () => {
+    await Promise.all([
+      mutateTickets(undefined, { revalidate: true }),
+      mutate('/api/tickets', undefined, { revalidate: true }),
+      mutate('/api/tickets?', undefined, { revalidate: true }),
+      mutate(apiUrl || '/api/tickets', undefined, { revalidate: true }),
+    ])
+  }
+
   const handleDelete = useCallback(async (id: string, subject: string) => {
     if (!(await confirm(t('deleteConfirm', { subject })))) {
       return
@@ -146,6 +157,9 @@ export default function TicketList() {
         mutate('/api/tickets?', updatedTickets, { revalidate: false }),
         mutate(apiUrl, updatedTickets, { revalidate: false }),
       ])
+      
+      // Success toast göster
+      toast.success('Destek talebi silindi', `${subject} başarıyla silindi.`)
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
@@ -201,25 +215,28 @@ export default function TicketList() {
       />
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
-          <p className="mt-2 text-gray-600">{t('totalTickets', { count: tickets.length })}</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{t('title')}</h1>
+          <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600">{t('totalTickets', { count: tickets.length })}</p>
         </div>
-        <Button
-          onClick={handleAdd}
-          className="bg-gradient-primary text-white"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          {t('newTicket')}
-        </Button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <RefreshButton onRefresh={handleRefresh} />
+          <Button
+            onClick={handleAdd}
+            className="bg-gradient-primary text-white flex-1 sm:flex-initial"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {t('newTicket')}
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4 flex-wrap">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
         {isSuperAdmin && (
           <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder={t('selectCompany')} />
             </SelectTrigger>
             <SelectContent>
@@ -233,7 +250,7 @@ export default function TicketList() {
           </Select>
         )}
         <Select value={status || 'all'} onValueChange={(v) => setStatus(v === 'all' ? '' : v)}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder={t('selectStatus')} />
           </SelectTrigger>
           <SelectContent>
@@ -244,7 +261,7 @@ export default function TicketList() {
           </SelectContent>
         </Select>
         <Select value={priority || 'all'} onValueChange={(v) => setPriority(v === 'all' ? '' : v)}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder={t('selectPriority')} />
           </SelectTrigger>
           <SelectContent>

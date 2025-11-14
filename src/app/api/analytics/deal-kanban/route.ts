@@ -2,8 +2,12 @@ import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
-// Dynamic route - POST sonrası fresh data için cache'i kapat
-export const dynamic = 'force-dynamic'
+// ✅ %100 KESİN ÇÖZÜM: Cache'i tamamen kapat - her çağrıda fresh data
+// ÖNEMLİ: Next.js App Router'ın API route cache'ini tamamen kapat
+export const revalidate = 0 // Revalidation'ı kapat
+export const dynamic = 'force-dynamic' // Dynamic route - her zaman çalıştır
+export const fetchCache = 'force-no-store' // Fetch cache'ini kapat
+export const runtime = 'nodejs' // Edge yerine Node zorla (cache sorunlarını önlemek için)
 
 export async function GET(request: Request) {
   try {
@@ -24,6 +28,7 @@ export async function GET(request: Request) {
     
     // Filtre parametreleri - güvenli parse
     let customerId = ''
+    let customerCompanyId = '' // Firma bazlı filtreleme
     let search = ''
     let minValue: string | null = null
     let maxValue: string | null = null
@@ -34,6 +39,7 @@ export async function GET(request: Request) {
     try {
       const { searchParams } = new URL(request.url)
       customerId = searchParams.get('customerId') || ''
+      customerCompanyId = searchParams.get('customerCompanyId') || '' // Firma bazlı filtreleme
       search = searchParams.get('search') || ''
       minValue = searchParams.get('minValue')
       maxValue = searchParams.get('maxValue')
@@ -50,7 +56,11 @@ export async function GET(request: Request) {
     // Tüm deal'ları çek - limit yok (tüm verileri çek)
     // Customer join'i ekle (performans için sadece gerekli alanlar)
     // NOT: lostReason kolonu migration 033'te eklenmiş olmalı, yoksa hata verir
-    // PERFORMANS: Sadece gerekli kolonları çek, displayOrder index'i kullan
+    // PERFORMANS: Sadece gerekli kolonları çek
+    // ÖNEMLİ: displayOrder kolonu migration 062'de eklenmiş olmalı
+    // Eğer displayOrder kolonu yoksa migration 062'yi çalıştırın!
+    // NOT: displayOrder kolonu select'te var ama .order() kullanılmıyor (kolon yoksa hata vermemesi için)
+    // ÖNEMLİ: status kolonu migration 072'de eklenmiş olmalı, yoksa hata verir
     let query = supabase
       .from('Deal')
       .select(`
@@ -59,17 +69,16 @@ export async function GET(request: Request) {
         stage, 
         value, 
         customerId, 
+        customerCompanyId, 
         createdAt, 
         updatedAt,
-        status,
         displayOrder,
         Customer:customerId (
           id,
           name
         )
       `)
-      .order('displayOrder', { ascending: true }) // ✅ displayOrder'a göre sırala (Kanban sıralama için)
-      .order('updatedAt', { ascending: false }) // Aynı displayOrder için updatedAt'e göre
+      .order('updatedAt', { ascending: false }) // updatedAt'e göre sırala (displayOrder yoksa)
       .order('createdAt', { ascending: false }) // Aynı updatedAt için createdAt'e göre
     
     // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
@@ -84,6 +93,11 @@ export async function GET(request: Request) {
     // Filtreler
     if (customerId) {
       query = query.eq('customerId', customerId)
+    }
+
+    // Firma bazlı filtreleme (customerCompanyId)
+    if (customerCompanyId) {
+      query = query.eq('customerCompanyId', customerCompanyId)
     }
 
     if (search) {
@@ -106,7 +120,78 @@ export async function GET(request: Request) {
       query = query.lte('createdAt', endDate)
     }
 
-    const { data: deals, error: queryError } = await query
+    // Status kolonunu kontrol et (kolon yoksa hata vermemesi için)
+    // Önce status olmadan deneyelim, sonra varsa ekleyelim
+    let deals: any[] = []
+    let queryError: any = null
+    
+    // Önce status olmadan deneyelim
+    const { data: dealsWithoutStatus, error: errorWithoutStatus } = await query
+    
+    if (errorWithoutStatus && (errorWithoutStatus.message?.includes('status') || (errorWithoutStatus.message?.includes('column') && errorWithoutStatus.message?.includes('does not exist')))) {
+      // Status kolonu yok, status olmadan kullan
+      queryError = null
+      deals = dealsWithoutStatus || []
+    } else if (errorWithoutStatus) {
+      // Başka bir hata var
+      queryError = errorWithoutStatus
+      deals = []
+    } else {
+      // Status kolonu var, status ile tekrar çek
+      let queryWithStatus = supabase
+        .from('Deal')
+        .select(`
+          id, 
+          title, 
+          stage, 
+          value, 
+          customerId, 
+          customerCompanyId, 
+          createdAt, 
+          updatedAt,
+          status,
+          displayOrder,
+          Customer:customerId (
+            id,
+            name
+          )
+        `)
+        .order('updatedAt', { ascending: false })
+        .order('createdAt', { ascending: false })
+      
+      // Filtreleri tekrar uygula
+      if (!isSuperAdmin) {
+        queryWithStatus = queryWithStatus.eq('companyId', companyId)
+      } else if (filterCompanyId) {
+        queryWithStatus = queryWithStatus.eq('companyId', filterCompanyId)
+      }
+      
+      if (customerId) {
+        queryWithStatus = queryWithStatus.eq('customerId', customerId)
+      }
+      if (customerCompanyId) {
+        queryWithStatus = queryWithStatus.eq('customerCompanyId', customerCompanyId)
+      }
+      if (search) {
+        queryWithStatus = queryWithStatus.ilike('title', `%${search}%`)
+      }
+      if (minValue) {
+        queryWithStatus = queryWithStatus.gte('value', parseFloat(minValue))
+      }
+      if (maxValue) {
+        queryWithStatus = queryWithStatus.lte('value', parseFloat(maxValue))
+      }
+      if (startDate) {
+        queryWithStatus = queryWithStatus.gte('createdAt', startDate)
+      }
+      if (endDate) {
+        queryWithStatus = queryWithStatus.lte('createdAt', endDate)
+      }
+      
+      const { data: dealsWithStatus, error: errorWithStatus } = await queryWithStatus
+      queryError = errorWithStatus
+      deals = dealsWithStatus || []
+    }
 
     // Debug: Deals verisini logla
     if (process.env.NODE_ENV === 'development') {
@@ -192,13 +277,14 @@ export async function GET(request: Request) {
       })))
     }
 
-    // Cache headers - Performans için 60 saniye cache (repo kurallarına uygun)
-    // NOT: dynamic = 'force-dynamic' ile cache zaten kapalı ama Next.js edge cache kullanabiliriz
+    // ✅ ÇÖZÜM: Cache'i tamamen kapat - her zaman fresh data çek
     return NextResponse.json(
       { kanban },
       {
         headers: {
-          'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120', // 60 saniye cache, 120 saniye stale-while-revalidate
+          'Cache-Control': 'no-store, must-revalidate, max-age=0', // ✅ ÇÖZÜM: Cache'i tamamen kapat - her zaman fresh data çek
+          'Pragma': 'no-cache', // ✅ ÇÖZÜM: Eski browser'lar için cache'i kapat
+          'Expires': '0', // ✅ ÇÖZÜM: Cache'i hemen expire et
         },
       }
     )

@@ -308,18 +308,19 @@ export default function TaskForm({ task, open, onClose, onSuccess, defaultTitle,
           </div>
 
           {/* Buttons */}
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
               disabled={loading}
+              className="w-full sm:w-auto"
             >
               {t('cancel')}
             </Button>
             <Button
               type="submit"
-              className="bg-gradient-primary text-white"
+              className="bg-gradient-primary text-white w-full sm:w-auto"
               disabled={loading}
             >
               {loading ? t('saving') : task ? t('update') : t('save')}

@@ -123,7 +123,7 @@ export default function FinanceDetailModal({
       >
         <div className="space-y-6">
           {/* Header Actions */}
-          <div className="flex justify-end gap-2 pb-4 border-b">
+          <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pb-4 border-b">
             <Badge className={isIncome ? 'bg-green-600 text-white border-green-700' : 'bg-red-600 text-white border-red-700'}>
               {isIncome ? (
                 <><TrendingUp className="h-3 w-3 mr-1" /> Gelir</>
@@ -131,13 +131,13 @@ export default function FinanceDetailModal({
                 <><TrendingDown className="h-3 w-3 mr-1" /> Gider</>
               )}
             </Badge>
-            <Button variant="outline" onClick={() => setFormOpen(true)}>
+            <Button variant="outline" onClick={() => setFormOpen(true)} className="w-full sm:w-auto">
               <Edit className="mr-2 h-4 w-4" />
               Düzenle
             </Button>
             <Button
               variant="outline"
-              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 w-full sm:w-auto"
               onClick={handleDelete}
               disabled={deleteLoading}
             >
@@ -147,7 +147,7 @@ export default function FinanceDetailModal({
           </div>
 
           {/* Info Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             <Card className="p-6">
               <p className="text-sm text-gray-600 mb-1">Tutar</p>
               <p className={`text-3xl font-bold ${isIncome ? 'text-green-600' : 'text-red-600'}`}>

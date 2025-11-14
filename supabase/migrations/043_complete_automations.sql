@@ -245,20 +245,24 @@ BEGIN
     BEGIN
       -- Notification (Atanan kullanıcıya)
       INSERT INTO "Notification" (
+        "userId",
+        "companyId",
         title,
         message,
         type,
         "relatedTo",
         "relatedId",
-        "companyId"
+        link
       )
       VALUES (
+        NEW."assignedTo",
+        NEW."companyId",
         'Yeni Görev Atandı',
         COALESCE(NEW.title, 'Başlıksız') || ' görevi size atandı.',
         'info',
         'Task',
         NEW.id,
-        NEW."companyId"
+        '/tr/tasks/' || NEW.id
       )
       ON CONFLICT DO NOTHING;
       

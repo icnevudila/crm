@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { X } from 'lucide-react'
+import { toast } from '@/lib/toast'
 
 const competitorSchema = z.object({
   name: z.string().min(1, 'Firma adı gereklidir'),
@@ -70,8 +71,15 @@ export default function CompetitorForm({
           marketShare: competitor.marketShare || 0,
           pricingStrategy: competitor.pricingStrategy || '',
         })
-        setStrengths(competitor.strengths || [])
-        setWeaknesses(competitor.weaknesses || [])
+        // Strengths/Weaknesses DB'de TEXT olarak saklanıyor, JSON parse et
+        try {
+          setStrengths(competitor.strengths ? (typeof competitor.strengths === 'string' ? JSON.parse(competitor.strengths) : competitor.strengths) : [])
+          setWeaknesses(competitor.weaknesses ? (typeof competitor.weaknesses === 'string' ? JSON.parse(competitor.weaknesses) : competitor.weaknesses) : [])
+        } catch {
+          // JSON parse hatası - boş string veya geçersiz format
+          setStrengths([])
+          setWeaknesses([])
+        }
       } else {
         reset({
           name: '',
@@ -87,7 +95,11 @@ export default function CompetitorForm({
     }
   }, [competitor, open, reset])
 
-  const addStrength = () => {
+  const addStrength = (e?: React.MouseEvent | React.KeyboardEvent) => {
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
     if (strengthInput.trim()) {
       setStrengths([...strengths, strengthInput.trim()])
       setStrengthInput('')
@@ -98,7 +110,11 @@ export default function CompetitorForm({
     setStrengths(strengths.filter((_, i) => i !== index))
   }
 
-  const addWeakness = () => {
+  const addWeakness = (e?: React.MouseEvent | React.KeyboardEvent) => {
+    if (e) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
     if (weaknessInput.trim()) {
       setWeaknesses([...weaknesses, weaknessInput.trim()])
       setWeaknessInput('')
@@ -120,8 +136,12 @@ export default function CompetitorForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...data,
-          strengths,
-          weaknesses,
+          // ✅ ÇÖZÜM: Strengths/Weaknesses array olarak gönder (DB TEXT[] - API route'u JSON string'i parse edecek)
+          strengths: strengths.length > 0 ? strengths : null,
+          weaknesses: weaknesses.length > 0 ? weaknesses : null,
+          // ✅ ÇÖZÜM: averagePrice ve marketShare undefined ise null gönder, 0 geçerli bir değer
+          averagePrice: data.averagePrice !== undefined ? data.averagePrice : null,
+          marketShare: data.marketShare !== undefined ? data.marketShare : null,
         }),
       })
 
@@ -131,6 +151,12 @@ export default function CompetitorForm({
       }
 
       const savedCompetitor = await res.json()
+
+      // Success toast göster
+      toast.success(
+        competitor ? 'Rakip güncellendi' : 'Rakip kaydedildi',
+        competitor ? `${data.name} başarıyla güncellendi.` : `${data.name} başarıyla eklendi.`
+      )
 
       if (onSuccess) {
         onSuccess(savedCompetitor)
@@ -182,9 +208,19 @@ export default function CompetitorForm({
                 value={strengthInput}
                 onChange={(e) => setStrengthInput(e.target.value)}
                 placeholder="Güçlü yön ekle..."
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addStrength())}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    addStrength(e)
+                  }
+                }}
               />
-              <Button type="button" onClick={addStrength} variant="outline">
+              <Button 
+                type="button" 
+                onClick={(e) => addStrength(e)} 
+                variant="outline"
+              >
                 Ekle
               </Button>
             </div>
@@ -206,9 +242,19 @@ export default function CompetitorForm({
                 value={weaknessInput}
                 onChange={(e) => setWeaknessInput(e.target.value)}
                 placeholder="Zayıf yön ekle..."
-                onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addWeakness())}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    addWeakness(e)
+                  }
+                }}
               />
-              <Button type="button" onClick={addWeakness} variant="outline">
+              <Button 
+                type="button" 
+                onClick={(e) => addWeakness(e)} 
+                variant="outline"
+              >
                 Ekle
               </Button>
             </div>

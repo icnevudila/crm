@@ -225,14 +225,14 @@ export default function ProductDetailModal({
       >
         <div className="space-y-6">
           {/* Header Actions */}
-          <div className="flex justify-end gap-2 pb-4 border-b">
-            <Button variant="outline" onClick={() => setFormOpen(true)}>
+          <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pb-4 border-b">
+            <Button variant="outline" onClick={() => setFormOpen(true)} className="w-full sm:w-auto">
               <Edit className="mr-2 h-4 w-4" />
               Düzenle
             </Button>
             <Button
               variant="outline"
-              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 w-full sm:w-auto"
               onClick={handleDelete}
               disabled={deleteLoading}
             >
@@ -242,7 +242,7 @@ export default function ProductDetailModal({
           </div>
 
           {/* Info Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-white rounded-lg shadow-card p-6">
               <p className="text-sm text-gray-600 mb-1">Fiyat</p>
               <p className="text-2xl font-bold text-gray-900">

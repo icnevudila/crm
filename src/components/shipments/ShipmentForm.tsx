@@ -303,18 +303,19 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess }: Shi
           </div>
 
           {/* Buttons */}
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
               disabled={loading || isProtected}
+              className="w-full sm:w-auto"
             >
               İptal
             </Button>
             <Button
               type="submit"
-              className="bg-gradient-primary text-white"
+              className="bg-gradient-primary text-white w-full sm:w-auto"
               disabled={loading || isProtected}
             >
               {loading ? 'Kaydediliyor...' : shipment ? (isProtected ? 'Değiştirilemez' : 'Güncelle') : 'Kaydet'}

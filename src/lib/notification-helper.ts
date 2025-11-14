@@ -130,7 +130,7 @@ export async function createNotificationForRole({
     if (isSuperAdminInRoles) {
       const { data: superAdminUsers, error: superAdminError } = await supabase
         .from('User')
-        .select('id')
+        .select('id, role, companyId')
         .eq('role', 'SUPER_ADMIN')
         .eq('status', 'ACTIVE')
       
@@ -143,7 +143,7 @@ export async function createNotificationForRole({
     if (otherRoles.length > 0) {
       const { data: otherUsers, error: otherUsersError } = await supabase
         .from('User')
-        .select('id')
+        .select('id, role, companyId')
         .eq('companyId', companyId)
         .in('role', otherRoles)
         .eq('status', 'ACTIVE')
@@ -184,21 +184,30 @@ export async function createNotificationForRole({
     }
 
     // Her kullanıcı için bildirim oluştur
-    const notifications = users.map((user: any) => ({
-      userId: user.id,
-      companyId,
-      title,
-      message: message || null,
-      type,
-      relatedTo: relatedTo || null,
-      relatedId: relatedId || null,
-      link: notificationLink || null,
-      isRead: false,
-      priority: priority || 'normal',
-      expiresAt: expiresAt || null,
-      actionType: actionType || null,
-      actionDone: false,
-    }))
+    // SuperAdmin için: kullanıcının kendi companyId'sini kullan (bildirimin gönderildiği companyId değil)
+    const notifications = users.map((user: any) => {
+      // SuperAdmin için kullanıcının kendi companyId'sini kullan
+      // Diğer kullanıcılar için bildirimin gönderildiği companyId'yi kullan
+      const userCompanyId = user.role === 'SUPER_ADMIN' && user.companyId 
+        ? user.companyId 
+        : companyId
+      
+      return {
+        userId: user.id,
+        companyId: userCompanyId,
+        title,
+        message: message || null,
+        type,
+        relatedTo: relatedTo || null,
+        relatedId: relatedId || null,
+        link: notificationLink || null,
+        isRead: false,
+        priority: priority || 'normal',
+        expiresAt: expiresAt || null,
+        actionType: actionType || null,
+        actionDone: false,
+      }
+    })
 
     // Tablo adını doğru yaz (boşluk olmadan)
     const { error } = await supabase

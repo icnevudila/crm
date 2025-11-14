@@ -28,6 +28,7 @@ import {
   DndContext,
   DragOverlay,
   closestCenter,
+  pointerWithin,
   KeyboardSensor,
   PointerSensor,
   TouchSensor,
@@ -73,6 +74,7 @@ interface DealKanbanChartProps {
   onEdit?: (deal: any) => void
   onDelete?: (id: string, title: string) => void
   onStageChange?: (dealId: string, newStage: string) => void | Promise<void>
+  onView?: (dealId: string) => void // ✅ ÇÖZÜM: Modal açmak için callback
 }
 
 const stageLabels: Record<string, string> = {
@@ -133,7 +135,7 @@ function DroppableColumn({ stage, children }: { stage: string; children: React.R
 }
 
 // Sortable Deal Card Component
-function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpenMeetingDialog, onOpenQuoteDialog, onOpenWonDialog, onOpenLostDialog }: {
+function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpenMeetingDialog, onOpenQuoteDialog, onOpenWonDialog, onOpenLostDialog, onView }: {
   deal: any
   stage: string
   onEdit?: (deal: any) => void
@@ -143,6 +145,7 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
   onOpenQuoteDialog?: (deal: any) => void
   onOpenWonDialog?: (deal: any) => void
   onOpenLostDialog?: (deal: any) => void
+  onView?: (dealId: string) => void // ✅ ÇÖZÜM: Modal açmak için callback
 }) {
   const locale = useLocale()
   const [dragMode, setDragMode] = useState(false)
@@ -159,28 +162,38 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
     isDragging,
   } = useSortable({ id: deal.id, disabled: !dragMode || isLocked })
 
-  // ✅ PREMIUM: Smooth drag animations with proper transitions
+  // ✅ PREMIUM: Ultra-smooth drag animations with GPU acceleration
   const x = transform?.x ?? 0
   const y = transform?.y ?? 0
   const style: React.CSSProperties = transform 
     ? {
-        transform: `translate3d(${x}px,${y}px,0)`,
-        WebkitTransform: `translate3d(${x}px,${y}px,0)`,
-        transition: isDragging ? 'none' : 'transform 200ms cubic-bezier(0.4, 0, 0.2, 1)', // ✅ Smooth transition when not dragging
+        transform: `translate3d(${x}px,${y}px,0) scale(1)`,
+        WebkitTransform: `translate3d(${x}px,${y}px,0) scale(1) translateZ(0)`,
+        transition: isDragging ? 'none' : 'transform 150ms cubic-bezier(0.25, 0.46, 0.45, 0.94)', // ✅ Daha hızlı ve smooth transition
         willChange: 'transform',
-        opacity: isDragging ? 0.6 : 1, // ✅ Daha görünür opacity
+        opacity: isDragging ? 0.7 : 1, // ✅ Daha görünür opacity
         cursor: dragMode && !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'default',
         transformOrigin: 'center center',
         backfaceVisibility: 'hidden',
         perspective: 1000,
         isolation: 'isolate',
         zIndex: isDragging ? 50 : 1, // ✅ Drag sırasında üstte
+        // ✅ GPU acceleration optimizations
+        WebkitBackfaceVisibility: 'hidden',
+        WebkitPerspective: 1000,
+        WebkitTransformStyle: 'preserve-3d',
+        transformStyle: 'preserve-3d',
       }
     : {
-        transition: 'transform 200ms cubic-bezier(0.4, 0, 0.2, 1), opacity 200ms ease-out', // ✅ Smooth transitions
+        transition: 'transform 150ms cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 150ms ease-out', // ✅ Daha hızlı transitions
         willChange: dragMode && !isLocked ? 'transform' : 'auto',
-        opacity: isDragging ? 0.6 : 1,
+        opacity: isDragging ? 0.7 : 1,
         cursor: dragMode && !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'default',
+        // ✅ GPU acceleration optimizations
+        WebkitBackfaceVisibility: 'hidden',
+        WebkitPerspective: 1000,
+        WebkitTransformStyle: 'preserve-3d',
+        transformStyle: 'preserve-3d',
       }
 
   const customer = deal.customer || deal.Customer
@@ -590,7 +603,13 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
                     onClick={(e) => {
                       e.preventDefault()
                       e.stopPropagation()
-                      window.open(`/${locale}/deals/${deal.id}`, '_blank')
+                      // ✅ ÇÖZÜM: Modal aç - yeni sekme açma
+                      if (onView) {
+                        onView(deal.id)
+                      } else {
+                        // Fallback: Eğer onView yoksa yeni sekmede aç (eski davranış)
+                        window.open(`/${locale}/deals/${deal.id}`, '_blank')
+                      }
                     }}
                   >
                     <Eye className="h-3 w-3 mr-1" />
@@ -666,7 +685,7 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
   )
 }
 
-export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange }: DealKanbanChartProps) {
+export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange, onView }: DealKanbanChartProps) {
   const locale = useLocale()
   const [activeId, setActiveId] = useState<string | null>(null)
   const [localData, setLocalData] = useState<any[]>(Array.isArray(data) ? data : [])
@@ -759,17 +778,17 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange 
     })
   }, [data]) // localData'yı dependency'den çıkar - sadece data prop'unu izle
 
-  // ✅ PREMIUM: Smooth activation with slight delay for better UX
+  // ✅ PREMIUM: Optimized sensors for smooth drag & drop
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // ✅ 8px - Kullanıcı gerçekten sürüklemek istiyor mu kontrol et
+        distance: 5, // ✅ 5px - Daha hassas, daha hızlı aktivasyon
       },
     }),
     useSensor(TouchSensor, {
       activationConstraint: {
-        distance: 8, // ✅ 8px - Touch için de aynı
-        delay: 100, // ✅ 100ms - Yanlışlıkla drag'i önle
+        distance: 5, // ✅ 5px - Touch için de aynı
+        delay: 50, // ✅ 50ms - Daha hızlı aktivasyon, yanlışlıkla drag'i önle
       },
     }),
     useSensor(KeyboardSensor, {
@@ -905,7 +924,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange 
 
         // ✅ Sıralamayı API'ye kaydet - batch order update
         try {
-          const orders = newDeals.map((deal, index) => ({
+          const orders = newDeals.map((deal: any, index) => ({
             id: deal.id,
             displayOrder: index + 1, // 1-based index
           }))
@@ -952,7 +971,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange 
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={pointerWithin} // ✅ pointerWithin - Daha smooth collision detection
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
@@ -1081,10 +1100,11 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange 
                           setWinningDealId(deal.id)
                           setWonDialogOpen(true)
                         }}
-                    onOpenLostDialog={(deal) => {
-                      setLosingDealId(deal.id)
-                      setLostDialogOpen(true)
-                    }}
+                        onOpenLostDialog={(deal) => {
+                          setLosingDealId(deal.id)
+                          setLostDialogOpen(true)
+                        }}
+                        onView={onView} // ✅ ÇÖZÜM: Modal açmak için callback
                       />
                     ))
                   )}
@@ -1099,25 +1119,30 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange 
         sideEffects: defaultDropAnimationSideEffects({
           styles: { 
             active: { 
-              opacity: '0.8',
-              scale: '1.05',
+              opacity: '0.85',
+              scale: '1.02',
             } 
           },
         }),
-        duration: 200, // ✅ 200ms - Smooth drop animation
-        easing: 'cubic-bezier(0.4, 0, 0.2, 1)', // ✅ Premium easing
+        duration: 150, // ✅ 150ms - Daha hızlı ve smooth drop animation
+        easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)', // ✅ Daha smooth easing (ease-out-quad)
       }), [])}>
         {activeDeal ? (
           <Card 
-            className="bg-white border-2 border-primary-500 shadow-2xl min-w-[300px] rotate-2 transition-all duration-200"
+            className="bg-white border-2 border-primary-500 shadow-2xl min-w-[300px] rotate-1 transition-all duration-150"
             style={{
               willChange: 'transform, opacity',
-              transform: 'translate3d(0, 0, 0) scale(1.05)',
+              transform: 'translate3d(0, 0, 0) scale(1.02) translateZ(0)',
               backfaceVisibility: 'hidden',
-              WebkitTransform: 'translateZ(0)',
+              WebkitTransform: 'translate3d(0, 0, 0) scale(1.02) translateZ(0)',
+              WebkitBackfaceVisibility: 'hidden',
               perspective: 1000,
+              WebkitPerspective: 1000,
               pointerEvents: 'none',
               boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              // ✅ GPU acceleration optimizations
+              WebkitTransformStyle: 'preserve-3d',
+              transformStyle: 'preserve-3d',
             }}
           >
             <div className="p-3">

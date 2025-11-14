@@ -43,3 +43,5 @@ COMMENT ON COLUMN "Deal"."leadSource" IS 'Potansiyel müşterinin kaynağı (WEB
 
 
 
+
+

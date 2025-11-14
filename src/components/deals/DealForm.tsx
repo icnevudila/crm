@@ -1,22 +1,25 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
-import { useTranslations } from 'next-intl'
+import { useTranslations, useLocale } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import { toast } from '@/lib/toast'
+import { handleFormValidationErrors } from '@/lib/form-validation'
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog'
 import {
   Select,
@@ -62,12 +65,16 @@ export default function DealForm({
 }: DealFormProps) {
   const t = useTranslations('deals.form')
   const tCommon = useTranslations('common.form')
+  const locale = useLocale()
   const router = useRouter()
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
   const searchCustomerCompanyId = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
   const customerCompanyId = customerCompanyIdProp || searchCustomerCompanyId
   const [loading, setLoading] = useState(false)
+  const [lostReasonDialogOpen, setLostReasonDialogOpen] = useState(false)
+  const [lostReason, setLostReason] = useState('')
+  const [pendingFormData, setPendingFormData] = useState<DealFormData | null>(null)
 
   // Schema'yı component içinde oluştur - locale desteği için
   const dealSchema = z.object({
@@ -84,6 +91,7 @@ export default function DealForm({
     leadSource: z.enum(['WEB', 'EMAIL', 'PHONE', 'REFERRAL', 'SOCIAL', 'OTHER']).optional(), // Lead source tracking (migration 025)
     competitorId: z.string().optional(), // Competitor tracking
     customerCompanyId: z.string().optional(),
+    lostReason: z.string().optional(), // LOST stage'inde zorunlu olacak
   })
 
   type DealFormData = z.infer<typeof dealSchema>
@@ -107,6 +115,8 @@ export default function DealForm({
     : customers
   const competitors = Array.isArray(competitorsData) ? competitorsData : []
 
+  const formRef = useRef<HTMLFormElement>(null)
+  
   const {
     register,
     handleSubmit,
@@ -164,6 +174,7 @@ export default function DealForm({
           expectedCloseDate: formattedDate,
           leadSource: deal.leadSource || undefined, // Lead source tracking (migration 025)
           customerCompanyId: deal.customerCompanyId || customerCompanyId || '',
+          lostReason: deal.lostReason || '', // LOST stage'inde kayıp sebebi
         })
       } else {
         // Yeni deal için formu sıfırla
@@ -224,12 +235,36 @@ export default function DealForm({
     onSuccess: async (savedDeal) => {
       // Toast mesajı göster
       if (deal) {
-        toast.success(t('dealUpdated'), t('dealUpdatedMessage', { title: savedDeal.title }))
+        // WON stage'i için özel mesaj
+        if (savedDeal.stage === 'WON' && deal.stage !== 'WON') {
+          toast.success(
+            '🎉 Fırsat Kazanıldı!',
+            `"${savedDeal.title}" fırsatı kazanıldı!\n\nOtomatik işlemler:\n• Teklif oluşturuldu\n• Sözleşme oluşturuldu\n• E-posta gönderildi`,
+            {
+              label: 'Teklifleri Görüntüle',
+              onClick: () => window.location.href = `/${locale}/quotes`,
+            }
+          )
+        } else {
+          toast.success(t('dealUpdated'), t('dealUpdatedMessage', { title: savedDeal.title }))
+        }
       } else {
-        const message = customerCompanyName 
-          ? t('dealCreatedMessageWithCompany', { company: customerCompanyName, title: savedDeal.title })
-          : t('dealCreatedMessage', { title: savedDeal.title })
-        toast.success(t('dealCreated'), message)
+        // Yeni deal oluşturuldu
+        if (savedDeal.stage === 'WON') {
+          toast.success(
+            '🎉 Fırsat Kazanıldı!',
+            `"${savedDeal.title}" fırsatı kazanıldı!\n\nOtomatik işlemler:\n• Teklif oluşturuldu\n• Sözleşme oluşturuldu\n• E-posta gönderildi`,
+            {
+              label: 'Teklifleri Görüntüle',
+              onClick: () => window.location.href = `/${locale}/quotes`,
+            }
+          )
+        } else {
+          const message = customerCompanyName 
+            ? t('dealCreatedMessageWithCompany', { company: customerCompanyName, title: savedDeal.title })
+            : t('dealCreatedMessage', { title: savedDeal.title })
+          toast.success(t('dealCreated'), message)
+        }
       }
       
       // Query cache'ini invalidate et - fresh data çek
@@ -264,6 +299,23 @@ export default function DealForm({
   })
 
   const onSubmit = async (data: DealFormData) => {
+    // LOST stage seçildiyse ve lostReason yoksa dialog aç
+    if (data.stage === 'LOST' && !data.lostReason?.trim()) {
+      setPendingFormData(data)
+      setLostReasonDialogOpen(true)
+      return
+    }
+
+    // Normal submit işlemi
+    await submitFormData(data)
+  }
+
+  const onError = (errors: any) => {
+    // Form validation hatalarını göster ve scroll yap
+    handleFormValidationErrors(errors, formRef)
+  }
+
+  const submitFormData = async (data: DealFormData) => {
     setLoading(true)
     try {
       // Boş string'leri temizle - tarih, description ve customerId için
@@ -286,6 +338,8 @@ export default function DealForm({
           : customerCompanyId || undefined,
         // WinProbability sıfırsa undefined yap
         winProbability: data.winProbability || undefined,
+        // lostReason ekle (LOST stage'inde)
+        lostReason: data.lostReason?.trim() || undefined,
       }
       await mutation.mutateAsync(cleanData)
     } catch (error: any) {
@@ -312,7 +366,7 @@ export default function DealForm({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form ref={formRef} onSubmit={handleSubmit(onSubmit, onError)} className="space-y-4">
           {customerCompanyId && (
             <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3 text-sm text-indigo-700">
               <p className="font-semibold">
@@ -539,18 +593,19 @@ export default function DealForm({
           </div>
 
           {/* Buttons */}
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
               disabled={loading || isProtected}
+              className="w-full sm:w-auto"
             >
               {t('cancel')}
             </Button>
             <Button
               type="submit"
-              className="bg-gradient-primary text-white"
+              className="bg-gradient-primary text-white w-full sm:w-auto"
               disabled={loading || isProtected}
             >
               {loading ? t('saving') : deal ? (isProtected ? t('cannotEdit') : t('update')) : t('save')}
@@ -558,6 +613,78 @@ export default function DealForm({
           </div>
         </form>
       </DialogContent>
+
+      {/* LOST Reason Dialog - Kayıp sebebi sor */}
+      <Dialog open={lostReasonDialogOpen} onOpenChange={setLostReasonDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Fırsatı Kaybedildi Olarak İşaretle</DialogTitle>
+            <DialogDescription>
+              Fırsatı kaybedildi olarak işaretlemek için lütfen sebep belirtin. Bu sebep fırsat detay sayfasında not olarak görünecektir ve analiz görevi oluşturulacaktır.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="lostReason">Kayıp Sebebi *</Label>
+              <Textarea
+                id="lostReason"
+                placeholder="Örn: Fiyat uygun değil, Müşteri ihtiyacı değişti, Teknik uyumsuzluk, Rakipler daha avantajlı..."
+                value={lostReason}
+                onChange={(e) => setLostReason(e.target.value)}
+                rows={4}
+                className="resize-none"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setLostReasonDialogOpen(false)
+                setLostReason('')
+                setPendingFormData(null)
+              }}
+            >
+              İptal
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (!lostReason.trim()) {
+                  toast.error('Sebep gerekli', 'Lütfen kayıp sebebini belirtin.')
+                  return
+                }
+
+                if (!pendingFormData) {
+                  toast.error('Hata', 'Form verisi bulunamadı.')
+                  setLostReasonDialogOpen(false)
+                  return
+                }
+
+                // Dialog'u kapat
+                setLostReasonDialogOpen(false)
+                const reason = lostReason.trim()
+                setLostReason('')
+                
+                // Form verisine lostReason ekle ve submit et
+                const formDataWithReason = {
+                  ...pendingFormData,
+                  lostReason: reason,
+                }
+                setPendingFormData(null)
+                
+                // Form'u submit et
+                await submitFormData(formDataWithReason)
+              }}
+              disabled={!lostReason.trim()}
+            >
+              Kaydet ve Kaybedildi Olarak İşaretle
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   )
 }

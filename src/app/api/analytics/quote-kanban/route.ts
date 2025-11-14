@@ -28,12 +28,14 @@ export async function GET(request: Request) {
     
     // Filtre parametreleri - güvenli parse
     let dealId = ''
+    let customerCompanyId = '' // Firma bazlı filtreleme
     let search = ''
     let filterCompanyId = '' // SuperAdmin için firma filtresi
     
     try {
       const { searchParams } = new URL(request.url)
       dealId = searchParams.get('dealId') || ''
+      customerCompanyId = searchParams.get('customerCompanyId') || '' // Firma bazlı filtreleme
       search = searchParams.get('search') || ''
       filterCompanyId = searchParams.get('filterCompanyId') || ''
     } catch (error) {
@@ -46,7 +48,7 @@ export async function GET(request: Request) {
     // Tüm quote'ları çek - limit yok (tüm verileri çek)
     let query = supabase
       .from('Quote')
-        .select('id, title, status, totalAmount, dealId, createdAt, updatedAt, notes, displayOrder') // ✅ ÇÖZÜM: notes kolonu migration ile eklendi (057_add_quote_notes.sql), displayOrder Kanban sıralama için
+        .select('id, title, status, totalAmount, dealId, customerCompanyId, createdAt, updatedAt, notes, displayOrder') // ✅ ÇÖZÜM: notes kolonu migration ile eklendi (057_add_quote_notes.sql), displayOrder Kanban sıralama için
       .order('displayOrder', { ascending: true }) // ✅ displayOrder'a göre sırala (Kanban sıralama için)
       .order('updatedAt', { ascending: false }) // Aynı displayOrder için updatedAt'e göre
       .order('createdAt', { ascending: false }) // Aynı updatedAt için createdAt'e göre
@@ -63,6 +65,11 @@ export async function GET(request: Request) {
     // Filtreler
     if (dealId) {
       query = query.eq('dealId', dealId)
+    }
+
+    // Firma bazlı filtreleme (customerCompanyId)
+    if (customerCompanyId) {
+      query = query.eq('customerCompanyId', customerCompanyId)
     }
 
     if (search) {

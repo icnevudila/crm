@@ -128,6 +128,9 @@ export default function ContractList() {
         mutate('/api/contracts?', { data: updatedContracts }, { revalidate: false }),
         mutate(apiUrl, { data: updatedContracts }, { revalidate: false }),
       ])
+      
+      // Success toast göster
+      toast.success('Sözleşme silindi', `${title} başarıyla silindi.`)
     } catch (error: any) {
       console.error('Delete error:', error)
       toast.error(t('deleteFailed'), error?.message)

@@ -4,7 +4,6 @@ import { useState } from 'react'
 import type { ComponentType } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Card } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   TrendingUp,
   Users,
@@ -164,26 +163,43 @@ export default function ReportsPage() {
   ]
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Raporlar</h1>
-        <p className="mt-2 text-gray-600">Detaylı analiz ve raporlar - Anlık veri ile güncel bilgiler</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Raporlar</h1>
+        <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600">Detaylı analiz ve raporlar - Anlık veri ile güncel bilgiler</p>
       </div>
 
       {isLoading ? (
         <SkeletonList />
       ) : (
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
           {categories?.map((category: ReportCategory) => {
             const IconComponent = category.iconId ? iconMap[category.iconId] : Activity
+            const isActive = activeTab === category.id
             return (
-              <Card key={category.id} className="cursor-pointer p-4 transition-shadow hover:shadow-md">
+              <Card 
+                key={category.id} 
+                className={`cursor-pointer p-4 transition-all hover:shadow-md ${
+                  isActive ? 'ring-2 ring-primary-500 shadow-md' : ''
+                }`}
+                onClick={() => setActiveTab(category.id)}
+              >
                 <div className="flex items-center gap-3">
-                  <div className="rounded-lg bg-primary-50 p-2">
-                    {IconComponent && <IconComponent className="h-5 w-5 text-primary-600" />}
+                  <div className={`rounded-lg p-2 transition-colors ${
+                    isActive ? 'bg-primary-500' : 'bg-primary-50'
+                  }`}>
+                    {IconComponent && (
+                      <IconComponent className={`h-5 w-5 ${
+                        isActive ? 'text-white' : 'text-primary-600'
+                      }`} />
+                    )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-gray-900">{category.name}</p>
+                    <p className={`truncate text-sm font-medium ${
+                      isActive ? 'text-primary-700' : 'text-gray-900'
+                    }`}>
+                      {category.name}
+                    </p>
                     <p className="text-xs text-gray-500">{category.count} rapor</p>
                   </div>
                 </div>
@@ -193,23 +209,19 @@ export default function ReportsPage() {
         </div>
       )}
 
-      <Card className="p-6">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="mb-6 grid w-full grid-cols-2 md:grid-cols-5 lg:grid-cols-10">
-            {reportTabs.map((tab) => (
-              <TabsTrigger key={tab.id} value={tab.id} className="text-xs">
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          {reportTabs.map(({ id, Component }) => (
-            <TabsContent key={id} value={id} className="mt-0">
-              <Component isActive={activeTab === id} />
-            </TabsContent>
-          ))}
-        </Tabs>
-      </Card>
+      {/* Rapor İçeriği - Tab'lar olmadan */}
+      {activeTab && (
+        <Card className="p-4 sm:p-6">
+          {reportTabs.map(({ id, Component }) => {
+            if (activeTab !== id) return null
+            return (
+              <div key={id}>
+                <Component isActive={true} />
+              </div>
+            )
+          })}
+        </Card>
+      )}
     </div>
   )
 }

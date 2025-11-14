@@ -12,7 +12,9 @@ export async function GET(request: Request) {
       return sessionError
     }
     
-    if (!session?.user?.companyId) {
+    // SuperAdmin kontrolü - SuperAdmin companyId olmadan da erişebilir
+    const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+    if (!session?.user || (!session?.user?.companyId && !isSuperAdmin)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     
@@ -24,12 +26,11 @@ export async function GET(request: Request) {
         role: session.user.role,
         companyId: session.user.companyId,
         companyName: session.user.companyName,
-        isSuperAdmin: session.user.role === 'SUPER_ADMIN',
+        isSuperAdmin: isSuperAdmin,
       })
     }
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
-    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     const companyId = session.user.companyId
     const supabase = getSupabaseWithServiceRole()
 

@@ -43,6 +43,7 @@ import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
 import dynamic from 'next/dynamic'
 import { AutomationInfo } from '@/components/automation/AutomationInfo'
+import RefreshButton from '@/components/ui/RefreshButton'
 
 // Lazy load büyük componentler - performans için
 const QuoteForm = dynamic(() => import('./QuoteForm'), {
@@ -79,11 +80,12 @@ interface Quote {
   createdAt: string
 }
 
-async function fetchKanbanQuotes(search: string, dealId: string, filterCompanyId?: string) {
+async function fetchKanbanQuotes(search: string, dealId: string, filterCompanyId?: string, customerCompanyId?: string) {
   const params = new URLSearchParams()
   if (search) params.append('search', search)
   if (dealId) params.append('dealId', dealId)
   if (filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+  if (customerCompanyId) params.append('customerCompanyId', customerCompanyId) // Firma bazlı filtreleme
 
   // ÇÖZÜM: Cache'i kapat - refresh sonrası her zaman yeni data çek
   const res = await fetch(`/api/analytics/quote-kanban?${params.toString()}`, {
@@ -133,6 +135,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState(statusFromUrl)
   const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin için firma filtresi
+  const [customerCompanyId, setCustomerCompanyId] = useState('') // Firma bazlı filtreleme
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
   const [rejectingQuoteId, setRejectingQuoteId] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
@@ -142,7 +145,11 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
     if (statusFromUrl && statusFromUrl !== status) {
       setStatus(statusFromUrl)
     }
-  }, [statusFromUrl, status])
+    const customerCompanyIdFromUrl = searchParams.get('customerCompanyId') || '' // Read from URL
+    if (customerCompanyIdFromUrl && customerCompanyIdFromUrl !== customerCompanyId) {
+      setCustomerCompanyId(customerCompanyIdFromUrl)
+    }
+  }, [statusFromUrl, status, searchParams, customerCompanyId])
   const [dealId, setDealId] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null)
@@ -204,9 +211,23 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
   // Kanban view için TanStack Query kullanıyoruz (kanban özel endpoint)
   // ÖNEMLİ: Her zaman çalıştır (viewMode ne olursa olsun) - silme/güncelleme için gerekli
   const queryClient = useQueryClient()
+
+  // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([
+      mutateQuotes(undefined, { revalidate: true }),
+      mutate('/api/quotes', undefined, { revalidate: true }),
+      mutate('/api/quotes?', undefined, { revalidate: true }),
+      mutate(apiUrl || '/api/quotes', undefined, { revalidate: true }),
+      queryClient.invalidateQueries({ queryKey: ['kanban-quotes'] }),
+      queryClient.invalidateQueries({ queryKey: ['quote-kanban'] }),
+    ])
+  }, [mutateQuotes, apiUrl, queryClient])
+  // SuperAdmin için filterCompanyId'yi normalize et - boş string yerine undefined kullan
+  const normalizedFilterCompanyId = filterCompanyId && filterCompanyId !== '' ? filterCompanyId : undefined
   const { data: kanbanDataFromQuery = [], isLoading: isLoadingKanban } = useQuery({
-    queryKey: ['kanban-quotes', debouncedSearch, dealId, filterCompanyId],
-    queryFn: () => fetchKanbanQuotes(debouncedSearch, dealId, filterCompanyId || undefined),
+    queryKey: ['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId, isSuperAdmin],
+    queryFn: () => fetchKanbanQuotes(debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId || undefined),
     staleTime: 0, // ✅ ÇÖZÜM: Cache'i kapat - refresh sonrası her zaman yeni data çek
     gcTime: 0, // ✅ ÇÖZÜM: Garbage collection'ı kapat - cache'i hemen temizle
     refetchOnWindowFocus: false,
@@ -216,8 +237,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
     structuralSharing: false, // ÖNEMLİ: Structural sharing'i kapat - referans değişikliğini algıla
     notifyOnChangeProps: 'all', // ✅ ÇÖZÜM: Tüm değişiklikleri notify et - setQueryData değişikliklerini algıla
     // ÖNEMLİ: setQueryData ile cache güncellenince otomatik olarak güncellenir
-    // enabled kaldırıldı - her zaman çalış (silme/güncelleme için gerekli)
-    enabled: isOpen,
+    enabled: isOpen && viewMode === 'kanban', // Sadece kanban view'da çalış
   })
 
   // ✅ ÇÖZÜM: useQuery'den gelen data'yı state'e kopyala - optimistic update için
@@ -287,14 +307,14 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
               ...col,
               quotes: updatedQuotes,
               count: Math.max(0, (col.count || 0) - 1),
-              totalValue: updatedTotalValue, // Toplam tutarÄ± gÃ¼ncelle
+              totalValue: updatedTotalValue, // Toplam tutarı güncelle
             }
           }
           return col
         })
         // Kanban query cache'ini güncelle - optimistic update (refetch yapmadan önce)
         // ÖNEMLİ: setQueryData ile cache'i güncelle, böylece kanbanData prop'u otomatik güncellenir
-        queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId], updatedKanbanData)
+        queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId], updatedKanbanData)
       }
       
       // SONRA API'ye DELETE isteği gönder
@@ -311,7 +331,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
         throw new Error(errorData.error || 'Failed to delete quote')
       }
       
-      // BaÅŸarÄ± bildirimi
+      // Başarı bildirimi
       toast.success(
         t('quoteDeleted'),
         t('quoteDeletedMessage', { title })
@@ -404,32 +424,35 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
       />
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
-          <p className="mt-2 text-gray-600">{t('totalQuotes', { count: totalQuotes })}</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{t('title')}</h1>
+          <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600">{t('totalQuotes', { count: totalQuotes })}</p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant={viewMode === 'table' ? 'default' : 'outline'}
-            size="icon"
-            onClick={() => setViewMode('table')}
-          >
-            <TableIcon className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={viewMode === 'kanban' ? 'default' : 'outline'}
-            size="icon"
-            onClick={() => setViewMode('kanban')}
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </Button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <div className="flex gap-2 flex-1 sm:flex-initial">
+            <RefreshButton onRefresh={handleRefresh} />
+            <Button
+              variant={viewMode === 'table' ? 'default' : 'outline'}
+              size="icon"
+              onClick={() => setViewMode('table')}
+            >
+              <TableIcon className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === 'kanban' ? 'default' : 'outline'}
+              size="icon"
+              onClick={() => setViewMode('kanban')}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+          </div>
           <Button
             onClick={() => {
               setSelectedQuote(null)
               setFormOpen(true)
             }}
-            className="bg-gradient-primary text-white"
+            className="bg-gradient-primary text-white w-full sm:w-auto"
           >
             <Plus className="mr-2 h-4 w-4" />
             {t('newQuote')}
@@ -438,20 +461,20 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4 flex-wrap">
-        <div className="flex-1 relative min-w-[200px]">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+        <div className="flex-1 relative w-full sm:min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             type="search"
             placeholder={t('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
+            className="pl-10 w-full"
           />
         </div>
         {isSuperAdmin && (
           <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder={tCommon('select')} />
             </SelectTrigger>
             <SelectContent>
@@ -466,7 +489,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
         )}
         {viewMode === 'table' && (
           <Select value={status || 'all'} onValueChange={(v) => setStatus(v === 'all' ? '' : v)}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder={tStatus('status')} />
             </SelectTrigger>
             <SelectContent>
@@ -484,6 +507,10 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
       {/* Content */}
       {viewMode === 'kanban' ? (
         <QuoteKanbanChart
+          onView={(quoteId) => {
+            setSelectedQuoteId(quoteId)
+            setDetailModalOpen(true)
+          }} // ✅ ÇÖZÜM: Modal açmak için callback
           data={kanbanData}
           onEdit={handleEdit}
           onDelete={handleDelete}
@@ -527,7 +554,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
             
             // ÇÖZÜM: Optimistic update - kart anında taşınır
             const optimisticKanbanData = kanbanData.map((col: any) => {
-              // Eski status'den quote'u bul ve kaldÄ±r
+              // Eski status'den quote'u bul ve kaldır
               const quoteIndex = (col.quotes || []).findIndex((q: any) => q.id === quoteId)
               if (quoteIndex !== -1) {
                 const updatedQuotes = (col.quotes || []).filter((q: any) => q.id !== quoteId)
@@ -596,10 +623,10 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
               const updatedQuote = await res.json()
               const automation = updatedQuote?.automation || {}
               
-              // Teklif baÅŸlÄ±ÄŸÄ±nÄ± al
+              // Teklif başlığını al
               const quoteTitle = updatedQuote?.title || 'Teklif'
               
-              // DetaylÄ± toast mesajlarÄ± oluÅŸtur
+              // Detaylı toast mesajları oluştur
               let toastTitle = ''
               let toastDescription = ''
               let toastType: 'success' | 'warning' | 'info' = 'success'
@@ -635,8 +662,8 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                   
                 default:
                   const statusName = statusLabels[newStatus] || newStatus
-                  toastTitle = `Teklif durumu gÃ¼ncellendi: "${quoteTitle}"`
-                  toastDescription = `Teklif "${statusName}" durumuna taÅŸÄ±ndÄ±.`
+                  toastTitle = `Teklif durumu güncellendi: "${quoteTitle}"`
+                  toastDescription = `Teklif "${statusName}" durumuna taşındı.`
               }
 
               if (toastType === 'success') {
@@ -650,7 +677,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
               // %100 KESİN ÇÖZÜM: Backend'den dönen güncellenmiş quote ile kanban data'yı güncelle
               // ÖNEMLİ: Backend'den dönen gerçek data'yı kullan - updatedAt güncel olacak
               const updatedKanbanDataWithBackendData = previousKanbanData.map((col: any) => {
-                // Eski kolondan quote'u kaldÄ±r
+                // Eski kolondan quote'u kaldır
                 if (col.quotes?.some((q: any) => q.id === quoteId)) {
                   const filteredQuotes = col.quotes.filter((q: any) => q.id !== quoteId)
                   const updatedTotalValue = filteredQuotes.reduce((sum: number, q: any) => {
@@ -697,7 +724,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
               
               // %100 KESİN ÇÖZÜM: Backend'den dönen gerçek data ile cache'i güncelle
               // ÖNEMLİ: Backend'den dönen gerçek data ile cache güncelleniyor - refresh sonrası güncel data görünecek
-              queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId], updatedKanbanDataWithNewRef)
+              queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId], updatedKanbanDataWithNewRef)
               
               // %100 KESİN ÇÖZÜM: State'i de güncelle - backend'den dönen gerçek data ile
               setKanbanData(updatedKanbanDataWithNewRef)
@@ -710,19 +737,19 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
               
               // %100 KESİN ÇÖZÜM: Cache'i backend'den dönen gerçek data ile tekrar set et
               // ÖNEMLİ: removeQueries sonrası cache'i tekrar set et - refresh sonrası cache'den güncel data gelsin
-              queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId], updatedKanbanDataWithNewRef)
+              queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId], updatedKanbanDataWithNewRef)
               
               // %100 KESİN ÇÖZÜM: Query'yi invalidate et ve manuel refetch yap - refresh sonrası API'den yeni data çekilsin
               // ÖNEMLİ: staleTime: 0 ve gcTime: 0 nedeniyle refresh sonrası kesinlikle yeni data çekilecek
               await queryClient.invalidateQueries({ 
-                queryKey: ['kanban-quotes', debouncedSearch, dealId],
+                queryKey: ['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId],
                 exact: true,
               })
               
               // %100 KESİN ÇÖZÜM: Manuel refetch yap - kesinlikle fresh data çek
               // ÖNEMLİ: invalidateQueries sonrası manuel refetch yap - kesinlikle API'den yeni data çekilsin
               await queryClient.refetchQueries({ 
-                queryKey: ['kanban-quotes', debouncedSearch, dealId],
+                queryKey: ['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId],
                 exact: true,
               })
               
@@ -734,15 +761,15 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
               // ÖNEMLİ: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
               // Sadece dashboard'daki diğer query'leri invalidate et - onlar kendi staleTime'larına göre refetch olur
               await Promise.all([
-                queryClient.invalidateQueries({ queryKey: ['quotes'] }), // Table view iÃ§in
-                queryClient.invalidateQueries({ queryKey: ['stats-quotes'] }), // Stats iÃ§in
-                queryClient.invalidateQueries({ queryKey: ['quote-kanban'] }), // Dashboard'daki kanban chart'Ä± gÃ¼ncelle
-                queryClient.invalidateQueries({ queryKey: ['quote-analysis'] }), // Dashboard'daki quote analiz grafiÄŸini gÃ¼ncelle
-                queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs gÃ¼ncelle
+                queryClient.invalidateQueries({ queryKey: ['quotes'] }), // Table view için
+                queryClient.invalidateQueries({ queryKey: ['stats-quotes'] }), // Stats için
+                queryClient.invalidateQueries({ queryKey: ['quote-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
+                queryClient.invalidateQueries({ queryKey: ['quote-analysis'] }), // Dashboard'daki quote analiz grafiğini güncelle
+                queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle
               ])
               
-              // âœ… Ã‡Ã–ZÃœM: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
-              // Optimistic update zaten yapÄ±ldÄ±, invalidate yeterli - query'ler kendi staleTime'larÄ±na gÃ¶re refetch olur
+              // ✅ ÇÖZÜM: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
+              // Optimistic update zaten yapıldı, invalidate yeterli - query'ler kendi staleTime'larına göre refetch olur
             } catch (error: any) {
               console.error('Status update error:', error)
               toast.error(t('rejectDialog.statusUpdateError'), error?.message)
@@ -797,7 +824,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                           className="text-primary-600 hover:underline"
                           prefetch={true}
                         >
-                          FÄ±rsat #{quote.dealId.substring(0, 8)}
+                          Fırsat #{quote.dealId.substring(0, 8)}
                         </Link>
                       ) : (
                         '-'
@@ -881,7 +908,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
         open={formOpen}
         onClose={handleFormClose}
         onSuccess={async (savedQuote) => {
-          // BaÅŸarÄ± bildirimi
+          // Başarı bildirimi
           toast.success(
             selectedQuote ? t('rejectDialog.quoteUpdatedToast') : t('rejectDialog.quoteCreatedToast'),
             selectedQuote
@@ -889,16 +916,16 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
               : t('rejectDialog.quoteCreatedMessage', { title: savedQuote.title })
           )
           
-          // Optimistic update - yeni/gÃ¼ncellenmiÅŸ kaydÄ± hemen cache'e ekle
-          // Ã–NEMLÄ°: Hem table hem kanban view iÃ§in optimistic update yap
+          // Optimistic update - yeni/güncellenmiş kaydı hemen cache'e ekle
+          // ÖNEMLİ: Hem table hem kanban view için optimistic update yap
           
           if (selectedQuote) {
-            // UPDATE: Mevcut kaydÄ± gÃ¼ncelle
+            // UPDATE: Mevcut kaydı güncelle
             const updatedQuotes = quotes.map((q) =>
               q.id === savedQuote.id ? savedQuote : q
             )
             
-            // Table view iÃ§in SWR cache'i gÃ¼ncelle - optimistic update
+            // Table view için SWR cache'i güncelle - optimistic update
             if (viewMode === 'table') {
               await mutateQuotes(updatedQuotes, { revalidate: false })
               await Promise.all([
@@ -908,11 +935,11 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
               ])
             }
           } else {
-            // CREATE: Yeni kaydÄ± listenin baÅŸÄ±na ekle
+            // CREATE: Yeni kaydı listenin başına ekle
             const updatedQuotes = [savedQuote, ...quotes]
             
-            // Table view iÃ§in SWR cache'i gÃ¼ncelle - optimistic update
-            // Ã–NEMLÄ˜: Her zaman table view cache'ini gÃ¼ncelle (viewMode ne olursa olsun)
+            // Table view için SWR cache'i güncelle - optimistic update
+            // ÖNEMLİ: Her zaman table view cache'ini güncelle (viewMode ne olursa olsun)
             await mutateQuotes(updatedQuotes, { revalidate: false })
             await Promise.all([
               mutate('/api/quotes', updatedQuotes, { revalidate: false }),
@@ -921,14 +948,14 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
             ])
           }
           
-          // Kanban view iÃ§in optimistic update - yeni kaydÄ± kanban data'ya ekle
-          // Ã–NEMLÄ˜: Her zaman kanban data'yÄ± gÃ¼ncelle (viewMode ne olursa olsun)
+          // Kanban view için optimistic update - yeni kaydı kanban data'ya ekle
+          // ÖNEMLİ: Her zaman kanban data'yı güncelle (viewMode ne olursa olsun)
           if (Array.isArray(kanbanData)) {
             const status = savedQuote.status || 'DRAFT'
             const updatedKanbanData = kanbanData.map((col: any) => {
               if (col.status === status) {
                 if (selectedQuote) {
-                  // UPDATE: Mevcut kaydÄ± gÃ¼ncelle
+                  // UPDATE: Mevcut kaydı güncelle
                   const updatedQuotes = (col.quotes || []).map((q: any) =>
                     q.id === savedQuote.id ? savedQuote : q
                   )
@@ -939,10 +966,10 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                   return {
                     ...col,
                     quotes: updatedQuotes,
-                    totalValue: updatedTotalValue, // Toplam tutarÄ± gÃ¼ncelle
+                    totalValue: updatedTotalValue, // Toplam tutarı güncelle
                   }
                 } else {
-                  // CREATE: Yeni kaydÄ± bu kolona ekle - totalValue'yu da gÃ¼ncelle
+                  // CREATE: Yeni kaydı bu kolona ekle - totalValue'yu da güncelle
                   const updatedQuotes = [savedQuote, ...(col.quotes || [])]
                   const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
                     const quoteValue = typeof q.total === 'string' ? parseFloat(q.total) || 0 : (q.total || 0)
@@ -952,29 +979,29 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                     ...col,
                     quotes: updatedQuotes,
                     count: (col.count || 0) + 1,
-                    totalValue: updatedTotalValue, // Toplam tutarÄ± gÃ¼ncelle
+                    totalValue: updatedTotalValue, // Toplam tutarı güncelle
                   }
                 }
               }
               return col
             })
-            // Kanban query cache'ini gÃ¼ncelle
-            queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId], updatedKanbanData)
+            // Kanban query cache'ini güncelle
+            queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId], updatedKanbanData)
           }
           
-          // âœ… Ã‡Ã–ZÃœM: Sadece dashboard'daki diÄŸer query'leri invalidate et (background'da, refetch olmadan)
-          // Ã–NEMLÄ˜: kanban-quotes query'sini invalidate ETME - optimistic update'i koru
-          // Ã–NEMLÄ˜: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
-          // Sadece dashboard'daki diÄŸer query'leri invalidate et - onlar kendi staleTime'larÄ±na gÃ¶re refetch olur
+          // ✅ ÇÖZÜM: Sadece dashboard'daki diğer query'leri invalidate et (background'da, refetch olmadan)
+          // ÖNEMLİ: kanban-quotes query'sini invalidate ETME - optimistic update'i koru
+          // ÖNEMLİ: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
+          // Sadece dashboard'daki diğer query'leri invalidate et - onlar kendi staleTime'larına göre refetch olur
           await Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['quotes'] }), // Table view iÃ§in
-            queryClient.invalidateQueries({ queryKey: ['stats-quotes'] }), // Stats iÃ§in
-            queryClient.invalidateQueries({ queryKey: ['quote-kanban'] }), // Dashboard'daki kanban chart'Ä± gÃ¼ncelle
-            queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs gÃ¼ncelle
+            queryClient.invalidateQueries({ queryKey: ['quotes'] }), // Table view için
+            queryClient.invalidateQueries({ queryKey: ['stats-quotes'] }), // Stats için
+            queryClient.invalidateQueries({ queryKey: ['quote-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
+            queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle
           ])
           
-          // âœ… Ã‡Ã–ZÃœM: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
-          // Optimistic update zaten yapÄ±ldÄ±, invalidate yeterli - query'ler kendi staleTime'larÄ±na gÃ¶re refetch olur
+          // ✅ ÇÖZÜM: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
+          // Optimistic update zaten yapıldı, invalidate yeterli - query'ler kendi staleTime'larına göre refetch olur
         }}
       />
 
@@ -1034,7 +1061,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                 setRejectReason('')
                 setRejectingQuoteId(null)
 
-                // Status gÃ¼ncelleme iÅŸlemini devam ettir - notes ile birlikte
+                // Status güncelleme işlemini devam ettir - notes ile birlikte
                 const quote = kanbanData
                   .flatMap((c: any) => c.quotes || [])
                   .find((q: any) => q.id === quoteId)
@@ -1044,7 +1071,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                 const previousKanbanData = kanbanData
                 
                 const optimisticKanbanData = kanbanData.map((col: any) => {
-                  // Eski status'den quote'u bul ve kaldÄ±r
+                  // Eski status'den quote'u bul ve kaldır
                   const quoteIndex = (col.quotes || []).findIndex((q: any) => q.id === quoteId)
                   if (quoteIndex !== -1) {
                     const updatedQuotes = (col.quotes || []).filter((q: any) => q.id !== quoteId)
@@ -1093,14 +1120,14 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                 const optimisticKanbanDataWithNewRef = JSON.parse(JSON.stringify(optimisticKanbanData))
                 setKanbanData(optimisticKanbanDataWithNewRef)
                 
-                // API Ã§aÄŸrÄ±sÄ± yap - notes ile birlikte
+                // API çağrısı yap - notes ile birlikte
                 try {
                   const res = await fetch(`/api/quotes/${quoteId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                       status: 'REJECTED',
-                      notes: `ğŸ”´ REDDEDÄ°LDÄ° - ${new Date().toLocaleDateString('tr-TR')}\nSebep: ${reason}`,
+                      notes: `❌ REDDEDİLDİ - ${new Date().toLocaleDateString('tr-TR')}\nSebep: ${reason}`,
                     }),
                   })
                   
@@ -1113,9 +1140,9 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
 
                   const updatedQuote = await res.json()
                   
-                  // Backend'den dÃ¶nen gÃ¼ncellenmiÅŸ quote ile kanban data'yÄ± gÃ¼ncelle
+                  // Backend'den dönen güncellenmiş quote ile kanban data'yı güncelle
                   const updatedKanbanDataWithBackendData = previousKanbanData.map((col: any) => {
-                    // Eski kolondan quote'u kaldÄ±r
+                    // Eski kolondan quote'u kaldır
                     if (col.quotes?.some((q: any) => q.id === quoteId)) {
                       const filteredQuotes = col.quotes.filter((q: any) => q.id !== quoteId)
                       const updatedTotalValue = filteredQuotes.reduce((sum: number, q: any) => {
@@ -1131,7 +1158,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                     }
                     return col
                   }).map((col: any) => {
-                    // REJECTED kolonuna gÃ¼ncellenmiÅŸ quote'u ekle
+                    // REJECTED kolonuna güncellenmiş quote'u ekle
                     if (col.status === 'REJECTED' || col.status === 'DECLINED') {
                       const updatedQuoteForKanban = {
                         id: updatedQuote.id,
@@ -1156,10 +1183,10 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                     return col
                   })
                   
-                  // Backend'den dÃ¶nen gÃ¼ncellenmiÅŸ data ile cache'i gÃ¼ncelle
-                  queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId], updatedKanbanDataWithBackendData)
+                  // Backend'den dönen güncellenmiş data ile cache'i güncelle
+                  queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId], updatedKanbanDataWithBackendData)
                   
-                  // DiÄŸer query'leri invalidate et
+                  // Diğer query'leri invalidate et
                   await Promise.all([
                     queryClient.invalidateQueries({ queryKey: ['quotes'] }),
                     queryClient.invalidateQueries({ queryKey: ['stats-quotes'] }),

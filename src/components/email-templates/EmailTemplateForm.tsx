@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { toast } from '@/lib/toast'
 import { Badge } from '@/components/ui/badge'
 
 const templateSchema = z.object({
@@ -141,6 +142,12 @@ export default function EmailTemplateForm({
       }
 
       const savedTemplate = await res.json()
+      
+      // Success toast göster
+      toast.success(
+        template ? 'E-posta şablonu güncellendi' : 'E-posta şablonu kaydedildi',
+        template ? `${data.name} başarıyla güncellendi.` : `${data.name} başarıyla eklendi.`
+      )
       
       if (onSuccess) {
         onSuccess(savedTemplate)

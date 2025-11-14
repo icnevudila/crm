@@ -5,10 +5,10 @@ import { getSupabaseWithServiceRole } from '@/lib/supabase'
 // Dynamic route - sektör atandığında fresh data için cache'i kapat
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     // Session kontrolü - hata yakalama ile
-    const { session, error: sessionError } = await getSafeSession()
+    const { session, error: sessionError } = await getSafeSession(request)
     if (sessionError) {
       return sessionError
     }

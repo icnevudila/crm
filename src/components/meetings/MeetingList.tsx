@@ -33,7 +33,7 @@ import { formatCurrency } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import dynamic from 'next/dynamic'
 
-// Lazy load MeetingForm - performans iÃ§in
+// Lazy load MeetingForm - performans için
 const MeetingForm = dynamic(() => import('./MeetingForm'), {
   ssr: false,
   loading: () => null,
@@ -114,7 +114,7 @@ export default function MeetingList() {
   const [expenseWarningOpen, setExpenseWarningOpen] = useState(false)
   const [newMeetingId, setNewMeetingId] = useState<string | null>(null)
 
-  // Debounced search - performans iÃ§in
+  // Debounced search - performans için
   const [debouncedSearch, setDebouncedSearch] = useState(search)
   
   useEffect(() => {
@@ -148,13 +148,23 @@ export default function MeetingList() {
   
   const apiUrl = `/api/meetings?${params.toString()}`
   const { data: meetings = [], isLoading, error, mutate: mutateMeetings } = useData<Meeting[]>(apiUrl, {
-    dedupingInterval: 5000, // 5 saniye cache (daha kÄ±sa - gÃ¼ncellemeler daha hÄ±zlÄ±)
+    dedupingInterval: 5000, // 5 saniye cache (daha kısa - güncellemeler daha hızlı)
     revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
-    keepPreviousData: true, // Hata durumunda Ã¶nceki veriyi gÃ¶ster
-    fallbackData: [], // Ä°lk yÃ¼klemede boÅŸ array gÃ¶ster
+    keepPreviousData: true, // Hata durumunda önceki veriyi göster
+    fallbackData: [], // İlk yüklemede boş array göster
   })
 
-  // KullanÄ±cÄ± listesi (Admin filtreleme iÃ§in) - sadece admin iÃ§in Ã§ek
+  // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
+  const handleRefresh = async () => {
+    await Promise.all([
+      mutateMeetings(undefined, { revalidate: true }),
+      mutate('/api/meetings', undefined, { revalidate: true }),
+      mutate('/api/meetings?', undefined, { revalidate: true }),
+      mutate(apiUrl || '/api/meetings', undefined, { revalidate: true }),
+    ])
+  }
+
+  // Kullanıcı listesi (Admin filtreleme için) - sadece admin için çek
   const shouldFetchUsers = session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPER_ADMIN'
   const { data: users = [] } = useData<any[]>(
     shouldFetchUsers ? '/api/users' : null,
@@ -280,41 +290,46 @@ export default function MeetingList() {
       />
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
-          <p className="mt-2 text-gray-600">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{t('title')}</h1>
+          <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600">
             {t('totalMeetings', { count: meetings.length })}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <div className="flex gap-2">
+            <RefreshButton onRefresh={handleRefresh} />
+            <Button
+              variant="outline"
+              onClick={() => handleExport('excel')}
+              className="flex-1 sm:flex-initial"
+            >
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">Excel</span>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleExport('pdf')}
+              className="flex-1 sm:flex-initial"
+            >
+              <FileTextIcon className="mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">PDF</span>
+            </Button>
+          </div>
           <Button
             onClick={handleAdd}
-            className="bg-gradient-primary text-white"
+            className="bg-gradient-primary text-white w-full sm:w-auto"
           >
             <Plus className="mr-2 h-4 w-4" />
             {t('newMeeting')}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => handleExport('excel')}
-          >
-            <FileSpreadsheet className="mr-2 h-4 w-4" />
-            Excel
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => handleExport('pdf')}
-          >
-            <FileTextIcon className="mr-2 h-4 w-4" />
-            PDF
           </Button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="lg:col-span-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="sm:col-span-2">
           <Input
             placeholder={t('searchPlaceholder')}
             value={search}
@@ -323,7 +338,7 @@ export default function MeetingList() {
           />
         </div>
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger>
+          <SelectTrigger className="w-full">
             <SelectValue placeholder={t('selectStatus')} />
           </SelectTrigger>
           <SelectContent>
@@ -405,7 +420,7 @@ export default function MeetingList() {
           </TableHeader>
           <TableBody>
             {isLoading && meetings.length === 0 ? (
-              // Loading skeleton - her satÄ±r iÃ§in
+              // Loading skeleton - her satır için
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={`skeleton-${i}`}>
                   <TableCell colSpan={isSuperAdmin ? 9 : 8}>
@@ -561,20 +576,20 @@ export default function MeetingList() {
             // CREATE
             updatedMeetings = [savedMeeting, ...meetings]
             
-            // Gider uyarÄ±sÄ± kontrolÃ¼
+            // Gider uyarısı kontrolü
             if (savedMeeting.expenseWarning) {
               setNewMeetingId(savedMeeting.id)
               setExpenseWarningOpen(true)
             }
             
-            // Yeni gÃ¶rÃ¼ÅŸme oluÅŸturulduÄŸunda detay sayfasÄ±na yÃ¶nlendir
+            // Yeni görüşme oluşturulduğunda detay sayfasına yönlendir
             router.push(`/${locale}/meetings/${savedMeeting.id}`)
           }
           
-          // Cache'i gÃ¼ncelle
+          // Cache'i güncelle
           await mutateMeetings(updatedMeetings, { revalidate: false })
           
-          // TÃ¼m ilgili URL'leri gÃ¼ncelle
+          // Tüm ilgili URL'leri güncelle
           await Promise.all([
             mutate('/api/meetings', updatedMeetings, { revalidate: false }),
             mutate('/api/meetings?', updatedMeetings, { revalidate: false }),

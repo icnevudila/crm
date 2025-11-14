@@ -100,7 +100,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
   const tCommon = useTranslations('common')
   const { data: session } = useSession()
   
-  // Kategori etiketleri - locale desteÄŸi ile
+  // Kategori etiketleri - locale desteği ile
   const categoryLabels: Record<string, string> = {
     // Gider kategorileri
     FUEL: t('categoryFuel'),
@@ -116,7 +116,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
     OTHER: t('categoryOther'),
   }
   
-  // SuperAdmin kontrolÃ¼
+  // SuperAdmin kontrolü
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
   
   const [type, setType] = useState('')
@@ -170,7 +170,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
     }
   )
 
-  // SWR ile veri Ã§ekme (repo kurallarÄ±na uygun) - debounced search kullanÄ±yoruz
+  // SWR ile veri çekme (repo kurallarına uygun) - debounced search kullanıyoruz
   const apiUrl = useMemo(() => {
     if (!isOpen) return null
 
@@ -204,11 +204,21 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
     }
   )
 
-  // FiltrelenmiÅŸ ve sÄ±ralanmÄ±ÅŸ kayÄ±tlar
+  // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
+  const handleRefresh = async () => {
+    await Promise.all([
+      mutateFinance(undefined, { revalidate: true }),
+      mutate('/api/finance', undefined, { revalidate: true }),
+      mutate('/api/finance?', undefined, { revalidate: true }),
+      mutate(apiUrl || '/api/finance', undefined, { revalidate: true }),
+    ])
+  }
+
+  // Filtrelenmiş ve sıralanmış kayıtlar
   const filteredAndSortedRecords = useMemo(() => {
     let filtered = [...financeRecords]
     
-    // SÄ±ralama
+    // Sıralama
     filtered.sort((a, b) => {
       let aValue: any
       let bValue: any
@@ -253,7 +263,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
     }
   }, [filteredAndSortedRecords.length, currentPage, pageSize])
 
-  // KarÅŸÄ±laÅŸtÄ±rma: GeÃ§en ay vs Bu ay
+  // Karşılaştırma: Geçen ay vs Bu ay
   const monthlyComparison = useMemo(() => {
     const today = new Date()
     const currentMonth = today.getMonth()
@@ -263,7 +273,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
     const thisMonthStart = new Date(currentYear, currentMonth, 1)
     const thisMonthEnd = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59)
     
-    // GeÃ§en ay
+    // Geçen ay
     const lastMonthStart = new Date(currentYear, currentMonth - 1, 1)
     const lastMonthEnd = new Date(currentYear, currentMonth, 0, 23, 59, 59)
     
@@ -317,7 +327,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
     }
   }, [financeRecords])
 
-  // Toplam hesaplama - useMemo ile optimize et (detaylÄ± breakdown ile)
+  // Toplam hesaplama - useMemo ile optimize et (detaylı breakdown ile)
   const { totalIncome, totalExpense, netProfit, incomeBreakdown, expenseBreakdown, automationStats } = useMemo(() => {
     const income = financeRecords
       .filter((f) => f.type === 'INCOME')
@@ -326,25 +336,25 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
       .filter((f) => f.type === 'EXPENSE')
       .reduce((sum, f) => sum + (f.amount || 0), 0)
     
-    // Kategori bazlÄ± breakdown
+    // Kategori bazlı breakdown
     const incomeByCategory: Record<string, number> = {}
     const expenseByCategory: Record<string, number> = {}
     
     // Otomasyon istatistikleri
-    let autoIncomeCount = 0 // Invoice PAID'den otomatik oluÅŸan
-    let autoExpenseCount = 0 // Shipment DELIVERED'den otomatik oluÅŸan
+    let autoIncomeCount = 0 // Invoice PAID'den otomatik oluşan
+    let autoExpenseCount = 0 // Shipment DELIVERED'den otomatik oluşan
     let recurringCount = 0 // Tekrarlayan giderler
     let manualIncomeCount = 0
     let manualExpenseCount = 0
     
     financeRecords.forEach((f) => {
-      const category = f.category || 'KATEGORÄ°SÄ°Z'
+      const category = f.category || 'KATEGORİSİZ'
       const amount = f.amount || 0
       
       if (f.type === 'INCOME') {
         incomeByCategory[category] = (incomeByCategory[category] || 0) + amount
         
-        // Otomasyon kontrolÃ¼
+        // Otomasyon kontrolü
         if (f.relatedEntityType === 'INVOICE' || f.relatedTo?.includes('Invoice:')) {
           autoIncomeCount++
         } else {
@@ -353,7 +363,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
       } else {
         expenseByCategory[category] = (expenseByCategory[category] || 0) + amount
         
-        // Otomasyon kontrolÃ¼
+        // Otomasyon kontrolü
         if (f.relatedEntityType === 'SHIPMENT' || f.relatedTo?.includes('Shipment:')) {
           autoExpenseCount++
         } else if (f.isRecurring) {
@@ -381,7 +391,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
     }
   }, [filteredAndSortedRecords, financeRecords])
   
-  // HÄ±zlÄ± tarih filtreleri
+  // Hızlı tarih filtreleri
   const setQuickDateFilter = useCallback((period: 'today' | 'week' | 'month' | 'year') => {
     const today = new Date()
     let start: Date
@@ -497,24 +507,24 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
     setSelectedFinance(null)
   }, [])
 
-  // Eksik kayÄ±tlarÄ± kontrol et
+  // Eksik kayıtları kontrol et
   const checkMissing = useCallback(async () => {
-    setChecking(true) // Loading state baÅŸlat
+    setChecking(true) // Loading state başlat
     
-    // Loading toast gÃ¶ster
+    // Loading toast göster
     const loadingToast = toast.loading(t('checkingMissing'))
     
     try {
       // Cache bypass için timestamp ekle (fresh data için)
       const res = await fetch(`/api/finance/check-missing?t=${Date.now()}`)
       
-      // Network hatasÄ± kontrolÃ¼
+      // Network hatası kontrolü
       if (!res) {
-        throw new Error('Network hatasÄ± - sunucuya baÄŸlanÄ±lamadÄ±')
+        throw new Error('Network hatası - sunucuya bağlanılamadı')
       }
       
       if (!res.ok) {
-        // JSON parse hatasÄ± olabilir - try-catch ile yakala
+        // JSON parse hatası olabilir - try-catch ile yakala
         let errorData: any = {}
         try {
           errorData = await res.json()
@@ -522,7 +532,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
           // JSON parse edilemezse status text kullan
           throw new Error(`HTTP ${res.status}: ${res.statusText || 'Bilinmeyen hata'}`)
         }
-        throw new Error(errorData.error || `HTTP ${res.status}: Kontrol yapÄ±lamadÄ±`)
+        throw new Error(errorData.error || `HTTP ${res.status}: Kontrol yapılamadı`)
       }
       
       const data = await res.json()
@@ -539,7 +549,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
       const previousCount = missingCount
       setMissingCount(data.missingCount || 0)
       
-      // BaÅŸarÄ± toast'Ä± gÃ¶ster
+      // Başarı toast'ı göster
       toast.dismiss(loadingToast)
       
       if (data.missingCount > 0) {
@@ -553,27 +563,27 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
         toast.success(t('noMissingRecords'), t('noMissingRecordsMessage'))
       }
     } catch (error: any) {
-      // Hata mesajÄ±nÄ± daha aÃ§Ä±klayÄ±cÄ± yap
+      // Hata mesajını daha açıklayıcı yap
       const errorMessage = error?.message || 'Bilinmeyen hata'
       console.error('Check missing error:', error)
       
-      // Hata toast'Ä± gÃ¶ster
+      // Hata toast'ı göster
       toast.dismiss(loadingToast)
       toast.error(t('checkFailed'), errorMessage)
       
-      // Hata durumunda missingCount'u null yap (buton gÃ¶sterilmesin)
+      // Hata durumunda missingCount'u null yap (buton gösterilmesin)
       setMissingCount(null)
     } finally {
       setChecking(false) // Loading state bitir
     }
   }, [missingCount])
 
-  // Eksik kayÄ±tlarÄ± senkronize et
+  // Eksik kayıtları senkronize et
   const syncMissing = useCallback(async () => {
     // Toast ile işlemi başlat (modal yerine - daha iyi UX)
     setSyncing(true)
     
-    // Loading toast gÃ¶ster
+    // Loading toast göster
     const loadingToast = toast.loading(t('syncingMissing'))
     
     try {
@@ -588,7 +598,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
       
       const data = await res.json()
       
-      // Cache'i gÃ¼ncelle - yeni kayÄ±tlarÄ± gÃ¶ster
+      // Cache'i güncelle - yeni kayıtları göster
       await mutateFinance()
       await Promise.all([
         mutate('/api/finance'),
@@ -598,7 +608,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
       
       setMissingCount(0)
       
-      // BaÅŸarÄ± toast'Ä± gÃ¶ster
+      // Başarı toast'ı göster
       toast.dismiss(loadingToast)
       toast.success(t('syncSuccess', { count: data.created || 0 }))
     } catch (error: any) {
@@ -610,12 +620,12 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
     }
   }, [mutateFinance, apiUrl])
 
-  // Ä°lk yÃ¼klemede eksik kayÄ±tlarÄ± kontrol et (sadece bir kez)
+  // İlk yüklemede eksik kayıtları kontrol et (sadece bir kez)
   useEffect(() => {
-    // Sadece component mount olduÄŸunda bir kez Ã§alÄ±ÅŸtÄ±r
+    // Sadece component mount olduğunda bir kez çalıştır
     checkMissing()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // BoÅŸ dependency array - sadece mount'ta Ã§alÄ±ÅŸÄ±r
+  }, []) // Boş dependency array - sadece mount'ta çalışır
 
   // Error handling
   if (error) {
@@ -674,35 +684,41 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
         />
 
         {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
-          <p className="mt-2 text-gray-600">{t('totalRecords', { count: financeRecords.length })}</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{t('title')}</h1>
+          <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600">{t('totalRecords', { count: financeRecords.length })}</p>
         </div>
-        <div className="flex gap-2">
-          {/* Eksik KayÄ±t UyarÄ±sÄ± ve Senkronize Butonu */}
-          {missingCount !== null && missingCount > 0 && (
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <div className="flex gap-2">
+            <RefreshButton onRefresh={handleRefresh} />
+            {/* Eksik Kayıt Uyarısı ve Senkronize Butonu */}
+            {missingCount !== null && missingCount > 0 && (
+              <Button
+                onClick={syncMissing}
+                disabled={syncing}
+                variant="outline"
+                className="border-orange-500 text-orange-600 hover:bg-orange-50 flex-1 sm:flex-initial"
+              >
+                <AlertCircle className="mr-2 h-4 w-4" />
+                <span className="hidden sm:inline">{syncing ? t('syncing') : t('missingRecords', { count: missingCount })}</span>
+                <span className="sm:hidden">{syncing ? t('syncing') : `${missingCount} Eksik`}</span>
+              </Button>
+            )}
             <Button
-              onClick={syncMissing}
-              disabled={syncing}
+              onClick={checkMissing}
               variant="outline"
-              className="border-orange-500 text-orange-600 hover:bg-orange-50"
+              disabled={syncing || checking}
+              className="flex-1 sm:flex-initial"
             >
-              <AlertCircle className="mr-2 h-4 w-4" />
-              {syncing ? t('syncing') : t('missingRecords', { count: missingCount })}
+              <RefreshCw className={`mr-2 h-4 w-4 ${checking ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">{checking ? 'Kontrol Ediliyor...' : t('check')}</span>
+              <span className="sm:hidden">{checking ? 'Kontrol...' : 'Kontrol'}</span>
             </Button>
-          )}
-          <Button
-            onClick={checkMissing}
-            variant="outline"
-            disabled={syncing || checking}
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${checking ? 'animate-spin' : ''}`} />
-            {checking ? 'Kontrol Ediliyor...' : t('check')}
-          </Button>
+          </div>
           <Button
             onClick={handleAdd}
-            className="bg-gradient-primary text-white"
+            className="bg-gradient-primary text-white w-full sm:w-auto"
           >
             <Plus className="mr-2 h-4 w-4" />
             {t('newRecord')}
@@ -724,36 +740,36 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
                       <Info className="h-4 w-4 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-xs bg-gray-900 text-white p-3 text-xs">
-                      <div className="font-semibold mb-2 text-sm">ğŸ’° Gelir Bilgileri</div>
+                      <div className="font-semibold mb-2 text-sm">💰 Gelir Bilgileri</div>
                       <div className="space-y-1.5">
                         <div className="flex items-start gap-2">
-                          <span className="text-green-400">â€¢</span>
+                          <span className="text-green-400">•</span>
                           <div>
-                            <div className="font-medium">Toplam {financeRecords.filter(f => f.type === 'INCOME').length} gelir kaydÄ±</div>
-                            <div className="text-gray-300 text-[10px] mt-0.5">Finance tablosundan Ã§ekiliyor</div>
+                            <div className="font-medium">Toplam {financeRecords.filter(f => f.type === 'INCOME').length} gelir kaydı</div>
+                            <div className="text-gray-300 text-[10px] mt-0.5">Finance tablosundan çekiliyor</div>
                           </div>
                         </div>
                         {automationStats.autoIncomeCount > 0 && (
                           <div className="flex items-start gap-2">
-                            <span className="text-blue-400">â€¢</span>
+                            <span className="text-blue-400">•</span>
                             <div>
                               <div className="font-medium">{automationStats.autoIncomeCount} otomatik gelir</div>
-                              <div className="text-gray-300 text-[10px] mt-0.5">Fatura Ã¶dendiÄŸinde otomatik oluÅŸuyor</div>
+                              <div className="text-gray-300 text-[10px] mt-0.5">Fatura ödendiğinde otomatik oluşuyor</div>
                             </div>
                           </div>
                         )}
                         {automationStats.manualIncomeCount > 0 && (
                           <div className="flex items-start gap-2">
-                            <span className="text-yellow-400">â€¢</span>
+                            <span className="text-yellow-400">•</span>
                             <div>
                               <div className="font-medium">{automationStats.manualIncomeCount} manuel gelir</div>
-                              <div className="text-gray-300 text-[10px] mt-0.5">KullanÄ±cÄ± tarafÄ±ndan ekleniyor</div>
+                              <div className="text-gray-300 text-[10px] mt-0.5">Kullanıcı tarafından ekleniyor</div>
                             </div>
                           </div>
                         )}
                         {Object.keys(incomeBreakdown).length > 0 && (
                           <div className="mt-2 pt-2 border-t border-gray-700">
-                            <div className="font-semibold mb-1.5 text-xs">Kategorilere GÃ¶re:</div>
+                            <div className="font-semibold mb-1.5 text-xs">Kategorilere Göre:</div>
                             <div className="space-y-1">
                               {Object.entries(incomeBreakdown).slice(0, 3).map(([cat, amount]) => (
                                 <div key={cat} className="flex justify-between items-center text-[10px]">
@@ -790,45 +806,45 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
                       <Info className="h-4 w-4 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-xs bg-gray-900 text-white p-3 text-xs">
-                      <div className="font-semibold mb-2 text-sm">ğŸ’¸ Gider Bilgileri</div>
+                      <div className="font-semibold mb-2 text-sm">💸 Gider Bilgileri</div>
                       <div className="space-y-1.5">
                         <div className="flex items-start gap-2">
-                          <span className="text-red-400">â€¢</span>
+                          <span className="text-red-400">•</span>
                           <div>
-                            <div className="font-medium">Toplam {financeRecords.filter(f => f.type === 'EXPENSE').length} gider kaydÄ±</div>
-                            <div className="text-gray-300 text-[10px] mt-0.5">Finance tablosundan Ã§ekiliyor</div>
+                            <div className="font-medium">Toplam {financeRecords.filter(f => f.type === 'EXPENSE').length} gider kaydı</div>
+                            <div className="text-gray-300 text-[10px] mt-0.5">Finance tablosundan çekiliyor</div>
                           </div>
                         </div>
                         {automationStats.autoExpenseCount > 0 && (
                           <div className="flex items-start gap-2">
-                            <span className="text-blue-400">â€¢</span>
+                            <span className="text-blue-400">•</span>
                             <div>
                               <div className="font-medium">{automationStats.autoExpenseCount} otomatik gider</div>
-                              <div className="text-gray-300 text-[10px] mt-0.5">Sevkiyat teslim edildiÄŸinde otomatik oluÅŸuyor</div>
+                              <div className="text-gray-300 text-[10px] mt-0.5">Sevkiyat teslim edildiğinde otomatik oluşuyor</div>
                             </div>
                           </div>
                         )}
                         {automationStats.recurringCount > 0 && (
                           <div className="flex items-start gap-2">
-                            <span className="text-purple-400">â€¢</span>
+                            <span className="text-purple-400">•</span>
                             <div>
                               <div className="font-medium">{automationStats.recurringCount} tekrarlayan gider</div>
-                              <div className="text-gray-300 text-[10px] mt-0.5">Her ayÄ±n 1&#39;inde otomatik oluÅŸuyor</div>
+                              <div className="text-gray-300 text-[10px] mt-0.5">Her ayın 1&#39;inde otomatik oluşuyor</div>
                             </div>
                           </div>
                         )}
                         {automationStats.manualExpenseCount > 0 && (
                           <div className="flex items-start gap-2">
-                            <span className="text-yellow-400">â€¢</span>
+                            <span className="text-yellow-400">•</span>
                             <div>
                               <div className="font-medium">{automationStats.manualExpenseCount} manuel gider</div>
-                              <div className="text-gray-300 text-[10px] mt-0.5">KullanÄ±cÄ± tarafÄ±ndan ekleniyor</div>
+                              <div className="text-gray-300 text-[10px] mt-0.5">Kullanıcı tarafından ekleniyor</div>
                             </div>
                           </div>
                         )}
                         {Object.keys(expenseBreakdown).length > 0 && (
                           <div className="mt-2 pt-2 border-t border-gray-700">
-                            <div className="font-semibold mb-1.5 text-xs">Kategorilere GÃ¶re:</div>
+                            <div className="font-semibold mb-1.5 text-xs">Kategorilere Göre:</div>
                             <div className="space-y-1">
                               {Object.entries(expenseBreakdown).slice(0, 3).map(([cat, amount]) => (
                                 <div key={cat} className="flex justify-between items-center text-[10px]">
@@ -865,24 +881,24 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
                       <Info className="h-4 w-4 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-xs bg-gray-900 text-white p-3 text-xs">
-                      <div className="font-semibold mb-2 text-sm">ğŸ“ˆ Net Kar Bilgileri</div>
+                      <div className="font-semibold mb-2 text-sm">📈 Net Kar Bilgileri</div>
                       <div className="space-y-1.5">
                         <div className="flex items-start gap-2">
-                          <span className="text-green-400">â€¢</span>
+                          <span className="text-green-400">•</span>
                           <div>
                             <div className="font-medium">Gelir: {formatCurrency(totalIncome)}</div>
-                            <div className="text-gray-300 text-[10px] mt-0.5">TÃ¼m gelir kayÄ±tlarÄ±nÄ±n toplamÄ±</div>
+                            <div className="text-gray-300 text-[10px] mt-0.5">Tüm gelir kayıtlarının toplamı</div>
                           </div>
                         </div>
                         <div className="flex items-start gap-2">
-                          <span className="text-red-400">â€¢</span>
+                          <span className="text-red-400">•</span>
                           <div>
                             <div className="font-medium">Gider: {formatCurrency(totalExpense)}</div>
-                            <div className="text-gray-300 text-[10px] mt-0.5">TÃ¼m gider kayÄ±tlarÄ±nÄ±n toplamÄ±</div>
+                            <div className="text-gray-300 text-[10px] mt-0.5">Tüm gider kayıtlarının toplamı</div>
                           </div>
                         </div>
                         <div className="flex items-start gap-2">
-                          <span className={netProfit >= 0 ? "text-green-400" : "text-red-400"}>â€¢</span>
+                          <span className={netProfit >= 0 ? "text-green-400" : "text-red-400"}>•</span>
                           <div>
                             <div className="font-medium">Net: {formatCurrency(netProfit)}</div>
                             <div className="text-gray-300 text-[10px] mt-0.5">Gelir - Gider</div>
@@ -891,7 +907,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
                         {totalIncome > 0 && (
                           <div className="mt-2 pt-2 border-t border-gray-700">
                             <div className="flex justify-between items-center">
-                              <span className="text-xs">Kar MarjÄ±:</span>
+                              <span className="text-xs">Kar Marjı:</span>
                               <span className={`font-semibold text-sm ${netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                                 {((netProfit / totalIncome) * 100).toFixed(1)}%
                               </span>
@@ -911,7 +927,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
         </div>
       </TooltipProvider>
 
-      {/* KarÅŸÄ±laÅŸtÄ±rma: GeÃ§en Ay vs Bu Ay */}
+      {/* Karşılaştırma: Geçen Ay vs Bu Ay */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="p-4">
           <div className="text-sm text-gray-600 mb-2">Bu Ay Gelir</div>
@@ -920,8 +936,8 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
           </div>
           {monthlyComparison.lastMonth.income > 0 && (
             <div className={`text-xs mt-1 ${monthlyComparison.incomeChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {monthlyComparison.incomeChange >= 0 ? 'â†‘' : 'â†“'} {Math.abs(monthlyComparison.incomeChange).toFixed(1)}% 
-              <span className="text-gray-500 ml-1">geÃ§en aya gÃ¶re</span>
+              {monthlyComparison.incomeChange >= 0 ? '↑' : '↓'} {Math.abs(monthlyComparison.incomeChange).toFixed(1)}% 
+              <span className="text-gray-500 ml-1">geçen aya göre</span>
             </div>
           )}
         </Card>
@@ -932,8 +948,8 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
           </div>
           {monthlyComparison.lastMonth.expense > 0 && (
             <div className={`text-xs mt-1 ${monthlyComparison.expenseChange <= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {monthlyComparison.expenseChange <= 0 ? 'â†“' : 'â†‘'} {Math.abs(monthlyComparison.expenseChange).toFixed(1)}% 
-              <span className="text-gray-500 ml-1">geÃ§en aya gÃ¶re</span>
+              {monthlyComparison.expenseChange <= 0 ? '↓' : '↑'} {Math.abs(monthlyComparison.expenseChange).toFixed(1)}% 
+              <span className="text-gray-500 ml-1">geçen aya göre</span>
             </div>
           )}
         </Card>
@@ -944,9 +960,9 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
           </div>
           {monthlyComparison.lastMonth.net !== 0 && (
             <div className={`text-xs mt-1 ${monthlyComparison.thisMonth.net >= monthlyComparison.lastMonth.net ? 'text-green-600' : 'text-red-600'}`}>
-              {monthlyComparison.thisMonth.net >= monthlyComparison.lastMonth.net ? 'â†‘' : 'â†“'} 
+              {monthlyComparison.thisMonth.net >= monthlyComparison.lastMonth.net ? '↑' : '↓'} 
               {formatCurrency(Math.abs(monthlyComparison.thisMonth.net - monthlyComparison.lastMonth.net))}
-              <span className="text-gray-500 ml-1">geÃ§en aya gÃ¶re</span>
+              <span className="text-gray-500 ml-1">geçen aya göre</span>
             </div>
           )}
         </Card>
@@ -955,12 +971,12 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
       {/* Search and Filters */}
       <div className="space-y-4">
         {/* Arama */}
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
             <Input
               type="text"
-              placeholder="AÃ§Ä±klama, tutar veya kategori ile ara..."
+              placeholder="Açıklama, tutar veya kategori ile ara..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10 w-full"
@@ -969,21 +985,23 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
           <Button
             onClick={() => handleExport('excel')}
             variant="outline"
+            className="w-full sm:w-auto"
           >
             <Download className="mr-2 h-4 w-4" />
-            Excel Ä°ndir
+            <span className="hidden sm:inline">Excel İndir</span>
+            <span className="sm:hidden">Excel</span>
           </Button>
         </div>
 
         {/* Filtreler */}
-        <div className="flex flex-wrap gap-4">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
           {isSuperAdmin && (
             <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="Firma SeÃ§" />
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue placeholder="Firma Seç" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">TÃ¼m Firmalar</SelectItem>
+                <SelectItem value="all">Tüm Firmalar</SelectItem>
                 {companies.map((company) => (
                   <SelectItem key={company.id} value={company.id}>
                     {company.name}
@@ -993,22 +1011,22 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
             </Select>
           )}
           <Select value={type || 'all'} onValueChange={(v) => setType(v === 'all' ? '' : v)}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder={t('selectType')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">TÃ¼mÃ¼</SelectItem>
+              <SelectItem value="all">Tümü</SelectItem>
               <SelectItem value="INCOME">Gelir</SelectItem>
               <SelectItem value="EXPENSE">Gider</SelectItem>
             </SelectContent>
           </Select>
           
           <Select value={category || 'all'} onValueChange={(v) => setCategory(v === 'all' ? '' : v)}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder={t('selectCategory')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">TÃ¼m Kategoriler</SelectItem>
+              <SelectItem value="all">Tüm Kategoriler</SelectItem>
               {Object.entries(categoryLabels).map(([value, label]) => (
                 <SelectItem key={value} value={value}>
                   {label}
@@ -1018,11 +1036,11 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
           </Select>
 
           <Select value={customerCompanyId || 'all'} onValueChange={(v) => setCustomerCompanyId(v === 'all' ? '' : v)}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder="Firma" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">TÃ¼m Firmalar</SelectItem>
+              <SelectItem value="all">Tüm Firmalar</SelectItem>
               {customerCompanies.map((company) => (
                 <SelectItem key={company.id} value={company.id}>
                   {company.name}
@@ -1031,7 +1049,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
             </SelectContent>
           </Select>
 
-          {/* HÄ±zlÄ± Tarih Filtreleri */}
+          {/* Hızlı Tarih Filtreleri */}
           <div className="flex gap-2">
             <Button
               variant="outline"
@@ -1040,7 +1058,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
               className="text-xs"
             >
               <Calendar className="mr-1 h-3 w-3" />
-              BugÃ¼n
+              Bugün
             </Button>
             <Button
               variant="outline"
@@ -1064,7 +1082,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
               onClick={() => setQuickDateFilter('year')}
               className="text-xs"
             >
-              Bu YÄ±l
+              Bu Yıl
             </Button>
           </div>
 
@@ -1072,7 +1090,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            placeholder="BaÅŸlangÄ±Ã§ Tarihi"
+            placeholder="Başlangıç Tarihi"
             className="w-48"
           />
           
@@ -1080,14 +1098,14 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            placeholder="BitiÅŸ Tarihi"
+            placeholder="Bitiş Tarihi"
             className="w-48"
           />
         </div>
 
-        {/* SÄ±ralama */}
+        {/* Sıralama */}
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-600">SÄ±rala:</span>
+          <span className="text-sm text-gray-600">Sırala:</span>
           <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
             <SelectTrigger className="w-40">
               <SelectValue />
@@ -1117,7 +1135,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
             <FinanceTrendChart data={financeRecords} />
           </Card>
           <Card className="p-6">
-            <h3 className="text-lg font-semibold mb-4">Kategori DaÄŸÄ±lÄ±mÄ±</h3>
+            <h3 className="text-lg font-semibold mb-4">Kategori Dağılımı</h3>
             <FinanceCategoryChart 
               incomeData={incomeBreakdown} 
               expenseData={expenseBreakdown}
@@ -1136,11 +1154,11 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
                   <TableHead>Tutar</TableHead>
                   <TableHead>Kategori</TableHead>
                   {isSuperAdmin && <TableHead>Firma</TableHead>}
-                  <TableHead>MÃ¼ÅŸteri Firma</TableHead>
-                  <TableHead>AÃ§Ä±klama</TableHead>
-                  <TableHead>Ä°liÅŸkili</TableHead>
+                  <TableHead>Müşteri Firma</TableHead>
+                  <TableHead>Açıklama</TableHead>
+                  <TableHead>İlişkili</TableHead>
                   <TableHead>Tarih</TableHead>
-                  <TableHead className="text-right">Ä°ÅŸlemler</TableHead>
+                  <TableHead className="text-right">İşlemler</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

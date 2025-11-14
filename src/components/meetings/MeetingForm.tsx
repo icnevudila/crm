@@ -610,18 +610,19 @@ export default function MeetingForm({
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
               disabled={loading}
+              className="w-full sm:w-auto"
             >
               {t('cancel')}
             </Button>
             <Button
               type="submit"
-              className="bg-gradient-to-r from-primary-600 to-secondary-600 text-white hover:from-primary-700 hover:to-secondary-700 disabled:opacity-50"
+              className="bg-gradient-to-r from-primary-600 to-secondary-600 text-white hover:from-primary-700 hover:to-secondary-700 disabled:opacity-50 w-full sm:w-auto"
               disabled={loading}
             >
               {loading ? t('saving') : meeting ? t('update') : t('save')}

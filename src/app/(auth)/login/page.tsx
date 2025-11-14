@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, memo, useCallback } from 'react'
-import { signIn, useSession } from 'next-auth/react'
+import { useSession } from '@/hooks/useSession'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import {
@@ -18,23 +18,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-
-// Premium Animated Title - Premium Sky Blue & Deep Space Blue
-function AnimatedTitle({ text }: { text: string }) {
-  return (
-    <span
-      className="bg-clip-text text-transparent"
-      style={{
-        backgroundImage: 'linear-gradient(to right, #6366f1, #8b5cf6, #ec4899)',
-        animation: 'color-shift 4s ease-in-out infinite',
-        backgroundSize: '200% 100%',
-        willChange: 'background-position',
-      }}
-    >
-      {text}
-    </span>
-  )
-}
+import GradientText from '@/components/GradientText'
 
 function LoginPage() {
   const router = useRouter()
@@ -67,28 +51,45 @@ function LoginPage() {
     setError('')
 
     try {
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
-      })
+      const trimmedEmail = email.trim()
 
-      if (result?.error) {
-        setError(result.error)
+      if (!trimmedEmail || !password) {
+        setError('E-posta ve şifre gereklidir')
         setLoading(false)
         return
       }
 
-      if (result?.ok) {
-        // Başarılı giriş - window.location kullan (daha hızlı)
-        router.prefetch('/tr/dashboard')
-        window.location.href = '/tr/dashboard'
-      } else {
-        setError('Giriş başarısız oldu')
+      // Supabase Auth ile login - direkt API endpoint'e POST yap
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Cookie'ler için gerekli
+        body: JSON.stringify({
+          email: trimmedEmail,
+          password: password,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        setError(data.error || 'E-posta veya şifre hatalı')
         setLoading(false)
+        return
       }
-    } catch (err) {
-      setError('Giriş yapılırken bir hata oluştu')
+
+      // Başarılı login - dashboard'a yönlendir
+      router.prefetch('/tr/dashboard')
+      window.location.href = '/tr/dashboard'
+    } catch (err: any) {
+      console.error('Login error:', err)
+      if (err?.message?.includes('fetch') || err?.message?.includes('network')) {
+        setError('Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edin.')
+      } else {
+        setError('Giriş yapılırken bir hata oluştu')
+      }
       setLoading(false)
     }
   }, [email, password, router])
@@ -267,8 +268,8 @@ function LoginPage() {
                   <div className="absolute inset-0 blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500" style={{ background: 'linear-gradient(to right, rgba(99, 102, 241, 0.5), rgba(139, 92, 246, 0.5), rgba(236, 72, 153, 0.5))' }} />
                   <Sparkles className="relative z-10 h-10 w-10 text-white drop-shadow-lg" />
                 </motion.div>
-                <CardTitle className="text-4xl font-extrabold tracking-tight">
-                  <AnimatedTitle text="CRM Enterprise V3" />
+                <CardTitle className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+                  CRM Enterprise V3
                 </CardTitle>
                 <CardDescription className="text-base text-gray-600 font-medium">
                   Hoş Geldiniz! Hesabınıza giriş yapın ve işinizi yönetmeye başlayın
@@ -452,115 +453,6 @@ function LoginPage() {
             </CardContent>
           </Card>
           </div>
-
-          {/* Features Preview - Premium Cards */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={mounted ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-            transition={{ delay: 0.6 }}
-            className="mt-8 grid grid-cols-3 gap-4 text-center"
-          >
-            <motion.div
-              whileHover={{ scale: 1.08, y: -4 }}
-              className="relative p-5 rounded-2xl bg-white/70 backdrop-blur-xl border border-white/30 shadow-xl hover:shadow-2xl transition-all duration-500 cursor-pointer overflow-hidden group"
-              style={{
-                transform: 'translate3d(0, 0, 0)',
-                willChange: 'transform',
-                contain: 'layout style paint',
-              }}
-            >
-              {/* Gradient background on hover - Premium Sky Blue */}
-              <div 
-                className="absolute inset-0 transition-all duration-500"
-                style={{ 
-                  background: 'linear-gradient(to bottom right, rgba(99, 102, 241, 0), rgba(139, 92, 246, 0))',
-                  transform: 'translate3d(0, 0, 0)' 
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(99, 102, 241, 0.12), rgba(139, 92, 246, 0.12))'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(99, 102, 241, 0), rgba(139, 92, 246, 0))'
-                }}
-              />
-              <motion.div
-                whileHover={{ rotate: 360 }}
-                transition={{ duration: 0.6 }}
-                className="relative z-10"
-                style={{ transform: 'translate3d(0, 0, 0)' }}
-              >
-                    <Zap className="h-7 w-7 text-indigo-500 mx-auto mb-3 drop-shadow-lg" />
-                <p className="text-sm font-bold text-gray-800">Hızlı</p>
-                <p className="text-xs text-gray-600 mt-1 font-medium">&lt;300ms</p>
-              </motion.div>
-            </motion.div>
-            <motion.div
-              whileHover={{ scale: 1.08, y: -4 }}
-              className="relative p-5 rounded-2xl bg-white/70 backdrop-blur-xl border border-white/30 shadow-xl hover:shadow-2xl transition-all duration-500 cursor-pointer overflow-hidden group"
-              style={{
-                transform: 'translate3d(0, 0, 0)',
-                willChange: 'transform',
-                contain: 'layout style paint',
-              }}
-            >
-              <div 
-                className="absolute inset-0 transition-all duration-500"
-                style={{ 
-                  background: 'linear-gradient(to bottom right, rgba(24, 144, 255, 0), rgba(27, 38, 59, 0))',
-                  transform: 'translate3d(0, 0, 0)' 
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(24, 144, 255, 0.1), rgba(27, 38, 59, 0.1))'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(24, 144, 255, 0), rgba(27, 38, 59, 0))'
-                }}
-              />
-              <motion.div
-                whileHover={{ rotate: 360 }}
-                transition={{ duration: 0.6 }}
-                className="relative z-10"
-                style={{ transform: 'translate3d(0, 0, 0)' }}
-              >
-                <Shield className="h-7 w-7 text-indigo-500 mx-auto mb-3 drop-shadow-lg" />
-                <p className="text-sm font-bold text-gray-800">Güvenli</p>
-                <p className="text-xs text-gray-600 mt-1 font-medium">Enterprise</p>
-              </motion.div>
-            </motion.div>
-            <motion.div
-              whileHover={{ scale: 1.08, y: -4 }}
-              className="relative p-5 rounded-2xl bg-white/70 backdrop-blur-xl border border-white/30 shadow-xl hover:shadow-2xl transition-all duration-500 cursor-pointer overflow-hidden group"
-              style={{
-                transform: 'translate3d(0, 0, 0)',
-                willChange: 'transform',
-                contain: 'layout style paint',
-              }}
-            >
-              <div 
-                className="absolute inset-0 transition-all duration-500"
-                style={{ 
-                  background: 'linear-gradient(to bottom right, rgba(49, 46, 129, 0), rgba(99, 102, 241, 0))',
-                  transform: 'translate3d(0, 0, 0)' 
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(49, 46, 129, 0.12), rgba(99, 102, 241, 0.12))'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(to bottom right, rgba(49, 46, 129, 0), rgba(99, 102, 241, 0))'
-                }}
-              />
-              <motion.div
-                whileHover={{ rotate: 360 }}
-                transition={{ duration: 0.6 }}
-                className="relative z-10"
-                style={{ transform: 'translate3d(0, 0, 0)' }}
-              >
-                <TrendingUp className="h-7 w-7 text-indigo-500 mx-auto mb-3 drop-shadow-lg" />
-                <p className="text-sm font-bold text-gray-800">Güvenilir</p>
-                <p className="text-xs text-gray-600 mt-1 font-medium">%99.9</p>
-              </motion.div>
-            </motion.div>
-          </motion.div>
         </motion.div>
       </motion.div>
     </div>

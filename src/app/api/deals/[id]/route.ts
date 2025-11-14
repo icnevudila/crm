@@ -224,10 +224,22 @@ export async function PUT(
     }
 
     // Sadece gönderilen alanları güncelle (undefined olanları mevcut değerle koru)
-    // NOT: Sadece temel kolonları güncelle - migration kolonları (leadSource, lostReason) opsiyonel
+    // NOT: Sadece temel kolonları güncelle - migration kolonları (leadSource, lostReason, status) opsiyonel
     if (body.title !== undefined) updateData.title = body.title
-    if (body.stage !== undefined) updateData.stage = body.stage
-    if (body.status !== undefined) updateData.status = body.status
+    if (body.stage !== undefined) {
+      updateData.stage = body.stage
+      // ✅ ÇÖZÜM: Stage değiştiğinde status'u otomatik güncelle
+      // WON veya LOST → CLOSED, diğerleri → OPEN
+      if (body.stage === 'WON' || body.stage === 'LOST') {
+        updateData.status = 'CLOSED'
+      } else {
+        updateData.status = 'OPEN'
+      }
+    }
+    // Status kolonu güncelle (eğer stage değişmemişse)
+    if (body.status !== undefined && body.stage === undefined) {
+      updateData.status = body.status
+    }
     if (body.value !== undefined) updateData.value = typeof body.value === 'string' ? parseFloat(body.value) || 0 : (body.value || 0)
     if (body.customerId !== undefined) updateData.customerId = body.customerId || null
     // lostReason: LOST stage'inde gönderilirse ekle (kolon yoksa hata vermemesi için try-catch ile)
@@ -254,8 +266,69 @@ export async function PUT(
       updateQuery = updateQuery.eq('companyId', companyId)
     }
     
-    // Update işlemini yap - select yapmıyoruz (Invoice join'i i.total hatası veriyor)
-    const { error, data: updatedDealData } = await updateQuery.select('id, title, stage, status, value, customerId, companyId, updatedAt').single()
+    // Update işlemini yap - Status kolonu yoksa hata vermemesi için fallback mekanizması
+    let updatedDealData: any = null
+    let error: any = null
+    
+    // Status kolonunu updateData'dan ayır (kolon yoksa hata vermemesi için)
+    const { status: statusValue, ...updateDataWithoutStatus } = updateData
+    
+    // Önce status olmadan update yap
+    let retryQuery = supabase
+      .from('Deal')
+      .update(updateDataWithoutStatus)
+      .eq('id', id)
+    
+    if (!isSuperAdmin) {
+      retryQuery = retryQuery.eq('companyId', companyId)
+    }
+    
+    // Status olmadan update yap ve select et
+    const retryResult = await retryQuery.select('id, title, stage, value, customerId, companyId, updatedAt').single()
+    error = retryResult.error
+    updatedDealData = retryResult.data
+    
+    // Eğer status kolonu varsa ve statusValue varsa, status'u ayrı bir update ile güncelle
+    if (!error && statusValue !== undefined) {
+      // Status kolonunu kontrol et - önce status ile select deneyelim
+      const statusCheckQuery = supabase
+        .from('Deal')
+        .select('id, status')
+        .eq('id', id)
+        .limit(1)
+      
+      if (!isSuperAdmin) {
+        statusCheckQuery.eq('companyId', companyId)
+      }
+      
+      const statusCheckResult = await statusCheckQuery.single()
+      
+      // Eğer status kolonu varsa (hata yoksa), status'u güncelle
+      if (!statusCheckResult.error) {
+        const statusUpdateQuery = supabase
+          .from('Deal')
+          .update({ status: statusValue })
+          .eq('id', id)
+        
+        if (!isSuperAdmin) {
+          statusUpdateQuery.eq('companyId', companyId)
+        }
+        
+        // Status update'i yap (select yapmadan)
+        await statusUpdateQuery
+        
+        // updatedDealData'ya status'u ekle
+        if (updatedDealData) {
+          updatedDealData.status = statusValue
+        }
+      }
+    }
+    
+    // Eğer hala hata varsa ve status kolonu hatası değilse, hatayı döndür
+    if (error && !(error.message?.includes('status') || (error.message?.includes('column') && error.message?.includes('does not exist')))) {
+      // Status kolonu hatası değil, başka bir hata var
+      // Devam et, lostReason kontrolüne geç
+    }
 
     if (error) {
       // lostReason kolonu yoksa hatayı yok say (opsiyonel kolon)
@@ -475,9 +548,9 @@ export async function PUT(
             relatedTo: 'Quote',
             relatedId: (newQuote as any).id,
           })
-        } else if (process.env.NODE_ENV === 'development') {
+        } else if (process.env.NODE_ENV !== 'production') {
           console.error('Deal WON → Quote creation error:', quoteError)
-        } else if (quote) {
+        } else if (newQuote) {
           // ✅ Email otomasyonu: Deal WON → Müşteriye email gönder
           try {
             const { getAndRenderEmailTemplate, getTemplateVariables } = await import('@/lib/template-renderer')
@@ -506,7 +579,7 @@ export async function PUT(
                 })
                 
                 if (emailResult.success) {
-                  if (process.env.NODE_ENV === 'development') {
+                  if (process.env.NODE_ENV !== 'production') {
                     console.log('✅ Deal WON email sent to:', variables.customerEmail)
                   }
                 } else {
@@ -516,7 +589,7 @@ export async function PUT(
             }
           } catch (emailError) {
             // Email hatası ana işlemi engellemez
-            if (process.env.NODE_ENV === 'development') {
+            if (process.env.NODE_ENV !== 'production') {
               console.error('Deal WON email automation error:', emailError)
             }
           }

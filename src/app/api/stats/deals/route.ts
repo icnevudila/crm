@@ -12,7 +12,9 @@ export async function GET(request: Request) {
       return sessionError
     }
     
-    if (!session?.user?.companyId) {
+    // SuperAdmin kontrolü - SuperAdmin companyId olmadan da erişebilir
+    const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+    if (!session?.user || (!session?.user?.companyId && !isSuperAdmin)) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
     
@@ -24,39 +26,68 @@ export async function GET(request: Request) {
         role: session.user.role,
         companyId: session.user.companyId,
         companyName: session.user.companyName,
-        isSuperAdmin: session.user.role === 'SUPER_ADMIN',
+        isSuperAdmin: isSuperAdmin,
       })
     }
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
-    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     const companyId = session.user.companyId
     const supabase = getSupabaseWithServiceRole()
 
     // Tüm deal'ları çek - limit yok (tüm verileri çek)
     // ÖNEMLİ: Deal-kanban API'si ile AYNI kolonları seç (tutarlılık için)
+    // ÖNEMLİ: status kolonu migration 072'de eklenmiş olmalı, yoksa hata vermemesi için fallback
     let query = supabase
       .from('Deal')
-      .select('id, title, stage, value, customerId, createdAt, status, companyId') // DÜZELTME: deal-kanban API'si ile AYNI kolonları seç (tutarlılık için) - companyId eklendi
+      .select('id, title, stage, value, customerId, createdAt, companyId') // Status olmadan başla
       .order('createdAt', { ascending: false })
     
     // ÖNCE companyId filtresi (SuperAdmin değilse MUTLAKA filtrele)
     if (!isSuperAdmin) {
       query = query.eq('companyId', companyId)
       // DEBUG: companyId filtresi uygulandı
-      if (process.env.NODE_ENV === 'development') {
+      if (process.env.NODE_ENV !== 'production') {
         console.log('[Stats Deals API] 🔒 Deal query filtered by companyId:', companyId)
       }
     } else {
       // DEBUG: SuperAdmin - tüm firmaları göster
-      if (process.env.NODE_ENV === 'development') {
+      if (process.env.NODE_ENV !== 'production') {
         console.log('[Stats Deals API] 👑 SuperAdmin - showing all companies')
       }
     }
     
-    const { data: deals, error } = await query
+    // Status kolonunu kontrol et - önce status olmadan deneyelim
+    let deals: any[] = []
+    let error: any = null
     
-    if (error) {
+    const { data: dealsWithoutStatus, error: errorWithoutStatus } = await query
+    
+    if (errorWithoutStatus && (errorWithoutStatus.message?.includes('status') || (errorWithoutStatus.message?.includes('column') && errorWithoutStatus.message?.includes('does not exist')))) {
+      // Status kolonu yok, status olmadan kullan
+      error = null
+      deals = dealsWithoutStatus || []
+    } else if (errorWithoutStatus) {
+      // Başka bir hata var
+      error = errorWithoutStatus
+      deals = []
+    } else {
+      // Status kolonu var, status ile tekrar çek
+      let queryWithStatus = supabase
+        .from('Deal')
+        .select('id, title, stage, value, customerId, createdAt, status, companyId')
+        .order('createdAt', { ascending: false })
+      
+      // Filtreleri tekrar uygula
+      if (!isSuperAdmin) {
+        queryWithStatus = queryWithStatus.eq('companyId', companyId)
+      }
+      
+      const { data: dealsWithStatus, error: errorWithStatus } = await queryWithStatus
+      error = errorWithStatus
+      deals = dealsWithStatus || []
+    }
+    
+    if (error && !(error.message?.includes('status') || (error.message?.includes('column') && error.message?.includes('does not exist')))) {
       console.error('[Stats Deals API] Deal data fetch error:', error)
       return NextResponse.json(
         { error: error.message || 'Failed to fetch deal stats' },
@@ -80,7 +111,7 @@ export async function GET(request: Request) {
     const negotiationCount = deals.filter((d: any) => d.stage === 'NEGOTIATION').length
     const wonCount = deals.filter((d: any) => d.stage === 'WON').length
     const lostCount = deals.filter((d: any) => d.stage === 'LOST').length
-    const openCount = deals.filter((d: any) => d.status === 'OPEN').length
+    const openCount = deals.filter((d: any) => d.status === 'OPEN' || (!d.status && d.stage !== 'WON' && d.stage !== 'LOST')).length
     const totalCount = deals.length
     
     // Bu ay oluşturulan deal'lar - doğru hesaplama

@@ -75,6 +75,9 @@ export default function CompetitorList() {
         mutate('/api/competitors', updatedCompetitors, { revalidate: false }),
         mutate(apiUrl, updatedCompetitors, { revalidate: false }),
       ])
+      
+      // Success toast göster
+      toast.success('Rakip silindi', `${name} başarıyla silindi.`)
     } catch (error: any) {
       console.error('Delete error:', error)
       toast.error(t('deleteFailed'), error?.message)
@@ -175,24 +178,62 @@ export default function CompetitorList() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    {competitor.strengths ? (
-                      <div className="flex items-center gap-1 text-sm">
-                        <TrendingUp className="h-4 w-4 text-green-600" />
-                        <span className="text-gray-700">{competitor.strengths.substring(0, 50)}{competitor.strengths.length > 50 ? '...' : ''}</span>
-                      </div>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
+                    {(() => {
+                      try {
+                        const strengthsArray = competitor.strengths 
+                          ? (typeof competitor.strengths === 'string' ? JSON.parse(competitor.strengths) : competitor.strengths)
+                          : []
+                        if (strengthsArray.length > 0) {
+                          return (
+                            <div className="flex flex-wrap gap-1">
+                              {strengthsArray.slice(0, 2).map((strength: string, idx: number) => (
+                                <Badge key={idx} variant="secondary" className="flex items-center gap-1 text-xs">
+                                  <TrendingUp className="h-3 w-3 text-green-600" />
+                                  {strength}
+                                </Badge>
+                              ))}
+                              {strengthsArray.length > 2 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  +{strengthsArray.length - 2}
+                                </Badge>
+                              )}
+                            </div>
+                          )
+                        }
+                        return <span className="text-gray-400">-</span>
+                      } catch {
+                        return <span className="text-gray-400">-</span>
+                      }
+                    })()}
                   </TableCell>
                   <TableCell>
-                    {competitor.weaknesses ? (
-                      <div className="flex items-center gap-1 text-sm">
-                        <TrendingDown className="h-4 w-4 text-red-600" />
-                        <span className="text-gray-700">{competitor.weaknesses.substring(0, 50)}{competitor.weaknesses.length > 50 ? '...' : ''}</span>
-                      </div>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
+                    {(() => {
+                      try {
+                        const weaknessesArray = competitor.weaknesses 
+                          ? (typeof competitor.weaknesses === 'string' ? JSON.parse(competitor.weaknesses) : competitor.weaknesses)
+                          : []
+                        if (weaknessesArray.length > 0) {
+                          return (
+                            <div className="flex flex-wrap gap-1">
+                              {weaknessesArray.slice(0, 2).map((weakness: string, idx: number) => (
+                                <Badge key={idx} variant="secondary" className="flex items-center gap-1 text-xs">
+                                  <TrendingDown className="h-3 w-3 text-red-600" />
+                                  {weakness}
+                                </Badge>
+                              ))}
+                              {weaknessesArray.length > 2 && (
+                                <Badge variant="secondary" className="text-xs">
+                                  +{weaknessesArray.length - 2}
+                                </Badge>
+                              )}
+                            </div>
+                          )
+                        }
+                        return <span className="text-gray-400">-</span>
+                      } catch {
+                        return <span className="text-gray-400">-</span>
+                      }
+                    })()}
                   </TableCell>
                   <TableCell>
                     {competitor.averagePrice

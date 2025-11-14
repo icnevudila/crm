@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { Edit, Trash2, FileText, Copy, AlertTriangle, RefreshCw, Plus, Info, Calendar } from 'lucide-react'
+import { Edit, Trash2, FileText, Copy, AlertTriangle, RefreshCw, Plus, Info, Calendar, Download } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +19,8 @@ import DetailModal from '@/components/ui/DetailModal'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import dynamic from 'next/dynamic'
+import jsPDF from 'jspdf'
+import { formatCurrency, formatDate, encodeTurkish, PDFStyles, drawHeader, drawTitle, drawSectionBox, drawFooter, drawSignatureArea } from '@/lib/pdf-utils'
 
 const QuoteForm = dynamic(() => import('./QuoteForm'), {
   ssr: false,
@@ -70,6 +72,217 @@ export default function QuoteDetailModal({
   )
 
   const displayQuote = quote || initialData
+
+  // Client-side PDF generation - jsPDF ile (Mevzuata Uygun Teklif Formatı)
+  const handleDownloadPDF = () => {
+    if (!displayQuote) {
+      toast.error('PDF oluşturulamadı', 'Teklif verisi bulunamadı')
+      return
+    }
+
+    try {
+      const doc = new jsPDF()
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
+      let yPos = drawHeader(doc, pageWidth, displayQuote.Company?.name || 'Şirket Adı', displayQuote.Company)
+
+      // Başlık
+      yPos = drawTitle(doc, pageWidth, 'TEKLİF', yPos)
+
+      // Teklif Bilgileri
+      const validUntilDate = displayQuote.validUntil 
+        ? formatDate(displayQuote.validUntil)
+        : (() => {
+            const today = new Date()
+            const validUntil = new Date(today)
+            validUntil.setDate(today.getDate() + 15) // Bugün + 15 gün
+            return formatDate(validUntil)
+          })()
+
+      const quoteInfo: Array<[string, string]> = [
+        ['Teklif No:', displayQuote.id?.substring(0, 8).toUpperCase() || displayQuote.quoteNumber || ''],
+        ['Başlık:', encodeTurkish(displayQuote.title || '')],
+        ['Tarih:', formatDate(displayQuote.createdAt || '')],
+        ['Son Geçerlilik:', validUntilDate],
+        ['Durum:', encodeTurkish(statusLabels[displayQuote.status] || displayQuote.status || '')],
+      ]
+
+      if (displayQuote.version && displayQuote.version > 1) {
+        quoteInfo.push(['Versiyon:', `${displayQuote.version}`])
+      }
+
+      yPos = drawSectionBox(doc, pageWidth, yPos, 'Teklif Bilgileri', quoteInfo, 70)
+
+      // Müşteri Bilgileri
+      const customer = displayQuote.Deal?.Customer || displayQuote.Customer
+      if (customer?.name) {
+        if (yPos > pageHeight - 80) {
+          doc.addPage()
+          yPos = 25
+        }
+
+        const customerInfo: Array<[string, string]> = [
+          ['Müşteri:', encodeTurkish(customer.name || '')]
+        ]
+        if (customer.email) customerInfo.push(['E-posta:', customer.email])
+        if (customer.phone) customerInfo.push(['Telefon:', customer.phone])
+        if (customer.city) customerInfo.push(['Şehir:', encodeTurkish(customer.city)])
+        if (customer.address) customerInfo.push(['Adres:', encodeTurkish(customer.address)])
+        if (customer.taxNumber) customerInfo.push(['VKN/TCKN:', customer.taxNumber])
+
+        yPos = drawSectionBox(doc, pageWidth, yPos, 'Müşteri Bilgileri', customerInfo, 50)
+      }
+
+      // Ürün/Hizmet Listesi ve Toplamlar
+      if (yPos > pageHeight - 120) {
+        doc.addPage()
+        yPos = 25
+      }
+
+      const totalAmount = displayQuote.totalAmount || displayQuote.total || 0
+      const taxRate = displayQuote.taxRate || 18
+      const subtotal = totalAmount / (1 + taxRate / 100)
+      const kdv = totalAmount - subtotal
+      const total = totalAmount
+
+      // Ürün/Hizmet Bilgileri Box
+      doc.setFillColor(...PDFStyles.colors.background)
+      doc.roundedRect(
+        PDFStyles.spacing.margin,
+        yPos - 10,
+        pageWidth - PDFStyles.spacing.margin * 2,
+        80,
+        3,
+        3,
+        'FD'
+      )
+
+      doc.setFontSize(PDFStyles.fonts.subtitle)
+      doc.setTextColor(...PDFStyles.colors.primary)
+      doc.setFont('helvetica', 'bold')
+      doc.text(encodeTurkish('Ürün/Hizmet Detayları'), PDFStyles.spacing.margin + 5, yPos)
+      yPos += 12
+
+      // Ürün tablosu header
+      doc.setFontSize(PDFStyles.fonts.body)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(0, 0, 0)
+      doc.text(encodeTurkish('Açıklama'), PDFStyles.spacing.margin + 5, yPos)
+      doc.text(encodeTurkish('Miktar'), 120, yPos)
+      doc.text(encodeTurkish('Birim Fiyat'), 145, yPos)
+      doc.text(encodeTurkish('Toplam'), 175, yPos)
+      yPos += 8
+
+      // Çizgi
+      doc.setDrawColor(...PDFStyles.colors.border)
+      doc.line(PDFStyles.spacing.margin + 5, yPos - 3, pageWidth - PDFStyles.spacing.margin - 5, yPos - 3)
+      yPos += 5
+
+      // Ürün satırı
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(0, 0, 0)
+      const description = encodeTurkish(displayQuote.title || 'Teklif')
+      const descriptionLines = doc.splitTextToSize(description, 100)
+      descriptionLines.forEach((line: string, index: number) => {
+        doc.text(line, PDFStyles.spacing.margin + 5, yPos + (index * 5))
+      })
+      doc.text('1', 120, yPos)
+      doc.text(formatCurrency(subtotal), 145, yPos)
+      doc.text(formatCurrency(subtotal), 175, yPos)
+      yPos += Math.max(10, descriptionLines.length * 5)
+
+      yPos += 10
+
+      // Toplamlar
+      doc.setFontSize(PDFStyles.fonts.body)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...PDFStyles.colors.gray)
+      doc.text(encodeTurkish('Ara Toplam:'), 145, yPos)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(0, 0, 0)
+      doc.text(formatCurrency(subtotal), 175, yPos)
+      yPos += 7
+
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(...PDFStyles.colors.gray)
+      doc.text(encodeTurkish(`KDV (%${taxRate}):`), 145, yPos)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(0, 0, 0)
+      doc.text(formatCurrency(kdv), 175, yPos)
+      yPos += 10
+
+      // Genel Toplam
+      doc.setDrawColor(...PDFStyles.colors.primary)
+      doc.line(145, yPos - 3, pageWidth - PDFStyles.spacing.margin - 5, yPos - 3)
+      yPos += 5
+      doc.setFontSize(PDFStyles.fonts.subtitle)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(...PDFStyles.colors.primary)
+      doc.text(encodeTurkish('GENEL TOPLAM:'), 145, yPos)
+      doc.setFontSize(PDFStyles.fonts.title - 4)
+      doc.text(formatCurrency(total), 175, yPos)
+      yPos += 15
+
+      // Notlar (varsa)
+      if (displayQuote.notes) {
+        if (yPos > pageHeight - 60) {
+          doc.addPage()
+          yPos = 25
+        }
+
+        doc.setFontSize(PDFStyles.fonts.subtitle)
+        doc.setTextColor(...PDFStyles.colors.primary)
+        doc.setFont('helvetica', 'bold')
+        doc.text(encodeTurkish('Notlar'), PDFStyles.spacing.margin, yPos)
+        yPos += 8
+
+        doc.setFontSize(PDFStyles.fonts.body)
+        doc.setTextColor(0, 0, 0)
+        doc.setFont('helvetica', 'normal')
+        const notesLines = doc.splitTextToSize(encodeTurkish(displayQuote.notes), pageWidth - 40)
+        notesLines.forEach((line: string) => {
+          doc.text(line, PDFStyles.spacing.margin, yPos)
+          yPos += 5
+        })
+
+        yPos += 10
+      }
+
+      // İmza Alanı
+      if (yPos > pageHeight - 55) {
+        doc.addPage()
+        yPos = pageHeight - 55
+      } else {
+        yPos = pageHeight - 55
+      }
+
+      drawSignatureArea(doc, pageWidth, yPos)
+
+      // Footer
+      const reportDate = formatDate(displayQuote.createdAt || new Date().toISOString())
+      drawFooter(doc, pageWidth, pageHeight, reportDate)
+
+      // Son geçerlilik tarihi notu
+      yPos = pageHeight - 5
+      doc.setFontSize(PDFStyles.fonts.tiny)
+      doc.setTextColor(...PDFStyles.colors.primary)
+      doc.setFont('helvetica', 'bold')
+      doc.text(
+        encodeTurkish(`Son geçerlilik tarihi: ${validUntilDate}`),
+        pageWidth / 2,
+        yPos,
+        { align: 'center' }
+      )
+
+      // PDF'i indir
+      const fileName = `teklif-${displayQuote.id?.substring(0, 8) || 'rapor'}.pdf`
+      doc.save(fileName)
+      toast.success('PDF başarıyla indirildi')
+    } catch (error: any) {
+      console.error('PDF generation error:', error)
+      toast.error('PDF oluşturulamadı', error?.message || 'Beklenmeyen bir hata oluştu')
+    }
+  }
 
   const handleDelete = async () => {
     if (!displayQuote || !confirm(`${displayQuote.title} teklifini silmek istediğinize emin misiniz?`)) {
@@ -174,7 +387,7 @@ export default function QuoteDetailModal({
       >
         <div className="space-y-6">
           {/* Header Actions */}
-          <div className="flex justify-end gap-2 pb-4 border-b">
+          <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pb-4 border-b">
             <Badge className={statusColors[displayQuote?.status] || 'bg-gray-600 text-white border-gray-700'}>
               {statusLabels[displayQuote?.status] || displayQuote?.status}
             </Badge>
@@ -183,13 +396,20 @@ export default function QuoteDetailModal({
                 Revizyon
               </Badge>
             )}
-            <Button variant="outline" onClick={() => setFormOpen(true)}>
+            <Button
+              className="bg-gradient-primary text-white w-full sm:w-auto"
+              onClick={handleDownloadPDF}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              PDF İndir
+            </Button>
+            <Button variant="outline" onClick={() => setFormOpen(true)} className="w-full sm:w-auto">
               <Edit className="mr-2 h-4 w-4" />
               Düzenle
             </Button>
             <Button
               variant="outline"
-              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 w-full sm:w-auto"
               onClick={handleDelete}
               disabled={deleteLoading || displayQuote?.status === 'ACCEPTED'}
             >
@@ -209,11 +429,11 @@ export default function QuoteDetailModal({
                 <p className="mb-3">
                   Bu teklif 30 gün geçtiği için otomatik olarak süresi doldu (EXPIRED).
                 </p>
-                <div className="flex gap-2 mt-4">
+                <div className="flex flex-col sm:flex-row gap-2 mt-4">
                   <Button
                     onClick={handleCreateRevision}
                     disabled={creatingRevision}
-                    className="bg-orange-600 hover:bg-orange-700 text-white"
+                    className="bg-orange-600 hover:bg-orange-700 text-white w-full sm:w-auto"
                   >
                     <RefreshCw className="h-4 w-4 mr-2" />
                     {creatingRevision ? 'Oluşturuluyor...' : 'Revizyon Oluştur'}

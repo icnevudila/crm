@@ -200,7 +200,7 @@ export default function DashboardPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-[1920px] space-y-6 p-4">
+      <div className="mx-auto max-w-[1920px] space-y-4 sm:space-y-6 p-3 sm:p-4">
         <SmartReminder />
 
         <HeroBanner t={t} userName={session?.user?.name} />
@@ -235,22 +235,22 @@ export default function DashboardPage() {
                   value={id}
                   className="rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow data-[state=open]:shadow-lg"
                 >
-                  <AccordionTrigger className="px-4 py-3 text-left md:px-6">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 text-indigo-500">
-                        <Icon className="h-4 w-4" />
+                  <AccordionTrigger className="px-3 sm:px-4 md:px-6 py-3 text-left">
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 text-indigo-500">
+                        <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">
+                        <p className="text-xs sm:text-sm font-semibold text-slate-900">
                           {title}
                         </p>
                         {description ? (
-                          <p className="text-xs text-slate-500">{description}</p>
+                          <p className="text-[10px] sm:text-xs text-slate-500">{description}</p>
                         ) : null}
                       </div>
                     </div>
                   </AccordionTrigger>
-                  <AccordionContent className="px-4 pb-6 pt-0 md:px-6">
+                  <AccordionContent className="px-3 sm:px-4 pb-4 sm:pb-6 pt-0 md:px-6">
                     <Component isOpen={isOpen} />
                   </AccordionContent>
                 </AccordionItem>
@@ -308,14 +308,14 @@ function HeroBanner({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className="relative overflow-hidden rounded-[28px] border border-white/10 bg-white/40 p-8 text-slate-900 shadow-[0_24px_80px_-40px_rgba(99,102,241,0.35)] backdrop-blur-lg dark:border-slate-800/60 dark:bg-slate-900/70 dark:text-slate-100"
+      className="relative overflow-hidden rounded-[20px] sm:rounded-[28px] border border-white/10 bg-white/40 p-4 sm:p-8 text-slate-900 shadow-[0_24px_80px_-40px_rgba(99,102,241,0.35)] backdrop-blur-lg dark:border-slate-800/60 dark:bg-slate-900/70 dark:text-slate-100"
     >
       <div className="space-y-6">
         <span className="inline-flex items-center gap-2 rounded-full border border-slate-200/60 bg-white px-4 py-1 text-xs font-semibold uppercase tracking-[0.35em] text-slate-500 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/70 dark:text-slate-300">
           {t('title')}
         </span>
         <div className="space-y-3">
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight">
             {t('welcome')},{' '}
             <span className="text-indigo-600 dark:text-indigo-300">
               {userName ??
@@ -335,7 +335,7 @@ function HeroBanner({
                 })}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 dark:text-slate-200">
+        <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-slate-600 dark:text-slate-200">
           <span className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white px-3 py-1 font-semibold shadow-sm dark:border-slate-700/60 dark:bg-slate-900/70">
             <Users className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-300" />
             {watchersText}

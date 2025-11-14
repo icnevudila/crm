@@ -139,15 +139,15 @@ export async function PUT(
     )
 
     // Eğer assignedTo değiştiyse ve yeni atanan kullanıcı farklıysa bildirim gönder
-    if (body.assignedTo && body.assignedTo !== currentTask?.assignedTo && body.assignedTo !== session.user.id) {
+    // SuperAdmin kendi işlemlerini görmek için bildirim alabilir
+    if (body.assignedTo && body.assignedTo !== currentTask?.assignedTo) {
       try {
-        await notifyTaskAssignment(
-          body.assignedTo,
-          session.user.companyId,
-          id,
-          body.title || currentTask?.title || 'Görev',
-          session.user.name || 'Sistem'
-        )
+        await notifyTaskAssignment({
+          userId: body.assignedTo,
+          companyId: session.user.companyId,
+          taskId: id,
+          taskTitle: body.title || currentTask?.title || 'Görev',
+        })
       } catch (notifError) {
         // Bildirim hatası ana işlemi engellemez
         if (process.env.NODE_ENV === 'development') {

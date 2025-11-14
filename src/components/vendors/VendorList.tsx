@@ -25,6 +25,7 @@ import {
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import ModuleStats from '@/components/stats/ModuleStats'
 import EmptyState from '@/components/ui/EmptyState'
+import RefreshButton from '@/components/ui/RefreshButton'
 import { Building2 } from 'lucide-react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
@@ -88,6 +89,16 @@ export default function VendorList() {
     revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
   })
 
+  // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
+  const handleRefresh = async () => {
+    await Promise.all([
+      mutateVendors(undefined, { revalidate: true }),
+      mutate('/api/vendors', undefined, { revalidate: true }),
+      mutate('/api/vendors?', undefined, { revalidate: true }),
+      mutate(apiUrl || '/api/vendors', undefined, { revalidate: true }),
+    ])
+  }
+
   const handleDelete = useCallback(async (id: string, name: string) => {
     if (!(await confirm(t('deleteConfirm', { name })))) {
       return
@@ -115,6 +126,9 @@ export default function VendorList() {
         mutate('/api/vendors?', updatedVendors, { revalidate: false }),
         mutate(apiUrl, updatedVendors, { revalidate: false }),
       ])
+      
+      // Success toast göster
+      toast.success('Tedarikçi silindi', `${name} başarıyla silindi.`)
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
@@ -167,6 +181,7 @@ export default function VendorList() {
           </p>
         </div>
         <div className="flex gap-2">
+          <RefreshButton onRefresh={handleRefresh} />
           <Button
             onClick={handleAdd}
             className="bg-gradient-primary text-white"

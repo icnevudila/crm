@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Plus, Trash2, Package } from 'lucide-react'
 import { toast } from '@/lib/toast'
 import { translateStage, getStageMessage } from '@/lib/stageTranslations'
+import { handleFormValidationErrors } from '@/lib/form-validation'
 import {
   Dialog,
   DialogContent,
@@ -199,6 +200,8 @@ export default function InvoiceForm({
   const vendors = Array.isArray(vendorsData) ? vendorsData : []
   const products = Array.isArray(productsData) ? productsData : []
 
+  const formRef = useRef<HTMLFormElement>(null)
+  
   const {
     register,
     handleSubmit,
@@ -583,6 +586,11 @@ export default function InvoiceForm({
     },
   })
 
+  const onError = (errors: any) => {
+    // Form validation hatalarını göster ve scroll yap
+    handleFormValidationErrors(errors, formRef)
+  }
+
   const onSubmit = async (data: InvoiceFormData) => {
     // ÖNEMLİ: SHIPPED durumundaki faturalar düzenlenemez
     if (invoice && invoice.status === 'SHIPPED') {
@@ -651,7 +659,7 @@ export default function InvoiceForm({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form ref={formRef} onSubmit={handleSubmit(onSubmit, onError)} className="space-y-4">
           {customerCompanyId && (
             <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3 text-sm text-indigo-700">
               <p className="font-semibold">
@@ -1237,18 +1245,19 @@ export default function InvoiceForm({
           )}
 
           {/* Buttons */}
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
               disabled={loading}
+              className="w-full sm:w-auto"
             >
               {t('cancel')}
             </Button>
             <Button
               type="submit"
-              className="bg-gradient-primary text-white"
+              className="bg-gradient-primary text-white w-full sm:w-auto"
               disabled={loading || isProtected}
             >
               {loading ? t('saving') : invoice ? (isProtected ? t('cannotEdit') : t('update')) : t('save')}

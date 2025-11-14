@@ -12,7 +12,6 @@ import {
   TrendingUp,
   Users,
 } from 'lucide-react'
-import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
 import { Button } from '@/components/ui/button'
@@ -288,10 +287,6 @@ function HeroShowcase() {
   }, [pathname])
 
   const locale = browserLocale ?? derivedLocale ?? 'tr-TR'
-  const dashboardHref =
-    pathname && (pathname === '/en' || pathname.startsWith('/en/'))
-      ? '/en/dashboard'
-      : '/dashboard'
 
   const metrics = useMemo(() => FALLBACK_DATA[range], [range])
 
@@ -402,15 +397,16 @@ function HeroShowcase() {
                         </Badge>
                 </div>
                     </div>
-                    <Link href={dashboardHref} prefetch className="group">
+                    <div className="group">
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-9 w-9 rounded-full border border-slate-200/70 bg-white/70 text-slate-500 shadow-sm transition group-hover:text-indigo-600 dark:border-slate-700/60 dark:bg-slate-900/60"
+                        className="h-9 w-9 rounded-full border border-slate-200/70 bg-white/70 text-slate-500 shadow-sm transition group-hover:text-indigo-600 dark:border-slate-700/60 dark:bg-slate-900/60 cursor-default"
+                        disabled
                       >
                         <ArrowUpRight className="h-4 w-4" />
                       </Button>
-                    </Link>
+                    </div>
               </div>
 
               <div className="mt-6 space-y-4">

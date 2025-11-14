@@ -30,6 +30,7 @@ import {
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import ModuleStats from '@/components/stats/ModuleStats'
 import { AutomationInfo } from '@/components/automation/AutomationInfo'
+import RefreshButton from '@/components/ui/RefreshButton'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
 import dynamic from 'next/dynamic'
@@ -78,7 +79,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
   const searchParams = useSearchParams()
   const { data: session } = useSession()
   
-  // SuperAdmin kontrolÃ¼
+  // SuperAdmin kontrolü
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
   
   // URL parametrelerinden filtreleri oku
@@ -107,7 +108,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     isOpen && isSuperAdmin ? '/api/superadmin/companies' : null,
     { dedupingInterval: 60000, revalidateOnFocus: false }
   )
-  // Duplicate'leri filtrele - aynÄ± id'ye sahip kayÄ±tlarÄ± tekilleÅŸtir
+  // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
   const companies = (companiesData?.companies || []).filter((company, index, self) => 
     index === self.findIndex((c) => c.id === company.id)
   )
@@ -123,7 +124,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     return () => clearTimeout(timer)
   }, [search])
 
-  // SWR ile veri Ã§ekme (CustomerList pattern'i)
+  // SWR ile veri çekme (CustomerList pattern'i)
   const apiUrl = useMemo(() => {
     if (!isOpen) return null
 
@@ -152,9 +153,19 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     }
   )
 
-  // API'den dÃ¶nen veriyi parse et - array olarak bekliyoruz (useMemo ile memoize)
+  // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
+  const handleRefresh = async () => {
+    await Promise.all([
+      mutateProducts(undefined, { revalidate: true }),
+      mutate('/api/products', undefined, { revalidate: true }),
+      mutate('/api/products?', undefined, { revalidate: true }),
+      mutate(apiUrl || '/api/products', undefined, { revalidate: true }),
+    ])
+  }
+
+  // API'den dönen veriyi parse et - array olarak bekliyoruz (useMemo ile memoize)
   const products = useMemo(() => {
-    // Hata varsa boÅŸ array dÃ¶ndÃ¼r
+    // Hata varsa boş array döndür
     if (error) {
       return []
     }
@@ -192,10 +203,10 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
         throw new Error(errorData.error || 'Failed to delete product')
       }
       
-      // Optimistic update - silinen kaydÄ± listeden kaldÄ±r
+      // Optimistic update - silinen kaydı listeden kaldır
       const updatedProducts = products.filter((p) => p.id !== id)
       
-      // Cache'i gÃ¼ncelle
+      // Cache'i güncelle
       await mutateProducts(updatedProducts, { revalidate: false })
       
       // Tüm diğer product URL'lerini de güncelle
@@ -204,8 +215,11 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
         mutate('/api/products?', updatedProducts, { revalidate: false }),
         apiUrl ? mutate(apiUrl, updatedProducts, { revalidate: false }) : Promise.resolve(),
       ])
+      
+      // Success toast göster
+      toast.success('Ürün silindi', `${name} başarıyla silindi.`)
     } catch (error: any) {
-      // Production'da console.error kaldÄ±rÄ±ldÄ±
+      // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
@@ -251,7 +265,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     const outOfStock = products.filter(p => p.stock === 0).length
     const inStock = products.filter(p => p.stock > (p.minStock || 10)).length
     
-    // Son giriÅŸ ve Ã§Ä±kÄ±ÅŸ tarihlerini bul
+    // Son giriş ve çıkış tarihlerini bul
     const lastEntry = products
       .filter(p => p.updatedAt)
       .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())[0]
@@ -273,7 +287,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     return <SkeletonList />
   }
 
-  // Hata durumunda kullanÄ±cÄ±ya bilgi ver
+  // Hata durumunda kullanıcıya bilgi ver
   if (error) {
     return (
       <div className="space-y-6">
@@ -298,7 +312,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
 
   return (
     <div className="space-y-6">
-      {/* Ä°statistikler */}
+      {/* İstatistikler */}
       <ModuleStats module="products" statsUrl="/api/stats/products" />
 
       {/* Otomasyon Bilgileri */}
@@ -340,7 +354,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
         ]}
       />
       
-      {/* Stok Durumu Ä°statistik KartlarÄ± */}
+      {/* Stok Durumu İstatistik Kartları */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -412,35 +426,38 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
-          <p className="mt-2 text-gray-600">{t('totalProducts', { count: totalProducts })}</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{t('title')}</h1>
+          <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600">{t('totalProducts', { count: totalProducts })}</p>
         </div>
-        <Button
-          onClick={handleAdd}
-          className="bg-gradient-primary text-white"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          {t('newProduct')}
-        </Button>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <RefreshButton onRefresh={handleRefresh} />
+          <Button
+            onClick={handleAdd}
+            className="bg-gradient-primary text-white flex-1 sm:flex-initial"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            {t('newProduct')}
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4 flex-wrap">
-        <div className="flex-1 relative min-w-[200px]">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+        <div className="flex-1 relative w-full sm:min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             type="search"
             placeholder={t('searchPlaceholderDetailed')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
+            className="pl-10 w-full"
           />
         </div>
         {isSuperAdmin && (
           <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder={t('selectCompany')} />
             </SelectTrigger>
             <SelectContent>
@@ -454,7 +471,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
           </Select>
         )}
         <Select value={stockFilter || 'all'} onValueChange={(v) => setStockFilter(v === 'all' ? '' : v)}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder={t('selectStockStatus')} />
           </SelectTrigger>
           <SelectContent>
@@ -465,7 +482,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
           </SelectContent>
         </Select>
         <Select value={categoryFilter || 'all'} onValueChange={(v) => setCategoryFilter(v === 'all' ? '' : v)}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder={t('selectCategory')} />
           </SelectTrigger>
           <SelectContent>
@@ -476,7 +493,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
           </SelectContent>
         </Select>
         <Select value={statusFilter || 'all'} onValueChange={(v) => setStatusFilter(v === 'all' ? '' : v)}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder={t('selectStatus')} />
           </SelectTrigger>
           <SelectContent>
@@ -606,7 +623,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
                         size="icon"
                         onClick={() => {
                           setSelectedProductId(product.id)
-                          setSelectedProductData(product) // Liste sayfasÄ±ndaki veriyi hemen gÃ¶ster (hÄ±zlÄ± aÃ§Ä±lÄ±ÅŸ)
+                          setSelectedProductData(product) // Liste sayfasındaki veriyi hemen göster (hızlı açılış)
                           setDetailModalOpen(true)
                         }}
                         aria-label={t('viewProduct', { name: product.name })}
@@ -657,32 +674,32 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
         open={formOpen}
         onClose={handleFormClose}
         onSuccess={async (savedProduct: Product) => {
-          // Optimistic update - yeni/gÃ¼ncellenmiÅŸ kaydÄ± hemen cache'e ekle
+          // Optimistic update - yeni/güncellenmiş kaydı hemen cache'e ekle
           let updatedProducts: Product[]
           
           if (selectedProduct) {
-            // UPDATE: Mevcut kaydÄ± gÃ¼ncelle - savedProduct'daki tÃ¼m alanlarÄ± kullan (minStock dahil)
-            // savedProduct API'den dÃ¶nen tam veri, tÃ¼m alanlarÄ± iÃ§eriyor
+            // UPDATE: Mevcut kaydı güncelle - savedProduct'daki tüm alanları kullan (minStock dahil)
+            // savedProduct API'den dönen tam veri, tüm alanları içeriyor
             updatedProducts = products.map((p) =>
               p.id === savedProduct.id ? { ...savedProduct } : p
             )
           } else {
-            // CREATE: Yeni kaydÄ± listenin baÅŸÄ±na ekle
+            // CREATE: Yeni kaydı listenin başına ekle
             updatedProducts = [{ ...savedProduct }, ...products]
           }
           
-          // Cache'i gÃ¼ncelle - optimistic update (revalidate: true ile fresh data Ã§ek)
-          // BÃ¶ylece API'den fresh data Ã§ekilir ve minStock gÃ¼ncel gelir
+          // Cache'i güncelle - optimistic update (revalidate: true ile fresh data çek)
+          // Böylece API'den fresh data çekilir ve minStock güncel gelir
           await mutateProducts(updatedProducts, { revalidate: true })
           
-          // Tüm diğer product URL'lerini de güncelle (revalidate: true ile fresh data Ã§ek)
+          // Tüm diğer product URL'lerini de güncelle (revalidate: true ile fresh data çek)
           await Promise.all([
             mutate('/api/products', updatedProducts, { revalidate: true }),
             mutate('/api/products?', updatedProducts, { revalidate: true }),
             apiUrl ? mutate(apiUrl, updatedProducts, { revalidate: true }) : Promise.resolve(),
           ])
           
-          // Form'u kapat ve seÃ§ili Ã¼rÃ¼nÃ¼ temizle
+          // Form'u kapat ve seçili ürünü temizle
           setFormOpen(false)
           setSelectedProduct(null)
         }}

@@ -206,10 +206,10 @@ const metrics = data ?? EMPTY_STATE[range]
         transition={{ duration: 0.5 }}
         className={className}
       >
-        <div className="relative overflow-hidden rounded-[28px] border border-white/40 bg-white/80 p-6 shadow-[0_40px_120px_-60px_rgba(99,102,241,0.55)] backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-900/70">
+        <div className="relative overflow-hidden rounded-[20px] sm:rounded-[28px] border border-white/40 bg-white/80 p-4 sm:p-6 shadow-[0_40px_120px_-60px_rgba(99,102,241,0.55)] backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-900/70">
           <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-purple-500/5 to-pink-500/10" />
-          <div className="relative flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-200">
+          <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-200">
               <span className="relative flex items-center gap-2 rounded-full border border-emerald-200/60 bg-white/80 px-3 py-1 text-emerald-500 shadow-sm dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
                 <span className="relative block h-2.5 w-2.5 rounded-full bg-emerald-500">
                   {metrics.live ? <span className="absolute inset-0 animate-ping rounded-full bg-emerald-400/40" /> : null}
@@ -221,9 +221,9 @@ const metrics = data ?? EMPTY_STATE[range]
                 {numberFormatter.format(metrics.watchers)} izleyici
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
               <Select value={range} onValueChange={(value) => setRange(value as DashboardRange)}>
-                <SelectTrigger className="h-8 w-[120px] rounded-full border border-slate-200/70 bg-white/80 px-3 text-xs font-semibold text-slate-600 shadow-sm backdrop-blur dark:border-slate-800/60 dark:bg-slate-900/70 dark:text-slate-300">
+                <SelectTrigger className="h-8 w-full sm:w-[120px] rounded-full border border-slate-200/70 bg-white/80 px-3 text-xs font-semibold text-slate-600 shadow-sm backdrop-blur dark:border-slate-800/60 dark:bg-slate-900/70 dark:text-slate-300">
                   <SelectValue placeholder="Aralık" />
                 </SelectTrigger>
                 <SelectContent className="rounded-2xl border border-slate-200/80 bg-white/95 shadow-xl dark:border-slate-700/60 dark:bg-slate-900/80">
@@ -245,7 +245,7 @@ const metrics = data ?? EMPTY_STATE[range]
             </div>
           </div>
 
-          <div className="relative mt-6 grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+          <div className="relative mt-4 sm:mt-6 grid gap-4 sm:gap-6 lg:grid-cols-[1.3fr_1fr]">
             {isLoading && !data ? (
               <SpotlightSkeleton />
             ) : (

@@ -53,6 +53,7 @@ interface InvoiceKanbanChartProps {
   onEdit?: (invoice: KanbanInvoice) => void
   onDelete?: (id: string, title: string) => void
   onStatusChange?: (invoiceId: string, newStatus: string) => Promise<void> | void
+  onView?: (invoiceId: string) => void // ✅ ÇÖZÜM: Modal açmak için callback
 }
 
 const STATUS_FLOW = ['DRAFT', 'SENT', 'SHIPPED', 'RECEIVED', 'PAID', 'OVERDUE', 'CANCELLED']
@@ -419,7 +420,7 @@ const getQuickActions = (status: string, invoiceType?: string): QuickActionConfi
   return filteredActions
 }
 
-function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange }: InvoiceKanbanChartProps) {
+function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange, onView }: InvoiceKanbanChartProps) {
   const locale = useLocale()
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
 
@@ -608,16 +609,25 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange }: Inv
 
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1.5">
-                            <Link href={`/${locale}/invoices/${invoice.id}`} prefetch={true}>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-slate-500 hover:text-indigo-600"
-                                aria-label="Faturayı görüntüle"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            </Link>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-slate-500 hover:text-indigo-600"
+                              aria-label="Faturayı görüntüle"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                // ✅ ÇÖZÜM: Modal aç - yeni sekme açma
+                                if (onView) {
+                                  onView(invoice.id)
+                                } else {
+                                  // Fallback: Eğer onView yoksa yeni sekmede aç (eski davranış)
+                                  window.open(`/${locale}/invoices/${invoice.id}`, '_blank')
+                                }
+                              }}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
                             {onEdit && (
                               <Button
                                 variant="ghost"

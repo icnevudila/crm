@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { toast, handleApiError } from '@/lib/toast'
+import { handleFormValidationErrors } from '@/lib/form-validation'
 import {
   Dialog,
   DialogContent,
@@ -75,6 +76,8 @@ export default function CustomerForm({
   })
   const customerCompanies = Array.isArray(customerCompaniesData) ? customerCompaniesData : []
 
+  const formRef = useRef<HTMLFormElement>(null)
+  
   const {
     register,
     handleSubmit,
@@ -160,6 +163,11 @@ export default function CustomerForm({
 
   const status = watch('status')
 
+  const onError = (errors: any) => {
+    // Form validation hatalarını göster ve scroll yap
+    handleFormValidationErrors(errors, formRef)
+  }
+
   const onSubmit = async (data: CustomerFormData) => {
     setLoading(true)
     try {
@@ -219,7 +227,7 @@ export default function CustomerForm({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form ref={formRef} onSubmit={handleSubmit(onSubmit, onError)} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Logo Upload */}
             <div className="space-y-2 md:col-span-2">
@@ -423,18 +431,19 @@ export default function CustomerForm({
           </div>
 
           {/* Buttons */}
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
             <Button
               type="button"
               variant="outline"
               onClick={onClose}
               disabled={loading}
+              className="w-full sm:w-auto"
             >
               İptal
             </Button>
             <Button
               type="submit"
-              className="bg-gradient-primary text-white"
+              className="bg-gradient-primary text-white w-full sm:w-auto"
               disabled={loading}
             >
               {loading ? 'Kaydediliyor...' : customer ? 'Güncelle' : 'Kaydet'}

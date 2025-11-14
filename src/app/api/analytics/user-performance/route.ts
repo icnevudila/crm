@@ -5,7 +5,7 @@ import { getSupabaseWithServiceRole } from '@/lib/supabase'
 // Cache kaldırıldı - multi-tenant güvenlik için fresh data gerekli
 export const revalidate = 0
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     // Session kontrolü - hata yakalama ile
     const { session, error: sessionError } = await getSafeSession(request)

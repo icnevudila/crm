@@ -43,6 +43,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
+import RefreshButton from '@/components/ui/RefreshButton'
 import dynamic from 'next/dynamic'
 import {
   DropdownMenu,
@@ -226,6 +227,16 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
     revalidateOnFocus: false, // Focus'ta yeniden fetch yapma (instant navigation)
     refreshInterval: 0, // Otomatik refresh yok
   })
+
+  // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
+  const handleRefresh = async () => {
+    await Promise.all([
+      mutateCustomers(undefined, { revalidate: true }),
+      mutate('/api/customers', undefined, { revalidate: true }),
+      mutate(apiUrl || '/api/customers', undefined, { revalidate: true }),
+      queryClient.invalidateQueries({ queryKey: ['customers'] }),
+    ])
+  }
 
   // NOT: apiUrl currentPage'e bağlı olduğu için SWR otomatik refetch yapıyor
   // currentPage değiştiğinde apiUrl değişir ve SWR yeni URL'i otomatik fetch eder
@@ -561,33 +572,40 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       <ModuleStats module="customers" statsUrl="/api/stats/customers" />
 
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
-          <p className="mt-2 text-gray-600">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{t('title')}</h1>
+          <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600">
             {t('totalCustomers', { count: stats?.total || pagination.totalItems || customers.length })}
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setImportOpen(true)}
-            aria-label={t('import')}
-          >
-            <Upload className="mr-2 h-4 w-4" />
-            {t('import')}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => handleExport('excel')}
-            aria-label={t('export')}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            {t('export')}
-          </Button>
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <div className="flex gap-2">
+            <RefreshButton onRefresh={handleRefresh} />
+            <Button
+              variant="outline"
+              onClick={() => setImportOpen(true)}
+              aria-label={t('import')}
+              className="flex-1 sm:flex-initial"
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">{t('import')}</span>
+              <span className="sm:hidden">İçe Aktar</span>
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleExport('excel')}
+              aria-label={t('export')}
+              className="flex-1 sm:flex-initial"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              <span className="hidden sm:inline">{t('export')}</span>
+              <span className="sm:hidden">Dışa Aktar</span>
+            </Button>
+          </div>
           <Button
             onClick={handleAdd}
-            className="bg-gradient-primary text-white"
+            className="bg-gradient-primary text-white w-full sm:w-auto"
           >
             <Plus className="mr-2 h-4 w-4" />
             {t('newCustomer')}
@@ -596,20 +614,20 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4 flex-wrap">
-        <div className="flex-1 relative min-w-[200px]">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+        <div className="flex-1 relative w-full sm:min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             type="search"
             placeholder={t('searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10"
+            className="pl-10 w-full"
           />
         </div>
         {isSuperAdmin && (
           <Select value={filterCompanyId || 'all'} onValueChange={(value) => setFilterCompanyId(value === 'all' ? '' : value)}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder={t('selectCompany')} />
             </SelectTrigger>
             <SelectContent>
@@ -623,7 +641,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
           </Select>
         )}
         <Select value={status || 'all'} onValueChange={(value) => setStatus(value === 'all' ? '' : value)}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder={t('selectStatus')} />
           </SelectTrigger>
           <SelectContent>
@@ -633,7 +651,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
           </SelectContent>
         </Select>
         <Select value={sector || 'all'} onValueChange={(value) => setSector(value === 'all' ? '' : value)}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder={t('selectSector')} />
           </SelectTrigger>
           <SelectContent>
@@ -948,7 +966,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
               await Promise.all([
                 mutateCustomers(undefined, { revalidate: true }),
                 apiUrl,
-                // Dashboard'daki mÃ¼ÅŸteri sektÃ¶r daÄŸÄ±lÄ±mÄ± grafiÄŸini tekrar gÃ¼ncelle
+                // Dashboard'daki müşteri sektör dağılımı grafiğini tekrar güncelle
                 queryClient.refetchQueries({ queryKey: ['distribution'] }),
               ])
             }, 500)
@@ -988,7 +1006,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
               await Promise.all([
                 mutate(firstPageUrl, undefined, { revalidate: true }),
                 mutateCustomers(undefined, { revalidate: true }),
-                // Dashboard'daki mÃ¼ÅŸteri sektÃ¶r daÄŸÄ±lÄ±mÄ± grafiÄŸini tekrar gÃ¼ncelle
+                // Dashboard'daki müşteri sektör dağılımı grafiğini tekrar güncelle
                 queryClient.refetchQueries({ queryKey: ['distribution'] }),
               ])
             }, 500)

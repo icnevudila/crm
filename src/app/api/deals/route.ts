@@ -71,11 +71,15 @@ export async function GET(request: Request) {
     // migration 020: priorityScore, isPriority (lead scoring)
     // migration 025: leadSource (lead source tracking)
     // migration 033: LeadScore JOIN (score, temperature) - OPSIYONEL (tablo yoksa hata vermez)
+    // migration 072: status kolonu - OPSIYONEL (kolon yoksa hata vermemesi için fallback)
     // SuperAdmin için Company bilgisi ekle
+    
+    // Status kolonunu kontrol et (kolon yoksa hata vermemesi için)
+    // Önce status olmadan deneyelim
     let query = supabase
       .from('Deal')
       .select(`
-        id, title, stage, value, status, customerId, customerCompanyId, priorityScore, isPriority, leadSource, createdAt, companyId,
+        id, title, stage, value, customerId, customerCompanyId, priorityScore, isPriority, leadSource, createdAt, companyId,
         Company:companyId (
           id,
           name
@@ -133,27 +137,100 @@ export async function GET(request: Request) {
     // Pagination uygula - EN SON (filtrelerden sonra)
     query = query.range((page - 1) * pageSize, page * pageSize - 1)
 
-    const { data, error, count } = await query
+    // Status kolonunu kontrol et - önce status olmadan deneyelim
+    let deals: any[] = []
+    let error: any = null
+    let totalCount = 0
+    
+    const { data: dealsWithoutStatus, error: errorWithoutStatus, count: countWithoutStatus } = await query
+    
+    if (errorWithoutStatus && (errorWithoutStatus.message?.includes('status') || (errorWithoutStatus.message?.includes('column') && errorWithoutStatus.message?.includes('does not exist')))) {
+      // Status kolonu yok, status olmadan kullan
+      error = null
+      deals = dealsWithoutStatus || []
+      totalCount = countWithoutStatus || 0
+    } else if (errorWithoutStatus) {
+      // Başka bir hata var
+      error = errorWithoutStatus
+      deals = []
+      totalCount = 0
+    } else {
+      // Status kolonu var, status ile tekrar çek
+      let queryWithStatus = supabase
+        .from('Deal')
+        .select(`
+          id, title, stage, value, status, customerId, customerCompanyId, priorityScore, isPriority, leadSource, createdAt, companyId,
+          Company:companyId (
+            id,
+            name
+          )
+        `, { count: 'exact' })
+        .order('createdAt', { ascending: false })
+      
+      // Filtreleri tekrar uygula
+      if (!isSuperAdmin) {
+        queryWithStatus = queryWithStatus.eq('companyId', companyId)
+      } else if (filterCompanyId) {
+        queryWithStatus = queryWithStatus.eq('companyId', filterCompanyId)
+      }
+      
+      if (stage) {
+        queryWithStatus = queryWithStatus.eq('stage', stage)
+      }
+      if (customerId) {
+        queryWithStatus = queryWithStatus.eq('customerId', customerId)
+      }
+      if (customerCompanyId) {
+        queryWithStatus = queryWithStatus.eq('customerCompanyId', customerCompanyId)
+      }
+      if (leadSource) {
+        queryWithStatus = queryWithStatus.eq('leadSource', leadSource)
+      }
+      if (search) {
+        queryWithStatus = queryWithStatus.ilike('title', `%${search}%`)
+      }
+      if (minValue) {
+        queryWithStatus = queryWithStatus.gte('value', parseFloat(minValue))
+      }
+      if (maxValue) {
+        queryWithStatus = queryWithStatus.lte('value', parseFloat(maxValue))
+      }
+      if (startDate) {
+        queryWithStatus = queryWithStatus.gte('createdAt', startDate)
+      }
+      if (endDate) {
+        queryWithStatus = queryWithStatus.lte('createdAt', endDate)
+      }
+      
+      // Pagination uygula
+      queryWithStatus = queryWithStatus.range((page - 1) * pageSize, page * pageSize - 1)
+      
+      const { data: dealsWithStatus, error: errorWithStatus, count: countWithStatus } = await queryWithStatus
+      error = errorWithStatus
+      deals = dealsWithStatus || []
+      totalCount = countWithStatus || 0
+    }
 
-    if (error) {
+    // Eğer hata varsa ve status kolonu hatası değilse, hatayı döndür
+    if (error && !(error.message?.includes('status') || (error.message?.includes('column') && error.message?.includes('does not exist')))) {
       // Production'da console.error kaldırıldı
-      if (process.env.NODE_ENV === 'development') {
+      if (process.env.NODE_ENV !== 'production') {
         console.error('Deals API query error:', error)
       }
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const totalPages = Math.ceil((count || 0) / pageSize)
+    const totalPages = Math.ceil((totalCount || 0) / pageSize)
 
     // Dengeli cache - 60 saniye (performans + veri güncelliği dengesi)
     // stale-while-revalidate: Eski veri gösterilirken arka planda yenilenir (kullanıcı beklemez)
     return NextResponse.json(
       {
-        data: data || [],
+        data: deals || [],
         pagination: {
           page,
           pageSize,
-          totalItems: count || 0,
+          totalItems: totalCount || 0,
           totalPages,
         },
       },

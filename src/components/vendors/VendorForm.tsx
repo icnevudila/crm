@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { toast } from '@/lib/toast'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { handleFormValidationErrors } from '@/lib/form-validation'
 import {
   Dialog,
   DialogContent,
@@ -62,6 +63,8 @@ export default function VendorForm({
   const router = useRouter()
   const [loading, setLoading] = useState(false)
 
+  const formRef = useRef<HTMLFormElement>(null)
+  
   const {
     register,
     handleSubmit,
@@ -125,6 +128,11 @@ export default function VendorForm({
 
   const status = watch('status')
 
+  const onError = (errors: any) => {
+    // Form validation hatalarını göster ve scroll yap
+    handleFormValidationErrors(errors, formRef)
+  }
+
   const onSubmit = async (data: VendorFormData) => {
     setLoading(true)
     try {
@@ -147,6 +155,12 @@ export default function VendorForm({
       const savedVendor = await res.json()
       
       // onSuccess callback'i çağır - optimistic update için
+      // Success toast göster
+      toast.success(
+        vendor ? 'Tedarikçi güncellendi' : 'Tedarikçi kaydedildi',
+        vendor ? `${data.name} başarıyla güncellendi.` : `${data.name} başarıyla eklendi.`
+      )
+
       if (onSuccess) {
         onSuccess(savedVendor)
       }
@@ -173,7 +187,7 @@ export default function VendorForm({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form ref={formRef} onSubmit={handleSubmit(onSubmit, onError)} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Name */}
             <div className="space-y-2 md:col-span-2">

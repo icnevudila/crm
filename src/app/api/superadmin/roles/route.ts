@@ -4,7 +4,7 @@ import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { buildPermissionDeniedResponse } from '@/lib/permissions'
 
 // Tüm rolleri listele (sadece SUPER_ADMIN)
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { session, error: sessionError } = await getSafeSession(request)
     if (sessionError) {
