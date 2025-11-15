@@ -7,6 +7,7 @@ import { sendEmailViaSmtp, createGmailSmtpConfig, createOutlookSmtpConfig, SmtpC
 import { sendEmailViaGmail, refreshGmailToken } from './gmail-oauth'
 import { sendEmailViaOutlook, refreshOutlookToken } from './outlook-oauth'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { sendEmailViaResend } from './resend'
 
 export interface SendEmailOptions {
   to: string | string[]
@@ -47,7 +48,44 @@ export async function sendEmail(
       }
     }
 
-    // Öncelik sırası: Gmail OAuth > Outlook OAuth > SMTP
+    // Öncelik sırası: Resend (CompanyIntegration) > Resend (env) > Gmail OAuth > Outlook OAuth > SMTP
+    // Resend kontrolü - önce CompanyIntegration'dan, sonra environment variable'dan
+    const resendApiKey = integration?.resendApiKey || process.env.RESEND_API_KEY
+    
+    // Resend kontrolü: resendApiKey varsa kullan (resendEnabled flag'i opsiyonel)
+    if (resendApiKey) {
+      // Eğer resendFromEmail ayarlanmışsa kullan, yoksa options.from veya varsayılan değeri kullan
+      const resendOptions = {
+        ...options,
+        from: options.from || integration?.resendFromEmail || undefined,
+      }
+      
+      const result = await sendEmailViaResend(resendOptions, resendApiKey)
+      
+      // Başarılı ise status'u güncelle
+      if (result.success) {
+        await supabase
+          .from('CompanyIntegration')
+          .update({
+            emailStatus: 'ACTIVE',
+            emailLastError: null,
+            emailProvider: 'RESEND',
+          })
+          .eq('companyId', companyId)
+      } else {
+        // Hata durumunu kaydet
+        await supabase
+          .from('CompanyIntegration')
+          .update({
+            emailStatus: 'ERROR',
+            emailLastError: result.error,
+          })
+          .eq('companyId', companyId)
+      }
+      
+      return result
+    }
+
     if (integration.gmailEnabled && integration.gmailOAuthToken) {
       // Gmail OAuth ile gönder
       let accessToken = integration.gmailOAuthToken
