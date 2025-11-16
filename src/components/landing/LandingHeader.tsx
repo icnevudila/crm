@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Menu, X } from 'lucide-react'
+import { Menu, X, BarChart3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 const navItems = [
@@ -45,7 +45,7 @@ export default function LandingHeader() {
       animate={{ y: 0 }}
       transition={{ duration: 0.3 }}
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled ? 'bg-white shadow-md' : 'bg-white'
+        scrolled ? 'bg-white/95 backdrop-blur-sm shadow-sm border-b border-gray-100' : 'bg-white/80 backdrop-blur-sm'
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -57,21 +57,17 @@ export default function LandingHeader() {
               transition={{ type: 'spring', stiffness: 400, damping: 17 }}
               className="relative"
             >
-              <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 rounded-lg flex items-center justify-center shadow-lg group-hover:shadow-xl transition-shadow duration-300">
-                <motion.div
-                  animate={{ rotate: [0, 360] }}
-                  transition={{ duration: 20, repeat: Infinity, ease: 'linear' }}
-                  className="w-4 h-4 border-2 border-white rounded-sm"
-                />
+              <div className="w-9 h-9 bg-blue-600 rounded-md flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow duration-300">
+                <BarChart3 className="h-5 w-5 text-white" />
               </div>
             </motion.div>
             <motion.span
               initial={{ opacity: 0, x: -10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.1 }}
-              className="text-2xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent"
+              className="text-xl font-bold text-gray-900"
             >
-              Enterprise V3
+              CRM Enterprise
             </motion.span>
           </Link>
 

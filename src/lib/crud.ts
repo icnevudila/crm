@@ -159,18 +159,41 @@ export async function createRecord(table: string, data: any, logDescription?: st
   // Service role key ile RLS bypass
   const supabase = getSupabaseWithServiceRole()
 
-  // companyId ekle
-  const recordData = {
+  // companyId ve createdBy ekle (audit trail için)
+  // Güvenlik: session.user.id yoksa NULL kullan (foreign key hatası önleme)
+  // ÖNEMLİ: createdBy kolonu yoksa (migration çalıştırılmamışsa) hata vermemesi için
+  const recordData: any = {
     ...data,
     companyId: session.user.companyId,
   }
+  
+  // createdBy kolonunu ekle (migration çalıştırılmışsa)
+  // PGRST204 hatası = kolon yok, bu durumda createdBy ekleme
+  try {
+    recordData.createdBy = session.user.id || null
+  } catch {
+    // createdBy eklenemezse devam et (kolon yok)
+  }
 
   // @ts-ignore - Supabase type inference issue with dynamic table names
-  const { data: created, error } = await (supabase
+  let { data: created, error } = await (supabase
     .from(table) as any)
     .insert(recordData)
     .select()
     .single()
+
+  // Eğer createdBy kolonu hatası varsa (PGRST204), createdBy olmadan tekrar dene
+  if (error && (error.code === 'PGRST204' || error.message?.includes('createdBy'))) {
+    console.warn(`createRecord: createdBy kolonu bulunamadı, createdBy olmadan tekrar deneniyor...`)
+    const { createdBy, ...recordDataWithoutCreatedBy } = recordData
+    const retryResult = await (supabase
+      .from(table) as any)
+      .insert(recordDataWithoutCreatedBy)
+      .select()
+      .single()
+    created = retryResult.data
+    error = retryResult.error
+  }
 
   if (error) {
     console.error(`createRecord error for table ${table}:`, {
@@ -206,21 +229,45 @@ export async function updateRecord(
   // Service role key ile RLS bypass
   const supabase = getSupabaseWithServiceRole()
 
-  // updatedAt ekle
+  // updatedAt ve updatedBy ekle (audit trail için)
   // NOT: data zaten endpoint'lerde filtrelenmiş olmalı (sadece schema.sql kolonları)
-  const updateData = {
+  // Güvenlik: session.user.id yoksa NULL kullan (foreign key hatası önleme)
+  // ÖNEMLİ: updatedBy kolonu yoksa (migration çalıştırılmamışsa) hata vermemesi için
+  const updateData: any = {
     ...data,
     updatedAt: new Date().toISOString(),
   }
+  
+  // updatedBy kolonunu ekle (migration çalıştırılmışsa)
+  try {
+    updateData.updatedBy = session.user.id || null
+  } catch {
+    // updatedBy eklenemezse devam et (kolon yok)
+  }
 
   // @ts-ignore - Supabase type inference issue with dynamic table names
-  const { data: updated, error } = await (supabase
+  let { data: updated, error } = await (supabase
     .from(table) as any)
     .update(updateData)
     .eq('id', id)
     .eq('companyId', session.user.companyId)
     .select()
     .single()
+
+  // Eğer updatedBy kolonu hatası varsa (PGRST204), updatedBy olmadan tekrar dene
+  if (error && (error.code === 'PGRST204' || error.message?.includes('updatedBy'))) {
+    console.warn(`updateRecord: updatedBy kolonu bulunamadı, updatedBy olmadan tekrar deneniyor...`)
+    const { updatedBy, ...updateDataWithoutUpdatedBy } = updateData
+    const retryResult = await (supabase
+      .from(table) as any)
+      .update(updateDataWithoutUpdatedBy)
+      .eq('id', id)
+      .eq('companyId', session.user.companyId)
+      .select()
+      .single()
+    updated = retryResult.data
+    error = retryResult.error
+  }
 
   if (error) {
     throw new Error(error.message)

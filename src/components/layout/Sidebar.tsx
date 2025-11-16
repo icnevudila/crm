@@ -34,11 +34,15 @@ import {
   Filter,
   Target,
   Send,
+  Plug,
+  TrendingUp,
+  X,
 } from 'lucide-react'
 import { useSession } from '@/hooks/useSession'
 import { useData } from '@/hooks/useData'
 import { OnboardingButton } from '@/components/onboarding/OnboardingButton'
 import { getMenuPriorityByRole } from '@/lib/workflows'
+import { Button } from '@/components/ui/button'
 
 // Modül mapping - href'den modül koduna
 const MODULE_MAP: Record<string, string> = {
@@ -66,6 +70,7 @@ const MODULE_MAP: Record<string, string> = {
   '/email-campaigns': 'email-campaign',
   '/segments': 'segment',
   '/competitors': 'competitor',
+  '/user-integrations': 'user-integration',
 }
 
 interface SidebarItem {
@@ -93,7 +98,11 @@ interface SidebarSection {
 // ✅ Footer'a taşınacaklar: Hakkımızda, Şartlar, Gizlilik
 // ✅ Header/User Dropdown'a taşınacaklar: Yardım, Kullanım Kılavuzu, SSS
 
-function Sidebar() {
+interface SidebarProps {
+  onClose?: () => void
+}
+
+function Sidebar({ onClose }: SidebarProps) {
   const locale = useLocale()
   const t = useTranslations('sidebar')
   const pathname = usePathname()
@@ -190,6 +199,8 @@ function Sidebar() {
         { href: '/documents', label: t('items.documents'), icon: FolderOpen, module: 'document' },
         { href: '/vendors', label: t('items.vendors'), icon: Store, module: 'vendor' },
         { href: '/email-templates', label: t('items.emailTemplates'), icon: Mail, module: 'email-templates' },
+        { href: '/user-integrations', label: t('items.userIntegrations'), icon: Plug, module: 'user-integration' },
+        { href: '/integrations/analytics', label: t('items.integrationAnalytics') || 'Entegrasyon İstatistikleri', icon: TrendingUp, module: 'integration-analytics' },
         { href: '/settings', label: t('items.settings'), icon: Settings },
       ],
     },
@@ -444,7 +455,7 @@ function Sidebar() {
       <div className="flex h-full flex-col">
         {/* Logo */}
         <motion.div
-          className="flex h-16 items-center border-b px-6"
+          className="flex h-16 items-center justify-between border-b px-6"
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{
@@ -458,6 +469,12 @@ function Sidebar() {
             href={`/${locale}/dashboard`}
             prefetch={true}
             className="cursor-pointer"
+            onClick={() => {
+              // Mobilde link tıklandığında sidebar'ı kapat
+              if (onClose && typeof window !== 'undefined' && window.innerWidth < 1024) {
+                onClose()
+              }
+            }}
           >
             <motion.h1
               className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"
@@ -479,6 +496,18 @@ function Sidebar() {
               CRM V3
             </motion.h1>
           </Link>
+          {/* Mobile Close Button */}
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="lg:hidden h-8 w-8"
+              onClick={onClose}
+              aria-label="Menüyü kapat"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
         </motion.div>
 
         {/* Menu */}
@@ -532,6 +561,12 @@ function Sidebar() {
                   <PrefetchLink
                     href={href}
                     priority="high"
+                    onClick={() => {
+                      // Mobilde link tıklandığında sidebar'ı kapat
+                      if (onClose && typeof window !== 'undefined' && window.innerWidth < 1024) {
+                        onClose()
+                      }
+                    }}
                     className={cn(
                               'flex items-center gap-3 rounded-lg px-4 py-3 text-sm font-medium relative overflow-hidden group transition-colors',
                       isActive

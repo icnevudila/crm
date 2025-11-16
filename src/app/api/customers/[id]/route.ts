@@ -37,11 +37,16 @@ export async function GET(
     const supabase = getSupabaseWithServiceRole()
 
     // Customer'ı sadece gerekli kolonlarla çek (performans için)
-    // NOT: Invoice/Quote join'leri hata verebiliyor (totalAmount kolonu yoksa), bu yüzden sadece Customer kolonlarını çekiyoruz
-    // İlişkili veriler gerekirse ayrı query'lerle çekilebilir
+    // createdBy ve updatedBy bilgilerini User join ile çekiyoruz (audit trail için)
+    // NOT: Foreign key yoksa (migration çalıştırılmamışsa) join'leri kaldırıp tekrar deniyoruz
     let customerQuery = supabase
       .from('Customer')
-      .select('id, name, email, phone, city, status, customerCompanyId, companyId, logoUrl, createdAt, updatedAt')
+      .select(`
+        id, name, email, phone, city, status, customerCompanyId, companyId, logoUrl, notes, createdAt, updatedAt,
+        createdBy, updatedBy,
+        CreatedByUser:User!Customer_createdBy_fkey(id, name, email),
+        UpdatedByUser:User!Customer_updatedBy_fkey(id, name, email)
+      `)
       .eq('id', id)
     
     // SuperAdmin değilse companyId filtresi ekle
@@ -49,7 +54,49 @@ export async function GET(
       customerQuery = customerQuery.eq('companyId', companyId)
     }
     
-    const { data, error } = await customerQuery.single()
+    let { data, error } = await customerQuery.single()
+
+    // Foreign key hatası varsa (PGRST200), join'leri kaldırıp tekrar dene
+    if (error && (error.code === 'PGRST200' || error.message?.includes('Could not find a relationship'))) {
+      console.warn('Customer GET API: Foreign key bulunamadı, join olmadan tekrar deneniyor...')
+      let customerQueryWithoutJoin = supabase
+        .from('Customer')
+        .select(`
+          id, name, email, phone, city, status, customerCompanyId, companyId, logoUrl, notes, createdAt, updatedAt,
+          createdBy, updatedBy
+        `)
+        .eq('id', id)
+      
+      if (!isSuperAdmin) {
+        customerQueryWithoutJoin = customerQueryWithoutJoin.eq('companyId', companyId)
+      }
+      
+      const retryResult = await customerQueryWithoutJoin.single()
+      const retryData: any = retryResult.data
+      error = retryResult.error
+      
+      // createdBy/updatedBy varsa User bilgilerini ayrı query ile çek
+      if (retryData && (retryData.createdBy || retryData.updatedBy)) {
+        const userIds = [retryData.createdBy, retryData.updatedBy].filter(Boolean) as string[]
+        if (userIds.length > 0) {
+          const { data: users } = await supabase
+            .from('User')
+            .select('id, name, email')
+            .in('id', userIds)
+          
+          if (users) {
+            const userMap = new Map(users.map((u: any) => [u.id, u]))
+            if (retryData.createdBy && userMap.has(retryData.createdBy)) {
+              retryData.CreatedByUser = userMap.get(retryData.createdBy)
+            }
+            if (retryData.updatedBy && userMap.has(retryData.updatedBy)) {
+              retryData.UpdatedByUser = userMap.get(retryData.updatedBy)
+            }
+          }
+        }
+      }
+      data = retryData
+    }
 
     if (error) {
       if (process.env.NODE_ENV === 'development') {
@@ -62,18 +109,19 @@ export async function GET(
         })
       }
       
+      const { getErrorMessage } = await import('@/lib/api-locale')
       // 404 hatası için özel mesaj
       if (error.code === 'PGRST116' || error.message?.includes('No rows')) {
         return NextResponse.json(
-          { error: 'Müşteri bulunamadı', message: 'Bu müşteri kaydı bulunamadı veya silinmiş olabilir.' },
+          { error: getErrorMessage('errors.api.customerNotFound', request), message: getErrorMessage('errors.api.customerNotFoundMessage', request) },
           { status: 404 }
         )
       }
       
       return NextResponse.json(
         { 
-          error: 'Müşteri bilgileri alınamadı',
-          message: error.message || 'Müşteri verilerine erişirken bir hata oluştu.',
+          error: getErrorMessage('errors.api.customerCannotBeFetched', request),
+          message: error.message || getErrorMessage('errors.api.customerCannotBeFetchedMessage', request),
           ...(process.env.NODE_ENV === 'development' && {
             details: error,
             code: error.code,
@@ -84,8 +132,9 @@ export async function GET(
     }
 
     if (!data) {
+      const { getErrorMessage } = await import('@/lib/api-locale')
       return NextResponse.json(
-        { error: 'Müşteri bulunamadı', message: 'Bu müşteri kaydı bulunamadı.' },
+        { error: getErrorMessage('errors.api.customerNotFound', request), message: getErrorMessage('errors.api.customerNotFoundMessage', request) },
         { status: 404 }
       )
     }
@@ -107,8 +156,9 @@ export async function GET(
       }
     )
   } catch (error) {
+    const { getErrorMessage } = await import('@/lib/api-locale')
     return NextResponse.json(
-      { error: 'Failed to fetch customer' },
+      { error: getErrorMessage('errors.api.customerCannotBeFetched', request) },
       { status: 500 }
     )
   }
@@ -145,13 +195,16 @@ export async function PUT(
     // schema.sql: name, email, phone, city, status, companyId, updatedAt
     // schema-extension.sql: address, sector, website, taxNumber, fax, notes (migration çalıştırılmamış olabilir - GÖNDERME!)
     // migration 004: customerCompanyId (müşteri hangi firmada çalışıyor)
+    // Güvenlik: createdBy ve updatedBy otomatik dolduruluyor (CRUD fonksiyonunda), body'den alınmamalı
+    const { id: bodyId, companyId, createdAt, updatedAt, createdBy, updatedBy, ...cleanBody } = body
+    
     const customerData: any = {
-      name: body.name,
-      email: body.email || null,
-      phone: body.phone || null,
-      city: body.city || null,
-      status: body.status || 'ACTIVE',
-      updatedAt: new Date().toISOString(),
+      name: cleanBody.name,
+      email: cleanBody.email || null,
+      phone: cleanBody.phone || null,
+      city: cleanBody.city || null,
+      status: cleanBody.status || 'ACTIVE',
+      // updatedAt ve updatedBy CRUD fonksiyonunda otomatik ekleniyor
     }
     // customerCompanyId - müşteri hangi firmada çalışıyor (migration 004'te eklendi)
     if (body.customerCompanyId !== undefined && body.customerCompanyId !== null && body.customerCompanyId !== '') {
@@ -180,7 +233,8 @@ export async function PUT(
       .single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      const { getErrorMessage } = await import('@/lib/api-locale')
+      return NextResponse.json({ error: error.message || getErrorMessage('errors.api.customerCannotBeUpdated', request) }, { status: 500 })
     }
 
     // ActivityLog KALDIRILDI - Sadece kritik işlemler için ActivityLog tutulacak
@@ -193,8 +247,9 @@ export async function PUT(
       },
     })
   } catch (error) {
+    const { getErrorMessage } = await import('@/lib/api-locale')
     return NextResponse.json(
-      { error: 'Failed to update customer' },
+      { error: getErrorMessage('errors.api.customerCannotBeUpdated', request) },
       { status: 500 }
     )
   }
@@ -212,7 +267,8 @@ export async function DELETE(
     }
 
     if (!session?.user?.companyId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      const { getErrorMessage } = await import('@/lib/api-locale')
+      return NextResponse.json({ error: getErrorMessage('errors.unauthorized', request) }, { status: 401 })
     }
 
     // Permission check - canDelete kontrolü
@@ -239,11 +295,12 @@ export async function DELETE(
       console.error('Customer DELETE - Deal check error:', dealsError)
     }
     
+    const { getErrorMessage } = await import('@/lib/api-locale')
     if (deals && deals.length > 0) {
       return NextResponse.json(
         { 
-          error: 'Müşteri silinemez',
-          message: 'Bu müşteriye ait fırsatlar var. Müşteriyi silmek için önce ilgili fırsatları silmeniz gerekir.',
+          error: getErrorMessage('errors.api.customerCannotBeDeleted', request),
+          message: getErrorMessage('errors.api.customerHasDeals', request),
           reason: 'CUSTOMER_HAS_DEALS',
           relatedItems: {
             deals: deals.length,
@@ -272,8 +329,8 @@ export async function DELETE(
     if (quotes && quotes.length > 0) {
       return NextResponse.json(
         { 
-          error: 'Müşteri silinemez',
-          message: 'Bu müşteriye ait teklifler var. Müşteriyi silmek için önce ilgili teklifleri silmeniz gerekir.',
+          error: getErrorMessage('errors.api.customerCannotBeDeleted', request),
+          message: getErrorMessage('errors.api.customerHasQuotes', request),
           reason: 'CUSTOMER_HAS_QUOTES',
           relatedItems: {
             quotes: quotes.length,
@@ -302,8 +359,8 @@ export async function DELETE(
     if (invoices && invoices.length > 0) {
       return NextResponse.json(
         { 
-          error: 'Müşteri silinemez',
-          message: 'Bu müşteriye ait faturalar var. Müşteriyi silmek için önce ilgili faturaları silmeniz gerekir.',
+          error: getErrorMessage('errors.api.customerCannotBeDeleted', request),
+          message: getErrorMessage('errors.api.customerHasInvoices', request),
           reason: 'CUSTOMER_HAS_INVOICES',
           relatedItems: {
             invoices: invoices.length,
@@ -334,7 +391,8 @@ export async function DELETE(
 
     if (error) {
       console.error('Delete error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      const { getErrorMessage } = await import('@/lib/api-locale')
+      return NextResponse.json({ error: error.message || getErrorMessage('errors.api.customerCannotBeDeleted', request) }, { status: 500 })
     }
 
     // ActivityLog KALDIRILDI - Sadece kritik işlemler için ActivityLog tutulacak
@@ -351,8 +409,9 @@ export async function DELETE(
     )
   } catch (error: any) {
     console.error('Delete error:', error)
+    const { getErrorMessage } = await import('@/lib/api-locale')
     return NextResponse.json(
-      { error: error?.message || 'Failed to delete customer' },
+      { error: error?.message || getErrorMessage('errors.api.customerCannotBeDeleted', request) },
       { status: 500 }
     )
   }

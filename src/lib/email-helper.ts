@@ -62,7 +62,11 @@ export async function sendEmail({
     // 2. SendGrid (Alternatif)
     if (process.env.SENDGRID_API_KEY) {
       try {
-        const sgMail = await import('@sendgrid/mail')
+        // @ts-expect-error - Paket yoksa hata vermemesi için
+        const sgMail = await import('@sendgrid/mail').catch(() => null)
+        if (!sgMail) {
+          throw new Error('SendGrid paketi yüklü değil')
+        }
         sgMail.default.setApiKey(process.env.SENDGRID_API_KEY)
 
         const [response] = await sgMail.default.send({
@@ -88,7 +92,11 @@ export async function sendEmail({
     // 3. Brevo (Alternatif - En Yüksek Limit)
     if (process.env.BREVO_API_KEY) {
       try {
-        const brevo = await import('@getbrevo/brevo')
+        // @ts-expect-error - Paket yoksa hata vermemesi için
+        const brevo = await import('@getbrevo/brevo').catch(() => null)
+        if (!brevo) {
+          throw new Error('Brevo paketi yüklü değil')
+        }
         const apiInstance = new brevo.TransactionalEmailsApi()
         apiInstance.setApiKey(
           brevo.TransactionalEmailsApiApiKeys.apiKey,

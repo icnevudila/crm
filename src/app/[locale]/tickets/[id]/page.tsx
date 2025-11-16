@@ -1,10 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { ArrowLeft, Edit, Trash2, MessageSquare, User, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, MessageSquare, User, AlertCircle, Mail, MessageSquare as MessageSquareIcon, Calendar } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -13,6 +12,12 @@ import CommentsSection from '@/components/ui/CommentsSection'
 import TicketForm from '@/components/tickets/TicketForm'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import Link from 'next/link'
+import { toastError, toastWarning } from '@/lib/toast'
+import SendEmailButton from '@/components/integrations/SendEmailButton'
+import SendSmsButton from '@/components/integrations/SendSmsButton'
+import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
+import { useQuickActionSuccess } from '@/lib/quick-action-helper'
+import { useData } from '@/hooks/useData'
 
 interface Ticket {
   id: string
@@ -38,12 +43,6 @@ interface Ticket {
   activities?: any[]
 }
 
-async function fetchTicket(id: string): Promise<Ticket> {
-  const res = await fetch(`/api/tickets/${id}`)
-  if (!res.ok) throw new Error('Failed to fetch ticket')
-  return res.json()
-}
-
 export default function TicketDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -51,28 +50,37 @@ export default function TicketDetailPage() {
   const id = params.id as string
   const [formOpen, setFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const { handleQuickActionSuccess } = useQuickActionSuccess()
 
-  const { data: ticket, isLoading, refetch } = useQuery({
-    queryKey: ['ticket', id],
-    queryFn: () => fetchTicket(id),
-  })
+  const { data: ticket, isLoading, error, mutate: mutateTicket } = useData<Ticket>(
+    id ? `/api/tickets/${id}` : null,
+    {
+      dedupingInterval: 30000,
+      revalidateOnFocus: false,
+    }
+  )
 
   if (isLoading) {
     return <SkeletonDetail />
   }
 
-  if (!ticket) {
+  if (error || !ticket) {
     return (
-      <div className="text-center py-12">
-        <p className="text-gray-600">Destek talebi bulunamadı</p>
-        <Button
-          variant="outline"
-          className="mt-4"
-          onClick={() => router.push(`/${locale}/tickets`)}
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Geri Dön
-        </Button>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            Destek Talebi Bulunamadı
+          </h1>
+          {error && (
+            <p className="text-sm text-gray-600 mb-4">
+              {(error as any)?.message || 'Destek talebi yüklenirken bir hata oluştu'}
+            </p>
+          )}
+          <Button onClick={() => router.push(`/${locale}/tickets`)}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Geri Dön
+          </Button>
+        </div>
       </div>
     )
   }
@@ -109,7 +117,7 @@ export default function TicketDetailPage() {
     
     // RESOLVED veya CLOSED ticket'ları silinemez
     if (ticket.status === 'RESOLVED' || ticket.status === 'CLOSED') {
-      alert('Çözülmüş veya kapatılmış talepler silinemez')
+      toastWarning('Çözülmüş veya kapatılmış talepler silinemez')
       return
     }
 
@@ -131,7 +139,7 @@ export default function TicketDetailPage() {
       router.push(`/${locale}/tickets`)
     } catch (error: any) {
       console.error('Delete error:', error)
-      alert(error?.message || 'Silme işlemi başarısız oldu')
+      toastError('Silme işlemi başarısız oldu', error?.message)
     } finally {
       setDeleteLoading(false)
     }
@@ -183,6 +191,72 @@ export default function TicketDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Quick Actions */}
+      {ticket.Customer && (ticket.Customer.email || ticket.Customer.phone) && (
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Hızlı İşlemler</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {ticket.Customer.email && (
+              <SendEmailButton
+                to={ticket.Customer.email}
+                subject={`Destek Talebi: ${ticket.subject}`}
+                html={`
+                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px;">
+                      Destek Talebi Bilgileri
+                    </h2>
+                    <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                      <p><strong>Konu:</strong> ${ticket.subject}</p>
+                      <p><strong>Durum:</strong> ${statusLabels[ticket.status] || ticket.status}</p>
+                      <p><strong>Öncelik:</strong> ${priorityLabels[ticket.priority] || ticket.priority}</p>
+                      ${ticket.description ? `<p><strong>Açıklama:</strong> ${ticket.description}</p>` : ''}
+                    </div>
+                    <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">
+                      Bu e-posta CRM Enterprise V3 sisteminden gönderilmiştir.
+                    </p>
+                  </div>
+                `}
+                category="GENERAL"
+                entityData={ticket}
+                onSuccess={() => handleQuickActionSuccess({
+                  entityType: 'ticket',
+                  entityName: ticket.subject,
+                  entityId: ticket.id,
+                  actionType: 'updated',
+                  onClose: () => {},
+                })}
+              />
+            )}
+            {ticket.Customer.phone && (
+              <>
+                <SendSmsButton
+                  to={ticket.Customer.phone}
+                  message={`Merhaba ${ticket.Customer.name}, destek talebiniz hakkında size ulaşmak istiyoruz. Konu: ${ticket.subject}`}
+                  onSuccess={() => handleQuickActionSuccess({
+                    entityType: 'ticket',
+                    entityName: ticket.subject,
+                    entityId: ticket.id,
+                    actionType: 'updated',
+                    onClose: () => {},
+                  })}
+                />
+                <SendWhatsAppButton
+                  to={ticket.Customer.phone}
+                  message={`Merhaba ${ticket.Customer.name}, destek talebiniz hakkında size ulaşmak istiyoruz. Konu: ${ticket.subject}`}
+                  onSuccess={() => handleQuickActionSuccess({
+                    entityType: 'ticket',
+                    entityName: ticket.subject,
+                    entityId: ticket.id,
+                    actionType: 'updated',
+                    onClose: () => {},
+                  })}
+                />
+              </>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* Ticket Info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

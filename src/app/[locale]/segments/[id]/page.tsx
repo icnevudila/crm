@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useData } from '@/hooks/useData'
 import SegmentForm from '@/components/segments/SegmentForm'
 import { mutate } from 'swr'
+import { toastError } from '@/lib/toast'
 
 interface SegmentMember {
   id: string
@@ -65,7 +66,7 @@ export default function SegmentDetailPage() {
       router.push(`/${locale}/segments`)
     } catch (error: any) {
       console.error('Delete error:', error)
-      alert(error?.message || 'Silme işlemi başarısız oldu')
+      toastError('Silme işlemi başarısız oldu', error?.message)
     }
   }
 
@@ -87,7 +88,7 @@ export default function SegmentDetailPage() {
       mutate(`/api/segments/${segmentId}`)
     } catch (error: any) {
       console.error('Remove member error:', error)
-      alert(error?.message || 'Üye çıkarma işlemi başarısız oldu')
+      toastError('Üye çıkarma işlemi başarısız oldu', error?.message)
     }
   }
 

@@ -13,6 +13,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/lib/toast'
 import { getStageMessage } from '@/lib/stageTranslations'
 import { handleFormValidationErrors } from '@/lib/form-validation'
+import { useNavigateToDetailToast } from '@/lib/quick-action-helper'
+import { AutomationConfirmationModal } from '@/lib/automations/toast-confirmation'
 import {
   Dialog,
   DialogContent,
@@ -37,6 +39,7 @@ interface QuoteFormProps {
   customerId?: string // Prop olarak customerId geçilebilir (modal içinde kullanım için)
   customerCompanyId?: string
   customerCompanyName?: string
+  skipDialog?: boolean // Wizard içinde kullanım için Dialog wrapper'ı atla
 }
 
 async function fetchDeals(customerCompanyId?: string) {
@@ -67,6 +70,7 @@ export default function QuoteForm({
   customerId: customerIdProp,
   customerCompanyId: customerCompanyIdProp,
   customerCompanyName,
+  skipDialog = false,
 }: QuoteFormProps) {
   const t = useTranslations('quotes.form')
   const tCommon = useTranslations('common.form')
@@ -82,6 +86,10 @@ export default function QuoteForm({
   const dealId = dealIdProp || dealIdFromUrl
   const customerId = customerIdProp
   const [loading, setLoading] = useState(false)
+  const navigateToDetailToast = useNavigateToDetailToast()
+  const [automationModalOpen, setAutomationModalOpen] = useState(false)
+  const [automationModalType, setAutomationModalType] = useState<'email' | 'sms' | 'whatsapp'>('email')
+  const [automationModalOptions, setAutomationModalOptions] = useState<any>(null)
 
   // Schema'yı component içinde oluştur - locale desteği için
   const quoteSchema = z.object({
@@ -178,6 +186,18 @@ export default function QuoteForm({
     enabled: !!dealId && open && !quote, // Sadece yeni kayıt modunda ve dealId varsa
   })
 
+  // customerIdProp geldiğinde müşteri bilgilerini çek (wizard'larda kullanım için)
+  const { data: customerData } = useQuery({
+    queryKey: ['customer', customerIdProp],
+    queryFn: async () => {
+      if (!customerIdProp) return null
+      const res = await fetch(`/api/customers/${customerIdProp}`)
+      if (!res.ok) return null
+      return res.json()
+    },
+    enabled: open && !quote && !dealId && !!customerIdProp, // Sadece yeni quote, dealId yok ve customerIdProp varsa
+  })
+
   // Quote prop değiştiğinde veya modal açıldığında form'u güncelle
   useEffect(() => {
     if (open) {
@@ -230,6 +250,24 @@ export default function QuoteForm({
           taxRate: 18,
           customerCompanyId: deal.customerCompanyId || customerCompanyId || '',
         })
+      } else if (customerIdProp && customerData && !dealId) {
+        // Yeni kayıt modu - customerIdProp varsa ve müşteri bilgileri yüklendiyse forma yansıt
+        const customer = customerData
+        const validUntilDate = new Date()
+        validUntilDate.setDate(validUntilDate.getDate() + 30) // 30 gün sonra
+        
+        reset({
+          title: '',
+          status: 'DRAFT',
+          total: 0,
+          dealId: '', // Deal seçilmediyse boş
+          vendorId: '',
+          description: '',
+          validUntil: validUntilDate.toISOString().split('T')[0],
+          discount: 0,
+          taxRate: 18,
+          customerCompanyId: customer.customerCompanyId || customerCompanyId || '',
+        })
       } else {
         // Yeni kayıt modu - form'u temizle
         reset({
@@ -242,11 +280,15 @@ export default function QuoteForm({
           validUntil: '',
           discount: 0,
           taxRate: 18,
-          customerCompanyId: customerCompanyId || '',
+          customerCompanyId: customerCompanyId || (customerData?.customerCompanyId) || '',
         })
+        // Müşteri bilgileri geldiyse customerCompanyId'yi güncelle
+        if (customerData?.customerCompanyId && !customerCompanyId) {
+          setValue('customerCompanyId', customerData.customerCompanyId)
+        }
       }
     }
-  }, [quote, open, reset, dealId, dealData, customerCompanyId]) // onClose dependency'den çıkarıldı - stable değil
+  }, [quote, open, reset, dealId, dealData, customerCompanyId, customerIdProp, customerData, setValue]) // onClose dependency'den çıkarıldı - stable değil
 
   useEffect(() => {
     if (open && !quote && filteredDeals.length === 1 && !selectedDealId) {
@@ -290,10 +332,8 @@ export default function QuoteForm({
       if (quote) {
         toast.success('Teklif güncellendi', `"${savedQuote.title}" teklifi başarıyla güncellendi.`)
       } else {
-        const message = customerCompanyName 
-          ? `${customerCompanyName} firması için "${savedQuote.title}" teklifi oluşturuldu.`
-          : `"${savedQuote.title}" teklifi oluşturuldu.`
-        toast.success('Teklif oluşturuldu', message)
+        // Yeni quote oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
+        navigateToDetailToast('quote', savedQuote.id, savedQuote.title)
       }
       
       // Query cache'ini invalidate et - fresh data çek
@@ -319,6 +359,79 @@ export default function QuoteForm({
       if (onSuccess) {
         await onSuccess(savedQuote)
       }
+      
+      // ✅ Otomasyon: Quote oluşturulduğunda email gönder (kullanıcı tercihine göre)
+      if (!quote && savedQuote.dealId) {
+        try {
+          // Deal bilgisini çek
+          const dealRes = await fetch(`/api/deals/${savedQuote.dealId}`)
+          if (dealRes.ok) {
+            const deal = await dealRes.json()
+            if (deal?.customerId) {
+              // Customer bilgisini çek
+              const customerRes = await fetch(`/api/customers/${deal.customerId}`)
+              if (customerRes.ok) {
+                const customer = await customerRes.json()
+                if (customer?.email) {
+                  // Automation API'yi kontrol et
+                  const automationRes = await fetch('/api/automations/quote-sent-email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ quote: savedQuote }),
+                  })
+                  
+                  if (automationRes.ok) {
+                    const automationData = await automationRes.json()
+                    if (automationData.shouldAsk) {
+                      // Kullanıcıya sor (modal aç)
+                      setAutomationModalType('email')
+                      setAutomationModalOptions({
+                        entityType: 'QUOTE',
+                        entityId: savedQuote.id,
+                        entityTitle: savedQuote.title,
+                        customerEmail: customer.email,
+                        customerPhone: customer.phone,
+                        customerName: customer.name,
+                        defaultSubject: `Teklif: ${savedQuote.title}`,
+                        defaultMessage: `Merhaba ${customer.name},\n\nYeni teklif hazırlandı: ${savedQuote.title}\n\nTutar: ${savedQuote.total ? `₺${savedQuote.total.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}\nDurum: ${savedQuote.status || 'DRAFT'}\n\nDetayları görüntülemek için lütfen bizimle iletişime geçin.`,
+                        defaultHtml: `<p>Merhaba ${customer.name},</p><p>Yeni teklif hazırlandı: <strong>${savedQuote.title}</strong></p><p>Tutar: ${savedQuote.total ? `₺${savedQuote.total.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}</p><p>Durum: ${savedQuote.status || 'DRAFT'}</p>`,
+                        onSent: () => {
+                          toast.success('E-posta gönderildi', 'Müşteriye quote bilgisi gönderildi')
+                        },
+                        onAlwaysSend: async () => {
+                          await fetch('/api/automations/preferences', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              automationType: 'emailOnQuoteSent',
+                              preference: 'ALWAYS',
+                            }),
+                          })
+                        },
+                        onNeverSend: async () => {
+                          await fetch('/api/automations/preferences', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                              automationType: 'emailOnQuoteSent',
+                              preference: 'NEVER',
+                            }),
+                          })
+                        },
+                      })
+                      setAutomationModalOpen(true)
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch (error) {
+          // Automation hatası ana işlemi engellemez
+          console.error('Quote automation error:', error)
+        }
+      }
+      
       reset()
       onClose()
     },
@@ -356,9 +469,9 @@ export default function QuoteForm({
     }
   }
 
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+  const formContent = (
+    <div className="space-y-4">
+      {!skipDialog && (
         <DialogHeader>
           <DialogTitle>
             {quote ? t('editTitle') : t('newTitle')}
@@ -371,8 +484,9 @@ export default function QuoteForm({
             </span>
           </DialogDescription>
         </DialogHeader>
+      )}
 
-        <form ref={formRef} onSubmit={handleSubmit(onSubmit, onError)} className="space-y-4">
+      <form ref={formRef} onSubmit={handleSubmit(onSubmit, onError)} className="space-y-4">
           {customerCompanyId && (
             <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3 text-sm text-indigo-700">
               <p className="font-semibold">
@@ -633,12 +747,45 @@ export default function QuoteForm({
               type="submit"
               className="bg-gradient-primary text-white w-full sm:w-auto"
               disabled={loading || isProtected}
+              loading={loading}
             >
               {loading ? t('saving') : quote ? (isProtected ? t('cannotEdit') : t('update')) : t('save')}
             </Button>
           </div>
         </form>
-      </DialogContent>
-    </Dialog>
+    </div>
+  )
+
+  // Automation Modal - skipDialog durumunda render etme
+  const dialogs = (
+    <>
+      {/* Automation Confirmation Modal */}
+      {automationModalOpen && automationModalOptions && (
+        <AutomationConfirmationModal
+          type={automationModalType}
+          options={automationModalOptions}
+          open={automationModalOpen}
+          onClose={() => {
+            setAutomationModalOpen(false)
+            setAutomationModalOptions(null)
+          }}
+        />
+      )}
+    </>
+  )
+
+  if (skipDialog) {
+    return formContent
+  }
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onClose}>
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+          {formContent}
+        </DialogContent>
+      </Dialog>
+      {dialogs}
+    </>
   )
 }

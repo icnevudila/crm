@@ -10,31 +10,33 @@ const config: Config = {
   theme: {
   	extend: {
   		colors: {
+  			/* PRIMARY: Indigo scale - ana kurumsal renk */
   			primary: {
-  				'50': '#E6F7FF',
-  				'100': '#BAE7FF',
-  				'200': '#91D5FF',
-  				'300': '#69C0FF',
-  				'400': '#40A9FF',
-  				'500': '#00AEEF',   // Accent (premium sky blue)
-  				'600': '#1890FF',
-  				'700': '#096DD9',
-  				'800': '#0050B3',
-  				'900': '#003A8C',
+  				'50': '#eef2ff',
+  				'100': '#e0e7ff',
+  				'200': '#c7d2fe',
+  				'300': '#a5b4fc',
+  				'400': '#818cf8',
+  				'500': '#6366f1',   // Indigo 500
+  				'600': '#4f46e5',
+  				'700': '#4338ca',
+  				'800': '#3730a3',
+  				'900': '#312e81',
   				DEFAULT: 'hsl(var(--primary))',
   				foreground: 'hsl(var(--primary-foreground))'
   			},
+  			/* SECONDARY: Purple scale - gradient partner */
   			secondary: {
-  				'50': '#E9EDF5',
-  				'100': '#C9D0E3',
-  				'200': '#A8B3D0',
-  				'300': '#8796BE',
-  				'400': '#6679AC',
-  				'500': '#1B263B',   // Main background (Deep Space Blue)
-  				'600': '#162033',
-  				'700': '#10182A',
-  				'800': '#0B1221',
-  				'900': '#060B18',
+  				'50': '#faf5ff',
+  				'100': '#f3e8ff',
+  				'200': '#e9d5ff',
+  				'300': '#d8b4fe',
+  				'400': '#c084fc',
+  				'500': '#8b5cf6',   // Purple 500
+  				'600': '#7c3aed',
+  				'700': '#6d28d9',
+  				'800': '#5b21b6',
+  				'900': '#4c1d95',
   				DEFAULT: 'hsl(var(--secondary))',
   				foreground: 'hsl(var(--secondary-foreground))'
   			},
@@ -55,10 +57,11 @@ const config: Config = {
   				DEFAULT: 'hsl(var(--accent))',
   				foreground: 'hsl(var(--accent-foreground))'
   			},
+  			/* Status & info renkleri - amber burada status rolünde kalıyor */
   			success: '#22C55E',
-  			warning: '#FACC15',
+  			warning: '#F59E0B',
   			error: '#EF4444',
-  			info: '#00AEEF',
+  			info: '#3B82F6',
   			neutral: '#1E293B',
   			glass: 'rgba(255, 255, 255, 0.05)',
   			background: 'hsl(var(--background))',

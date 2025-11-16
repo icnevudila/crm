@@ -183,6 +183,8 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
     if (endDate) params.append('endDate', endDate)
     if (debouncedSearch) params.append('search', debouncedSearch)
     if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+    params.append('page', currentPage.toString())
+    params.append('pageSize', pageSize.toString())
     return `/api/finance?${params.toString()}`
   }, [
     isOpen,
@@ -194,9 +196,21 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
     debouncedSearch,
     isSuperAdmin,
     filterCompanyId,
+    currentPage,
+    pageSize,
   ])
 
-  const { data: financeRecords = [], isLoading, error, mutate: mutateFinance } = useData<Finance[]>(
+  interface FinanceResponse {
+    data: Finance[]
+    pagination: {
+      page: number
+      pageSize: number
+      totalItems: number
+      totalPages: number
+    }
+  }
+
+  const { data: financeData, isLoading, error, mutate: mutateFinance } = useData<Finance[] | FinanceResponse>(
     apiUrl,
     {
       dedupingInterval: 5000,
@@ -204,6 +218,22 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
       refreshInterval: 0,
     }
   )
+  
+  const financeRecords = useMemo(() => {
+    if (Array.isArray(financeData)) return financeData
+    if (financeData && typeof financeData === 'object' && 'data' in financeData) {
+      return (financeData as FinanceResponse).data || []
+    }
+    return []
+  }, [financeData])
+  
+  const pagination = useMemo(() => {
+    if (!financeData || Array.isArray(financeData)) return null
+    if (financeData && typeof financeData === 'object' && 'pagination' in financeData) {
+      return (financeData as FinanceResponse).pagination || null
+    }
+    return null
+  }, [financeData])
 
   // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
   const handleRefresh = async () => {
@@ -215,54 +245,9 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
     ])
   }
 
-  // Filtrelenmiş ve sıralanmış kayıtlar
-  const filteredAndSortedRecords = useMemo(() => {
-    let filtered = [...financeRecords]
-    
-    // Sıralama
-    filtered.sort((a, b) => {
-      let aValue: any
-      let bValue: any
-      
-      if (sortBy === 'date') {
-        aValue = new Date(a.createdAt).getTime()
-        bValue = new Date(b.createdAt).getTime()
-      } else if (sortBy === 'amount') {
-        aValue = a.amount || 0
-        bValue = b.amount || 0
-      } else if (sortBy === 'category') {
-        aValue = (a.category || '').toLowerCase()
-        bValue = (b.category || '').toLowerCase()
-      }
-      
-      if (sortOrder === 'asc') {
-        return aValue > bValue ? 1 : -1
-      } else {
-        return aValue < bValue ? 1 : -1
-      }
-    })
-    
-    return filtered
-  }, [financeRecords, sortBy, sortOrder])
-
-  // Pagination için kayıtlar
-  const paginatedRecords = useMemo(() => {
-    const startIndex = (currentPage - 1) * pageSize
-    const endIndex = startIndex + pageSize
-    return filteredAndSortedRecords.slice(startIndex, endIndex)
-  }, [filteredAndSortedRecords, currentPage, pageSize])
-
-  // Pagination bilgileri
-  const pagination = useMemo(() => {
-    const totalItems = filteredAndSortedRecords.length
-    const totalPages = Math.ceil(totalItems / pageSize)
-    return {
-      page: currentPage,
-      totalPages,
-      pageSize,
-      totalItems,
-    }
-  }, [filteredAndSortedRecords.length, currentPage, pageSize])
+  // API'den gelen veri zaten filtrelenmiş ve paginated
+  const filteredAndSortedRecords = financeRecords
+  const paginatedRecords = financeRecords // API zaten pagination yapıyor
 
   // Karşılaştırma: Geçen ay vs Bu ay
   const monthlyComparison = useMemo(() => {
@@ -422,6 +407,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
     
     setStartDate(start.toISOString().split('T')[0])
     setEndDate(end.toISOString().split('T')[0])
+    setCurrentPage(1) // Tarih filtresi değiştiğinde ilk sayfaya dön
   }, [])
   
   // Export handler
@@ -453,7 +439,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
   }, [type, category, customerCompanyId, startDate, endDate, debouncedSearch])
 
   const handleDelete = useCallback(async (id: string) => {
-    if (!(await confirm('Bu finans kaydını silmek istediğinize emin misiniz?'))) {
+    if (!(await confirm(tCommon('deleteConfirm', { name: '', item: 'finans kaydı' })))) {
       return
     }
 
@@ -482,7 +468,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
       ])
 
       toast.dismiss(toastId)
-      toast.success('Silindi', 'Finans kaydı başarıyla silindi.')
+      toast.success(tCommon('financeDeletedSuccess'), tCommon('financeDeletedSuccessMessage'))
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
@@ -997,7 +983,10 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
         {/* Filtreler */}
         <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
           {isSuperAdmin && (
-            <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
+            <Select value={filterCompanyId || 'all'} onValueChange={(v) => {
+              setFilterCompanyId(v === 'all' ? '' : v)
+              setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+            }}>
               <SelectTrigger className="w-full sm:w-48">
                 <SelectValue placeholder="Firma Seç" />
               </SelectTrigger>
@@ -1011,7 +1000,10 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
               </SelectContent>
             </Select>
           )}
-          <Select value={type || 'all'} onValueChange={(v) => setType(v === 'all' ? '' : v)}>
+          <Select value={type || 'all'} onValueChange={(v) => {
+            setType(v === 'all' ? '' : v)
+            setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+          }}>
             <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder={t('selectType')} />
             </SelectTrigger>
@@ -1022,7 +1014,10 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
             </SelectContent>
           </Select>
           
-          <Select value={category || 'all'} onValueChange={(v) => setCategory(v === 'all' ? '' : v)}>
+          <Select value={category || 'all'} onValueChange={(v) => {
+            setCategory(v === 'all' ? '' : v)
+            setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+          }}>
             <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder={t('selectCategory')} />
             </SelectTrigger>
@@ -1036,7 +1031,10 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
             </SelectContent>
           </Select>
 
-          <Select value={customerCompanyId || 'all'} onValueChange={(v) => setCustomerCompanyId(v === 'all' ? '' : v)}>
+          <Select value={customerCompanyId || 'all'} onValueChange={(v) => {
+            setCustomerCompanyId(v === 'all' ? '' : v)
+            setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+          }}>
             <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder="Firma" />
             </SelectTrigger>
@@ -1090,7 +1088,10 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
           <Input
             type="date"
             value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
+            onChange={(e) => {
+              setStartDate(e.target.value)
+              setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+            }}
             placeholder="Başlangıç Tarihi"
             className="w-48"
           />
@@ -1098,7 +1099,10 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
           <Input
             type="date"
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
+            onChange={(e) => {
+              setEndDate(e.target.value)
+              setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+            }}
             placeholder="Bitiş Tarihi"
             className="w-48"
           />
@@ -1267,13 +1271,13 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
             </Table>
             
             {/* Pagination */}
-            {pagination.totalPages > 1 && (
+            {pagination && pagination.totalPages > 1 && (
               <Pagination
                 currentPage={pagination.page}
                 totalPages={pagination.totalPages}
                 pageSize={pagination.pageSize}
                 totalItems={pagination.totalItems}
-                onPageChange={setCurrentPage}
+                onPageChange={(page) => setCurrentPage(page)}
                 onPageSizeChange={(size) => {
                   setPageSize(size)
                   setCurrentPage(1)

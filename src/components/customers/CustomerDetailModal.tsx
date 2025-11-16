@@ -2,9 +2,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useLocale } from 'next-intl'
-import { Edit, Mail, Phone, MapPin, Building2, Briefcase, FileText, Receipt, Trash2, X } from 'lucide-react'
+import { useLocale, useTranslations } from 'next-intl'
+import { Edit, Mail, Phone, MapPin, Building2, Briefcase, FileText, Receipt, Trash2, X, User } from 'lucide-react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -42,18 +43,21 @@ export default function CustomerDetailModal({
   const [deleteLoading, setDeleteLoading] = useState(false)
 
   // SWR ile veri çek - cache'den hızlı açılış için
+  // ÖNEMLİ: initialData'da CreatedByUser/UpdatedByUser yoksa API'den fresh data çek
   const { data: customer, isLoading, error, mutate: mutateCustomer } = useData<any>(
     customerId && open ? `/api/customers/${customerId}` : null,
     {
       dedupingInterval: 5000, // 5 saniye cache
       revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
-      fallbackData: initialData, // İlk render için liste sayfasındaki veriyi kullan
     }
   )
+  
+  // initialData'yı fallback olarak kullan ama CreatedByUser/UpdatedByUser için API'den çek
+  const displayCustomer = customer || (initialData && (initialData.CreatedByUser || initialData.UpdatedByUser) ? initialData : undefined)
 
   const handleDelete = async () => {
-    const displayCustomer = customer || initialData
-    if (!displayCustomer || !confirm(`${displayCustomer.name} müşterisini silmek istediğinize emin misiniz?`)) {
+    const tCommon = useTranslations('common')
+    if (!displayCustomer || !confirm(tCommon('deleteConfirm', { name: displayCustomer.name, item: 'müşteri' }))) {
       return
     }
 
@@ -68,7 +72,7 @@ export default function CustomerDetailModal({
         throw new Error(errorData.error || 'Silme işlemi başarısız')
       }
 
-      toast.success('Müşteri silindi')
+      toast.success(tCommon('customerDeletedSuccess'))
       
       // Cache'i güncelle
       await mutate('/api/customers')
@@ -83,22 +87,46 @@ export default function CustomerDetailModal({
     }
   }
 
-  if (!open || !customerId) return null
+  // ✅ ÇÖZÜM: customerId null kontrolü - modal açılmadan önce kontrol et
+  if (!open) return null
+  
+  if (!customerId) {
+    return (
+      <DetailModal open={open} onClose={onClose} title="Hata" size="md">
+        <div className="p-4 text-center">
+          <p className="text-gray-500 mb-4">Müşteri ID bulunamadı</p>
+          <Button onClick={onClose} className="bg-gradient-primary text-white">
+            Kapat
+          </Button>
+        </div>
+      </DetailModal>
+    )
+  }
 
-  // initialData varsa direkt göster (hızlı açılış için)
-  // Loading/error state'leri sadece initialData yoksa göster
-  const displayCustomer = customer || initialData
+  // displayCustomer zaten yukarıda tanımlı
+
+  // DEBUG: CreatedByUser/UpdatedByUser kontrolü
+  if (process.env.NODE_ENV === 'development' && displayCustomer) {
+    console.log('[CustomerDetailModal] Debug Info:', {
+      hasCreatedByUser: !!displayCustomer.CreatedByUser,
+      hasUpdatedByUser: !!displayCustomer.UpdatedByUser,
+      createdBy: displayCustomer.createdBy,
+      updatedBy: displayCustomer.updatedBy,
+      logoUrl: displayCustomer.logoUrl,
+      customerId: customerId,
+    })
+  }
 
   // Loading state - sadece initialData yoksa ve hala loading ise göster
   if (isLoading && !initialData && !displayCustomer) {
     return (
-      <DetailModal
-        open={open}
-        onClose={onClose}
-        title="Müşteri Detayları"
-        size="xl"
-      >
-        <div className="p-4">Yükleniyor...</div>
+      <DetailModal open={open} onClose={onClose} title="Müşteri Detayları" size="xl">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent"></div>
+            <p className="mt-4 text-sm text-gray-600">Yükleniyor...</p>
+          </div>
+        </div>
       </DetailModal>
     )
   }
@@ -106,15 +134,16 @@ export default function CustomerDetailModal({
   // Error state - sadece initialData yoksa ve error varsa göster
   if (error && !initialData && !displayCustomer) {
     return (
-      <DetailModal
-        open={open}
-        onClose={onClose}
-        title="Hata"
-        size="md"
-      >
+      <DetailModal open={open} onClose={onClose} title="Hata" size="md">
         <div className="p-4 text-center">
-          <p className="text-gray-500 mb-4">Müşteri yüklenemedi</p>
-          <Button onClick={onClose}>Kapat</Button>
+          <p className="text-gray-500 mb-4">
+            {error?.message?.includes('404') || error?.message?.includes('bulunamadı')
+              ? 'Müşteri bulunamadı'
+              : 'Müşteri yüklenemedi'}
+          </p>
+          <Button onClick={onClose} className="bg-gradient-primary text-white">
+            Kapat
+          </Button>
         </div>
       </DetailModal>
     )
@@ -123,15 +152,12 @@ export default function CustomerDetailModal({
   // Customer yoksa - sadece gerçekten yoksa göster (initialData varsa buraya gelmez)
   if (!displayCustomer) {
     return (
-      <DetailModal
-        open={open}
-        onClose={onClose}
-        title="Müşteri Bulunamadı"
-        size="md"
-      >
+      <DetailModal open={open} onClose={onClose} title="Müşteri Bulunamadı" size="md">
         <div className="p-4 text-center">
           <p className="text-gray-500 mb-4">Müşteri bulunamadı</p>
-          <Button onClick={onClose}>Kapat</Button>
+          <Button onClick={onClose} className="bg-gradient-primary text-white">
+            Kapat
+          </Button>
         </div>
       </DetailModal>
     )
@@ -147,6 +173,21 @@ export default function CustomerDetailModal({
         size="xl"
       >
         <div className="space-y-6">
+          {/* Customer Logo/Photo */}
+          {displayCustomer?.logoUrl && (
+            <div className="flex justify-center pb-4 border-b">
+              <div className="w-32 h-32 rounded-lg bg-white border-2 border-gray-300 flex items-center justify-center overflow-hidden">
+                <Image
+                  src={displayCustomer.logoUrl}
+                  alt={displayCustomer.name || 'Müşteri'}
+                  width={128}
+                  height={128}
+                  className="object-cover"
+                />
+              </div>
+            </div>
+          )}
+          
           {/* Header Actions */}
           <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pb-4 border-b">
             <Button variant="outline" onClick={() => setFormOpen(true)} className="w-full sm:w-auto">
@@ -223,7 +264,7 @@ export default function CustomerDetailModal({
             </Card>
 
             <Card className="p-6">
-              <h2 className="text-xl font-semibold mb-4">Durum</h2>
+              <h2 className="text-xl font-semibold mb-4">Durum ve Bilgiler</h2>
               <div className="space-y-3">
                 <div>
                   <span className="text-sm text-gray-600">Durum:</span>
@@ -243,6 +284,36 @@ export default function CustomerDetailModal({
                     {displayCustomer?.createdAt ? new Date(displayCustomer.createdAt).toLocaleDateString('tr-TR') : '-'}
                   </span>
                 </div>
+                {displayCustomer?.CreatedByUser && (
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-gray-400" />
+                    <div>
+                      <span className="text-sm text-gray-600">Oluşturan:</span>
+                      <span className="ml-2 text-gray-700 font-medium">
+                        {displayCustomer.CreatedByUser.name}
+                      </span>
+                    </div>
+                  </div>
+                )}
+                {displayCustomer?.updatedAt && (
+                  <div>
+                    <span className="text-sm text-gray-600">Son Güncelleme:</span>
+                    <span className="ml-2 text-gray-700">
+                      {new Date(displayCustomer.updatedAt).toLocaleDateString('tr-TR')}
+                    </span>
+                  </div>
+                )}
+                {displayCustomer?.UpdatedByUser && (
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-gray-400" />
+                    <div>
+                      <span className="text-sm text-gray-600">Son Güncelleyen:</span>
+                      <span className="ml-2 text-gray-700 font-medium">
+                        {displayCustomer.UpdatedByUser.name}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </Card>
           </div>

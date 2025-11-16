@@ -13,7 +13,10 @@ export async function GET(
     if (sessionError) {
       return sessionError
     }
-    if (!session?.user?.companyId) {
+    
+    // SuperAdmin için companyId kontrolünü bypass et
+    const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+    if (!isSuperAdmin && !session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -27,7 +30,7 @@ export async function GET(
     const { id: campaignId } = await params
 
     // Campaign bilgisini getir (segment ilişkisiyle)
-    const { data: campaign, error: campaignError } = await supabase
+    let query = supabase
       .from('EmailCampaign')
       .select(`
         *,
@@ -35,8 +38,13 @@ export async function GET(
         segment:CustomerSegment(name)
       `)
       .eq('id', campaignId)
-      .eq('companyId', session.user.companyId)
-      .single()
+    
+    // SuperAdmin için companyId filtresini bypass et
+    if (!isSuperAdmin) {
+      query = query.eq('companyId', session.user.companyId)
+    }
+    
+    const { data: campaign, error: campaignError } = await query.single()
 
     if (campaignError || !campaign) {
       console.error('Campaign fetch error:', campaignError)
@@ -59,7 +67,10 @@ export async function PUT(
     if (sessionError) {
       return sessionError
     }
-    if (!session?.user?.companyId) {
+    
+    // SuperAdmin için companyId kontrolünü bypass et
+    const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+    if (!isSuperAdmin && !session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -87,16 +98,20 @@ export async function PUT(
 
     const validatedData = validationResult.data
 
-    const { data, error } = await supabase
+    let updateQuery = supabase
       .from('EmailCampaign')
       .update({
         ...validatedData,
         updatedAt: new Date().toISOString(),
       })
       .eq('id', campaignId)
-      .eq('companyId', session.user.companyId)
-      .select()
-      .single()
+    
+    // SuperAdmin için companyId filtresini bypass et
+    if (!isSuperAdmin) {
+      updateQuery = updateQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { data, error } = await updateQuery.select().single()
 
     if (error) throw error
 
@@ -130,7 +145,10 @@ export async function DELETE(
     if (sessionError) {
       return sessionError
     }
-    if (!session?.user?.companyId) {
+    
+    // SuperAdmin için companyId kontrolünü bypass et
+    const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+    if (!isSuperAdmin && !session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -143,13 +161,26 @@ export async function DELETE(
     const supabase = getSupabaseWithServiceRole()
     const { id: campaignId } = await params
 
-    const { error } = await supabase
+    let deleteQuery = supabase
       .from('EmailCampaign')
       .delete()
       .eq('id', campaignId)
-      .eq('companyId', session.user.companyId)
+    
+    // SuperAdmin için companyId filtresini bypass et
+    if (!isSuperAdmin) {
+      deleteQuery = deleteQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { error } = await deleteQuery
 
     if (error) throw error
+
+    // Önce kampanyayı al (companyId için)
+    const { data: campaign } = await supabase
+      .from('EmailCampaign')
+      .select('companyId')
+      .eq('id', campaignId)
+      .single()
 
     // Activity Log
     await supabase.from('ActivityLog').insert({
@@ -157,7 +188,7 @@ export async function DELETE(
       entityType: 'EmailCampaign',
       entityId: campaignId,
       userId: session.user.id,
-      companyId: session.user.companyId,
+      companyId: campaign?.companyId || session.user.companyId,
       description: `Email kampanyası silindi`,
       meta: { campaignId },
     })

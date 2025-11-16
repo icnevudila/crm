@@ -3,7 +3,7 @@ import { getSafeSession } from '@/lib/safe-session'
 import { getSupabase } from '@/lib/supabase'
 import React from 'react'
 import { renderToBuffer } from '@react-pdf/renderer'
-import QuotePDF from '@/components/pdf/QuotePDF'
+import QuoteRecordPDF from '@/components/pdf/QuoteRecordPDF'
 
 // Edge Runtime desteklemiyor, Node.js runtime kullan
 // export const runtime = 'edge'
@@ -38,14 +38,23 @@ export async function GET(
             name,
             email,
             phone,
-            city
+            city,
+            address,
+            CustomerCompany:customerCompanyId (
+              id,
+              name,
+              address,
+              city
+            )
           )
         ),
-        Company (
+        Company:companyId (
           id,
           name,
           city,
-          sector
+          address,
+          phone,
+          email
         )
       `
       )
@@ -60,15 +69,15 @@ export async function GET(
     const quoteData = quote as any
 
     // PDF oluştur
-    const pdfBuffer = await renderToBuffer(
-      React.createElement(QuotePDF, { quote: quoteData }) as any
-    )
+    const QuoteRecordPDFComponent = QuoteRecordPDF as React.ComponentType<{ quote: any }>
+    const pdfElement = React.createElement(QuoteRecordPDFComponent, { quote: quoteData })
+    const pdfBuffer = await renderToBuffer(pdfElement)
 
     // PDF response döndür
     return new NextResponse(pdfBuffer as any, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="teklif-${quoteData.id.substring(0, 8)}.pdf"`,
+        'Content-Disposition': `attachment; filename="kayit_ozeti_${quoteData.id.substring(0, 8)}.pdf"`,
       },
     })
   } catch (error) {

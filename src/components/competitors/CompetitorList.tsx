@@ -1,17 +1,25 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { toast, confirm } from '@/lib/toast'
 import { useLocale, useTranslations } from 'next-intl'
-import { Plus, Search, Edit, Trash2, TrendingUp, TrendingDown } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, TrendingUp, TrendingDown, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import CompetitorForm from './CompetitorForm'
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import Pagination from '@/components/ui/Pagination'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
+import dynamic from 'next/dynamic'
+
+// Lazy load CompetitorDetailModal - performans için
+const CompetitorDetailModal = dynamic(() => import('./CompetitorDetailModal'), {
+  ssr: false,
+  loading: () => null,
+})
 
 interface Competitor {
   id: string
@@ -26,6 +34,16 @@ interface Competitor {
   createdAt: string
 }
 
+interface CompetitorsResponse {
+  data: Competitor[]
+  pagination: {
+    page: number
+    pageSize: number
+    totalItems: number
+    totalPages: number
+  }
+}
+
 export default function CompetitorList() {
   const locale = useLocale()
   const t = useTranslations('competitors')
@@ -33,12 +51,43 @@ export default function CompetitorList() {
   const [search, setSearch] = useState('')
   const [formOpen, setFormOpen] = useState(false)
   const [selectedCompetitor, setSelectedCompetitor] = useState<Competitor | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [selectedCompetitorId, setSelectedCompetitorId] = useState<string | null>(null)
+  const [selectedCompetitorData, setSelectedCompetitorData] = useState<Competitor | null>(null)
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  
+  // Debounced search
+  const [debouncedSearch, setDebouncedSearch] = useState(search)
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+      setCurrentPage(1) // Arama değiştiğinde ilk sayfaya dön
+    }, 300)
+    
+    return () => clearTimeout(timer)
+  }, [search])
 
-  const apiUrl = `/api/competitors${search ? `?search=${search}` : ''}`
-  const { data: competitors = [], isLoading, mutate: mutateCompetitors } = useData<Competitor[]>(apiUrl, {
+  // API URL with pagination
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams()
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    params.append('page', currentPage.toString())
+    params.append('pageSize', pageSize.toString())
+    return `/api/competitors?${params.toString()}`
+  }, [debouncedSearch, currentPage, pageSize])
+  
+  const { data: response, isLoading, mutate: mutateCompetitors } = useData<CompetitorsResponse | Competitor[]>(apiUrl, {
     dedupingInterval: 5000,
     revalidateOnFocus: false,
   })
+  
+  // Backward compatibility: Eğer response data array ise direkt kullan, değilse response.data kullan
+  const competitors = Array.isArray(response) ? response : (response?.data || [])
+  const pagination = Array.isArray(response) ? null : (response?.pagination || null)
 
   const handleNew = () => {
     setSelectedCompetitor(null)
@@ -260,6 +309,18 @@ export default function CompetitorList() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setSelectedCompetitorId(competitor.id)
+                          setSelectedCompetitorData(competitor)
+                          setDetailModalOpen(true)
+                        }}
+                        aria-label={`${competitor.name} rakip kaydını görüntüle`}
+                      >
+                        <Eye className="h-4 w-4 text-gray-600" />
+                      </Button>
                       <Button variant="ghost" size="icon" onClick={() => handleEdit(competitor)}>
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -278,7 +339,34 @@ export default function CompetitorList() {
             )}
           </TableBody>
         </Table>
+        
+        {/* Pagination */}
+        {pagination && (
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            pageSize={pagination.pageSize}
+            totalItems={pagination.totalItems}
+            onPageChange={(page) => setCurrentPage(page)}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              setCurrentPage(1) // Sayfa boyutu değiştiğinde ilk sayfaya dön
+            }}
+          />
+        )}
       </div>
+
+      {/* Detail Modal */}
+      <CompetitorDetailModal
+        competitorId={selectedCompetitorId}
+        open={detailModalOpen}
+        onClose={() => {
+          setDetailModalOpen(false)
+          setSelectedCompetitorId(null)
+          setSelectedCompetitorData(null)
+        }}
+        initialData={selectedCompetitorData || undefined}
+      />
 
       {/* Form Modal */}
       <CompetitorForm

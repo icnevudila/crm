@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { toast } from '@/lib/toast'
+import { toast, toastWarning } from '@/lib/toast'
 import { useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
+import { useNavigateToDetailToast } from '@/lib/quick-action-helper'
+import { AutomationConfirmationModal } from '@/lib/automations/toast-confirmation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -68,6 +70,10 @@ export default function MeetingForm({
   const [loading, setLoading] = useState(false)
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([])
   const [creatingVideoMeeting, setCreatingVideoMeeting] = useState(false)
+  const navigateToDetailToast = useNavigateToDetailToast()
+  const [automationModalOpen, setAutomationModalOpen] = useState(false)
+  const [automationModalType, setAutomationModalType] = useState<'email' | 'sms' | 'whatsapp'>('email')
+  const [automationModalOptions, setAutomationModalOptions] = useState<any>(null)
 
   // Schema'yı component içinde oluştur - locale desteği için
   const meetingSchema = z.object({
@@ -363,7 +369,8 @@ export default function MeetingForm({
           successMessage = t('meetingCreatedWithCompany', { company: customerCompanyName })
         }
         
-        toast.success(successTitle, successMessage)
+        // Yeni meeting oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
+        navigateToDetailToast('meeting', savedMeeting.id, savedMeeting.title)
       }
       
       // onSuccess callback'i çağır - yönlendirme burada yapılacak
@@ -371,6 +378,71 @@ export default function MeetingForm({
       // onSuccess içinde onClose çağrılmamalı - form zaten kendi içinde onClose çağırıyor
       if (onSuccess) {
         await onSuccess(savedMeeting)
+      }
+      
+      // ✅ Otomasyon: Meeting oluşturulduğunda email gönder (kullanıcı tercihine göre)
+      if (!meeting && savedMeeting.customerId) {
+        try {
+          // Customer bilgisini çek
+          const customerRes = await fetch(`/api/customers/${savedMeeting.customerId}`)
+          if (customerRes.ok) {
+            const customer = await customerRes.json()
+            if (customer?.email) {
+              // Automation API'yi kontrol et
+              const automationRes = await fetch('/api/automations/meeting-created-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ meeting: savedMeeting }),
+              })
+              
+              if (automationRes.ok) {
+                const automationData = await automationRes.json()
+                if (automationData.shouldAsk) {
+                  // Kullanıcıya sor (modal aç)
+                  setAutomationModalType('email')
+                  setAutomationModalOptions({
+                    entityType: 'MEETING',
+                    entityId: savedMeeting.id,
+                    entityTitle: savedMeeting.title,
+                    customerEmail: customer.email,
+                    customerPhone: customer.phone,
+                    customerName: customer.name,
+                    defaultSubject: `Toplantı: ${savedMeeting.title}`,
+                    defaultMessage: `Merhaba ${customer.name},\n\nYeni toplantı planlandı: ${savedMeeting.title}\n\nTarih: ${savedMeeting.meetingDate ? new Date(savedMeeting.meetingDate).toLocaleString('tr-TR') : 'Belirtilmemiş'}\nLokasyon: ${savedMeeting.location || 'Belirtilmemiş'}\n\nDetayları görüntülemek için lütfen bizimle iletişime geçin.`,
+                    defaultHtml: `<p>Merhaba ${customer.name},</p><p>Yeni toplantı planlandı: <strong>${savedMeeting.title}</strong></p><p>Tarih: ${savedMeeting.meetingDate ? new Date(savedMeeting.meetingDate).toLocaleString('tr-TR') : 'Belirtilmemiş'}</p><p>Lokasyon: ${savedMeeting.location || 'Belirtilmemiş'}</p>`,
+                    onSent: () => {
+                      toast.success('E-posta gönderildi', 'Müşteriye meeting bilgisi gönderildi')
+                    },
+                    onAlwaysSend: async () => {
+                      await fetch('/api/automations/preferences', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          automationType: 'emailOnMeetingCreated',
+                          preference: 'ALWAYS',
+                        }),
+                      })
+                    },
+                    onNeverSend: async () => {
+                      await fetch('/api/automations/preferences', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          automationType: 'emailOnMeetingCreated',
+                          preference: 'NEVER',
+                        }),
+                      })
+                    },
+                  })
+                  setAutomationModalOpen(true)
+                }
+              }
+            }
+          }
+        } catch (error) {
+          // Automation hatası ana işlemi engellemez
+          console.error('Meeting automation error:', error)
+        }
       }
       
       reset()
@@ -385,6 +457,7 @@ export default function MeetingForm({
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -518,12 +591,12 @@ export default function MeetingForm({
                       const meetingDuration = watch('meetingDuration') || 60
 
                       if (!title || title.trim() === '') {
-                        alert('Önce toplantı başlığını girin')
+                        toastWarning('Önce toplantı başlığını girin')
                         return
                       }
 
                       if (!meetingDate) {
-                        alert('Önce toplantı tarihini girin')
+                        toastWarning('Önce toplantı tarihini girin')
                         return
                       }
 
@@ -782,6 +855,20 @@ export default function MeetingForm({
         </form>
       </DialogContent>
     </Dialog>
+    
+    {/* Automation Confirmation Modal */}
+    {automationModalOpen && automationModalOptions && (
+      <AutomationConfirmationModal
+        type={automationModalType}
+        options={automationModalOptions}
+        open={automationModalOpen}
+        onClose={() => {
+          setAutomationModalOpen(false)
+          setAutomationModalOptions(null)
+        }}
+      />
+    )}
+    </>
   )
 }
 

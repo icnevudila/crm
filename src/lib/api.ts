@@ -53,17 +53,9 @@ async function fetchWithRetry(
           await delay(retryDelay * Math.pow(2, i)) // Exponential backoff
           continue
         }
-        // Daha detaylı hata mesajı - hangi endpoint başarısız oldu
-        let errorMessage = `API Error: ${response.status} ${response.statusText}`
-        try {
-          const errorData = await response.json().catch(() => null)
-          if (errorData?.error || errorData?.message) {
-            errorMessage = `${errorMessage} - ${errorData.error || errorData.message}`
-          }
-        } catch {
-          // JSON parse hatası - sadece status code ile devam et
-        }
-        throw new Error(`${errorMessage} (${url})`)
+        // ✅ ÇÖZÜM: Response body'yi burada okuma - fetchData içinde okunacak
+        // Sadece response'u döndür, error handling fetchData'da yapılacak
+        return response
       }
 
       return response
@@ -106,7 +98,101 @@ export async function fetchData<T = any>(
       })
     }
 
-    const data = await response.json()
+    // ✅ ÇÖZÜM: Content-Type kontrolü - JSON değilse hata ver (response.ok kontrolünden ÖNCE)
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('application/json')) {
+      // HTML/text response (örneğin 500 Internal Server Error sayfası veya redirect)
+      const text = await response.text().catch(() => '')
+      let errorMessage = 'Beklenmeyen yanıt formatı'
+      
+      if (!response.ok) {
+        // Response başarısız ve HTML dönüyor - muhtemelen bir hata sayfası
+        if (response.status === 500 || text.includes('Internal Server Error')) {
+          errorMessage = 'Sunucu hatası oluştu. Lütfen daha sonra tekrar deneyin.'
+        } else if (response.status === 401 || text.includes('Unauthorized')) {
+          errorMessage = 'Yetkilendirme hatası. Lütfen tekrar giriş yapın.'
+        } else if (response.status === 403 || text.includes('Forbidden')) {
+          errorMessage = 'Bu işlem için yetkiniz bulunmamaktadır.'
+        } else if (response.status >= 400) {
+          errorMessage = `API hatası (${response.status}). Lütfen daha sonra tekrar deneyin.`
+        } else {
+          errorMessage = text.length > 200 
+            ? `Beklenmeyen yanıt formatı: ${text.substring(0, 200)}...`
+            : `Beklenmeyen yanıt formatı: ${text}`
+        }
+      } else {
+        // Response başarılı ama JSON değil
+        errorMessage = text.length > 200 
+          ? `Beklenmeyen yanıt formatı: ${text.substring(0, 200)}...`
+          : `Beklenmeyen yanıt formatı: ${text}`
+      }
+      
+      const error = new Error(`${errorMessage} (${url})`) as any
+      error.status = response.status
+      error.url = url
+      throw error
+    }
+
+    // ✅ ÇÖZÜM: 404 hatalarını özel olarak handle et - response body'yi burada oku
+    if (!response.ok && response.status === 404) {
+      let errorData: any = {}
+      let errorMessage = 'Kayıt bulunamadı'
+      
+      try {
+        errorData = await response.json()
+        errorMessage = errorData.error || errorData.message || 'Kayıt bulunamadı'
+      } catch (parseError) {
+        // JSON parse hatası - varsayılan mesaj kullan
+        console.error('[fetchData] 404 Error Parse Error:', {
+          url,
+          error: parseError,
+        })
+      }
+      
+      // 404 için error object throw et - useData hook bunu handle edecek
+      const error = new Error(`API Error: 404 Not Found - ${errorMessage} (${url})`) as any
+      error.status = 404
+      error.data = errorData
+      throw error
+    }
+
+    // ✅ ÇÖZÜM: Diğer hata durumlarını handle et (500, 401, 403, vb.)
+    if (!response.ok) {
+      let errorData: any = {}
+      let errorMessage = `API hatası (${response.status})`
+      
+      try {
+        errorData = await response.json()
+        errorMessage = errorData.error || errorData.message || errorMessage
+      } catch (parseError) {
+        // JSON parse hatası - varsayılan mesaj kullan
+        console.error('[fetchData] Error Parse Error:', {
+          url,
+          status: response.status,
+          error: parseError,
+        })
+      }
+      
+      const error = new Error(`API Error: ${response.status} - ${errorMessage} (${url})`) as any
+      error.status = response.status
+      error.data = errorData
+      throw error
+    }
+
+    // ✅ ÇÖZÜM: JSON parse hatası yakalama - daha anlamlı hata mesajı
+    let data: T
+    try {
+      data = await response.json()
+    } catch (jsonError: any) {
+      // JSON parse hatası - response text'i al ve hata mesajı oluştur
+      const text = await response.text().catch(() => '')
+      const errorMessage = text.includes('Internal Server Error')
+        ? 'Sunucu hatası oluştu. Lütfen daha sonra tekrar deneyin.'
+        : text.includes('Error')
+          ? text.substring(0, 200)
+          : `JSON parse hatası: ${jsonError?.message || 'Geçersiz JSON yanıtı'}`
+      throw new Error(`${errorMessage} (${url})`)
+    }
 
     // CRITICAL: Her zaman log ekle - KPI sorununu debug etmek için
     if (url.includes('/api/stats/customers')) {

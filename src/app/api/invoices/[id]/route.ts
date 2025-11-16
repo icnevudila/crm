@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { updateRecord } from '@/lib/crud'
 import { 
   isValidInvoiceTransition, 
   isInvoiceImmutable, 
@@ -105,14 +106,19 @@ async function ensureSalesShipmentForSentStatus({
   companyId,
   sessionUserId,
   invoiceItems,
+  request,
 }: {
   supabase: ServiceSupabaseClient
   invoiceId: string
   companyId: string
   sessionUserId: string
   invoiceItems: InvoiceItemAutomation[]
+  request: Request
 }) {
   try {
+    const { getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const locale = getLocaleFromRequest(request)
+    const msgs = getMessages(locale)
     // Ürün varsa rezerve et
     if (invoiceItems.length > 0) {
       for (const item of invoiceItems) {
@@ -155,7 +161,7 @@ async function ensureSalesShipmentForSentStatus({
           {
             entity: 'Shipment',
             action: 'CREATE',
-            description: 'Fatura gönderildi, taslak sevkiyat oluşturuldu.',
+            description: msgs.activity.invoiceSentShipmentCreated,
             meta: {
               entity: 'Shipment',
               action: 'create_from_invoice',
@@ -190,14 +196,19 @@ async function ensurePurchaseTransactionForSentStatus({
   companyId,
   sessionUserId,
   invoiceItems,
+  request,
 }: {
   supabase: ServiceSupabaseClient
   invoiceId: string
   companyId: string
   sessionUserId: string
   invoiceItems: InvoiceItemAutomation[]
+  request: Request
 }) {
   try {
+    const { getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const locale = getLocaleFromRequest(request)
+    const msgs = getMessages(locale)
     // Ürün varsa bekleyen stok olarak işaretle
     if (invoiceItems.length > 0) {
       for (const item of invoiceItems) {
@@ -210,12 +221,12 @@ async function ensurePurchaseTransactionForSentStatus({
           })
         } catch (productError) {
           console.error('Product quantity update error:', productError)
-          // Ürün güncelleme hatası mal kabul oluşturmayı engellemez
+          // Ürün güncelleme hatası satın alma kaydı oluşturmayı engellemez
         }
       }
     }
 
-    // Mal kabul kaydı oluştur (ürün olsun ya da olmasın)
+    // Satın alma kaydı oluştur (ürün olsun ya da olmasın)
     const { data: purchaseTransaction, error: purchaseError } = await supabase
       .from('PurchaseTransaction')
       .insert([
@@ -240,7 +251,7 @@ async function ensurePurchaseTransactionForSentStatus({
           {
             entity: 'PurchaseTransaction',
             action: 'CREATE',
-            description: 'Alış faturası gönderildi, taslak mal kabul oluşturuldu.',
+            description: msgs.activity.purchaseInvoiceSentRecordCreated,
             meta: {
               entity: 'PurchaseTransaction',
               action: 'create_from_invoice',
@@ -253,7 +264,7 @@ async function ensurePurchaseTransactionForSentStatus({
         ])
       } catch (activityError) {
         console.error('ActivityLog creation error:', activityError)
-        // ActivityLog hatası mal kabul oluşturmayı engellemez
+        // ActivityLog hatası satın alma kaydı oluşturmayı engellemez
       }
 
       return {
@@ -269,20 +280,40 @@ async function ensurePurchaseTransactionForSentStatus({
   }
 }
 
-export const dynamic = 'force-dynamic'
+// ✅ %100 KESİN ÇÖZÜM: Cache'i tamamen kapat - her çağrıda fresh data
+// ÖNEMLİ: Next.js App Router'ın API route cache'ini tamamen kapat
+export const revalidate = 0 // Revalidation'ı kapat
+export const dynamic = 'force-dynamic' // Dynamic route - her zaman çalıştır
+export const fetchCache = 'force-no-store' // Fetch cache'ini kapat
+export const runtime = 'nodejs' // Edge yerine Node zorla (cache sorunlarını önlemek için)
 
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params
+    
+    // DEBUG: API endpoint çağrıldı
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Invoices [id] API] 🚀 GET endpoint called:', {
+        invoiceId: id,
+        url: request.url,
+      })
+    }
+    
     // Session kontrolü - hata yakalama ile
     const { session, error: sessionError } = await getSafeSession(request)
     if (sessionError) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[Invoices [id] API] ❌ Session Error:', sessionError)
+      }
       return sessionError
     }
 
-    if (!session?.user?.companyId) {
+    // ✅ ÇÖZÜM: SuperAdmin için companyId kontrolü bypass et
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    if (!isSuperAdmin && !session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -296,12 +327,11 @@ export async function GET(
       )
     }
 
-    const { id } = await params
     const supabase = getSupabaseWithServiceRole()
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
-    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
-    const companyId = session.user.companyId
+    // ✅ ÇÖZÜM: SuperAdmin'in companyId'si null olabilir, bu durumda filtreleme yapma
+    const companyId = session.user.companyId || null
 
     if (process.env.NODE_ENV === 'development') {
       console.log('Invoice GET request:', {
@@ -313,87 +343,173 @@ export async function GET(
     }
 
     // Önce invoice'ın var olup olmadığını kontrol et (companyId olmadan)
-    // OPTİMİZE: Retry mekanizması azaltıldı - sadece 2 deneme, 100ms bekleme (performans için)
-    // Normal kullanımda invoice hemen bulunur, retry'ye gerek yok
+    // SuperAdmin için tüm invoice'ları görebilir, normal kullanıcı için sadece kendi companyId'sini
     let invoiceCheck = null
     let checkError = null
-    const maxRetries = 2 // Sadece 2 deneme (performans için)
-    const retryDelay = 100 // 100ms - çok kısa bekleme (performans için)
     
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const { data, error } = await supabase
-        .from('Invoice')
-        .select('id, companyId')
-        .eq('id', id)
-        .maybeSingle()
-      
-      invoiceCheck = data
-      checkError = error
-      
-      if (invoiceCheck) {
-        break // Invoice bulundu, retry'ye gerek yok
-      }
-      
-      // Son deneme değilse bekle ve tekrar dene
-      if (attempt < maxRetries - 1) {
-        await new Promise(resolve => setTimeout(resolve, retryDelay))
-      }
+    // DEBUG: Invoice sorgusu başlatılıyor
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Invoices [id] API] 🔍 Checking invoice existence:', {
+        invoiceId: id,
+        isSuperAdmin,
+        companyId,
+        willFilterByCompany: !isSuperAdmin && companyId,
+      })
     }
+    
+    // SuperAdmin değilse ve companyId varsa filtrele, SuperAdmin ise filtreleme yapma
+    let checkQuery = supabase
+      .from('Invoice')
+      .select('id, companyId')
+      .eq('id', id)
+    
+    // SuperAdmin değilse companyId filtresi ekle
+    if (!isSuperAdmin && companyId) {
+      checkQuery = checkQuery.eq('companyId', companyId)
+    }
+    
+    const { data: checkData, error: checkQueryError } = await checkQuery.maybeSingle()
+    
+    invoiceCheck = checkData
+    checkError = checkQueryError
 
     if (process.env.NODE_ENV === 'development') {
-      console.log('Invoice check result:', {
+      console.log('[Invoices [id] API] 🔍 Invoice check result:', {
         invoiceExists: !!invoiceCheck,
         invoiceCompanyId: invoiceCheck?.companyId,
         userCompanyId: companyId,
         isSuperAdmin,
         checkError: checkError?.message,
-        attempts: maxRetries,
+        checkErrorCode: checkError?.code,
       })
     }
 
     // Invoice yoksa veya companyId eşleşmiyorsa (SuperAdmin değilse)
     if (!invoiceCheck) {
       if (process.env.NODE_ENV === 'development') {
-        console.error('Invoice not found in database after retries:', { invoiceId: id })
+        console.error('[Invoices [id] API] ❌ Invoice not found:', { 
+          invoiceId: id,
+          isSuperAdmin,
+          companyId,
+          checkError: checkError?.message,
+          checkErrorCode: checkError?.code,
+        })
       }
-      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+      const { getErrorMessage } = await import('@/lib/api-locale')
+      return NextResponse.json({ 
+        error: getErrorMessage('errors.api.invoiceNotFound', request),
+        message: getErrorMessage('errors.api.invoiceNotFoundMessage', request),
+        invoiceId: id,
+      }, { status: 404 })
     }
 
+    // SuperAdmin değilse ve companyId eşleşmiyorsa erişim reddedilir
     if (!isSuperAdmin && invoiceCheck.companyId !== companyId) {
       if (process.env.NODE_ENV === 'development') {
-        console.error('Invoice companyId mismatch:', {
+        console.error('[Invoices [id] API] ❌ Invoice companyId mismatch:', {
           invoiceId: id,
           invoiceCompanyId: invoiceCheck.companyId,
           userCompanyId: companyId,
+          isSuperAdmin,
         })
       }
-      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+      const { getErrorMessage } = await import('@/lib/api-locale')
+      return NextResponse.json({ 
+        error: getErrorMessage('errors.api.invoiceNotFound', request),
+        message: getErrorMessage('errors.api.invoiceAccessDenied', request),
+        invoiceId: id,
+      }, { status: 404 })
+    }
+
+    // DEBUG: SuperAdmin için invoice verilerini kontrol et
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Invoices [id] API] 🔍 Invoice Data Check:', {
+        invoiceId: id,
+        isSuperAdmin,
+        companyId,
+        invoiceCompanyId: invoiceCheck.companyId,
+        hasStatus: !!invoiceCheck.status,
+        status: invoiceCheck.status,
+        statusType: typeof invoiceCheck.status,
+      })
     }
 
     // Invoice'u sadece gerekli kolonlarla çek (performans için)
-    // NOT: Tüm kolonlar gerekli olabilir, bu yüzden temel kolonları + migration kolonlarını ekliyoruz
+    // NOT: Foreign key yoksa (migration çalıştırılmamışsa) join'leri kaldırıp tekrar deniyoruz
     let query = supabase
       .from('Invoice')
-      .select('id, title, status, totalAmount, quoteId, customerId, shipmentId, invoiceType, companyId, createdAt, updatedAt, invoiceNumber, dueDate, paymentDate, taxRate, vendorId, serviceDescription')
+      .select(`
+        id, title, status, totalAmount, quoteId, shipmentId, invoiceType, companyId, createdAt, updatedAt, invoiceNumber, dueDate, paidAmount, paymentDate, taxRate, notes,
+        createdBy, updatedBy,
+        CreatedByUser:User!Invoice_createdBy_fkey(id, name, email),
+        UpdatedByUser:User!Invoice_updatedBy_fkey(id, name, email)
+      `)
       .eq('id', id)
 
-    if (!isSuperAdmin) {
+    // SuperAdmin değilse ve companyId varsa filtrele
+    if (!isSuperAdmin && companyId) {
       query = query.eq('companyId', companyId)
     }
 
-    const { data: invoiceResult, error: invoiceError } = await query
+    let { data: invoiceResult, error: invoiceError } = await query
+    
+    // Foreign key hatası varsa (PGRST200), join'leri kaldırıp tekrar dene
+    if (invoiceError && (invoiceError.code === 'PGRST200' || invoiceError.message?.includes('Could not find a relationship'))) {
+      console.warn('Invoice GET API: Foreign key bulunamadı, join olmadan tekrar deneniyor...')
+      let queryWithoutJoin = supabase
+        .from('Invoice')
+        .select(`
+          id, title, status, totalAmount, quoteId, shipmentId, invoiceType, companyId, createdAt, updatedAt, invoiceNumber, dueDate, paidAmount, paymentDate, taxRate, notes,
+          createdBy, updatedBy
+        `)
+        .eq('id', id)
+      
+      if (!isSuperAdmin && companyId) {
+        queryWithoutJoin = queryWithoutJoin.eq('companyId', companyId)
+      }
+      
+      const retryResult = await queryWithoutJoin
+      invoiceResult = retryResult.data as any
+      invoiceError = retryResult.error
+      
+      // createdBy/updatedBy varsa User bilgilerini ayrı query ile çek
+      const invoiceDataTemp: any = Array.isArray(invoiceResult) && invoiceResult.length > 0 
+        ? invoiceResult[0] 
+        : invoiceResult
+      
+      if (invoiceDataTemp && (invoiceDataTemp.createdBy || invoiceDataTemp.updatedBy)) {
+        const userIds = [invoiceDataTemp.createdBy, invoiceDataTemp.updatedBy].filter(Boolean) as string[]
+        if (userIds.length > 0) {
+          const { data: users } = await supabase
+            .from('User')
+            .select('id, name, email')
+            .in('id', userIds)
+          
+          if (users) {
+            const userMap = new Map(users.map((u: any) => [u.id, u]))
+            if (invoiceDataTemp.createdBy && userMap.has(invoiceDataTemp.createdBy)) {
+              invoiceDataTemp.CreatedByUser = userMap.get(invoiceDataTemp.createdBy)
+            }
+            if (invoiceDataTemp.updatedBy && userMap.has(invoiceDataTemp.updatedBy)) {
+              invoiceDataTemp.UpdatedByUser = userMap.get(invoiceDataTemp.updatedBy)
+            }
+          }
+        }
+      }
+    }
 
     if (process.env.NODE_ENV === 'development') {
+      const invoiceResultTyped: any = invoiceResult
       console.log('Invoice GET - basic data:', {
-        invoiceFound: !!invoiceResult,
-        invoiceId: Array.isArray(invoiceResult) ? invoiceResult[0]?.id : invoiceResult?.id,
-        invoiceTitle: Array.isArray(invoiceResult) ? invoiceResult[0]?.title : invoiceResult?.title,
+        invoiceFound: !!invoiceResultTyped,
+        invoiceId: Array.isArray(invoiceResultTyped) ? invoiceResultTyped[0]?.id : invoiceResultTyped?.id,
+        invoiceTitle: Array.isArray(invoiceResultTyped) ? invoiceResultTyped[0]?.title : invoiceResultTyped?.title,
         error: invoiceError?.message,
       })
     }
 
     // .single() yerine array kontrolü yap - "Cannot coerce the result to a single JSON object" hatasını önle
-    const invoiceData = Array.isArray(invoiceResult) && invoiceResult.length > 0 
+    const invoiceData: any = Array.isArray(invoiceResult) && invoiceResult.length > 0 
       ? invoiceResult[0] 
       : invoiceResult
 
@@ -418,7 +534,7 @@ export async function GET(
     // Quote verisini çek (varsa)
     if (invoiceData.quoteId) {
       try {
-        const { data: quote, error: quoteError } = await supabase
+        let quoteQuery = supabase
           .from('Quote')
           .select(
             `
@@ -432,14 +548,27 @@ export async function GET(
                 id,
                 name,
                 email,
-                phone
+                phone,
+                city,
+                address,
+                CustomerCompany:customerCompanyId (
+                  id,
+                  name,
+                  address,
+                  city
+                )
               )
             )
           `
           )
           .eq('id', invoiceData.quoteId)
-          .eq('companyId', companyId)
-          .maybeSingle()
+        
+        // SuperAdmin değilse ve companyId varsa filtrele
+        if (!isSuperAdmin && companyId) {
+          quoteQuery = quoteQuery.eq('companyId', companyId)
+        }
+        
+        const { data: quote, error: quoteError } = await quoteQuery.maybeSingle()
         
         if (!quoteError && quote) {
           quoteData = quote
@@ -451,22 +580,54 @@ export async function GET(
       }
     }
 
-    // Customer verisini çek (varsa - invoice'da customerId yoksa Quote'dan al)
-    if (invoiceData.customerId) {
+    // Customer verisini çek - Quote'dan al (Invoice'da customerId kolonu yok)
+    // Önce Quote'dan Customer bilgisini al, yoksa direkt Customer tablosundan ara
+    if (quoteData?.Deal?.Customer) {
+      // Quote'dan Customer bilgisi geldi
+      customerData = quoteData.Deal.Customer
+    } else if (invoiceData.quoteId) {
+      // Quote'dan Customer bilgisi gelmediyse, Quote'dan Deal'ı çek ve Customer'ı al
       try {
-        const { data: customer, error: customerError } = await supabase
-          .from('Customer')
-          .select('id, name, email, phone')
-          .eq('id', invoiceData.customerId)
-          .eq('companyId', companyId)
-          .maybeSingle()
+        let quoteWithDealQuery = supabase
+          .from('Quote')
+          .select(
+            `
+            Deal (
+              Customer (
+                id,
+                name,
+                email,
+                phone,
+                city,
+                address,
+                CustomerCompany:customerCompanyId (
+                  id,
+                  name,
+                  address,
+                  city
+                )
+              )
+            )
+          `
+          )
+          .eq('id', invoiceData.quoteId)
         
-        if (!customerError && customer) {
-          customerData = customer
+        // SuperAdmin değilse ve companyId varsa filtrele
+        if (!isSuperAdmin && companyId) {
+          quoteWithDealQuery = quoteWithDealQuery.eq('companyId', companyId)
+        }
+        
+        const { data: quoteWithDeal, error: quoteWithDealError } = await quoteWithDealQuery.maybeSingle()
+        
+        if (!quoteWithDealError && quoteWithDeal) {
+          const quoteWithDealTyped: any = quoteWithDeal
+          if (quoteWithDealTyped?.Deal?.Customer) {
+            customerData = quoteWithDealTyped.Deal.Customer
+          }
         }
       } catch (customerErr) {
         if (process.env.NODE_ENV === 'development') {
-          console.error('Customer fetch error:', customerErr)
+          console.error('Customer fetch from Quote error:', customerErr)
         }
       }
     }
@@ -475,23 +636,34 @@ export async function GET(
     try {
       if (invoiceData.shipmentId) {
         // Invoice'da shipmentId varsa onu kullan
-        const { data: shipment, error: shipmentError } = await supabase
+        let shipmentQuery = supabase
           .from('Shipment')
           .select('id, tracking, status, createdAt')
           .eq('id', invoiceData.shipmentId)
-          .eq('companyId', companyId)
-          .maybeSingle()
+        
+        // SuperAdmin değilse ve companyId varsa filtrele
+        if (!isSuperAdmin && companyId) {
+          shipmentQuery = shipmentQuery.eq('companyId', companyId)
+        }
+        
+        const { data: shipment, error: shipmentError } = await shipmentQuery.maybeSingle()
         
         if (!shipmentError && shipment) {
           shipmentData = shipment
         }
       } else {
         // Invoice'da shipmentId yoksa invoiceId'den ara
-        const { data: shipments, error: shipmentError } = await supabase
+        let shipmentsQuery = supabase
           .from('Shipment')
           .select('id, tracking, status, createdAt')
           .eq('invoiceId', id)
-          .eq('companyId', companyId)
+        
+        // SuperAdmin değilse ve companyId varsa filtrele
+        if (!isSuperAdmin && companyId) {
+          shipmentsQuery = shipmentsQuery.eq('companyId', companyId)
+        }
+        
+        const { data: shipments, error: shipmentError } = await shipmentsQuery
           .order('createdAt', { ascending: false })
           .limit(1)
         
@@ -507,7 +679,7 @@ export async function GET(
 
     // InvoiceItem verisini çek (varsa)
     try {
-      const { data: invoiceItems, error: invoiceItemsError } = await supabase
+      let invoiceItemsQuery = supabase
         .from('InvoiceItem')
         .select(
           `
@@ -524,7 +696,13 @@ export async function GET(
         `
         )
         .eq('invoiceId', id)
-        .eq('companyId', companyId)
+      
+      // SuperAdmin değilse ve companyId varsa filtrele
+      if (!isSuperAdmin && companyId) {
+        invoiceItemsQuery = invoiceItemsQuery.eq('companyId', companyId)
+      }
+      
+      const { data: invoiceItems, error: invoiceItemsError } = await invoiceItemsQuery
         .order('createdAt', { ascending: true })
       
       if (!invoiceItemsError && invoiceItems) {
@@ -537,7 +715,7 @@ export async function GET(
     }
 
     // Invoice verisini ilişkili verilerle birleştir
-    const data = {
+    const invoiceResponseData: any = {
       ...invoiceData,
       Quote: quoteData,
       Customer: customerData,
@@ -547,9 +725,9 @@ export async function GET(
 
     if (process.env.NODE_ENV === 'development') {
       console.log('Invoice GET result:', {
-        invoiceFound: !!data,
-        invoiceId: data?.id,
-        invoiceTitle: data?.title,
+        invoiceFound: !!invoiceResponseData,
+        invoiceId: invoiceResponseData?.id,
+        invoiceTitle: invoiceResponseData?.title,
         hasQuote: !!quoteData,
         hasCustomer: !!customerData,
         hasShipment: !!shipmentData,
@@ -561,7 +739,7 @@ export async function GET(
     // (Performans optimizasyonu: Detay sayfası daha hızlı açılır, ActivityLog'lar gerektiğinde yüklenir)
     
     return NextResponse.json({
-      ...(data as any),
+      ...(invoiceResponseData as any),
       activities: [], // Boş array - lazy load için ayrı endpoint kullanılacak
     })
   } catch (error) {
@@ -598,7 +776,9 @@ export async function PUT(
     }
 
     const { id } = await params
-    const body = await request.json()
+    const bodyRaw = await request.json()
+    // Güvenlik: createdBy ve updatedBy otomatik dolduruluyor (CRUD fonksiyonunda), body'den alınmamalı
+    const { id: bodyId, companyId: bodyCompanyId, createdAt, updatedAt, createdBy, updatedBy, ...body } = bodyRaw
     const supabase = getSupabaseWithServiceRole()
 
     // Quote'tan oluşturulan faturalar ve kesinleşmiş faturalar korumalı - hiçbir şekilde değiştirilemez
@@ -704,11 +884,12 @@ export async function PUT(
         .eq('id', id)
         .maybeSingle()
       
+      const { getErrorMessage } = await import('@/lib/api-locale')
       if (checkInvoice && checkInvoice.companyId !== session.user.companyId) {
         return NextResponse.json(
           { 
             error: 'Forbidden',
-            message: 'Bu faturaya erişim yetkiniz yok.',
+            message: getErrorMessage('errors.api.invoiceAccessDenied', request),
             invoiceId: id,
             invoiceCompanyId: checkInvoice.companyId,
             userCompanyId: session.user.companyId
@@ -719,8 +900,8 @@ export async function PUT(
       
       return NextResponse.json(
         { 
-          error: 'Invoice not found',
-          message: 'Fatura bulunamadı. Lütfen sayfayı yenileyip tekrar deneyin.',
+          error: getErrorMessage('errors.api.invoiceNotFound', request),
+          message: getErrorMessage('errors.api.invoiceNotFoundMessage', request),
           invoiceId: id,
           companyId: session.user.companyId,
           lastError: lastError?.message || null
@@ -739,10 +920,11 @@ export async function PUT(
       
       // Status dışında başka bir şey güncelleniyorsa engelle
       if (!isOnlyStatusUpdate) {
+        const { getErrorMessage } = await import('@/lib/api-locale')
         return NextResponse.json(
           { 
-            error: 'Tekliften oluşturulan faturalar değiştirilemez',
-            message: 'Bu fatura tekliften otomatik olarak oluşturuldu. Fatura bilgilerini (başlık, tutar, kalemler vb.) değiştirmek için önce teklifi reddetmeniz gerekir. Ancak fatura durumunu (Gönderildi, Sevkiyat Yapıldı, Ödendi vb.) güncelleyebilirsiniz.',
+            error: getErrorMessage('errors.api.invoiceFromQuoteCannotBeChanged', request),
+            message: getErrorMessage('errors.api.invoiceFromQuoteCannotBeChangedMessage', request),
             reason: 'QUOTE_INVOICE_CANNOT_BE_UPDATED',
             relatedQuote: {
               id: currentInvoice.quoteId,
@@ -769,12 +951,14 @@ export async function PUT(
         relatedFinance = data
       }
 
+      const { getErrorMessage } = await import('@/lib/api-locale')
+      const immutableMessage = currentStatus === 'PAID' 
+        ? getErrorMessage('errors.api.invoicePaidCannotBeChanged', request, { status: currentStatus })
+        : getErrorMessage('errors.api.invoiceCancelledCannotBeChanged', request, { status: currentStatus })
       return NextResponse.json(
         { 
-          error: 'Bu fatura artık değiştirilemez',
-          message: `${currentStatus} durumundaki faturalar değiştirilemez (immutable). ${
-            currentStatus === 'PAID' ? 'Finance kaydı oluşturulmuştur.' : 'İptal edilmiştir.'
-          }`,
+          error: getErrorMessage('errors.api.invoiceCannotBeChanged', request),
+          message: immutableMessage,
           reason: 'IMMUTABLE_INVOICE',
           status: currentStatus,
           relatedFinance
@@ -784,6 +968,9 @@ export async function PUT(
     }
 
     // ÖNEMLİ: Status transition validation
+    const { getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const locale = getLocaleFromRequest(request)
+    const msgs = getMessages(locale)
     if (body.status !== undefined && body.status !== currentStatus) {
       // currentStatus null/undefined ise DRAFT olarak kabul et (yeni oluşturulan faturalar için)
       const statusForValidation = currentStatus || 'DRAFT'
@@ -876,11 +1063,12 @@ export async function PUT(
           // Bildirim gönder (database trigger da gönderecek ama burada da gönderiyoruz)
           try {
             const { createNotificationForRole } = await import('@/lib/notification-helper')
+            const invoiceNumber = (currentInvoice as any)?.invoiceNumber || currentInvoice?.title || msgs.activity.defaultInvoiceTitle
             await createNotificationForRole({
               companyId: session.user.companyId,
               role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-              title: 'Fatura Vadesi Geçti',
-              message: `${(currentInvoice as any)?.invoiceNumber || currentInvoice?.title || 'Fatura'} faturasının vadesi geçti. Ödeme yapılması gerekiyor.`,
+              title: msgs.activity.invoiceOverdue,
+              message: msgs.activity.invoiceOverdueMessage.replace('{invoiceNumber}', invoiceNumber),
               type: 'error',
               priority: 'high',
               relatedTo: 'Invoice',
@@ -896,11 +1084,16 @@ export async function PUT(
           
           try {
             const { createNotificationForRole } = await import('@/lib/notification-helper')
+            const invoiceNumber = (currentInvoice as any)?.invoiceNumber || currentInvoice?.title || msgs.activity.defaultInvoiceTitle
+            const notificationTitle = daysUntilDue <= 1 ? msgs.activity.invoiceDueSoonCritical : msgs.activity.invoiceDueSoon
+            const notificationMessage = daysUntilDue <= 1 
+              ? msgs.activity.invoiceDueSoonCriticalMessage.replace('{invoiceNumber}', invoiceNumber).replace('{days}', String(daysUntilDue))
+              : msgs.activity.invoiceDueSoonMessage.replace('{invoiceNumber}', invoiceNumber).replace('{days}', String(daysUntilDue))
             await createNotificationForRole({
               companyId: session.user.companyId,
               role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-              title: daysUntilDue <= 1 ? 'Fatura Vadesi Yaklaşıyor (Kritik)' : 'Fatura Vadesi Yaklaşıyor',
-              message: `${(currentInvoice as any)?.invoiceNumber || currentInvoice?.title || 'Fatura'} faturasının vadesi ${daysUntilDue} gün sonra. ${daysUntilDue <= 1 ? 'Acil ödeme yapılması gerekiyor.' : 'Ödeme yapılması gerekiyor.'}`,
+              title: notificationTitle,
+              message: notificationMessage,
               type: 'warning',
               priority: daysUntilDue <= 1 ? 'critical' : 'high',
               relatedTo: 'Invoice',
@@ -980,6 +1173,7 @@ export async function PUT(
           }
 
           const { shipmentId, created, error } = await ensureSalesShipmentForSentStatus({
+            request,
             supabase,
             invoiceId: id,
             companyId,
@@ -1030,6 +1224,7 @@ export async function PUT(
 
           const { purchaseShipmentId, created, error } =
             await ensurePurchaseTransactionForSentStatus({
+              request,
               supabase,
               invoiceId: id,
               companyId,
@@ -1087,10 +1282,11 @@ export async function PUT(
         } else {
           // Sevkiyat kaydı yok - önce SENT durumuna geçilmeli
           // İş akışı: DRAFT → SENT (sevkiyat kaydı oluştur) → SHIPPED (sevkiyat kaydı onayla)
+          const { getErrorMessage } = await import('@/lib/api-locale')
           return NextResponse.json(
             { 
-              error: 'Sevkiyat kaydı bulunamadı',
-              message: 'Sevkiyat yapıldı durumuna geçmek için önce faturayı "Gönderildi" durumuna taşımanız gerekiyor. Bu işlem sevkiyat kaydını otomatik olarak oluşturur.',
+              error: getErrorMessage('errors.api.shipmentNotFound', request),
+              message: getErrorMessage('errors.api.shipmentNotFoundMessage', request),
               reason: 'SHIPMENT_NOT_FOUND',
               requiredStep: 'SENT',
               workflow: 'DRAFT → SENT (sevkiyat kaydı oluştur) → SHIPPED (sevkiyat kaydı onayla)'
@@ -1113,10 +1309,11 @@ export async function PUT(
         
         if (updateError) {
           console.error('Shipment update error:', updateError)
+          const { getErrorMessage } = await import('@/lib/api-locale')
           return NextResponse.json(
             { 
-              error: 'Sevkiyat kaydı onaylanamadı',
-              message: 'Sevkiyat kaydı güncellenirken bir hata oluştu. Lütfen tekrar deneyin.',
+              error: getErrorMessage('errors.api.shipmentCannotBeApproved', request),
+              message: getErrorMessage('errors.api.shipmentCannotBeApprovedMessage', request),
               details: updateError.message
             },
             { status: 500 }
@@ -1138,8 +1335,7 @@ export async function PUT(
         {
           entity: 'Invoice',
           action: 'UPDATE',
-          description:
-            'Fatura sevkiyatı onaylandı ve stoktan düşüldü.',
+          description: msgs.activity.shipmentApprovedMessage.replace('{invoiceNumber}', (currentInvoice as any)?.invoiceNumber || currentInvoice?.title || msgs.activity.defaultInvoiceTitle),
           meta: {
             entity: 'Invoice',
             action: 'shipment_approved_from_invoice',
@@ -1174,10 +1370,11 @@ export async function PUT(
         } else {
           // Mal kabul kaydı yok - önce SENT durumuna geçilmeli
           // İş akışı: DRAFT → SENT (mal kabul kaydı oluştur) → RECEIVED (mal kabul kaydı onayla)
+          const { getErrorMessage } = await import('@/lib/api-locale')
           return NextResponse.json(
             { 
-              error: 'Mal kabul kaydı bulunamadı',
-              message: 'Mal kabul edildi durumuna geçmek için önce faturayı "Gönderildi" durumuna taşımanız gerekiyor. Bu işlem mal kabul kaydını otomatik olarak oluşturur.',
+              error: getErrorMessage('errors.api.purchaseRecordNotFound', request),
+              message: getErrorMessage('errors.api.purchaseRecordNotFoundMessage', request),
               reason: 'PURCHASE_TRANSACTION_NOT_FOUND',
               requiredStep: 'SENT',
               workflow: 'DRAFT → SENT (mal kabul kaydı oluştur) → RECEIVED (mal kabul kaydı onayla)'
@@ -1200,10 +1397,11 @@ export async function PUT(
         
         if (updateError) {
           console.error('PurchaseTransaction update error:', updateError)
+          const { getErrorMessage } = await import('@/lib/api-locale')
           return NextResponse.json(
             { 
-              error: 'Mal kabul kaydı onaylanamadı',
-              message: 'Mal kabul kaydı güncellenirken bir hata oluştu. Lütfen tekrar deneyin.',
+              error: getErrorMessage('errors.api.purchaseCannotBeApproved', request),
+              message: getErrorMessage('errors.api.purchaseCannotBeApprovedMessage', request),
               details: updateError.message
             },
             { status: 500 }
@@ -1225,8 +1423,7 @@ export async function PUT(
         {
           entity: 'Invoice',
           action: 'UPDATE',
-          description:
-            'Mal kabul tamamlandı ve stoğa giriş yapıldı.',
+          description: msgs.activity.purchaseApprovedMessage.replace('{invoiceNumber}', (currentInvoice as any)?.invoiceNumber || currentInvoice?.title || msgs.activity.defaultInvoiceTitle),
           meta: {
             entity: 'Invoice',
             action: 'purchase_received_from_invoice',
@@ -1388,42 +1585,25 @@ export async function PUT(
       }
     }
     
-    // @ts-ignore - Supabase type inference issue with dynamic updateData
-    const { data: updateResult, error } = await (supabase.from('Invoice') as any)
-      .update(cleanUpdateData)
-      .eq('id', id)
-      .eq('companyId', session.user.companyId)
-      .select()
-
-    if (error) {
-      console.error('Invoice UPDATE error:', {
-        error: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint,
-        updateData: cleanUpdateData
-      })
-      return NextResponse.json({ 
-        error: error.message,
-        code: error.code,
-        details: error.details,
-        hint: error.hint
-      }, { status: 500 })
-    }
-
-    // .single() yerine array kontrolü yap - "Cannot coerce the result to a single JSON object" hatasını önle
-    const data = Array.isArray(updateResult) && updateResult.length > 0 
-      ? updateResult[0] 
-      : updateResult
+    // NOT: updatedAt ve updatedBy updateRecord fonksiyonunda otomatik ekleniyor
+    
+    // updateRecord kullanarak audit trail desteği (updatedBy otomatik eklenir)
+    const data = await updateRecord(
+      'Invoice',
+      id,
+      cleanUpdateData,
+      msgs.activity.invoiceUpdated.replace('{title}', body.title || currentInvoice?.title || msgs.activity.defaultInvoiceTitle)
+    )
 
     if (!data) {
-      return NextResponse.json({ error: 'Invoice not found after update' }, { status: 404 })
+      const { getErrorMessage } = await import('@/lib/api-locale')
+      return NextResponse.json({ error: getErrorMessage('errors.api.invoiceCannotBeUpdated', request) }, { status: 500 })
     }
 
     const invoiceDisplayName =
       data?.title ||
       data?.invoiceNumber ||
-      `Fatura #${String(id).substring(0, 8)}`
+      `${msgs.activity.defaultInvoiceTitle} #${String(id).substring(0, 8)}`
 
     if (shouldNotifySent && data) {
       try {
@@ -1431,8 +1611,8 @@ export async function PUT(
         await createNotificationForRole({
           companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-          title: 'Fatura Gönderildi',
-          message: `${invoiceDisplayName} faturası gönderildi. Sevkiyat hazırlıkları tamamlandı.`,
+          title: msgs.activity.invoiceSent,
+          message: msgs.activity.invoiceSentMessage.replace('{invoiceNumber}', invoiceDisplayName),
           type: 'info',
           relatedTo: 'Invoice',
           relatedId: data.id,
@@ -1472,7 +1652,7 @@ export async function PUT(
           if (emailTemplate && variables.customerEmail) {
             await sendEmail({
               to: variables.customerEmail as string,
-              subject: emailTemplate.subject || 'Faturanız gönderildi',
+              subject: emailTemplate.subject || msgs.activity.invoiceSentEmailSubject,
               html: emailTemplate.body,
             })
           }
@@ -1490,8 +1670,8 @@ export async function PUT(
         await createNotificationForRole({
           companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-          title: 'Sevkiyat Onaylandı',
-          message: `${invoiceDisplayName} faturası için sevkiyat onaylandı ve stoktan düşüldü.`,
+          title: msgs.activity.shipmentApproved,
+          message: msgs.activity.shipmentApprovedMessage.replace('{invoiceNumber}', invoiceDisplayName),
           type: 'success',
           relatedTo: 'Invoice',
           relatedId: data.id,
@@ -1509,8 +1689,8 @@ export async function PUT(
         await createNotificationForRole({
           companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-          title: 'Mal Kabul Tamamlandı',
-          message: `${invoiceDisplayName} faturası için mal kabul tamamlandı ve stoğa giriş yapıldı.`,
+          title: msgs.activity.purchaseApproved,
+          message: msgs.activity.purchaseApprovedMessage.replace('{invoiceNumber}', invoiceDisplayName),
           type: 'success',
           relatedTo: 'Invoice',
           relatedId: data.id,
@@ -1528,8 +1708,8 @@ export async function PUT(
         await createNotificationForRole({
           companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-          title: 'Fatura İptal Edildi',
-          message: `${invoiceDisplayName} faturası iptal edildi.`,
+          title: msgs.activity.invoiceCancelled,
+          message: msgs.activity.invoiceCancelledMessage.replace('{invoiceNumber}', invoiceDisplayName),
           type: 'warning',
           relatedTo: 'Invoice',
           relatedId: data.id,
@@ -1544,6 +1724,15 @@ export async function PUT(
     // Invoice PAID olduğunda otomatik Finance kaydı oluştur
     // ÖNEMLİ: Status değişikliği yapıldığında (DRAFT → PAID) veya zaten PAID ise kontrol et
     if ((body.status === 'PAID' || data?.status === 'PAID') && data) {
+      // Fatura tipine göre Finance kaydı tipi belirle
+      const invoiceTypeForFinance = (data as any).invoiceType || invoiceType || 'SALES'
+      const financeType = (invoiceTypeForFinance === 'PURCHASE' || invoiceTypeForFinance === 'SERVICE_PURCHASE') 
+        ? 'EXPENSE' 
+        : 'INCOME'
+      const financeCategory = (invoiceTypeForFinance === 'PURCHASE' || invoiceTypeForFinance === 'SERVICE_PURCHASE')
+        ? 'PURCHASE'
+        : 'INVOICE_INCOME'
+      
       // Önce bu invoice için Finance kaydı var mı kontrol et (duplicate önleme)
       const { data: existingFinance } = await supabase
         .from('Finance')
@@ -1556,14 +1745,13 @@ export async function PUT(
       if (!existingFinance) {
         const { data: finance } = await supabase
           .from('Finance')
-          // @ts-expect-error - Supabase database type tanımları eksik
           .insert([
             {
-              type: 'INCOME',
+              type: financeType,
               amount: data.totalAmount || 0,
               relatedTo: `Invoice: ${data.id}`,
               companyId: session.user.companyId,
-              category: 'INVOICE_INCOME', // Kategori ekle
+              category: financeCategory,
             },
           ])
           .select()
@@ -1576,8 +1764,15 @@ export async function PUT(
             {
               entity: 'Finance',
               action: 'CREATE',
-              description: `Fatura ödendi, finans kaydı oluşturuldu`,
-              meta: { entity: 'Finance', action: 'create', id: (finance as any).id, fromInvoice: data.id },
+              description: msgs.activity.invoicePaidFinanceCreated.replace('{financeType}', financeType === 'EXPENSE' ? msgs.activity.expense : msgs.activity.income),
+              meta: { 
+                entity: 'Finance', 
+                action: 'create', 
+                id: (finance as any).id, 
+                fromInvoice: data.id,
+                financeType,
+                financeCategory,
+              },
               userId: session.user.id,
               companyId: session.user.companyId,
             },
@@ -1589,8 +1784,8 @@ export async function PUT(
             await createNotificationForRole({
               companyId: session.user.companyId,
               role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-              title: 'Fatura Ödendi',
-              message: `Fatura ödendi ve finans kaydı oluşturuldu. Detayları görmek ister misiniz?`,
+              title: msgs.activity.invoicePaid,
+              message: msgs.activity.invoicePaidMessage.replace('{financeType}', financeType === 'EXPENSE' ? msgs.activity.expense : msgs.activity.income),
               type: 'success',
               relatedTo: 'Invoice',
               relatedId: data.id,
@@ -1611,7 +1806,7 @@ export async function PUT(
                 // Email gönder
                 const emailResult = await sendEmail({
                   to: variables.customerEmail as string,
-                  subject: emailTemplate.subject || 'Faturanız Ödendi',
+                  subject: emailTemplate.subject || msgs.activity.invoicePaidEmailSubject,
                   html: emailTemplate.body,
                 })
                 
@@ -1637,33 +1832,49 @@ export async function PUT(
     const hasStatusChange =
       requestedStatus && requestedStatus !== previousStatus
 
-    let activityDescription = `Fatura bilgileri güncellendi: ${body.title || data.title}`
+    let activityDescription = msgs.activity.invoiceInfoUpdated.replace('{title}', body.title || data.title || msgs.activity.defaultInvoiceTitle)
 
     if (hasStatusChange) {
       switch (requestedStatus) {
         case 'SENT':
-          activityDescription = `${invoiceDisplayName} faturası gönderildi.`
+          activityDescription = msgs.activity.invoiceSentDescription.replace('{invoiceNumber}', invoiceDisplayName)
           break
         case 'SHIPPED':
-          activityDescription = `${invoiceDisplayName} faturası sevkiyatı onaylandı.`
+          activityDescription = msgs.activity.invoiceShippedDescription.replace('{invoiceNumber}', invoiceDisplayName)
           break
         case 'RECEIVED':
-          activityDescription = `${invoiceDisplayName} faturası için mal kabul tamamlandı.`
+          activityDescription = msgs.activity.invoiceReceivedDescription.replace('{invoiceNumber}', invoiceDisplayName)
           break
         case 'PAID':
-          activityDescription = `${invoiceDisplayName} faturası ödendi olarak işaretlendi.`
+          activityDescription = msgs.activity.invoicePaidDescription.replace('{invoiceNumber}', invoiceDisplayName)
           break
         case 'OVERDUE':
-          activityDescription = `${invoiceDisplayName} faturası vadesi geçmiş olarak işaretlendi.`
+          activityDescription = msgs.activity.invoiceOverdueMessage.replace('{invoiceNumber}', invoiceDisplayName)
+          // OVERDUE notification gönder
+          try {
+            const { createNotificationForRole } = await import('@/lib/notification-helper')
+            await createNotificationForRole({
+              companyId: session.user.companyId,
+              role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+              title: '⚠️ Fatura Vadesi Geçti',
+              message: `${invoiceDisplayName} faturasının vadesi geçti. Ödeme yapılması gerekiyor.`,
+              type: 'error',
+              priority: 'high',
+              relatedTo: 'Invoice',
+              relatedId: id,
+            }).catch(() => {}) // Notification hatası ana işlemi engellemez
+          } catch (notificationError) {
+            // Bildirim hatası ana işlemi engellemez
+          }
           break
         case 'CANCELLED':
-          activityDescription = `${invoiceDisplayName} faturası iptal edildi.`
+          activityDescription = msgs.activity.invoiceCancelledDescription.replace('{invoiceNumber}', invoiceDisplayName)
           break
         default:
-          activityDescription = `${invoiceDisplayName} faturası güncellendi (durum: ${requestedStatus}).`
+          activityDescription = msgs.activity.invoiceUpdatedStatus.replace('{invoiceNumber}', invoiceDisplayName).replace('{status}', requestedStatus)
       }
     } else if (body.title && body.title !== currentInvoice?.title) {
-      activityDescription = `Fatura başlığı güncellendi: ${currentInvoice?.title || '-'} → ${body.title}`
+      activityDescription = msgs.activity.invoiceTitleUpdated.replace('{oldTitle}', currentInvoice?.title || '-').replace('{newTitle}', body.title)
     }
 
     const activityMeta: Record<string, unknown> = {
@@ -1804,9 +2015,10 @@ export async function DELETE(
         .eq('companyId', session.user.companyId)
         .maybeSingle()
 
+      const { getErrorMessage } = await import('@/lib/api-locale')
       return NextResponse.json(
         { 
-          error: 'Bu fatura silinemez',
+          error: getErrorMessage('errors.api.invoiceCannotBeDeletedMessage', request),
           message: deleteCheck.error,
           reason: 'CANNOT_DELETE_INVOICE',
           status: invoice?.status,
@@ -1822,10 +2034,11 @@ export async function DELETE(
 
     // ÖNEMLİ: Invoice SHIPPED olduğunda silinemez (Stok düşüldüğü için)
     if (invoice?.status === 'SHIPPED') {
+      const { getErrorMessage } = await import('@/lib/api-locale')
       return NextResponse.json(
         { 
-          error: 'Sevkiyatı yapılmış faturalar silinemez',
-          message: 'Bu fatura için sevkiyat yapıldı ve stoktan düşüldü. Faturayı silmek için önce sevkiyatı iptal etmeniz ve stok işlemini geri almanız gerekir.',
+          error: getErrorMessage('errors.api.invoiceShippedCannotBeDeleted', request),
+          message: getErrorMessage('errors.api.invoiceShippedCannotBeDeletedMessage', request),
           reason: 'SHIPPED_INVOICE_CANNOT_BE_DELETED',
           action: 'Sevkiyatı iptal edip stok işlemini geri alın'
         },
@@ -1835,10 +2048,11 @@ export async function DELETE(
 
     // ÖNEMLİ: Invoice RECEIVED olduğunda silinemez (Stok artırıldığı için)
     if (invoice?.status === 'RECEIVED') {
+      const { getErrorMessage } = await import('@/lib/api-locale')
       return NextResponse.json(
         { 
-          error: 'Mal kabul edilmiş faturalar silinemez',
-          message: 'Bu fatura için mal kabul edildi ve stoğa girişi yapıldı. Faturayı silmek için önce mal kabul işlemini iptal etmeniz ve stok işlemini geri almanız gerekir.',
+          error: getErrorMessage('errors.api.invoiceReceivedCannotBeDeleted', request),
+          message: getErrorMessage('errors.api.invoiceReceivedCannotBeDeletedMessage', request),
           reason: 'RECEIVED_INVOICE_CANNOT_BE_DELETED',
           action: 'Mal kabul işlemini iptal edip stok işlemini geri alın'
         },
@@ -1848,10 +2062,11 @@ export async function DELETE(
 
     // ÖNEMLİ: Invoice quoteId varsa silinemez (Tekliften oluşturulduğu için)
     if (invoice?.quoteId) {
+      const { getErrorMessage } = await import('@/lib/api-locale')
       return NextResponse.json(
         { 
-          error: 'Tekliften oluşturulan faturalar silinemez',
-          message: 'Bu fatura tekliften otomatik olarak oluşturuldu. Faturayı silmek için önce teklifi reddetmeniz gerekir.',
+          error: getErrorMessage('errors.api.invoiceFromQuoteCannotBeDeleted', request),
+          message: getErrorMessage('errors.api.invoiceFromQuoteCannotBeDeletedMessage', request),
           reason: 'QUOTE_INVOICE_CANNOT_BE_DELETED',
           relatedQuote: {
             id: invoice.quoteId,
@@ -1892,17 +2107,19 @@ export async function DELETE(
     // ActivityLog kaydı - hata olsa bile ana işlem başarılı
     // invoice null olabilir (maybeSingle() kullandık), o yüzden deletedData'dan title al
     try {
-      const invoiceTitle = (invoice as any)?.title || (deletedData[0] as any)?.title || 'Unknown'
+      const { getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
+      const deleteLocale = getLocaleFromRequest(request)
+      const deleteMsgs = getMessages(deleteLocale)
+      const invoiceTitle = (invoice as any)?.title || (deletedData[0] as any)?.title || deleteMsgs.activity.defaultInvoiceTitle
       const activityData = {
         entity: 'Invoice',
         action: 'DELETE',
-        description: `Fatura silindi: ${invoiceTitle}`,
+        description: deleteMsgs.activity.invoiceDeleted.replace('{title}', invoiceTitle),
         meta: { entity: 'Invoice', action: 'delete', id },
         userId: session.user.id,
         companyId: session.user.companyId,
       }
       
-      // @ts-expect-error - Supabase database type tanımları eksik, insert metodu dinamik tip bekliyor
       await supabase.from('ActivityLog').insert([activityData])
     } catch (logError) {
       // ActivityLog hatası ana işlemi etkilemez

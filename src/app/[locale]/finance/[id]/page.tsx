@@ -4,19 +4,36 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { ArrowLeft, Edit, DollarSign, Trash2 } from 'lucide-react'
+import { ArrowLeft, Edit, DollarSign, Trash2, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import FinanceForm from '@/components/finance/FinanceForm'
+import { toastError } from '@/lib/toast'
 
 interface Finance {
   id: string
   type: 'INCOME' | 'EXPENSE'
   amount: number
   relatedTo?: string
+  relatedEntityType?: string
+  relatedEntityId?: string
+  invoiceId?: string
+  contractId?: string
+  Invoice?: {
+    id: string
+    title: string
+    status: string
+    invoiceNumber?: string
+  }
+  Contract?: {
+    id: string
+    title: string
+    status: string
+    contractNumber?: string
+  }
   createdAt: string
   updatedAt?: string
   activities?: any[]
@@ -88,6 +105,15 @@ export default function FinanceDetailPage() {
             <ArrowLeft className="mr-2 h-4 w-4" />
             Geri
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              window.open(`/api/pdf/finance/${id}`, '_blank')
+            }}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            PDF İndir
+          </Button>
           <Button variant="outline" onClick={() => setFormOpen(true)}>
             <Edit className="mr-2 h-4 w-4" />
             Düzenle
@@ -110,7 +136,7 @@ export default function FinanceDetailPage() {
                 }
                 router.push(`/${locale}/finance`)
               } catch (error: any) {
-                alert(error?.message || 'Silme işlemi başarısız oldu')
+                toastError('Silme işlemi başarısız oldu', error?.message)
               } finally {
                 setDeleteLoading(false)
               }
@@ -150,6 +176,39 @@ export default function FinanceDetailPage() {
               <div>
                 <p className="text-sm text-gray-600">İlişkili</p>
                 <p className="font-medium mt-1">{finance.relatedTo}</p>
+              </div>
+            )}
+            {finance.Invoice && (
+              <div>
+                <p className="text-sm text-gray-600">İlgili Fatura</p>
+                <Link
+                  href={`/${locale}/invoices/${finance.Invoice.id}`}
+                  className="font-medium text-indigo-600 hover:underline mt-1 block"
+                >
+                  {finance.Invoice.invoiceNumber || finance.Invoice.title}
+                </Link>
+              </div>
+            )}
+            {finance.Contract && (
+              <div>
+                <p className="text-sm text-gray-600">İlgili Sözleşme</p>
+                <Link
+                  href={`/${locale}/contracts/${finance.Contract.id}`}
+                  className="font-medium text-indigo-600 hover:underline mt-1 block"
+                >
+                  {finance.Contract.contractNumber || finance.Contract.title}
+                </Link>
+              </div>
+            )}
+            {finance.relatedEntityType && finance.relatedEntityId && !finance.Invoice && !finance.Contract && (
+              <div>
+                <p className="text-sm text-gray-600">İlgili Kayıt</p>
+                <Link
+                  href={`/${locale}/${finance.relatedEntityType.toLowerCase()}s/${finance.relatedEntityId}`}
+                  className="font-medium text-indigo-600 hover:underline mt-1 block"
+                >
+                  {finance.relatedEntityType} #{finance.relatedEntityId.substring(0, 8)}
+                </Link>
               </div>
             )}
           </div>

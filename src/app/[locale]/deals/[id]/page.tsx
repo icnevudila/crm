@@ -2,7 +2,6 @@
 
 import { useParams, useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { ArrowLeft, Calendar, DollarSign, User, TrendingUp, Clock, FileText, AlertTriangle, Edit, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
@@ -11,14 +10,27 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { formatCurrency } from '@/lib/utils'
-import { toast } from '@/lib/toast'
+import { toast, toastError } from '@/lib/toast'
+import { useData } from '@/hooks/useData'
+import { mutate } from 'swr'
+import { getStatusBadgeClass } from '@/lib/crm-colors'
 import WorkflowStepper from '@/components/ui/WorkflowStepper'
 import { getDealWorkflowSteps } from '@/lib/workflowSteps'
 import StatusInfoNote from '@/components/workflow/StatusInfoNote'
 import NextStepButtons from '@/components/workflow/NextStepButtons'
 import RelatedRecordsSuggestions from '@/components/workflow/RelatedRecordsSuggestions'
 import DealForm from '@/components/deals/DealForm'
+import QuoteForm from '@/components/quotes/QuoteForm'
+import MeetingForm from '@/components/meetings/MeetingForm'
 import SendEmailButton from '@/components/integrations/SendEmailButton'
+import SendSmsButton from '@/components/integrations/SendSmsButton'
+import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
+import AddToCalendarButton from '@/components/integrations/AddToCalendarButton'
+import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
+import ContextualActionsBar from '@/components/ui/ContextualActionsBar'
+import DocumentList from '@/components/documents/DocumentList'
+import ActivityTimeline from '@/components/ui/ActivityTimeline'
+import { Briefcase, FileText as FileTextIcon } from 'lucide-react'
 
 interface DealHistory {
   id: string
@@ -42,12 +54,31 @@ interface Deal {
   expectedCloseDate?: string
   winProbability?: number
   lostReason?: string
+  description?: string
+  leadSource?: string
   leadScore?: {
     score: number
     temperature: string
   }[]
   customer?: {
     name: string
+  }
+  Customer?: {
+    id: string
+    name: string
+    email?: string
+    phone?: string
+    companyId?: string
+  }
+  CreatedByUser?: {
+    id: string
+    name: string
+    email: string
+  }
+  UpdatedByUser?: {
+    id: string
+    name: string
+    email: string
   }
   Quote?: Array<{
     id: string
@@ -74,30 +105,16 @@ interface Deal {
   history?: DealHistory[]
 }
 
-async function fetchDealDetail(id: string): Promise<Deal> {
-  const res = await fetch(`/api/deals/${id}`, { cache: 'no-store' })
-  if (!res.ok) throw new Error('Failed to fetch deal')
-  return res.json()
-}
-
+// Stage labels - merkezi renk sistemi kullanılıyor (getStatusBadgeClass)
 const stageLabels: Record<string, string> = {
   LEAD: 'Potansiyel',
   CONTACT: 'İletişim',
+  CONTACTED: 'İletişim Kuruldu',
   DEMO: 'Demo',
   PROPOSAL: 'Teklif',
   NEGOTIATION: 'Pazarlık',
   WON: 'Kazanıldı',
   LOST: 'Kaybedildi',
-}
-
-const stageColors: Record<string, string> = {
-  LEAD: 'bg-gray-100 text-gray-800',
-  CONTACT: 'bg-blue-100 text-blue-800',
-  DEMO: 'bg-cyan-100 text-cyan-800',
-  PROPOSAL: 'bg-purple-100 text-purple-800',
-  NEGOTIATION: 'bg-orange-100 text-orange-800',
-  WON: 'bg-green-100 text-green-800',
-  LOST: 'bg-red-100 text-red-800',
 }
 
 export default function DealDetailPage() {
@@ -106,28 +123,207 @@ export default function DealDetailPage() {
   const locale = useLocale()
   const dealId = params.id as string
   const [formOpen, setFormOpen] = useState(false)
+  const [quoteFormOpen, setQuoteFormOpen] = useState(false)
+  const [meetingFormOpen, setMeetingFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
-  const { data: deal, isLoading } = useQuery({
-    queryKey: ['deal-detail', dealId],
-    queryFn: () => fetchDealDetail(dealId),
-  })
+  // useData hook ile veri çekme (SWR cache) - standardize edilmiş veri çekme stratejisi
+  const { data: deal, isLoading, error, mutate: mutateDeal } = useData<Deal>(
+    dealId ? `/api/deals/${dealId}` : null,
+    {
+      dedupingInterval: 30000, // 30 saniye cache (detay sayfası için optimal)
+      revalidateOnFocus: false, // Focus'ta revalidate yapma (instant navigation)
+    }
+  )
 
   if (isLoading) {
+    return <SkeletonDetail />
+  }
+
+  if (error || !deal) {
     return (
-      <div className="animate-pulse space-y-4">
-        <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-        <div className="h-64 bg-gray-200 rounded"></div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            Fırsat Bulunamadı
+          </h1>
+          {error && (
+            <p className="text-sm text-gray-600 mb-4">
+              {(error as any)?.message || 'Fırsat yüklenirken bir hata oluştu'}
+            </p>
+          )}
+          <Button onClick={() => router.push(`/${locale}/deals`)}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Geri Dön
+          </Button>
+        </div>
       </div>
     )
   }
 
-  if (!deal) {
-    return <div>Deal bulunamadı</div>
-  }
+  // Deal stage'leri için available statuses
+  const availableStages = [
+    { value: 'LEAD', label: 'Potansiyel' },
+    { value: 'CONTACTED', label: 'İletişim Kuruldu' },
+    { value: 'PROPOSAL', label: 'Teklif' },
+    { value: 'NEGOTIATION', label: 'Pazarlık' },
+    { value: 'WON', label: 'Kazanıldı' },
+    { value: 'LOST', label: 'Kaybedildi' },
+  ]
 
   return (
     <div className="space-y-6">
+      {/* Contextual Actions Bar */}
+      <ContextualActionsBar
+        entityType="deal"
+        entityId={dealId}
+        currentStatus={deal.stage}
+        availableStatuses={availableStages}
+        onStatusChange={async (newStage) => {
+          const res = await fetch(`/api/deals/${dealId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ stage: newStage }),
+          })
+          if (!res.ok) {
+            const error = await res.json().catch(() => ({}))
+            throw new Error(error.error || 'Durum değiştirilemedi')
+          }
+          const updatedDeal = await res.json()
+          await mutateDeal(updatedDeal, { revalidate: false })
+          await Promise.all([
+            mutate('/api/deals', undefined, { revalidate: true }),
+            mutate('/api/deals?', undefined, { revalidate: true }),
+          ])
+        }}
+        onEdit={() => setFormOpen(true)}
+        onDelete={async () => {
+          if (!confirm(`${deal.title} fırsatını silmek istediğinize emin misiniz?`)) {
+            return
+          }
+          setDeleteLoading(true)
+          try {
+            const res = await fetch(`/api/deals/${dealId}`, {
+              method: 'DELETE',
+            })
+            if (!res.ok) {
+              const errorData = await res.json().catch(() => ({}))
+              throw new Error(errorData.error || 'Silme işlemi başarısız')
+            }
+            router.push(`/${locale}/deals`)
+          } catch (error: any) {
+            toastError('Silme işlemi başarısız oldu', error?.message)
+            throw error
+          } finally {
+            setDeleteLoading(false)
+          }
+        }}
+        onDuplicate={async () => {
+          try {
+            const res = await fetch(`/api/deals/${dealId}/duplicate`, {
+              method: 'POST',
+            })
+            if (!res.ok) {
+              const errorData = await res.json().catch(() => ({}))
+              throw new Error(errorData.error || 'Kopyalama işlemi başarısız')
+            }
+            const duplicatedDeal = await res.json()
+            toast.success('Fırsat kopyalandı')
+            router.push(`/${locale}/deals/${duplicatedDeal.id}`)
+          } catch (error: any) {
+            toastError('Kopyalama işlemi başarısız oldu', error?.message)
+          }
+        }}
+        onCreateRelated={(type) => {
+          if (type === 'quote') {
+            setQuoteFormOpen(true) // Modal form aç
+          } else if (type === 'meeting') {
+            setMeetingFormOpen(true) // Modal form aç
+          }
+        }}
+        onSendEmail={deal.Customer?.email ? () => {
+          // Email gönderme işlemi SendEmailButton ile yapılıyor
+        } : undefined}
+        onSendSms={deal.Customer?.phone ? () => {
+          // SMS gönderme işlemi SendSmsButton ile yapılıyor
+        } : undefined}
+        onSendWhatsApp={deal.Customer?.phone ? () => {
+          // WhatsApp gönderme işlemi SendWhatsAppButton ile yapılıyor
+        } : undefined}
+        onAddToCalendar={deal.expectedCloseDate ? () => {
+          // Takvime ekleme işlemi AddToCalendarButton ile yapılıyor
+        } : undefined}
+        canEdit={deal.stage !== 'WON' && deal.stage !== 'LOST'}
+        canDelete={deal.stage !== 'WON' && deal.stage !== 'LOST'}
+      />
+
+      {/* Quick Actions */}
+      {deal.Customer && (
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Hızlı İşlemler</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {deal.Customer.email && (
+              <SendEmailButton
+                to={deal.Customer.email}
+                subject={`Fırsat: ${deal.title}`}
+                html={`
+                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px;">
+                      Fırsat Bilgileri
+                    </h2>
+                    <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                      <p><strong>Fırsat:</strong> ${deal.title}</p>
+                      <p><strong>Durum:</strong> ${stageLabels[deal.stage] || deal.stage}</p>
+                      ${deal.value ? `<p><strong>Tutar:</strong> ${formatCurrency(deal.value)}</p>` : ''}
+                      ${deal.expectedCloseDate ? `<p><strong>Beklenen Kapanış:</strong> ${new Date(deal.expectedCloseDate).toLocaleDateString('tr-TR')}</p>` : ''}
+                    </div>
+                  </div>
+                `}
+                category="DEAL"
+                entityData={deal}
+              />
+            )}
+            {deal.Customer.phone && (
+              <>
+                <SendSmsButton
+                  to={deal.Customer.phone}
+                  message={`Merhaba, "${deal.title}" fırsatı hakkında sizinle iletişime geçmek istiyoruz.`}
+                />
+                <SendWhatsAppButton
+                  to={deal.Customer.phone}
+                  message={`Merhaba, "${deal.title}" fırsatı hakkında sizinle iletişime geçmek istiyoruz.`}
+                />
+              </>
+            )}
+            {deal.expectedCloseDate && (
+              <AddToCalendarButton
+                recordType="deal"
+                record={deal}
+                startTime={new Date(deal.expectedCloseDate).toISOString()}
+                endTime={new Date(new Date(deal.expectedCloseDate).getTime() + 60 * 60 * 1000).toISOString()}
+                location={deal.Customer?.name || ''}
+              />
+            )}
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setQuoteFormOpen(true)}
+            >
+              <FileTextIcon className="mr-2 h-4 w-4" />
+              Teklif Oluştur
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setMeetingFormOpen(true)}
+            >
+              <Calendar className="mr-2 h-4 w-4" />
+              Toplantı Oluştur
+            </Button>
+          </div>
+        </Card>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -146,7 +342,7 @@ export default function DealDetailPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Badge className={stageColors[deal.stage] || 'bg-gray-100'}>
+          <Badge className={getStatusBadgeClass(deal.stage)}>
             {stageLabels[deal.stage] || deal.stage}
           </Badge>
           <Button variant="outline" onClick={() => router.push(`/${locale}/deals`)}>
@@ -198,7 +394,7 @@ export default function DealDetailPage() {
                 }
                 router.push(`/${locale}/deals`)
               } catch (error: any) {
-                alert(error?.message || 'Silme işlemi başarısız oldu')
+                toastError('Silme işlemi başarısız oldu', error?.message)
               } finally {
                 setDeleteLoading(false)
               }
@@ -213,7 +409,7 @@ export default function DealDetailPage() {
 
       {/* Workflow Stepper */}
       <WorkflowStepper
-        steps={getDealWorkflowSteps(deal.stage)}
+        steps={getDealWorkflowSteps(deal.stage) as any}
         currentStep={['LEAD', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION', 'WON'].indexOf(deal.stage)}
         title="Fırsat İş Akışı"
       />
@@ -251,7 +447,7 @@ export default function DealDetailPage() {
         entityType="deal"
         currentStatus={deal.stage}
         onAction={async (actionId) => {
-          // Stage değiştirme işlemi
+          // Stage değiştirme işlemi - Optimistic update ile
           try {
             const res = await fetch(`/api/deals/${dealId}`, {
               method: 'PUT',
@@ -266,18 +462,30 @@ export default function DealDetailPage() {
               )
               return
             }
+            
+            const updatedDeal = await res.json()
+            
+            // Optimistic update - cache'i güncelle (sayfa reload yok)
+            await mutateDeal(updatedDeal, { revalidate: false })
+            
+            // Tüm ilgili cache'leri güncelle
+            await Promise.all([
+              mutate('/api/deals', undefined, { revalidate: true }),
+              mutate('/api/deals?', undefined, { revalidate: true }),
+              mutate((key: string) => typeof key === 'string' && key.startsWith('/api/deals'), undefined, { revalidate: true }),
+            ])
+            
             toast.success('Aşama değiştirildi')
-            window.location.reload()
           } catch (error: any) {
             toast.error('Aşama değiştirilemedi', error.message || 'Bir hata oluştu.')
           }
         }}
         onCreateRelated={(type) => {
-          // İlişkili kayıt oluşturma
+          // İlişkili kayıt oluşturma - modal aç
           if (type === 'quote') {
-            window.location.href = `/${locale}/quotes/new?dealId=${dealId}`
+            setQuoteFormOpen(true)
           } else if (type === 'meeting') {
-            window.location.href = `/${locale}/meetings/new?dealId=${dealId}`
+            setMeetingFormOpen(true)
           }
         }}
       />
@@ -311,18 +519,54 @@ export default function DealDetailPage() {
             type: 'quote',
             label: 'Teklif Oluştur',
             icon: <FileText className="h-4 w-4" />,
-            onCreate: () => window.location.href = `/${locale}/quotes/new?dealId=${dealId}`,
+            onCreate: () => setQuoteFormOpen(true),
             description: 'Bu fırsat için teklif oluşturun',
           }] : []),
           ...(deal.stage === 'PROPOSAL' && (!deal.Meeting || deal.Meeting.length === 0) ? [{
             type: 'meeting',
             label: 'Görüşme Planla',
             icon: <Calendar className="h-4 w-4" />,
-            onCreate: () => window.location.href = `/${locale}/meetings/new?dealId=${dealId}`,
+            onCreate: () => setMeetingFormOpen(true),
             description: 'Teklif sunumu için görüşme planlayın',
           }] : []),
         ]}
       />
+
+      {/* İlgili Sözleşme */}
+      {deal.Contract && deal.Contract.length > 0 && (
+        <Card className="p-6 border-l-4 border-purple-500">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <FileText className="h-5 w-5 text-purple-600" />
+              İlgili Sözleşme
+            </h2>
+            {deal.Contract.length > 1 && (
+              <Badge variant="outline">{deal.Contract.length} Sözleşme</Badge>
+            )}
+          </div>
+          <div className="space-y-2">
+            {deal.Contract.map((contract: any) => (
+              <Link
+                key={contract.id}
+                href={`/${locale}/contracts/${contract.id}`}
+                className="block p-4 rounded-lg hover:bg-gray-50 transition-colors border"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium text-gray-900">{contract.title}</p>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Durum: <Badge className="ml-1">{contract.status}</Badge>
+                    </p>
+                  </div>
+                  <Button variant="ghost" size="sm">
+                    Detayları Gör →
+                  </Button>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Info Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -380,16 +624,79 @@ export default function DealDetailPage() {
             <p className="text-lg font-semibold truncate">{deal.customer.name}</p>
           </Card>
         )}
+
+        {deal.leadSource && (
+          <Card className="p-4">
+            <div className="flex items-center gap-2 text-gray-600 mb-2">
+              <TrendingUp className="h-4 w-4" />
+              <span className="text-sm">Lead Kaynağı</span>
+            </div>
+            <p className="text-lg font-semibold">{deal.leadSource}</p>
+          </Card>
+        )}
       </div>
 
-      {/* Form Modal */}
+      {/* Description Card */}
+      {deal.description && (
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Açıklama</h2>
+          <p className="text-gray-700 whitespace-pre-wrap">{deal.description}</p>
+        </Card>
+      )}
+
+      {/* Audit Trail Info */}
+      <Card className="p-6">
+        <h2 className="text-xl font-semibold mb-4">Kayıt Bilgileri</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <p className="text-sm text-gray-600">Oluşturulma</p>
+            <p className="font-medium mt-1">
+              {new Date(deal.createdAt).toLocaleString('tr-TR')}
+            </p>
+            {deal.CreatedByUser && (
+              <div className="flex items-center gap-2 mt-2">
+                <User className="h-4 w-4 text-gray-400" />
+                <span className="text-sm text-gray-600">
+                  {deal.CreatedByUser.name}
+                </span>
+              </div>
+            )}
+          </div>
+          {deal.updatedAt && (
+            <div>
+              <p className="text-sm text-gray-600">Son Güncelleme</p>
+              <p className="font-medium mt-1">
+                {new Date(deal.updatedAt).toLocaleString('tr-TR')}
+              </p>
+              {deal.UpdatedByUser && (
+                <div className="flex items-center gap-2 mt-2">
+                  <User className="h-4 w-4 text-gray-400" />
+                  <span className="text-sm text-gray-600">
+                    {deal.UpdatedByUser.name}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* Form Modals */}
       <DealForm
         deal={deal}
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        onSuccess={async () => {
-          // Form başarılı olduğunda sayfayı yenile
-          window.location.reload()
+        onSuccess={async (savedDeal: Deal) => {
+          // Form başarılı olduğunda cache'i güncelle (sayfa reload yok)
+          // Optimistic update - güncellenmiş deal'i cache'e ekle
+          await mutateDeal(savedDeal, { revalidate: false })
+          
+          // Tüm ilgili cache'leri güncelle
+          await Promise.all([
+            mutate('/api/deals', undefined, { revalidate: true }),
+            mutate('/api/deals?', undefined, { revalidate: true }),
+            mutate((key: string) => typeof key === 'string' && key.startsWith('/api/deals'), undefined, { revalidate: true }),
+          ])
         }}
       />
 
@@ -414,11 +721,11 @@ export default function DealDetailPage() {
                 {/* Content */}
                 <div className="flex-1 pb-4">
                   <div className="flex items-center gap-2 mb-1">
-                    <Badge className={stageColors[item.fromStage] || 'bg-gray-100'}>
+                    <Badge className={getStatusBadgeClass(item.fromStage)}>
                       {stageLabels[item.fromStage] || item.fromStage}
                     </Badge>
                     <span className="text-gray-400">→</span>
-                    <Badge className={stageColors[item.toStage] || 'bg-gray-100'}>
+                    <Badge className={getStatusBadgeClass(item.toStage)}>
                       {stageLabels[item.toStage] || item.toStage}
                     </Badge>
                   </div>
@@ -437,6 +744,48 @@ export default function DealDetailPage() {
           </div>
         </Card>
       )}
+
+      {/* Document List */}
+      <DocumentList relatedTo="Deal" relatedId={dealId} />
+
+      {/* Activity Timeline */}
+      <Card className="p-6">
+        <h2 className="text-xl font-semibold mb-4">İşlem Geçmişi</h2>
+        <ActivityTimeline entityType="Deal" entityId={dealId} />
+      </Card>
+
+      {/* Form Modals */}
+      <QuoteForm
+        quote={undefined}
+        open={quoteFormOpen}
+        onClose={() => setQuoteFormOpen(false)}
+        onSuccess={async (savedQuote) => {
+          // Cache'i güncelle - optimistic update
+          await mutateDeal(undefined, { revalidate: true })
+          setQuoteFormOpen(false)
+          // Başarılı kayıt sonrası teklif detay sayfasına yönlendir
+          router.push(`/${locale}/quotes/${savedQuote.id}`)
+        }}
+        dealId={dealId}
+        customerCompanyId={deal.Customer?.companyId}
+        customerCompanyName={deal.Customer?.name}
+      />
+
+      <MeetingForm
+        meeting={undefined}
+        open={meetingFormOpen}
+        onClose={() => setMeetingFormOpen(false)}
+        onSuccess={async (savedMeeting) => {
+          // Cache'i güncelle - optimistic update
+          await mutateDeal(undefined, { revalidate: true })
+          setMeetingFormOpen(false)
+          // Başarılı kayıt sonrası görüşme detay sayfasına yönlendir
+          router.push(`/${locale}/meetings/${savedMeeting.id}`)
+        }}
+        dealId={dealId}
+        customerCompanyId={deal.Customer?.companyId}
+        customerCompanyName={deal.Customer?.name}
+      />
     </div>
   )
 }

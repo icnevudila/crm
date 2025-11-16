@@ -181,7 +181,7 @@ export async function POST(request: Request) {
       await supabase.from('ActivityLog').insert([{
         entity: 'PurchaseTransaction',
         action: 'CREATE',
-        description: `Yeni mal kabul kaydı oluşturuldu`,
+        description: `Yeni satın alma kaydı oluşturuldu`,
         meta: { entity: 'PurchaseTransaction', action: 'create', id: insertData.id },
         userId: session.user.id,
         companyId: session.user.companyId,
@@ -192,7 +192,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ...insertData,
-      message: `Bu alış faturası için taslak mal kabul oluşturuldu (#${insertData.id.substring(0, 8)}).`,
+        message: `Bu alış faturası için taslak satın alma kaydı oluşturuldu (#${insertData.id.substring(0, 8)}).`,
     }, { status: 201 })
   } catch (error: any) {
     return NextResponse.json(

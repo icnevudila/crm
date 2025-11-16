@@ -1,6 +1,7 @@
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
+import { useLocale } from 'next-intl'
 import { useData } from '@/hooks/useData'
 import { ArrowLeft, Edit, Trash2, Calendar, Building2, User, FileText, DollarSign, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -12,9 +13,22 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { formatCurrency } from '@/lib/utils'
+import { toastError } from '@/lib/toast'
+import SendEmailButton from '@/components/integrations/SendEmailButton'
+import SendSmsButton from '@/components/integrations/SendSmsButton'
+import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
+import AddToCalendarButton from '@/components/integrations/AddToCalendarButton'
+import SendMeetingLinkButton from '@/components/integrations/SendMeetingLinkButton'
+import ContextualActionsBar from '@/components/ui/ContextualActionsBar'
 
 // Lazy load MeetingForm - performans için
 const MeetingForm = dynamic(() => import('@/components/meetings/MeetingForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
+// Lazy load QuoteForm - performans için
+const QuoteForm = dynamic(() => import('@/components/quotes/QuoteForm'), {
   ssr: false,
   loading: () => null,
 })
@@ -26,6 +40,9 @@ interface Meeting {
   meetingDate: string
   meetingDuration?: number
   location?: string
+  meetingType?: string
+  meetingUrl?: string
+  meetingPassword?: string
   status: string
   expenseWarning?: boolean
   companyId: string
@@ -72,9 +89,10 @@ export default function MeetingDetailPage() {
   const router = useRouter()
   const { data: session } = useSession()
   const id = params.id as string
-  const locale = params.locale as string
+  const locale = useLocale()
   const [editMode, setEditMode] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
+  const [quoteFormOpen, setQuoteFormOpen] = useState(false)
 
   const { data: meeting, isLoading, error, mutate } = useData<Meeting>(`/api/meetings/${id}`, {
     dedupingInterval: 0,
@@ -128,12 +146,37 @@ export default function MeetingDetailPage() {
 
       router.push(`/${locale}/meetings`)
     } catch (error: any) {
-      alert(error?.message || 'Silme işlemi başarısız oldu')
+      toastError('Silme işlemi başarısız oldu', error?.message)
     }
   }
 
   return (
     <div className="space-y-6">
+      {/* Contextual Actions Bar */}
+      <ContextualActionsBar
+        entityType="meeting"
+        entityId={id}
+        onEdit={canEdit ? () => {
+          setEditMode(true)
+          setFormOpen(true)
+        } : undefined}
+        onDelete={canEdit ? handleDelete : undefined}
+        onSendEmail={meeting.Customer?.email ? () => {
+          // Email gönderme işlemi SendEmailButton ile yapılıyor
+        } : undefined}
+        onSendSms={meeting.Customer?.phone ? () => {
+          // SMS gönderme işlemi SendSmsButton ile yapılıyor
+        } : undefined}
+        onSendWhatsApp={meeting.Customer?.phone ? () => {
+          // WhatsApp gönderme işlemi SendWhatsAppButton ile yapılıyor
+        } : undefined}
+        onAddToCalendar={() => {
+          // Takvime ekleme işlemi AddToCalendarButton ile yapılıyor
+        }}
+        canEdit={canEdit}
+        canDelete={canEdit}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -170,6 +213,69 @@ export default function MeetingDetailPage() {
                 <Edit className="mr-2 h-4 w-4" />
                 Düzenle
               </Button>
+              {meeting.Customer?.email && (
+                <SendEmailButton
+                  to={meeting.Customer.email}
+                  subject={`Toplantı: ${meeting.title}`}
+                  html={`
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                      <h2 style="color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px;">
+                        Toplantı Bilgileri
+                      </h2>
+                      <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                        <p><strong>Toplantı:</strong> ${meeting.title}</p>
+                        <p><strong>Tarih:</strong> ${new Date(meeting.meetingDate).toLocaleString('tr-TR')}</p>
+                        ${meeting.location ? `<p><strong>Konum:</strong> ${meeting.location}</p>` : ''}
+                        ${meeting.description ? `<p><strong>Açıklama:</strong><br>${meeting.description.replace(/\n/g, '<br>')}</p>` : ''}
+                      </div>
+                      <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">
+                        Bu e-posta CRM Enterprise V3 sisteminden gönderilmiştir.
+                      </p>
+                    </div>
+                  `}
+                  category="GENERAL"
+                  entityData={meeting}
+                />
+              )}
+              {meeting.Customer?.phone && (
+                <>
+                  <SendSmsButton
+                    to={meeting.Customer.phone.startsWith('+') 
+                      ? meeting.Customer.phone 
+                      : `+${meeting.Customer.phone.replace(/\D/g, '')}`}
+                    message={`Merhaba, ${meeting.title} toplantısı ${new Date(meeting.meetingDate).toLocaleString('tr-TR')} tarihinde planlanmıştır.`}
+                  />
+                  <SendWhatsAppButton
+                    to={meeting.Customer.phone.startsWith('+') 
+                      ? meeting.Customer.phone 
+                      : `+${meeting.Customer.phone.replace(/\D/g, '')}`}
+                    message={`Merhaba, ${meeting.title} toplantısı ${new Date(meeting.meetingDate).toLocaleString('tr-TR')} tarihinde planlanmıştır.`}
+                  />
+                </>
+              )}
+              <AddToCalendarButton
+                recordType="meeting"
+                record={meeting}
+                startTime={meeting.meetingDate}
+                endTime={meeting.meetingDuration 
+                  ? new Date(new Date(meeting.meetingDate).getTime() + meeting.meetingDuration * 60000).toISOString()
+                  : meeting.meetingDate}
+                location={meeting.location}
+                attendees={meeting.Customer?.email ? [{ email: meeting.Customer.email, displayName: meeting.Customer.name }] : undefined}
+              />
+              {meeting.meetingUrl && (
+                <SendMeetingLinkButton
+                  meetingUrl={meeting.meetingUrl}
+                  meetingTitle={meeting.title}
+                  meetingDate={meeting.meetingDate}
+                  meetingDuration={meeting.meetingDuration}
+                  meetingPassword={meeting.meetingPassword}
+                  meetingType={meeting.meetingType as any}
+                  customerEmail={meeting.Customer?.email}
+                  customerPhone={meeting.Customer?.phone}
+                  customerName={meeting.Customer?.name}
+                />
+              )}
               <Button
                 variant="outline"
                 onClick={handleDelete}
@@ -189,6 +295,89 @@ export default function MeetingDetailPage() {
           {statusLabels[meeting.status] || meeting.status}
         </Badge>
       </div>
+
+      {/* Quick Actions */}
+      {meeting.Customer && (
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Hızlı İşlemler</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {meeting.Customer.email && (
+              <SendEmailButton
+                to={meeting.Customer.email}
+                subject={`Toplantı: ${meeting.title}`}
+                html={`
+                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px;">
+                      Toplantı Bilgileri
+                    </h2>
+                    <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                      <p><strong>Toplantı:</strong> ${meeting.title}</p>
+                      <p><strong>Tarih:</strong> ${new Date(meeting.meetingDate).toLocaleString('tr-TR')}</p>
+                      ${meeting.location ? `<p><strong>Konum:</strong> ${meeting.location}</p>` : ''}
+                      ${meeting.description ? `<p><strong>Açıklama:</strong><br>${meeting.description.replace(/\n/g, '<br>')}</p>` : ''}
+                      ${meeting.meetingUrl ? `<p><strong>Toplantı Linki:</strong> <a href="${meeting.meetingUrl}" style="color: #6366f1;">${meeting.meetingUrl}</a></p>` : ''}
+                      ${meeting.meetingPassword ? `<p><strong>Şifre:</strong> ${meeting.meetingPassword}</p>` : ''}
+                    </div>
+                  </div>
+                `}
+                category="GENERAL"
+                entityData={meeting}
+              />
+            )}
+            {meeting.Customer.phone && (
+              <>
+                <SendSmsButton
+                  to={meeting.Customer.phone.startsWith('+') 
+                    ? meeting.Customer.phone 
+                    : `+${meeting.Customer.phone.replace(/\D/g, '')}`}
+                  message={`Merhaba, ${meeting.title} toplantısı ${new Date(meeting.meetingDate).toLocaleString('tr-TR')} tarihinde planlanmıştır.${meeting.meetingUrl ? ` Toplantı linki: ${meeting.meetingUrl}` : ''}`}
+                />
+                <SendWhatsAppButton
+                  to={meeting.Customer.phone.startsWith('+') 
+                    ? meeting.Customer.phone 
+                    : `+${meeting.Customer.phone.replace(/\D/g, '')}`}
+                  message={`Merhaba, ${meeting.title} toplantısı ${new Date(meeting.meetingDate).toLocaleString('tr-TR')} tarihinde planlanmıştır.${meeting.meetingUrl ? ` Toplantı linki: ${meeting.meetingUrl}` : ''}`}
+                />
+              </>
+            )}
+            <AddToCalendarButton
+              recordType="meeting"
+              record={meeting}
+              startTime={meeting.meetingDate}
+              endTime={meeting.meetingDuration 
+                ? new Date(new Date(meeting.meetingDate).getTime() + meeting.meetingDuration * 60000).toISOString()
+                : meeting.meetingDate}
+              location={meeting.location}
+              attendees={meeting.Customer?.email ? [{ email: meeting.Customer.email, displayName: meeting.Customer.name }] : undefined}
+            />
+            {meeting.meetingUrl && (
+              <SendMeetingLinkButton
+                meetingUrl={meeting.meetingUrl}
+                meetingTitle={meeting.title}
+                meetingDate={meeting.meetingDate}
+                meetingDuration={meeting.meetingDuration}
+                meetingPassword={meeting.meetingPassword}
+                meetingType={meeting.meetingType as any}
+                customerEmail={meeting.Customer?.email}
+                customerPhone={meeting.Customer?.phone}
+                customerName={meeting.Customer?.name}
+              />
+            )}
+            {meeting.dealId && (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  window.open(`/${locale}/deals/${meeting.dealId}`, '_blank')
+                }}
+              >
+                <DollarSign className="mr-2 h-4 w-4" />
+                Fırsatı Görüntüle
+              </Button>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -353,7 +542,7 @@ export default function MeetingDetailPage() {
                 <Button
                   variant="outline"
                   className="w-full justify-start"
-                  onClick={() => router.push(`/${locale}/quotes/new?customerId=${meeting.customerId}&dealId=${meeting.dealId || ''}`)}
+                  onClick={() => setQuoteFormOpen(true)}
                 >
                   <FileText className="mr-2 h-4 w-4" />
                   Teklif Oluştur
@@ -395,6 +584,23 @@ export default function MeetingDetailPage() {
           }}
         />
       )}
+
+      {/* Quote Form Modal */}
+      <QuoteForm
+        quote={undefined}
+        open={quoteFormOpen}
+        onClose={() => setQuoteFormOpen(false)}
+        onSuccess={async (savedQuote: any) => {
+          // Cache'i güncelle - optimistic update
+          await mutate(undefined, { revalidate: true })
+          setQuoteFormOpen(false)
+          // Başarılı kayıt sonrası teklif detay sayfasına yönlendir
+          router.push(`/${locale}/quotes/${savedQuote.id}`)
+        }}
+        dealId={meeting.dealId}
+        customerId={meeting.customerId}
+        customerCompanyId={meeting.companyId}
+      />
     </div>
   )
 }

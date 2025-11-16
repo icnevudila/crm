@@ -93,8 +93,8 @@ export default function KeyboardShortcuts({
         return
       }
 
-      // N - Yeni kayıt (sadece liste sayfalarında)
-      if (e.key === 'n' && !isModifier && !isShift) {
+      // Ctrl+N veya Cmd+N - Command Palette'i aç (Quick Create için)
+      if (isModifier && e.key === 'n') {
         // Input, textarea veya contenteditable içinde değilse
         const target = e.target as HTMLElement
         if (
@@ -104,21 +104,9 @@ export default function KeyboardShortcuts({
         ) {
           return
         }
-
-        const pathname = window.location.pathname
-        const pathParts = pathname.split('/').filter(Boolean)
-        
-        // Locale'den sonraki ilk segment modül adı
-        if (pathParts.length >= 2) {
-          const module = pathParts[1] // customers, deals, quotes, etc.
-          const newPath = `/${locale}/${module}/new`
-          
-          // Modül listesi sayfasındaysak yeni kayıt sayfasına git
-          if (!pathParts[2] || pathParts[2] === 'new') {
-            e.preventDefault()
-            router.push(newPath)
-          }
-        }
+        e.preventDefault()
+        // Command Palette'i açmak için custom event gönder
+        document.dispatchEvent(new CustomEvent('open-command-palette'))
         return
       }
 

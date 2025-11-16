@@ -27,6 +27,11 @@ const QuoteForm = dynamic(() => import('./QuoteForm'), {
   loading: () => null,
 })
 
+const MeetingForm = dynamic(() => import('../meetings/MeetingForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
 interface QuoteDetailModalProps {
   quoteId: string | null
   open: boolean
@@ -60,6 +65,7 @@ export default function QuoteDetailModal({
   const locale = useLocale()
   const [creatingRevision, setCreatingRevision] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
+  const [meetingFormOpen, setMeetingFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
   const { data: quote, isLoading, error, mutate: mutateQuote } = useData<any>(
@@ -67,11 +73,43 @@ export default function QuoteDetailModal({
     {
       dedupingInterval: 5000,
       revalidateOnFocus: false,
-      fallbackData: initialData,
     }
   )
 
   const displayQuote = quote || initialData
+
+  // DEBUG: Quote verilerini kontrol et
+  if (process.env.NODE_ENV === 'development' && open) {
+    console.log('[QuoteDetailModal] Debug Info:', {
+      quoteId,
+      open,
+      isLoading,
+      error: error?.message,
+      hasQuote: !!quote,
+      hasInitialData: !!initialData,
+      displayQuoteStatus: displayQuote?.status,
+      displayQuoteTitle: displayQuote?.title,
+      displayQuoteKeys: displayQuote ? Object.keys(displayQuote) : [],
+    })
+  }
+
+  // Loading state - modal açıldığında göster
+  if (open && isLoading && !displayQuote) {
+    return (
+      <DetailModal
+        open={open}
+        onClose={onClose}
+        title="Teklif Detayları"
+      >
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent"></div>
+            <p className="mt-4 text-sm text-gray-600">Yükleniyor...</p>
+          </div>
+        </div>
+      </DetailModal>
+    )
+  }
 
   // Client-side PDF generation - jsPDF ile (Mevzuata Uygun Teklif Formatı)
   const handleDownloadPDF = () => {
@@ -344,33 +382,63 @@ export default function QuoteDetailModal({
     }
   }
 
-  if (!open || !quoteId) return null
-
-  if (isLoading && !initialData && !displayQuote) {
-    return (
-      <DetailModal open={open} onClose={onClose} title="Teklif Detayları" size="xl">
-        <div className="p-4">Yükleniyor...</div>
-      </DetailModal>
-    )
-  }
-
-  if (error && !initialData && !displayQuote) {
+  // ✅ ÇÖZÜM: quoteId null kontrolü - modal açılmadan önce kontrol et
+  if (!open) return null
+  
+  if (!quoteId) {
     return (
       <DetailModal open={open} onClose={onClose} title="Hata" size="md">
         <div className="p-4 text-center">
-          <p className="text-gray-500 mb-4">Teklif yüklenemedi</p>
-          <Button onClick={onClose}>Kapat</Button>
+          <p className="text-gray-500 mb-4">Teklif ID bulunamadı</p>
+          <Button onClick={onClose} className="bg-gradient-primary text-white">
+            Kapat
+          </Button>
         </div>
       </DetailModal>
     )
   }
 
+  // Loading state - modal açıldığında göster
+  if (isLoading && !initialData && !displayQuote) {
+    return (
+      <DetailModal open={open} onClose={onClose} title="Teklif Detayları" size="xl">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent"></div>
+            <p className="mt-4 text-sm text-gray-600">Yükleniyor...</p>
+          </div>
+        </div>
+      </DetailModal>
+    )
+  }
+
+  // Error state - API hatası veya veri bulunamadı
+  if (error && !initialData && !displayQuote) {
+    return (
+      <DetailModal open={open} onClose={onClose} title="Hata" size="md">
+        <div className="p-4 text-center">
+          <p className="text-gray-500 mb-4">
+            {error?.message?.includes('404') || error?.message?.includes('bulunamadı')
+              ? 'Teklif bulunamadı'
+              : 'Teklif yüklenemedi'}
+          </p>
+          <Button onClick={onClose} className="bg-gradient-primary text-white">
+            Kapat
+          </Button>
+        </div>
+      </DetailModal>
+    )
+  }
+
+  // Veri yoksa göster
   if (!displayQuote) {
     return (
       <DetailModal open={open} onClose={onClose} title="Teklif Bulunamadı" size="md">
         <div className="p-4 text-center">
           <p className="text-gray-500 mb-4">Teklif bulunamadı</p>
-          <Button onClick={onClose}>Kapat</Button>
+          <Button onClick={onClose} className="bg-gradient-primary text-white">
+            Kapat
+          </Button>
         </div>
       </DetailModal>
     )
@@ -444,11 +512,51 @@ export default function QuoteDetailModal({
           )}
 
           {/* Workflow Stepper */}
-          <WorkflowStepper
-            steps={getQuoteWorkflowSteps(displayQuote?.status)}
-            currentStep={['DRAFT', 'SENT', 'ACCEPTED'].indexOf(displayQuote?.status)}
-            title="Teklif İş Akışı"
-          />
+          {displayQuote?.status ? (() => {
+            const validStatuses = ['DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'EXPIRED']
+            const currentStepIndex = validStatuses.indexOf(displayQuote.status)
+            const steps = getQuoteWorkflowSteps(displayQuote.status)
+            
+            // DEBUG: Workflow stepper hesaplama
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[QuoteDetailModal] Workflow Stepper Debug:', {
+                status: displayQuote.status,
+                currentStepIndex,
+                stepsCount: steps.length,
+                steps: steps.map(s => ({ id: s.id, label: s.label, status: s.status })),
+              })
+            }
+            
+            // currentStepIndex -1 ise (status listede yoksa) veya steps boşsa göster
+            if (currentStepIndex === -1 || steps.length === 0) {
+              if (process.env.NODE_ENV === 'development') {
+                return (
+                  <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-800">
+                      ⚠️ Workflow Stepper gösterilemedi: status = {String(displayQuote.status)} (geçersiz status)
+                    </p>
+                  </div>
+                )
+              }
+              return null
+            }
+            
+            return (
+              <WorkflowStepper
+                steps={steps}
+                currentStep={currentStepIndex}
+                title="Teklif İş Akışı"
+              />
+            )
+          })() : (
+            process.env.NODE_ENV === 'development' && (
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  ⚠️ Workflow Stepper gösterilemedi: status = {String(displayQuote?.status ?? 'undefined')}
+                </p>
+              </div>
+            )
+          )}
 
           {/* Status Info Note */}
           <StatusInfoNote
@@ -486,9 +594,8 @@ export default function QuoteDetailModal({
               }
             }}
             onCreateRelated={(type) => {
-              onClose()
               if (type === 'meeting') {
-                router.push(`/${locale}/meetings/new?quoteId=${quoteId}`)
+                setMeetingFormOpen(true)
               }
             }}
           />
@@ -517,8 +624,7 @@ export default function QuoteDetailModal({
                 label: 'Görüşme Planla',
                 icon: <Calendar className="h-4 w-4" />,
                 onCreate: () => {
-                  onClose()
-                  router.push(`/${locale}/meetings/new?quoteId=${quoteId}`)
+                  setMeetingFormOpen(true)
                 },
                 description: 'Teklif sunumu için görüşme planlayın',
               }] : []),
@@ -609,6 +715,22 @@ export default function QuoteDetailModal({
           setFormOpen(false)
           await mutateQuote()
           await mutate(`/api/quotes/${quoteId}`)
+        }}
+      />
+
+      {/* Meeting Form Modal */}
+      <MeetingForm
+        meeting={undefined}
+        open={meetingFormOpen}
+        onClose={() => setMeetingFormOpen(false)}
+        quoteId={quoteId || undefined}
+        customerCompanyId={displayQuote?.customerCompanyId}
+        onSuccess={async (savedMeeting: any) => {
+          // Cache'i güncelle - optimistic update
+          await mutateQuote()
+          setMeetingFormOpen(false)
+          // Başarılı kayıt sonrası görüşme detay sayfasına yönlendir
+          router.push(`/${locale}/meetings/${savedMeeting.id}`)
         }}
       />
     </>

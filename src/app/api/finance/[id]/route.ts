@@ -33,7 +33,7 @@ export async function GET(
     
     const supabase = getSupabaseWithServiceRole()
 
-    // Finance kaydını çek
+    // Finance kaydını çek - ilişkili Invoice/Contract bilgilerini de çek (eğer varsa)
     let financeQuery = supabase
       .from('Finance')
       .select('*')
@@ -76,6 +76,8 @@ export async function GET(
 
     return NextResponse.json({
       ...(finance as any),
+      Invoice: invoiceData,
+      Contract: contractData,
       activities: activities || [],
     })
   } catch (error: any) {

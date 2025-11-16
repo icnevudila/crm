@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 export async function GET(request: Request) {
   try {
@@ -22,16 +23,25 @@ export async function GET(request: Request) {
       return buildPermissionDeniedResponse()
     }
 
-    const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID
+    // CompanyIntegration'dan Google Calendar Client ID'yi al
+    const supabase = getSupabaseWithServiceRole()
+    const { data: integration } = await supabase
+      .from('CompanyIntegration')
+      .select('googleCalendarClientId, googleCalendarClientSecret, googleCalendarRedirectUri')
+      .eq('companyId', session.user.companyId)
+      .maybeSingle()
+
+    const GOOGLE_CLIENT_ID = integration?.googleCalendarClientId || process.env.GOOGLE_CLIENT_ID
     if (!GOOGLE_CLIENT_ID) {
       return NextResponse.json(
-        { error: 'Google Client ID yapılandırılmamış' },
+        { error: 'Google Client ID yapılandırılmamış. Lütfen Kullanıcı Entegrasyonları sayfasından Google Calendar bölümünde Client ID girin ve kaydedin.' },
         { status: 500 }
       )
     }
 
-    // OAuth callback URL
-    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/integrations/oauth/gmail/callback`
+    // OAuth callback URL - CompanyIntegration'dan veya env'den
+    const redirectUri = integration?.googleCalendarRedirectUri 
+      || `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/integrations/oauth/gmail/callback`
 
     // OAuth scope'ları
     const scopes = [
@@ -66,6 +76,8 @@ export async function GET(request: Request) {
     )
   }
 }
+
+
 
 
 

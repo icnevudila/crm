@@ -78,8 +78,8 @@ export async function GET(request: Request) {
       if (error.code === 'PGRST116' || error.message?.includes('relation') || error.message?.includes('does not exist')) {
         return NextResponse.json(
           { 
-            error: 'Company tablosu bulunamadı',
-            message: 'Supabase\'de Company tablosu yok veya migration çalıştırılmamış. Lütfen schema.sql dosyasını çalıştırın.',
+            error: (await import('@/lib/api-locale')).getErrorMessage('errors.api.companyTableNotFound', request),
+            message: (await import('@/lib/api-locale')).getErrorMessage('errors.api.companyTableNotFoundMessage', request),
             code: error.code,
           },
           { status: 500 }
@@ -89,8 +89,8 @@ export async function GET(request: Request) {
       if (error.code === '42501' || error.message?.includes('permission') || error.message?.includes('RLS')) {
         return NextResponse.json(
           { 
-            error: 'RLS policy hatası',
-            message: 'Row-Level Security (RLS) politikaları Company tablosu için login sayfasında şirketleri görmeye izin vermiyor. Lütfen RLS politikalarını kontrol edin.',
+            error: (await import('@/lib/api-locale')).getErrorMessage('errors.api.rlsPolicyError', request),
+            message: (await import('@/lib/api-locale')).getErrorMessage('errors.api.rlsPolicyErrorMessage', request),
             code: error.code,
           },
           { status: 500 }

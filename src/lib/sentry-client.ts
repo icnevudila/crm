@@ -5,11 +5,18 @@
  * next.config.js'de Sentry plugin'i ile entegre edilir.
  */
 
-import { initSentry } from './sentry'
+// Sentry opsiyonel - build sırasında hata vermemesi için
+// Runtime'da dynamic import ile yüklenecek
+// import { initSentry } from './sentry'
 
-// Client-side'da Sentry'yi başlat
+// Client-side'da Sentry'yi başlat (opsiyonel)
 if (typeof window !== 'undefined') {
-  initSentry()
+  // Runtime'da dynamic import - build sırasında hata vermez
+  import('./sentry')
+    .then((module) => module.initSentry())
+    .catch(() => {
+      // Sentry yoksa sessizce devam et
+    })
 }
 
 

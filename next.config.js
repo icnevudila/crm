@@ -37,24 +37,25 @@ const nextConfig = {
     optimizeCss: true,
     // Bundle size optimization
     webpackBuildWorker: true,
-    // swcMinify Next.js 15'te varsayılan olarak aktif - deprecated uyarısını önlemek için kaldırıldı
-    // turbo deprecated - turbopack'e taşındı
+    // Not: Turbopack --turbo flag ile aktif edilir, config'de ayar gerekmez
   },
-  // Turbopack - turbo yerine turbopack kullan
-  turbopack: {
-    // Turbopack optimizasyonları
-  },
-  // Compression aktif
-  compress: true,
+  // Turbopack - Next.js 15'te --turbo flag ile aktif
+  // Config'de turbopack ayarları (Next.js 15'te experimental.turbo deprecated)
+  // Not: --turbo flag'i kullanıldığında otomatik aktif olur
+  // Compression - Development'ta kapalı (hız için), production'da açık
+  compress: process.env.NODE_ENV === 'production',
   // React Strict Mode
   reactStrictMode: true,
-  // ESLint - build sırasında devre dışı (sadece uyarılar için)
+  // ESLint - development'ta devre dışı (hız için)
   eslint: {
     ignoreDuringBuilds: true,
+    // Development'ta ESLint'i tamamen devre dışı bırak (hız için)
+    dirs: process.env.NODE_ENV === 'production' ? ['src'] : [],
   },
-  // TypeScript - build sırasında geçici olarak devre dışı (params async hatası için)
+  // TypeScript - development'ta type checking'i devre dışı bırak (hız için)
   typescript: {
     ignoreBuildErrors: true, // Geçici olarak - Next.js 15 params async migration için
+    // Not: Development'ta type checking zaten daha az agresif çalışır
   },
   // Standalone output kaldırıldı - webpack chunk sorunları için
   // output: 'standalone',
@@ -63,16 +64,17 @@ const nextConfig = {
   // Output file tracing root - workspace root hatası için
   // Not: swcMinify ve optimizeFonts Next.js 15'te varsayılan olarak aktif
   outputFileTracingRoot: path.join(__dirname),
-  // Prefetching optimizasyonu - ULTRA AGRESİF prefetching
+  // Prefetching optimizasyonu - Development'ta daha agresif (hız için)
   // Sekme geçişlerini <100ms'e düşürmek için (tıklama anında açılmalı)
   onDemandEntries: {
-    maxInactiveAge: 60 * 60 * 1000, // 60 dakika (ULTRA uzun tut - instant navigation)
-    pagesBufferLength: 200, // 200 sayfa buffer (sekme geçişlerini maksimum hızlandırmak için - veri çekimini etkilemez)
+    // Development'ta daha kısa buffer (hız için), production'da daha uzun (memory için)
+    maxInactiveAge: process.env.NODE_ENV === 'development' ? 2 * 60 * 1000 : 5 * 60 * 1000, // Dev: 2dk, Prod: 5dk
+    pagesBufferLength: process.env.NODE_ENV === 'development' ? 20 : 50, // Dev: 20 sayfa, Prod: 50 sayfa
   },
   // Build optimizasyonu - hızlandırma
   // swcMinify: Next.js 15'te varsayılan olarak aktif - deprecated uyarısını önlemek için kaldırıldı
-  // Output optimizasyonu - standalone build hızlandırır
-  output: 'standalone', // Standalone output - build hızlandırır (5-10 dakikaya düşer)
+  // Output optimizasyonu - standalone build hızlandırır ama dev'de yavaşlatabilir
+  // output: 'standalone', // Dev'de kapatıldı - performans için
   // Agresif prefetching - tüm linkler otomatik prefetch
   poweredByHeader: false, // Güvenlik için
   // Security headers

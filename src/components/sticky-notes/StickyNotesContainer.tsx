@@ -71,6 +71,31 @@ export default function StickyNotesContainer({
     }
   }, [visibilityStorageKey])
 
+  // ✅ Custom event listener - Kanban kartlarından not ekleme modal'ını açmak için
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const handleOpenStickyNote = (event: CustomEvent) => {
+      const { relatedTo: eventRelatedTo, relatedId: eventRelatedId } = event.detail || {}
+      // Eğer relatedTo ve relatedId eşleşiyorsa modal'ı aç
+      if (eventRelatedTo === relatedTo && eventRelatedId === relatedId) {
+        setNewNoteOpen(true)
+      } else if (!relatedTo && !relatedId) {
+        // Global not ekleme (relatedTo/relatedId yoksa) - her zaman aç
+        setNewNoteOpen(true)
+      } else if (eventRelatedTo && eventRelatedId && !relatedTo && !relatedId) {
+        // Global container'dan event geldiğinde (relatedTo/relatedId yoksa) modal'ı aç
+        // relatedTo ve relatedId'yi set et (useStickyNotes hook'u otomatik güncellenecek)
+        setNewNoteOpen(true)
+      }
+    }
+
+    window.addEventListener('openStickyNote', handleOpenStickyNote as EventListener)
+    return () => {
+      window.removeEventListener('openStickyNote', handleOpenStickyNote as EventListener)
+    }
+  }, [relatedTo, relatedId])
+
   // Görünürlük durumunu kaydet
   const handleToggleVisibility = useCallback(() => {
     const newVisibility = !allNotesVisible
@@ -116,14 +141,14 @@ export default function StickyNotesContainer({
         </Button>
       )}
 
-      {/* Floating Add Button */}
+      {/* Floating Add Button - Küçük ve hızlı işlemlerin yanında */}
       <Button
         onClick={() => setNewNoteOpen(true)}
-        className="fixed bottom-6 right-6 h-12 w-12 rounded-full shadow-lg z-[10000] bg-indigo-600 hover:bg-indigo-700"
+        className="fixed bottom-6 right-6 h-8 w-8 rounded-full shadow-md z-[10000] bg-indigo-600 hover:bg-indigo-700"
         size="icon"
         title="Yeni Not Ekle"
       >
-        <Plus className="h-6 w-6" />
+        <Plus className="h-4 w-4" />
       </Button>
 
       {/* Sticky Notes - Sadece görünürse göster */}

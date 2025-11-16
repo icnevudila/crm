@@ -28,6 +28,16 @@ const DealForm = dynamic(() => import('./DealForm'), {
   loading: () => null,
 })
 
+const QuoteForm = dynamic(() => import('../quotes/QuoteForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
+const MeetingForm = dynamic(() => import('../meetings/MeetingForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
 interface DealDetailModalProps {
   dealId: string | null
   open: boolean
@@ -64,6 +74,8 @@ export default function DealDetailModal({
   const router = useRouter()
   const locale = useLocale()
   const [formOpen, setFormOpen] = useState(false)
+  const [quoteFormOpen, setQuoteFormOpen] = useState(false)
+  const [meetingFormOpen, setMeetingFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
   const { data: deal, isLoading, error, mutate: mutateDeal } = useData<any>(
@@ -76,6 +88,24 @@ export default function DealDetailModal({
   )
 
   const displayDeal = deal || initialData
+
+  // Loading state - modal açıldığında göster
+  if (open && isLoading && !displayDeal) {
+    return (
+      <DetailModal
+        open={open}
+        onClose={onClose}
+        title="Fırsat Detayları"
+      >
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent"></div>
+            <p className="mt-4 text-sm text-gray-600">Yükleniyor...</p>
+          </div>
+        </div>
+      </DetailModal>
+    )
+  }
 
   // Client-side PDF generation - jsPDF ile (Premium Tasarım + Türkçe Desteği)
   const handleDownloadPDF = () => {
@@ -225,33 +255,61 @@ export default function DealDetailModal({
     }
   }
 
-  if (!open || !dealId) return null
-
-  if (isLoading && !initialData && !displayDeal) {
-    return (
-      <DetailModal open={open} onClose={onClose} title="Fırsat Detayları" size="xl">
-        <div className="p-4">Yükleniyor...</div>
-      </DetailModal>
-    )
-  }
-
-  if (error && !initialData && !displayDeal) {
+  // ✅ ÇÖZÜM: dealId null kontrolü - modal açılmadan önce kontrol et
+  if (!open) return null
+  
+  if (!dealId) {
     return (
       <DetailModal open={open} onClose={onClose} title="Hata" size="md">
         <div className="p-4 text-center">
-          <p className="text-gray-500 mb-4">Fırsat yüklenemedi</p>
+          <p className="text-gray-500 mb-4">Fırsat ID bulunamadı</p>
           <Button onClick={onClose}>Kapat</Button>
         </div>
       </DetailModal>
     )
   }
 
+  // Loading state - modal açıldığında göster
+  if (isLoading && !initialData && !displayDeal) {
+    return (
+      <DetailModal open={open} onClose={onClose} title="Fırsat Detayları" size="xl">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent"></div>
+            <p className="mt-4 text-sm text-gray-600">Yükleniyor...</p>
+          </div>
+        </div>
+      </DetailModal>
+    )
+  }
+
+  // Error state - API hatası veya veri bulunamadı
+  if (error && !initialData && !displayDeal) {
+    return (
+      <DetailModal open={open} onClose={onClose} title="Hata" size="md">
+        <div className="p-4 text-center">
+          <p className="text-gray-500 mb-4">
+            {error?.message?.includes('404') || error?.message?.includes('bulunamadı')
+              ? 'Fırsat bulunamadı'
+              : 'Fırsat yüklenemedi'}
+          </p>
+          <Button onClick={onClose} className="bg-gradient-primary text-white">
+            Kapat
+          </Button>
+        </div>
+      </DetailModal>
+    )
+  }
+
+  // Veri yoksa göster
   if (!displayDeal) {
     return (
       <DetailModal open={open} onClose={onClose} title="Fırsat Bulunamadı" size="md">
         <div className="p-4 text-center">
           <p className="text-gray-500 mb-4">Fırsat bulunamadı</p>
-          <Button onClick={onClose}>Kapat</Button>
+          <Button onClick={onClose} className="bg-gradient-primary text-white">
+            Kapat
+          </Button>
         </div>
       </DetailModal>
     )
@@ -352,11 +410,10 @@ export default function DealDetailModal({
               }
             }}
             onCreateRelated={(type) => {
-              onClose()
               if (type === 'quote') {
-                router.push(`/${locale}/quotes/new?dealId=${dealId}`)
+                setQuoteFormOpen(true)
               } else if (type === 'meeting') {
-                router.push(`/${locale}/meetings/new?dealId=${dealId}`)
+                setMeetingFormOpen(true)
               }
             }}
           />
@@ -390,20 +447,14 @@ export default function DealDetailModal({
                 type: 'quote',
                 label: 'Teklif Oluştur',
                 icon: <FileText className="h-4 w-4" />,
-                onCreate: () => {
-                  onClose()
-                  router.push(`/${locale}/quotes/new?dealId=${dealId}`)
-                },
+                onCreate: () => setQuoteFormOpen(true),
                 description: 'Bu fırsat için teklif oluşturun',
               }] : []),
               ...(displayDeal?.stage === 'PROPOSAL' && (!displayDeal?.Meeting || displayDeal.Meeting.length === 0) ? [{
                 type: 'meeting',
                 label: 'Görüşme Planla',
                 icon: <Calendar className="h-4 w-4" />,
-                onCreate: () => {
-                  onClose()
-                  router.push(`/${locale}/meetings/new?dealId=${dealId}`)
-                },
+                onCreate: () => setMeetingFormOpen(true),
                 description: 'Teklif sunumu için görüşme planlayın',
               }] : []),
             ]}
@@ -521,6 +572,40 @@ export default function DealDetailModal({
           await mutateDeal()
           await mutate(`/api/deals/${dealId}`)
         }}
+      />
+
+      {/* Quote Form Modal */}
+      <QuoteForm
+        quote={undefined}
+        open={quoteFormOpen}
+        onClose={() => setQuoteFormOpen(false)}
+        onSuccess={async (savedQuote: any) => {
+          // Cache'i güncelle - optimistic update
+          await mutateDeal()
+          setQuoteFormOpen(false)
+          // Başarılı kayıt sonrası teklif detay sayfasına yönlendir
+          router.push(`/${locale}/quotes/${savedQuote.id}`)
+        }}
+        dealId={dealId || undefined}
+        customerCompanyId={displayDeal?.Customer?.companyId}
+        customerCompanyName={displayDeal?.Customer?.name}
+      />
+
+      {/* Meeting Form Modal */}
+      <MeetingForm
+        meeting={undefined}
+        open={meetingFormOpen}
+        onClose={() => setMeetingFormOpen(false)}
+        onSuccess={async (savedMeeting: any) => {
+          // Cache'i güncelle - optimistic update
+          await mutateDeal()
+          setMeetingFormOpen(false)
+          // Başarılı kayıt sonrası görüşme detay sayfasına yönlendir
+          router.push(`/${locale}/meetings/${savedMeeting.id}`)
+        }}
+        dealId={dealId || undefined}
+        customerCompanyId={displayDeal?.Customer?.companyId}
+        customerCompanyName={displayDeal?.Customer?.name}
       />
     </>
   )

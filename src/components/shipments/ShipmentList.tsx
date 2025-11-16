@@ -191,6 +191,7 @@ import ShipmentForm from './ShipmentForm'
 
 
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import Pagination from '@/components/ui/Pagination'
 
 
 
@@ -711,6 +712,10 @@ export default function ShipmentList() {
 
 
   const [statusChangingId, setStatusChangingId] = useState<string | null>(null)
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
 
 
 
@@ -775,13 +780,8 @@ export default function ShipmentList() {
 
 
     const timer = setTimeout(() => {
-
-
-
       setDebouncedSearch(search)
-
-
-
+      setCurrentPage(1) // Arama değiştiğinde ilk sayfaya dön
     }, 300)
 
 
@@ -834,11 +834,29 @@ export default function ShipmentList() {
 
 
 
-  const apiUrl = `/api/shipments?${params.toString()}`
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams()
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    if (statusFilter) params.append('status', statusFilter)
+    if (dateFrom) params.append('dateFrom', dateFrom)
+    if (dateTo) params.append('dateTo', dateTo)
+    if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+    params.append('page', currentPage.toString())
+    params.append('pageSize', pageSize.toString())
+    return `/api/shipments?${params.toString()}`
+  }, [debouncedSearch, statusFilter, dateFrom, dateTo, isSuperAdmin, filterCompanyId, currentPage, pageSize])
 
+  interface ShipmentsResponse {
+    data: Shipment[]
+    pagination: {
+      page: number
+      pageSize: number
+      totalItems: number
+      totalPages: number
+    }
+  }
 
-
-  const { data: shipmentsData = [], isLoading, error, mutate: mutateShipments } = useData<Shipment[]>(apiUrl, {
+  const { data: shipmentsData, isLoading, error, mutate: mutateShipments } = useData<Shipment[] | ShipmentsResponse>(apiUrl, {
 
 
 
@@ -859,17 +877,20 @@ export default function ShipmentList() {
 
 
   // API'den dönen veriyi parse et
-
-
-
   const shipments = useMemo(() => {
-
-
-
-    return Array.isArray(shipmentsData) ? shipmentsData : []
-
-
-
+    if (Array.isArray(shipmentsData)) return shipmentsData
+    if (shipmentsData && typeof shipmentsData === 'object' && 'data' in shipmentsData) {
+      return (shipmentsData as ShipmentsResponse).data || []
+    }
+    return []
+  }, [shipmentsData])
+  
+  const pagination = useMemo(() => {
+    if (!shipmentsData || Array.isArray(shipmentsData)) return null
+    if (shipmentsData && typeof shipmentsData === 'object' && 'pagination' in shipmentsData) {
+      return (shipmentsData as ShipmentsResponse).pagination || null
+    }
+    return null
   }, [shipmentsData])
 
 
@@ -1774,7 +1795,8 @@ export default function ShipmentList() {
 
 
 
-      toast.success('Sevkiyat silindi', `${tracking || 'Sevkiyat'} başarıyla silindi.`)
+      const tCommon = useTranslations('common')
+      toast.success(tCommon('shipmentDeletedSuccess'), tCommon('deleteSuccessMessage', { name: tracking || 'Sevkiyat' }))
 
 
 
@@ -3892,9 +3914,21 @@ export default function ShipmentList() {
 
 
         </Table>
-
-
-
+        
+        {/* Pagination */}
+        {pagination && (
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            pageSize={pagination.pageSize}
+            totalItems={pagination.totalItems}
+            onPageChange={(page) => setCurrentPage(page)}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              setCurrentPage(1)
+            }}
+          />
+        )}
       </div>
 
 

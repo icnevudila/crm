@@ -26,7 +26,7 @@ export default function LoginPage() {
       const trimmedEmail = email.trim()
 
       if (!trimmedEmail || !password) {
-        setError('E-posta ve şifre gereklidir')
+        setError(t('emailRequired'))
         setLoading(false)
         return
       }
@@ -47,7 +47,7 @@ export default function LoginPage() {
       const data = await response.json()
 
       if (!response.ok || !data.success) {
-        setError(data.error || 'E-posta veya şifre hatalı')
+        setError(data.error || t('invalidCredentials'))
         setLoading(false)
         return
       }
@@ -57,17 +57,17 @@ export default function LoginPage() {
     } catch (err: any) {
       console.error('Login error:', err)
       if (err?.message?.includes('fetch') || err?.message?.includes('network')) {
-        setError('Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edin.')
+        setError(t('networkError'))
       } else {
-        setError('Giriş yapılırken bir hata oluştu')
+        setError(t('loginError'))
       }
       setLoading(false)
     }
   }, [email, password, locale])
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 p-4">
-      <Card className="w-full max-w-md">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-indigo-950 via-slate-950 to-purple-950 p-4">
+      <Card className="w-full max-w-md border-slate-200/80 bg-white/95 backdrop-blur">
         <CardHeader className="space-y-1 text-center">
           <CardTitle className="text-2xl font-bold">CRM Enterprise V3</CardTitle>
           <CardDescription>{t('description')}</CardDescription>
@@ -75,12 +75,12 @@ export default function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">E-posta</label>
+              <label className="text-sm font-medium">{t('email')}</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <Input
                   type="email"
-                  placeholder="ornek@email.com"
+                  placeholder={t('emailPlaceholder')}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={loading}
@@ -91,7 +91,7 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Şifre</label>
+              <label className="text-sm font-medium">{t('password')}</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <Input
@@ -120,16 +120,16 @@ export default function LoginPage() {
               {loading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Giriş yapılıyor...
+                  {t('loggingIn')}
                 </>
               ) : (
-                'Giriş Yap'
+                t('login')
               )}
             </Button>
 
             <div className="rounded-lg bg-blue-50 border border-blue-200 p-3 text-xs text-blue-700">
-              <p className="font-semibold mb-1">Demo Girişi:</p>
-              <p>Şifre: <code className="font-mono bg-white px-2 py-1 rounded border">demo123</code></p>
+              <p className="font-semibold mb-1">{t('demoLogin')}:</p>
+              <p>{t('demoPasswordLabel')} <code className="font-mono bg-white px-2 py-1 rounded border">demo123</code></p>
             </div>
           </form>
         </CardContent>

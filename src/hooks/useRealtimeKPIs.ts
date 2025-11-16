@@ -58,13 +58,30 @@ export function useRealtimeKPIs(initialData: KPIData) {
         if (fetchTimeoutRef.current) {
           clearTimeout(fetchTimeoutRef.current)
         }
-        fetchTimeoutRef.current = setTimeout(() => {
-          fetch('/api/analytics/kpis')
-            .then((res) => res.json())
-            .then((data) => setKpis(data))
-            .catch(() => {
-              // Hata sessizce ignore edilir - initial data kullanılır
+        fetchTimeoutRef.current = setTimeout(async () => {
+          try {
+            const res = await fetch('/api/analytics/kpis', {
+              credentials: 'include',
+              cache: 'no-store',
             })
+            
+            if (!res.ok) {
+              // Hata sessizce ignore edilir - initial data kullanılır
+              return
+            }
+            
+            const contentType = res.headers.get('content-type')
+            if (!contentType || !contentType.includes('application/json')) {
+              // Invalid response type - sessizce ignore et
+              return
+            }
+            
+            const data = await res.json()
+            setKpis(data)
+          } catch (err) {
+            // Network hatası veya diğer hatalar - sessizce ignore edilir
+            // Initial data kullanılır
+          }
         }, 1000) // 1 saniye debounce
       }
 

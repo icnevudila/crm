@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { toast } from '@/lib/toast'
+import { toast, toastError, toastSuccess } from '@/lib/toast'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,9 +11,18 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { Briefcase, Edit, Trash2, Eye, GripVertical, Info, History, ChevronLeft, ChevronRight } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { Briefcase, Edit, Trash2, Eye, GripVertical, Info, History, ChevronLeft, ChevronRight, Sparkles, FileText, Calendar, CheckSquare, Receipt, StickyNote } from 'lucide-react'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
+import { getStatusHeaderClass, getStatusColor, getStatusBadgeClass } from '@/lib/crm-colors'
 import {
   Dialog,
   DialogContent,
@@ -53,6 +62,10 @@ import RelatedRecordsDialog from '@/components/activity/RelatedRecordsDialog'
 import { translateStage, getStageMessage } from '@/lib/stageTranslations'
 import MeetingForm from '@/components/meetings/MeetingForm'
 import QuoteForm from '@/components/quotes/QuoteForm'
+import SendEmailButton from '@/components/integrations/SendEmailButton'
+import SendSmsButton from '@/components/integrations/SendSmsButton'
+import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
+import AddToCalendarButton from '@/components/integrations/AddToCalendarButton'
 
 interface DealKanbanChartProps {
   data: Array<{ 
@@ -75,6 +88,7 @@ interface DealKanbanChartProps {
   onDelete?: (id: string, title: string) => void
   onStageChange?: (dealId: string, newStage: string) => void | Promise<void>
   onView?: (dealId: string) => void // ✅ ÇÖZÜM: Modal açmak için callback
+  onQuickAction?: (type: 'quote' | 'invoice' | 'task' | 'meeting', deal: any) => void // Quick action callback
 }
 
 const stageLabels: Record<string, string> = {
@@ -86,23 +100,9 @@ const stageLabels: Record<string, string> = {
   LOST: 'Kaybedildi',
 }
 
-const stageColors: Record<string, string> = {
-  LEAD: 'bg-blue-100 text-blue-800 border-blue-300',
-  CONTACTED: 'bg-purple-100 text-purple-800 border-purple-300',
-  PROPOSAL: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-  NEGOTIATION: 'bg-orange-100 text-orange-800 border-orange-300',
-  WON: 'bg-green-100 text-green-800 border-green-300',
-  LOST: 'bg-red-100 text-red-800 border-red-300',
-}
+// ✅ Merkezi renk sistemi kullanılıyor - getStatusColor ile
 
-const stageHeaderColors: Record<string, string> = {
-  LEAD: 'bg-blue-50 border-blue-200',
-  CONTACTED: 'bg-purple-50 border-purple-200',
-  PROPOSAL: 'bg-yellow-50 border-yellow-200',
-  NEGOTIATION: 'bg-orange-50 border-orange-200',
-  WON: 'bg-green-50 border-green-200',
-  LOST: 'bg-red-50 border-red-200',
-}
+// ✅ Merkezi renk sistemi kullanılıyor - getStatusHeaderClass ile
 
 // Her aşama için bilgilendirme mesajları - CRM'e uygun yönlendirici mesajlar (kart içinde gösterilecek)
 const stageInfoMessages: Record<string, string> = {
@@ -135,7 +135,7 @@ function DroppableColumn({ stage, children }: { stage: string; children: React.R
 }
 
 // Sortable Deal Card Component
-function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpenMeetingDialog, onOpenQuoteDialog, onOpenWonDialog, onOpenLostDialog, onView }: {
+function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpenMeetingDialog, onOpenQuoteDialog, onOpenWonDialog, onOpenLostDialog, onView, onQuickAction }: {
   deal: any
   stage: string
   onEdit?: (deal: any) => void
@@ -146,54 +146,49 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
   onOpenWonDialog?: (deal: any) => void
   onOpenLostDialog?: (deal: any) => void
   onView?: (dealId: string) => void // ✅ ÇÖZÜM: Modal açmak için callback
+  onQuickAction?: (type: 'quote' | 'invoice' | 'task' | 'meeting', deal: any) => void // Quick action callback
 }) {
   const locale = useLocale()
-  const [dragMode, setDragMode] = useState(false)
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
   
   // Kilitli durum kontrolü - WON ve LOST durumları taşınamaz
   const isLocked = isDealImmutable(stage)
   
+  // ✅ Drag & drop şimdilik olduğu gibi - sonra düzeltilecek
   const {
     attributes,
     listeners,
     setNodeRef,
     transform,
     isDragging,
-  } = useSortable({ id: deal.id, disabled: !dragMode || isLocked })
+  } = useSortable({ id: deal.id, disabled: isLocked })
 
-  // ✅ PREMIUM: Ultra-smooth drag animations with GPU acceleration
+  // ✅ PREMIUM: Ultra-smooth drag animations with GPU acceleration - Optimized for performance
   const x = transform?.x ?? 0
   const y = transform?.y ?? 0
   const style: React.CSSProperties = transform 
     ? {
-        transform: `translate3d(${x}px,${y}px,0) scale(1)`,
-        WebkitTransform: `translate3d(${x}px,${y}px,0) scale(1) translateZ(0)`,
-        transition: isDragging ? 'none' : 'transform 150ms cubic-bezier(0.25, 0.46, 0.45, 0.94)', // ✅ Daha hızlı ve smooth transition
+        transform: `translate3d(${x}px,${y}px,0)`,
+        WebkitTransform: `translate3d(${x}px,${y}px,0) translateZ(0)`,
+        transition: 'none', // ✅ Drag sırasında transition YOK - daha smooth
         willChange: 'transform',
-        opacity: isDragging ? 0.7 : 1, // ✅ Daha görünür opacity
-        cursor: dragMode && !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'default',
+        opacity: isDragging ? 0.95 : 1, // ✅ Daha görünür (0.7 yerine 0.95)
+        cursor: !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'not-allowed',
         transformOrigin: 'center center',
         backfaceVisibility: 'hidden',
-        perspective: 1000,
         isolation: 'isolate',
-        zIndex: isDragging ? 50 : 1, // ✅ Drag sırasında üstte
-        // ✅ GPU acceleration optimizations
+        zIndex: isDragging ? 9999 : 1, // ✅ Drag sırasında en üstte
+        // ✅ GPU acceleration optimizations - Minimal properties for better performance
         WebkitBackfaceVisibility: 'hidden',
-        WebkitPerspective: 1000,
-        WebkitTransformStyle: 'preserve-3d',
-        transformStyle: 'preserve-3d',
+        pointerEvents: isDragging ? 'none' : 'auto', // ✅ Drag sırasında pointer events kapalı
       }
     : {
-        transition: 'transform 150ms cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 150ms ease-out', // ✅ Daha hızlı transitions
-        willChange: dragMode && !isLocked ? 'transform' : 'auto',
-        opacity: isDragging ? 0.7 : 1,
-        cursor: dragMode && !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'default',
-        // ✅ GPU acceleration optimizations
+        transition: isDragging ? 'none' : 'transform 100ms ease-out, opacity 100ms ease-out', // ✅ Daha hızlı (100ms)
+        willChange: !isLocked ? 'transform' : 'auto',
+        opacity: 1,
+        cursor: !isLocked ? 'grab' : 'not-allowed',
+        // ✅ Minimal GPU optimizations
         WebkitBackfaceVisibility: 'hidden',
-        WebkitPerspective: 1000,
-        WebkitTransformStyle: 'preserve-3d',
-        transformStyle: 'preserve-3d',
       }
 
   const customer = deal.customer || deal.Customer
@@ -213,20 +208,24 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
   return (
     <Card
       ref={setNodeRef}
+      {...(!isLocked ? attributes : {})}
       style={{
         ...style,
         contain: 'layout style paint',
         isolation: 'isolate', // Force GPU layer
       }}
-      className={`bg-white border-2 transition-all duration-200 ${
+      className={`bg-white border-2 ${
+        isDragging ? '' : 'transition-all duration-150' // ✅ Drag sırasında transition YOK
+      } ${
         isLocked 
           ? stage === 'WON'
-            ? 'border-green-300 bg-green-50/30 hover:border-green-400'
-            : 'border-red-300 bg-red-50/30 hover:border-red-400'
-          : 'hover:border-primary-400 hover:shadow-lg'
-      } relative ${dragMode && !isLocked ? 'ring-2 ring-primary-400 ring-opacity-50' : ''} ${
-        isDragging ? 'shadow-2xl scale-105 rotate-1' : 'hover:scale-[1.02]'
+            ? 'border-green-300 bg-green-50/30 hover:border-green-400 cursor-not-allowed'
+            : 'border-red-300 bg-red-50/30 hover:border-red-400 cursor-not-allowed'
+          : 'hover:border-primary-400 hover:shadow-lg cursor-grab active:cursor-grabbing'
+      } relative ${
+        isDragging ? 'shadow-xl scale-[1.05] rotate-2 z-50' : 'hover:scale-[1.01]' // ✅ Drag sırasında daha belirgin
       }`}
+      {...(!isLocked ? listeners : {})}
     >
       {/* Kilitli Durum Badge - Kilitli kartlarda göster */}
       {isLocked && (
@@ -239,64 +238,23 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
         </div>
       )}
       
-      {/* Drag Handle Button - Sadece kilitli değilse göster */}
-      {!isLocked && (
-        <button
-        type="button"
-        onClick={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          setDragMode(!dragMode)
-        }}
-        className={`absolute top-2 right-2 z-50 p-1.5 rounded-md transition-all ${
-          dragMode
-            ? 'bg-primary-500 text-white shadow-md hover:bg-primary-600'
-            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-        }`}
-        title={dragMode ? 'Sürükle-bırak modunu kapat' : 'Sürükle-bırak modunu aç'}
-      >
-            <GripVertical className="h-4 w-4" />
-          </button>
-        )}
-        
-          {/* Drag Handle Overlay - Sadece drag mode aktifken ve kilitli değilse */}
-          {dragMode && !isLocked && (
-        <div
-          {...attributes}
-          {...listeners}
-          className="absolute inset-0 z-40 cursor-grab active:cursor-grabbing rounded-lg"
-          style={{
-            willChange: 'transform, opacity',
-            touchAction: 'none',
-            backfaceVisibility: 'hidden',
-            WebkitTransform: 'translateZ(0)',
-            transform: 'translateZ(0)',
-          }}
-          onClick={(e) => {
-            if (isDragging) {
-              e.preventDefault()
-              e.stopPropagation()
-            }
-          }}
-        />
-      )}
       <Link
         href={`/${locale}/deals/${deal.id}`}
         prefetch={true}
-        className={`block relative z-0 ${dragMode && !isLocked ? 'pointer-events-none' : ''}`}
+        className={`block relative z-0 ${isDragging ? 'pointer-events-none' : ''}`}
         onClick={(e) => {
-          if ((dragMode && !isLocked) || isDragging) {
+          if (isDragging) {
             e.preventDefault()
             e.stopPropagation()
           }
         }}
       >
-        <div className="p-3">
+        <div className="p-3 relative z-20">
           <div className="flex items-start gap-2 mb-2">
             <Briefcase className="h-4 w-4 text-primary-500 mt-0.5 flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <p className="font-medium text-sm text-gray-900 line-clamp-2">
+                <p className="font-medium text-sm text-gray-900 line-clamp-2 flex-1">
                   {deal.title}
                 </p>
                 {/* LOST durumunda lostReason gösterimi - hover ile tooltip */}
@@ -383,9 +341,7 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
                             } else if (!customerExists) {
                               // Başka bir hata var
                               const errorData = await customerCheck.json().catch(() => ({}))
-                              toast.error('Müşteri kontrolü başarısız', {
-                                description: errorData.message || 'Müşteri bilgilerine erişirken bir hata oluştu.',
-                              })
+                              toastError('Müşteri kontrolü başarısız', errorData.message || 'Müşteri bilgilerine erişirken bir hata oluştu.')
                             }
                           } catch (err) {
                             // Network hatası veya başka bir hata
@@ -393,9 +349,7 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
                             if (process.env.NODE_ENV === 'development') {
                               console.warn('Customer check error:', err)
                             }
-                            toast.error('Müşteri kontrolü başarısız', {
-                              description: 'Müşteri bilgilerine erişirken bir hata oluştu. Yeni müşteri oluşturmayı deneyin.',
-                            })
+                            toastError('Müşteri kontrolü başarısız', 'Müşteri bilgilerine erişirken bir hata oluştu. Yeni müşteri oluşturmayı deneyin.')
                           }
                         }
                         
@@ -430,7 +384,7 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
                           if (!res.ok) {
                             const errorData = await res.json().catch(() => ({}))
                             const errorMessage = errorData.message || errorData.error || 'Bir hata oluştu.'
-                            toast.error('Aşama değiştirilemedi', { description: errorMessage })
+                            toastError('Aşama değiştirilemedi', errorMessage)
                             return
                           }
                           
@@ -440,13 +394,11 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
                           // onStageChange callback'ini çağır (parent component cache'i güncelleyecek)
                           if (onStageChange) {
                             await onStageChange(deal.id, 'CONTACTED')
-                            toast.success('Fırsat aşaması güncellendi', {
-                              description: `Fırsat "${deal.title}" başarıyla "İletişimde" aşamasına taşındı.`,
-                            })
+                            toastSuccess('Fırsat aşaması güncellendi', `Fırsat "${deal.title}" başarıyla "İletişimde" aşamasına taşındı.`)
                           }
                         } catch (error: any) {
                           console.error('Stage change error:', error)
-                          toast.error('Aşama değiştirilemedi', { description: error?.message || 'Bir hata oluştu.' })
+                          toastError('Aşama değiştirilemedi', error?.message || 'Bir hata oluştu.')
                         }
                       }}
                     >
@@ -563,23 +515,193 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
             )}
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-1 pt-2 border-t" onClick={(e) => e.stopPropagation()}>
+          {/* Integration Buttons - Müşteri bilgileri varsa göster */}
+          {customer && (
+            <div className="flex gap-1 pt-2 border-t border-gray-200" onClick={(e) => e.stopPropagation()}>
+              {customer.email && (
+                <SendEmailButton
+                  to={customer.email}
+                  subject={`Fırsat: ${deal.title}`}
+                  html={`
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                      <h2 style="color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px;">
+                        Fırsat Bilgileri
+                      </h2>
+                      <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                        <p><strong>Fırsat:</strong> ${deal.title}</p>
+                        <p><strong>Durum:</strong> ${stageLabels[deal.stage] || deal.stage}</p>
+                        ${deal.value ? `<p><strong>Tutar:</strong> ${new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(deal.value)}</p>` : ''}
+                        ${deal.expectedCloseDate ? `<p><strong>Beklenen Kapanış:</strong> ${new Date(deal.expectedCloseDate).toLocaleDateString('tr-TR')}</p>` : ''}
+                      </div>
+                    </div>
+                  `}
+                  category="DEAL"
+                  entityData={deal}
+                  variant="ghost"
+                  size="sm"
+                  className="flex-1 h-6 text-xs px-1"
+                />
+              )}
+              {customer.phone && (
+                <>
+                  <SendSmsButton
+                    to={customer.phone}
+                    message={`Merhaba, "${deal.title}" fırsatı hakkında sizinle iletişime geçmek istiyoruz.`}
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1 h-6 text-xs px-1"
+                  />
+                  <SendWhatsAppButton
+                    to={customer.phone}
+                    message={`Merhaba, "${deal.title}" fırsatı hakkında sizinle iletişime geçmek istiyoruz.`}
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1 h-6 text-xs px-1"
+                  />
+                </>
+              )}
+              {deal.expectedCloseDate && (
+                <AddToCalendarButton
+                  recordType="deal"
+                  record={deal}
+                  startTime={new Date(deal.expectedCloseDate).toISOString()}
+                  endTime={new Date(new Date(deal.expectedCloseDate).getTime() + 60 * 60 * 1000).toISOString()}
+                  location={customer?.name || ''}
+                  variant="ghost"
+                  size="sm"
+                  className="flex-1 h-6 text-xs px-1"
+                />
+              )}
+            </div>
+          )}
+
+          {/* Action Buttons - Daha düzenli ve okunabilir */}
+          <div className="flex flex-wrap gap-1.5 pt-2 border-t border-gray-200 relative z-50" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+            {onQuickAction && (
+              <DropdownMenu>
+                <TooltipProvider delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7 p-0 border-0 bg-gradient-to-br from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex-shrink-0 relative overflow-hidden group"
+                        >
+                          {/* Shine effect */}
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                          <Sparkles className="h-4 w-4 relative z-10" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">
+                      <p>Hızlı İşlemler</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuLabel className="text-xs">Hızlı İşlemler</DropdownMenuLabel>
+                  {/* LEAD: Sadece görüşme planla (ilk temas) */}
+                  {stage === 'LEAD' && (
+                    <DropdownMenuItem
+                      onSelect={() => onQuickAction('meeting', deal)}
+                      className="text-xs"
+                    >
+                      <Calendar className="h-3 w-3 mr-2" />
+                      Görüşme Planla
+                    </DropdownMenuItem>
+                  )}
+                  {/* CONTACTED: Görüşme planla, görev oluştur (takip için) */}
+                  {stage === 'CONTACTED' && (
+                    <>
+                      <DropdownMenuItem
+                        onSelect={() => onQuickAction('meeting', deal)}
+                        className="text-xs"
+                      >
+                        <Calendar className="h-3 w-3 mr-2" />
+                        Görüşme Planla
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => onQuickAction('task', deal)}
+                        className="text-xs"
+                      >
+                        <CheckSquare className="h-3 w-3 mr-2" />
+                        Görev Oluştur
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {/* PROPOSAL: Teklif oluştur, görüşme planla (teklif sunumu) */}
+                  {stage === 'PROPOSAL' && (
+                    <>
+                      <DropdownMenuItem
+                        onSelect={() => onQuickAction('quote', deal)}
+                        className="text-xs"
+                      >
+                        <FileText className="h-3 w-3 mr-2" />
+                        Teklif Oluştur
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => onQuickAction('meeting', deal)}
+                        className="text-xs"
+                      >
+                        <Calendar className="h-3 w-3 mr-2" />
+                        Görüşme Planla
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {/* NEGOTIATION: Teklif oluştur, görev oluştur (revizyonlar için) */}
+                  {stage === 'NEGOTIATION' && (
+                    <>
+                      <DropdownMenuItem
+                        onSelect={() => onQuickAction('quote', deal)}
+                        className="text-xs"
+                      >
+                        <FileText className="h-3 w-3 mr-2" />
+                        Teklif Oluştur
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onSelect={() => onQuickAction('task', deal)}
+                        className="text-xs"
+                      >
+                        <CheckSquare className="h-3 w-3 mr-2" />
+                        Görev Oluştur
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {/* WON: Fatura oluştur (fatura kesmek için) */}
+                  {stage === 'WON' && (
+                    <DropdownMenuItem
+                      onSelect={() => onQuickAction('invoice', deal)}
+                      className="text-xs"
+                    >
+                      <Receipt className="h-3 w-3 mr-2" />
+                      Fatura Oluştur
+                    </DropdownMenuItem>
+                  )}
+                  {/* LOST: Hiçbir quick action yok (kilitli) */}
+                  {stage === 'LOST' && (
+                    <DropdownMenuItem disabled className="text-xs text-gray-400">
+                      Bu aşamada işlem yapılamaz
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {/* Geçmiş Butonu - Sadece ikon */}
             <TooltipProvider delayDuration={0}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="flex-1 h-6 text-xs px-1"
+                    className="h-7 w-7 p-0 flex-shrink-0"
                     onClick={(e) => {
                       e.preventDefault()
                       e.stopPropagation()
                       setHistoryDialogOpen(true)
                     }}
                   >
-                    <History className="h-3 w-3 mr-1" />
-                    Geçmiş
+                    <History className="h-4 w-4 text-gray-600" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -587,27 +709,34 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            
+            {/* Görüntüle Butonu - Sadece ikon */}
             <TooltipProvider delayDuration={0}>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="flex-1 h-6 text-xs px-1"
-                    onClick={(e) => {
+                    className="h-7 w-7 p-0 flex-shrink-0"
+                    onClick={async (e) => {
                       e.preventDefault()
                       e.stopPropagation()
                       // ✅ ÇÖZÜM: Modal aç - yeni sekme açma
                       if (onView) {
+                        try {
                         onView(deal.id)
+                        } catch (error) {
+                          console.error('View error:', error)
+                          // Fallback: Eğer hata olursa yeni sekmede aç
+                          window.open(`/${locale}/deals/${deal.id}`, '_blank')
+                        }
                       } else {
                         // Fallback: Eğer onView yoksa yeni sekmede aç (eski davranış)
                         window.open(`/${locale}/deals/${deal.id}`, '_blank')
                       }
                     }}
                   >
-                    <Eye className="h-3 w-3 mr-1" />
-                    Görüntüle
+                    <Eye className="h-4 w-4 text-blue-600" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
@@ -615,6 +744,8 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            
+            {/* Düzenle Butonu - Sadece ikon */}
             {onEdit && (
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
@@ -622,15 +753,14 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="flex-1 h-6 text-xs px-1"
+                      className="h-7 w-7 p-0 flex-shrink-0"
                       onClick={(e) => {
                         e.preventDefault()
                         e.stopPropagation()
                         handleEdit(e)
                       }}
                     >
-                      <Edit className="h-3 w-3 mr-1" />
-                      Düzenle
+                      <Edit className="h-4 w-4 text-indigo-600" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -639,6 +769,8 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
                 </Tooltip>
               </TooltipProvider>
             )}
+            
+            {/* Sil Butonu - Sadece ikon */}
             {onDelete && (
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
@@ -646,15 +778,14 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="flex-1 h-6 text-xs px-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+                      className="h-7 w-7 p-0 flex-shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50"
                       onClick={(e) => {
                         e.preventDefault()
                         e.stopPropagation()
                         handleDelete(e)
                       }}
                     >
-                      <Trash2 className="h-3 w-3 mr-1" />
-                      Sil
+                      <Trash2 className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -679,7 +810,7 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onOpen
   )
 }
 
-export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange, onView }: DealKanbanChartProps) {
+export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange, onView, onQuickAction }: DealKanbanChartProps) {
   const locale = useLocale()
   const [activeId, setActiveId] = useState<string | null>(null)
   const [localData, setLocalData] = useState<any[]>(Array.isArray(data) ? data : [])
@@ -773,16 +904,14 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
   }, [data]) // localData'yı dependency'den çıkar - sadece data prop'unu izle
 
   // ✅ PREMIUM: Optimized sensors for smooth drag & drop
+  // ✅ Optimized sensors for smooth drag & drop - Better performance
+  // ✅ ÇÖZÜM: Anında aktif olan drag & drop - activation constraint yok
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5, // ✅ 5px - Daha hassas, daha hızlı aktivasyon
-      },
-    }),
+    useSensor(PointerSensor), // ✅ Activation constraint yok - anında başlar
     useSensor(TouchSensor, {
       activationConstraint: {
-        distance: 5, // ✅ 5px - Touch için de aynı
-        delay: 50, // ✅ 50ms - Daha hızlı aktivasyon, yanlışlıkla drag'i önle
+        delay: 0, // ✅ 0ms delay - anında başlar
+        tolerance: 5, // ✅ 5px tolerance - yanlışlıkla drag'i önler ama çok hızlı
       },
     }),
     useSensor(KeyboardSensor, {
@@ -829,7 +958,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
       // Immutable kontrol
       if (isDealImmutable(currentStage)) {
         const message = getStageMessage(currentStage, 'deal', 'immutable')
-        toast.error(message.title, message.description) // ✅ Toast zaten 4 saniye gösteriyor
+        toastError(message.title, message.description) // ✅ Toast zaten 4 saniye gösteriyor
         // ✅ Kartı taşıma - sadece hata göster
         return
       }
@@ -842,7 +971,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
         const targetName = translateStage(targetStage, 'deal')
         const allowedNames = allowed.map((s: string) => translateStage(s, 'deal')).join(', ')
         
-        toast.error(
+        toastError(
           `${currentName} → ${targetName} geçişi yapılamıyor`,
           allowed.length > 0 
             ? `Bu fırsatı şu aşamalara taşıyabilirsiniz: ${allowedNames}` 
@@ -897,12 +1026,12 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
       } catch (error: any) {
           // Hata durumunda eski haline geri dön
           setLocalData(data)
-          toast.error('Aşama değiştirilemedi', { description: error?.message || 'Bir hata oluştu.' })
+          toastError('Aşama değiştirilemedi', error?.message || 'Bir hata oluştu.')
         }
       } else {
         // onStageChange yoksa hata göster
         setLocalData(data) // Optimistic update'i geri al
-        toast.error('Aşama değiştirilemedi', { description: 'onStageChange callback tanımlı değil' })
+        toastError('Aşama değiştirilemedi', 'onStageChange callback tanımlı değil')
       }
     } else {
       // Aynı stage içinde sıralama değişikliği
@@ -934,13 +1063,13 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
             console.error('Batch order update error:', errorData)
             // Hata durumunda eski haline geri dön
             setLocalData(localData)
-            toast.error('Sıralama kaydedilemedi', errorData.error || 'Bir hata oluştu.')
+            toastError('Sıralama kaydedilemedi', errorData.error || 'Bir hata oluştu.')
           }
         } catch (error: any) {
           console.error('Batch order update error:', error)
           // Hata durumunda eski haline geri dön
           setLocalData(localData)
-          toast.error('Sıralama kaydedilemedi', error?.message || 'Bir hata oluştu.')
+          toastError('Sıralama kaydedilemedi', error?.message || 'Bir hata oluştu.')
         }
       }
     }
@@ -1005,10 +1134,10 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
           <Card 
             key={column.stage} 
             id={column.stage}
-            className={`min-w-[320px] flex flex-col border-2 ${stageHeaderColors[column.stage] || 'bg-gray-50 border-gray-200'}`}
+            className={`flex-shrink-0 w-full max-w-[320px] min-w-[280px] flex flex-col border-2 ${getStatusHeaderClass(column.stage)}`}
           >
             {/* Column Header */}
-            <div className={`p-4 border-b-2 ${stageHeaderColors[column.stage] || 'bg-gray-50 border-gray-200'}`}>
+            <div className={`p-4 border-b-2 ${getStatusHeaderClass(column.stage)}`}>
               <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-gray-900 text-lg">
@@ -1043,7 +1172,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
                     </Tooltip>
                   </TooltipProvider>
                 </div>
-                <Badge className={`${stageColors[column.stage] || 'bg-gray-100 text-gray-800'} border`}>
+                <Badge className={`${getStatusBadgeClass(column.stage)} border`}>
                   {column.count}
                 </Badge>
               </div>
@@ -1099,6 +1228,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
                           setLostDialogOpen(true)
                         }}
                         onView={onView} // ✅ ÇÖZÜM: Modal açmak için callback
+                        onQuickAction={onQuickAction} // Quick action callback
                       />
                     ))
                   )}
@@ -1189,7 +1319,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
               className="bg-green-600 hover:bg-green-700"
               onClick={async () => {
                 if (!winningDealId) {
-                  toast.error('Hata', { description: 'Fırsat ID bulunamadı.' })
+                  toastError('Hata', 'Fırsat ID bulunamadı.')
                   setWonDialogOpen(false)
                   return
                 }
@@ -1217,8 +1347,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
                   const updatedDeal = await res.json()
                   
                   // Toast mesajı - sözleşme oluşturulduğunu bildir
-                  toast.success('Fırsat kazanıldı!', {
-                    description: 'Fırsat kazanıldı. Sözleşme otomatik olarak oluşturuldu. Sözleşmeler sayfasından kontrol edebilirsiniz.',
+                  toastSuccess('Fırsat kazanıldı!', 'Fırsat kazanıldı. Sözleşme otomatik olarak oluşturuldu. Sözleşmeler sayfasından kontrol edebilirsiniz.', {
                     action: {
                       label: 'Sözleşmeler Sayfasına Git',
                       onClick: () => window.location.href = `/${locale}/contracts`,
@@ -1275,7 +1404,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
                   }
                 } catch (error: any) {
                   console.error('Won error:', error)
-                  toast.error('Kazanıldı işaretleme başarısız', { description: error?.message || 'Fırsat kazanıldı olarak işaretlenemedi.' })
+                  toastError('Kazanıldı işaretleme başarısız', error?.message || 'Fırsat kazanıldı olarak işaretlenemedi.')
                 }
               }}
             >
@@ -1324,12 +1453,12 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
               variant="destructive"
               onClick={async () => {
                 if (!lostReason.trim()) {
-                  toast.error('Sebep gerekli', { description: 'Lütfen kayıp sebebini belirtin.' })
+                  toastError('Sebep gerekli', 'Lütfen kayıp sebebini belirtin.')
                   return
                 }
 
                 if (!losingDealId) {
-                  toast.error('Hata', { description: 'Fırsat ID bulunamadı.' })
+                  toastError('Hata', 'Fırsat ID bulunamadı.')
                   setLostDialogOpen(false)
                   return
                 }
@@ -1360,8 +1489,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
                   const updatedDeal = await res.json()
                   
                   // Toast mesajı - analiz görevi oluşturulduğunu bildir
-                  toast.success('Fırsat kaybedildi olarak işaretlendi', {
-                    description: 'Fırsat kaybedildi. Analiz görevi otomatik olarak oluşturuldu. Görevler sayfasından kontrol edebilirsiniz.',
+                  toastSuccess('Fırsat kaybedildi olarak işaretlendi', 'Fırsat kaybedildi. Analiz görevi otomatik olarak oluşturuldu. Görevler sayfasından kontrol edebilirsiniz.', {
                     action: {
                       label: 'Görevler Sayfasına Git',
                       onClick: () => window.location.href = `/${locale}/tasks`,
@@ -1418,7 +1546,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
                   }
                 } catch (error: any) {
                   console.error('Lost error:', error)
-                  toast.error('Kayıp işaretleme başarısız', { description: error?.message || 'Fırsat kaybedildi olarak işaretlenemedi.' })
+                  toastError('Kayıp işaretleme başarısız', error?.message || 'Fırsat kaybedildi olarak işaretlenemedi.')
                 }
               }}
               disabled={!lostReason.trim()}
@@ -1463,12 +1591,14 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
           // Toast mesajları - görüşme oluşturuldu
           if (savedMeeting?.dealStageUpdated === true) {
             // Deal stage güncellendi - detaylı mesaj
-            toast.success(
+            toastSuccess(
               'Görüşme oluşturuldu ve fırsat aşaması güncellendi',
               `${dealTitle || 'Fırsat'} için görüşme oluşturuldu. Fırsat otomatik olarak "Pazarlık" aşamasına taşındı.`,
               {
-                label: 'Fırsatı Görüntüle',
-                onClick: () => window.location.href = `/${locale}/deals/${dealId}`,
+                action: {
+                  label: 'Fırsatı Görüntüle',
+                  onClick: () => window.location.href = `/${locale}/deals/${dealId}`,
+                },
               }
             )
 
@@ -1540,7 +1670,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
                 }
               } catch (error: any) {
                 console.error('onStageChange error:', error)
-                toast.error('Cache güncelleme hatası', error?.message || 'Fırsat aşaması güncellendi ama cache güncellenemedi.')
+                toastError('Cache güncelleme hatası', error?.message || 'Fırsat aşaması güncellendi ama cache güncellenemedi.')
                 // Hata durumunda data'yı yeniden yükle
                 // useEffect data prop'u değiştiğinde zaten güncelleyecek
               }
@@ -1564,7 +1694,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
               ? `Fırsat şu anda "${translateStage(currentStage, 'deal')}" aşamasında. Sadece "Teklif" aşamasındaki fırsatlar otomatik olarak "Pazarlık" aşamasına taşınır.`
               : ''
             
-            toast.success(
+            toastSuccess(
               'Görüşme oluşturuldu',
               `${dealTitle || 'Fırsat'} için görüşme başarıyla oluşturuldu.${stageMessage ? ` ${stageMessage}` : ''}`
             )
@@ -1617,12 +1747,14 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
           // Toast mesajları - teklif oluşturuldu
           if (savedQuote?.dealStageUpdated === true) {
             // Deal stage güncellendi - detaylı mesaj
-            toast.success(
+            toastSuccess(
               'Teklif oluşturuldu ve fırsat aşaması güncellendi',
               `${dealTitle || 'Fırsat'} için teklif oluşturuldu. Fırsat otomatik olarak "Teklif" aşamasına taşındı.`,
               {
-                label: 'Fırsatı Görüntüle',
-                onClick: () => window.location.href = `/${locale}/deals/${dealId}`,
+                action: {
+                  label: 'Fırsatı Görüntüle',
+                  onClick: () => window.location.href = `/${locale}/deals/${dealId}`,
+                },
               }
             )
 
@@ -1695,7 +1827,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
                 }
               } catch (error: any) {
                 console.error('onStageChange error:', error)
-                toast.error('Cache güncelleme hatası', error?.message || 'Fırsat aşaması güncellendi ama cache güncellenemedi.')
+                toastError('Cache güncelleme hatası', error?.message || 'Fırsat aşaması güncellendi ama cache güncellenemedi.')
                 // Hata durumunda data'yı yeniden yükle
                 // useEffect data prop'u değiştiğinde zaten güncelleyecek
               }
@@ -1713,7 +1845,7 @@ export default function DealKanbanChart({ data, onEdit, onDelete, onStageChange,
               ? `Fırsat şu anda "${translateStage(currentStage, 'deal')}" aşamasında. Sadece "İletişimde" veya "Potansiyel" aşamasındaki fırsatlar otomatik olarak "Teklif" aşamasına taşınır.`
               : ''
             
-            toast.success(
+            toastSuccess(
               'Teklif oluşturuldu',
               `${dealTitle || 'Fırsat'} için teklif başarıyla oluşturuldu.${stageMessage ? ` ${stageMessage}` : ''}`
             )

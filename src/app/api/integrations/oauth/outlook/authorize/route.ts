@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 export async function GET(request: Request) {
   try {
@@ -22,16 +23,25 @@ export async function GET(request: Request) {
       return buildPermissionDeniedResponse()
     }
 
-    const MICROSOFT_CLIENT_ID = process.env.MICROSOFT_CLIENT_ID
+    // CompanyIntegration'dan Microsoft Client ID'yi al
+    const supabase = getSupabaseWithServiceRole()
+    const { data: integration } = await supabase
+      .from('CompanyIntegration')
+      .select('microsoftClientId, microsoftClientSecret, microsoftRedirectUri')
+      .eq('companyId', session.user.companyId)
+      .maybeSingle()
+
+    const MICROSOFT_CLIENT_ID = integration?.microsoftClientId || process.env.MICROSOFT_CLIENT_ID
     if (!MICROSOFT_CLIENT_ID) {
       return NextResponse.json(
-        { error: 'Microsoft Client ID yapılandırılmamış' },
+        { error: 'Microsoft Client ID yapılandırılmamış. Lütfen Kullanıcı Entegrasyonları sayfasından Microsoft Teams & Outlook bölümünde Client ID girin ve kaydedin.' },
         { status: 500 }
       )
     }
 
-    // OAuth callback URL
-    const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/integrations/oauth/outlook/callback`
+    // OAuth callback URL - CompanyIntegration'dan veya env'den
+    const redirectUri = integration?.microsoftRedirectUri 
+      || `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/integrations/oauth/outlook/callback`
 
     // OAuth scope'ları
     const scopes = [
@@ -65,6 +75,8 @@ export async function GET(request: Request) {
     )
   }
 }
+
+
 
 
 

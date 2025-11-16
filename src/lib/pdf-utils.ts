@@ -1,12 +1,26 @@
 import jsPDF from 'jspdf'
 
 // Türkçe karakter desteği için encoding helper
-// jsPDF UTF-8 destekler, sadece string olarak geçiriyoruz
+// jsPDF varsayılan olarak Türkçe karakterleri desteklemez, bu yüzden karakterleri düzeltiyoruz
 export const encodeTurkish = (text: string): string => {
   if (!text) return ''
-  // jsPDF UTF-8 destekler, direkt döndürüyoruz
-  // Eğer sorun olursa: return text.replace(/ı/g, 'i').replace(/İ/g, 'I') vb.
+  
+  // jsPDF'in Türkçe karakter desteği için karakterleri düzelt
+  // Not: jsPDF UTF-8 destekler ama font yüklenmesi gerekiyor
+  // Şimdilik karakterleri ASCII karşılıklarına çeviriyoruz
   return String(text)
+    .replace(/ş/g, 's')
+    .replace(/Ş/g, 'S')
+    .replace(/ı/g, 'i')
+    .replace(/İ/g, 'I')
+    .replace(/ğ/g, 'g')
+    .replace(/Ğ/g, 'G')
+    .replace(/ü/g, 'u')
+    .replace(/Ü/g, 'U')
+    .replace(/ö/g, 'o')
+    .replace(/Ö/g, 'O')
+    .replace(/ç/g, 'c')
+    .replace(/Ç/g, 'C')
 }
 
 // Tarih formatla (dd.mm.yyyy)

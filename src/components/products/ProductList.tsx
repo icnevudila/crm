@@ -31,6 +31,8 @@ import SkeletonList from '@/components/skeletons/SkeletonList'
 import ModuleStats from '@/components/stats/ModuleStats'
 import { AutomationInfo } from '@/components/automation/AutomationInfo'
 import RefreshButton from '@/components/ui/RefreshButton'
+import EmptyState from '@/components/ui/EmptyState'
+import Pagination from '@/components/ui/Pagination'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
 import dynamic from 'next/dynamic'
@@ -103,6 +105,10 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
   const [selectedProductData, setSelectedProductData] = useState<Product | null>(null)
   
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  
   // SuperAdmin için firmaları çek
   const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
     isOpen && isSuperAdmin ? '/api/superadmin/companies' : null,
@@ -119,6 +125,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
+      setCurrentPage(1) // Arama değiştiğinde ilk sayfaya dön
     }, 300)
     
     return () => clearTimeout(timer)
@@ -134,6 +141,8 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     if (categoryFilter) params.append('category', categoryFilter)
     if (statusFilter) params.append('status', statusFilter)
     if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+    params.append('page', currentPage.toString())
+    params.append('pageSize', pageSize.toString())
     return `/api/products?${params.toString()}`
   }, [
     isOpen,
@@ -143,9 +152,21 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     statusFilter,
     isSuperAdmin,
     filterCompanyId,
+    currentPage,
+    pageSize,
   ])
 
-  const { data: productsData, isLoading, error, mutate: mutateProducts } = useData<Product[]>(
+  interface ProductsResponse {
+    data: Product[]
+    pagination: {
+      page: number
+      pageSize: number
+      totalItems: number
+      totalPages: number
+    }
+  }
+
+  const { data: productsData, isLoading, error, mutate: mutateProducts } = useData<Product[] | ProductsResponse>(
     apiUrl,
     {
       dedupingInterval: 5000,
@@ -163,14 +184,26 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     ])
   }
 
-  // API'den dönen veriyi parse et - array olarak bekliyoruz (useMemo ile memoize)
+  // API'den dönen veriyi parse et - hem array hem de { data, pagination } formatını destekle
   const products = useMemo(() => {
     // Hata varsa boş array döndür
     if (error) {
       return []
     }
-    return Array.isArray(productsData) ? productsData : []
+    if (Array.isArray(productsData)) return productsData
+    if (productsData && typeof productsData === 'object' && 'data' in productsData) {
+      return (productsData as ProductsResponse).data || []
+    }
+    return []
   }, [productsData, error])
+  
+  const pagination = useMemo(() => {
+    if (!productsData || Array.isArray(productsData)) return null
+    if (productsData && typeof productsData === 'object' && 'pagination' in productsData) {
+      return (productsData as ProductsResponse).pagination || null
+    }
+    return null
+  }, [productsData])
 
   // Unique kategorileri çıkar (dropdown için)
   const categories = useMemo(() => {
@@ -217,7 +250,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
       ])
       
       // Success toast göster
-      toast.success('Ürün silindi', `${name} başarıyla silindi.`)
+      toast.success(tCommon('productDeletedSuccess'), tCommon('deleteSuccessMessage', { name }))
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
@@ -456,7 +489,10 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
           />
         </div>
         {isSuperAdmin && (
-          <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
+          <Select value={filterCompanyId || 'all'} onValueChange={(v) => {
+            setFilterCompanyId(v === 'all' ? '' : v)
+            setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+          }}>
             <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder={t('selectCompany')} />
             </SelectTrigger>
@@ -470,7 +506,10 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
             </SelectContent>
           </Select>
         )}
-        <Select value={stockFilter || 'all'} onValueChange={(v) => setStockFilter(v === 'all' ? '' : v)}>
+        <Select value={stockFilter || 'all'} onValueChange={(v) => {
+          setStockFilter(v === 'all' ? '' : v)
+          setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+        }}>
           <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder={t('selectStockStatus')} />
           </SelectTrigger>
@@ -481,7 +520,10 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
             <SelectItem value="outOfStock">{t('stockStatus.outOfStock')}</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={categoryFilter || 'all'} onValueChange={(v) => setCategoryFilter(v === 'all' ? '' : v)}>
+        <Select value={categoryFilter || 'all'} onValueChange={(v) => {
+          setCategoryFilter(v === 'all' ? '' : v)
+          setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+        }}>
           <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder={t('selectCategory')} />
           </SelectTrigger>
@@ -492,7 +534,10 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
             ))}
           </SelectContent>
         </Select>
-        <Select value={statusFilter || 'all'} onValueChange={(v) => setStatusFilter(v === 'all' ? '' : v)}>
+        <Select value={statusFilter || 'all'} onValueChange={(v) => {
+          setStatusFilter(v === 'all' ? '' : v)
+          setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+        }}>
           <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder={t('selectStatus')} />
           </SelectTrigger>
@@ -505,9 +550,10 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
         </Select>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow-card overflow-hidden">
-        <Table>
+      {/* Table - Desktop View */}
+      <div className="hidden md:block bg-white rounded-lg shadow-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <Table>
           <TableHeader>
             <TableRow>
               <TableHead>{t('tableHeaders.name')}</TableHead>
@@ -524,8 +570,17 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
           <TableBody>
             {products.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-8 text-gray-500">
-                  {t('noProductsFound')}
+                <TableCell colSpan={isSuperAdmin ? 9 : 8} className="p-0">
+                  <EmptyState
+                    icon={Package}
+                    title={t('noProductsFound')}
+                    description={t('emptyStateDescription') || 'Yeni ürün ekleyerek başlayın'}
+                    action={{
+                      label: t('newProduct'),
+                      onClick: handleAdd,
+                    }}
+                    className="border-0 shadow-none"
+                  />
                 </TableCell>
               </TableRow>
             ) : (
@@ -653,7 +708,113 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
               ))
             )}
           </TableBody>
-        </Table>
+          </Table>
+        </div>
+        {/* Pagination */}
+        {pagination && (
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            pageSize={pagination.pageSize}
+            totalItems={pagination.totalItems}
+            onPageChange={(page) => setCurrentPage(page)}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              setCurrentPage(1) // Sayfa boyutu değiştiğinde ilk sayfaya dön
+            }}
+          />
+        )}
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-3">
+        {products.length === 0 ? (
+          <EmptyState
+            icon={Package}
+            title={t('noProductsFound')}
+            description={t('emptyStateDescription') || 'Yeni ürün ekleyerek başlayın'}
+            action={{
+              label: t('newProduct'),
+              onClick: handleAdd,
+            }}
+          />
+        ) : (
+          products.map((product) => (
+            <div
+              key={product.id}
+              className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-gray-900 truncate">{product.name}</h3>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {product.category && (
+                      <Badge variant="outline" className="text-xs">{product.category}</Badge>
+                    )}
+                    {getStockBadge(product.stock || 0, product.minStock)}
+                    <Badge className={`text-xs ${
+                      product.status === 'ACTIVE' ? 'bg-green-600 text-white' :
+                      product.status === 'INACTIVE' ? 'bg-gray-600 text-white' :
+                      'bg-red-600 text-white'
+                    }`}>
+                      {product.status === 'ACTIVE' ? tCommon('active') :
+                       product.status === 'INACTIVE' ? tCommon('inactive') :
+                       t('discontinued')}
+                    </Badge>
+                    {isSuperAdmin && product.Company?.name && (
+                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                        {product.Company.name}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    <p className="text-sm font-semibold text-gray-900">
+                      {formatCurrency(product.price || 0)}
+                    </p>
+                    <p className="text-xs text-gray-600">
+                      {t('stock')}: {product.stock || 0} {product.unit || 'ADET'}
+                    </p>
+                    {product.sku && (
+                      <p className="text-xs font-mono text-gray-500">SKU: {product.sku}</p>
+                    )}
+                    {product.barcode && (
+                      <p className="text-xs font-mono text-gray-500">Barkod: {product.barcode}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => {
+                      setSelectedProductId(product.id)
+                      setDetailModalOpen(true)
+                    }}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handleEdit(product)}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-red-600"
+                    onClick={() => handleDelete(product.id, product.name)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Detail Modal */}

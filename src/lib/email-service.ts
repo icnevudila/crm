@@ -76,7 +76,8 @@ export async function sendEmail({
     // Seçenek 2: SendGrid
     /*
     if (process.env.SENDGRID_API_KEY) {
-      const sgMail = await import('@sendgrid/mail')
+      // @ts-expect-error - Paket yoksa hata vermemesi için
+      const sgMail = await import('@sendgrid/mail').catch(() => null)
       sgMail.setApiKey(process.env.SENDGRID_API_KEY)
 
       const msg = {
@@ -178,6 +179,8 @@ export async function sendBulkEmail(
 
   return { success, failed, errors }
 }
+
+
 
 
 

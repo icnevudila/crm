@@ -1,4 +1,4 @@
-# 🆓 CRM İç Yönetimi İçin Ücretsiz Veri Kaynakları
+# 🆓 CRM İç Yönetimi İçin Ücretsiz Veri Kaynaklarıww
 
 **Tarih:** 2024  
 **Hedef:** CRM sisteminin iç yönetimi için ücretsiz entegrasyonlar ve veri kaynakları

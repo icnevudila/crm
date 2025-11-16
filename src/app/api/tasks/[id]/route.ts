@@ -40,7 +40,7 @@ export async function GET(
     // Task'ı ilişkili verilerle çek - OPTİMİZE: User bilgisini çekerken SuperAdmin filtrele
     let taskQuery = supabase
       .from('Task')
-      .select('*, User!Task_assignedTo_fkey(id, name, email, role, companyId)')
+      .select('*, User:assignedTo(id, name, email, role, companyId)')
       .eq('id', id)
     
     // SuperAdmin değilse companyId filtresi ekle

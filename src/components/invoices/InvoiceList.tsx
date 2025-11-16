@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
 import { useSession } from '@/hooks/useSession'
-import { Plus, Search, Edit, Trash2, Eye, FileText, LayoutGrid, Table as TableIcon } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Eye, FileText, LayoutGrid, Table as TableIcon, Sparkles, Calendar, CheckSquare, Package, Mail, MessageSquare, MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useData } from '@/hooks/useData'
@@ -28,6 +28,15 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { AutomationConfirmationModal } from '@/lib/automations/toast-confirmation'
+import {
   Tabs,
   TabsList,
   TabsTrigger,
@@ -40,6 +49,8 @@ import RefreshButton from '@/components/ui/RefreshButton'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
 import dynamic from 'next/dynamic'
+import InlineEditBadge from '@/components/ui/InlineEditBadge'
+import { getStatusBadgeClass } from '@/lib/crm-colors'
 
 // Lazy load büyük componentler - performans için
 const InvoiceForm = dynamic(() => import('./InvoiceForm'), {
@@ -56,6 +67,12 @@ const InvoiceDetailModal = dynamic(() => import('./InvoiceDetailModal'), {
   ssr: false,
   loading: () => null,
 })
+
+const ShipmentForm = dynamic(() => import('../shipments/ShipmentForm'), { ssr: false, loading: () => null })
+
+const TaskForm = dynamic(() => import('../tasks/TaskForm'), { ssr: false, loading: () => null })
+
+const MeetingForm = dynamic(() => import('../meetings/MeetingForm'), { ssr: false, loading: () => null })
 
 interface InvoiceListProps {
   isOpen?: boolean
@@ -147,6 +164,12 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null)
   const [selectedInvoiceData, setSelectedInvoiceData] = useState<Invoice | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [quickAction, setQuickAction] = useState<{ type: 'shipment' | 'task' | 'meeting'; invoice: Invoice } | null>(null)
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false)
+  const [smsDialogOpen, setSmsDialogOpen] = useState(false)
+  const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false)
+  const [selectedInvoiceForCommunication, setSelectedInvoiceForCommunication] = useState<Invoice | null>(null)
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
 
   // Debounced search - performans için
   const [debouncedSearch, setDebouncedSearch] = useState(search)
@@ -220,7 +243,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
       queryClient.invalidateQueries({ queryKey: ['kanban-invoices'] }),
     ])
   }
-  const { data: kanbanDataRaw = [], isLoading: isLoadingKanban } = useQuery({
+  const { data: kanbanDataRaw = [], isLoading: isLoadingKanban, isError: isErrorKanban, error: errorKanban, refetch: refetchKanban } = useQuery({
     queryKey: ['kanban-invoices', debouncedSearch, quoteId, invoiceType, filterCompanyId],
     queryFn: () => fetchKanbanInvoices(debouncedSearch, quoteId, invoiceType, filterCompanyId),
     staleTime: 5 * 60 * 1000, // 5 dakika cache
@@ -241,6 +264,10 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
     // Status filtresi varsa sadece o status'teki kolonu göster
     return kanbanDataRaw.filter((col: any) => col.status === status)
   }, [kanbanDataRaw, status])
+
+  const closeQuickAction = useCallback(() => {
+    setQuickAction(null)
+  }, [])
 
   const handleEdit = useCallback((invoice: Invoice) => {
     // ÖNEMLİ: SHIPPED (Sevkiyatı Yapıldı) durumundaki faturalar düzenlenemez
@@ -517,7 +544,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
             <SelectItem value="DRAFT">Taslak</SelectItem>
             <SelectItem value="SENT">Gönderildi</SelectItem>
             <SelectItem value="SHIPPED">Sevkiyatı Yapıldı</SelectItem>
-            <SelectItem value="RECEIVED">Mal Kabul Edildi</SelectItem>
+            <SelectItem value="RECEIVED">Satın Alma Onaylandı</SelectItem>
             <SelectItem value="PAID">Ödendi</SelectItem>
             <SelectItem value="OVERDUE">Vadesi Geçmiş</SelectItem>
             <SelectItem value="CANCELLED">İptal</SelectItem>
@@ -538,11 +565,39 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
 
       {/* Content */}
       {viewMode === 'kanban' ? (
-        <InvoiceKanbanChart
-          onView={(invoiceId) => {
-            setSelectedInvoiceId(invoiceId)
-            setDetailModalOpen(true)
-          }} // ✅ ÇÖZÜM: Modal açmak için callback
+        <>
+          {isLoadingKanban && (
+            <div className="flex items-center justify-center h-[400px]">
+              <div className="text-center">
+                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent"></div>
+                <p className="mt-4 text-sm text-gray-600">Kanban yükleniyor...</p>
+              </div>
+            </div>
+          )}
+          {isErrorKanban && (
+            <div className="flex items-center justify-center h-[400px]">
+              <div className="text-center">
+                <p className="text-sm text-red-600">Kanban yüklenirken bir hata oluştu.</p>
+                <Button onClick={() => refetchKanban()} className="mt-4">
+                  Tekrar Dene
+                </Button>
+              </div>
+            </div>
+          )}
+          {!isLoadingKanban && !isErrorKanban && (
+            <InvoiceKanbanChart
+              onView={(invoiceId) => {
+                // DEBUG: Invoice ID kontrolü
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('[InvoiceList] onView called:', {
+                    invoiceId,
+                    invoiceIdType: typeof invoiceId,
+                    invoiceIdLength: invoiceId?.length,
+                  })
+                }
+                setSelectedInvoiceId(invoiceId)
+                setDetailModalOpen(true)
+              }} // ✅ ÇÖZÜM: Modal açmak için callback
           key={`kanban-${kanbanData.reduce((sum: number, col: any) => sum + (col.invoices?.length || 0), 0)}-${kanbanData.reduce((sum: number, col: any) => sum + (col.totalValue || 0), 0)}`}
           data={kanbanData}
           onEdit={handleEdit}
@@ -759,10 +814,15 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
               throw error
             }
           }}
-        />
+            />
+          )}
+        </>
       ) : (
-        <div className="bg-white rounded-lg shadow-card overflow-hidden">
-          <Table>
+        <>
+          {/* Desktop Table View */}
+          <div className="hidden md:block bg-white rounded-lg shadow-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>{t('tableHeaders.title')}</TableHead>
@@ -821,17 +881,45 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                         </TableCell>
                       )}
                       <TableCell>
-                        <Badge className={
-                          isLocked 
-                            ? isFromQuote 
-                              ? 'bg-indigo-100 text-indigo-800 border-indigo-300' 
-                              : isShipped
-                              ? 'bg-green-100 text-green-800 border-green-300'
-                              : 'bg-teal-100 text-teal-800 border-teal-300'
-                            : (statusColors[invoice.status] || 'bg-gray-100')
-                        }>
-                          {statusLabels[invoice.status] || invoice.status}
-                        </Badge>
+                        <InlineEditBadge
+                          value={invoice.status}
+                          options={[
+                            { value: 'DRAFT', label: statusLabels['DRAFT'] || 'Taslak' },
+                            { value: 'SENT', label: statusLabels['SENT'] || 'Gönderildi' },
+                            { value: 'SHIPPED', label: statusLabels['SHIPPED'] || 'Gönderildi' },
+                            { value: 'RECEIVED', label: statusLabels['RECEIVED'] || 'Alındı' },
+                            { value: 'PAID', label: statusLabels['PAID'] || 'Ödendi' },
+                            { value: 'OVERDUE', label: statusLabels['OVERDUE'] || 'Vadesi Geçti' },
+                            { value: 'CANCELLED', label: statusLabels['CANCELLED'] || 'İptal Edildi' },
+                          ]}
+                          onSave={async (newStatus) => {
+                            try {
+                              const res = await fetch(`/api/invoices/${invoice.id}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ status: newStatus }),
+                              })
+                              if (!res.ok) {
+                                const error = await res.json().catch(() => ({}))
+                                throw new Error(error.error || 'Durum güncellenemedi')
+                              }
+                              const updatedInvoice = await res.json()
+                              
+                              // Cache'i güncelle
+                              await Promise.all([
+                                mutate('/api/invoices', undefined, { revalidate: true }),
+                                mutate('/api/invoices?', undefined, { revalidate: true }),
+                                mutate((key: string) => typeof key === 'string' && key.startsWith('/api/invoices'), undefined, { revalidate: true }),
+                              ])
+                              
+                              toast.success('Durum güncellendi', `Fatura "${statusLabels[newStatus] || newStatus}" durumuna taşındı.`)
+                            } catch (error: any) {
+                              toast.error('Durum güncellenemedi', error?.message || 'Bir hata oluştu.')
+                              throw error
+                            }
+                          }}
+                          disabled={invoice.status === 'PAID' || invoice.status === 'SHIPPED' || invoice.status === 'RECEIVED' || !!invoice.quoteId}
+                        />
                       </TableCell>
                     <TableCell className="font-semibold">
                       {formatCurrency(getInvoiceValue(invoice))}
@@ -854,6 +942,161 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={t('quickActions.open', { name: invoice.title })}
+                            >
+                              <Sparkles className="h-4 w-4 text-indigo-500" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuLabel>{t('quickActions.title')}</DropdownMenuLabel>
+                            <DropdownMenuItem
+                              onSelect={() => setQuickAction({ type: 'shipment', invoice })}
+                              disabled={invoice.status !== 'PAID'}
+                            >
+                              <Package className="h-4 w-4" />
+                              {t('quickActions.createShipment')}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onSelect={() => setQuickAction({ type: 'task', invoice })}
+                            >
+                              <CheckSquare className="h-4 w-4" />
+                              {t('quickActions.createTask')}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => setQuickAction({ type: 'meeting', invoice })}
+                            >
+                              <Calendar className="h-4 w-4" />
+                              {t('quickActions.scheduleMeeting')}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            {/* Email/SMS/WhatsApp Butonları */}
+                            <DropdownMenuItem
+                              onSelect={async () => {
+                                // Quote, Deal ve Customer bilgisini çek
+                                if (invoice.quoteId) {
+                                  try {
+                                    const quoteRes = await fetch(`/api/quotes/${invoice.quoteId}`)
+                                    if (quoteRes.ok) {
+                                      const quote = await quoteRes.json()
+                                      if (quote?.dealId) {
+                                        const dealRes = await fetch(`/api/deals/${quote.dealId}`)
+                                        if (dealRes.ok) {
+                                          const deal = await dealRes.json()
+                                          if (deal?.customerId) {
+                                            const customerRes = await fetch(`/api/customers/${deal.customerId}`)
+                                            if (customerRes.ok) {
+                                              const customer = await customerRes.json()
+                                              if (customer?.email) {
+                                                setSelectedInvoiceForCommunication(invoice)
+                                                setSelectedCustomer(customer)
+                                                setEmailDialogOpen(true)
+                                              } else {
+                                                toast.error('E-posta adresi yok', 'Müşterinin e-posta adresi bulunamadı')
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  } catch (error) {
+                                    console.error('Customer fetch error:', error)
+                                  }
+                                } else {
+                                  toast.error('Teklif yok', 'Bu fatura için teklif bilgisi bulunamadı')
+                                }
+                              }}
+                              disabled={!invoice.quoteId}
+                            >
+                              <Mail className="h-4 w-4" />
+                              E-posta Gönder
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={async () => {
+                                if (invoice.quoteId) {
+                                  try {
+                                    const quoteRes = await fetch(`/api/quotes/${invoice.quoteId}`)
+                                    if (quoteRes.ok) {
+                                      const quote = await quoteRes.json()
+                                      if (quote?.dealId) {
+                                        const dealRes = await fetch(`/api/deals/${quote.dealId}`)
+                                        if (dealRes.ok) {
+                                          const deal = await dealRes.json()
+                                          if (deal?.customerId) {
+                                            const customerRes = await fetch(`/api/customers/${deal.customerId}`)
+                                            if (customerRes.ok) {
+                                              const customer = await customerRes.json()
+                                              if (customer?.phone) {
+                                                setSelectedInvoiceForCommunication(invoice)
+                                                setSelectedCustomer(customer)
+                                                setSmsDialogOpen(true)
+                                              } else {
+                                                toast.error('Telefon numarası yok', 'Müşterinin telefon numarası bulunamadı')
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  } catch (error) {
+                                    console.error('Customer fetch error:', error)
+                                  }
+                                } else {
+                                  toast.error('Teklif yok', 'Bu fatura için teklif bilgisi bulunamadı')
+                                }
+                              }}
+                              disabled={!invoice.quoteId}
+                            >
+                              <MessageSquare className="h-4 w-4" />
+                              SMS Gönder
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={async () => {
+                                if (invoice.quoteId) {
+                                  try {
+                                    const quoteRes = await fetch(`/api/quotes/${invoice.quoteId}`)
+                                    if (quoteRes.ok) {
+                                      const quote = await quoteRes.json()
+                                      if (quote?.dealId) {
+                                        const dealRes = await fetch(`/api/deals/${quote.dealId}`)
+                                        if (dealRes.ok) {
+                                          const deal = await dealRes.json()
+                                          if (deal?.customerId) {
+                                            const customerRes = await fetch(`/api/customers/${deal.customerId}`)
+                                            if (customerRes.ok) {
+                                              const customer = await customerRes.json()
+                                              if (customer?.phone) {
+                                                setSelectedInvoiceForCommunication(invoice)
+                                                setSelectedCustomer(customer)
+                                                setWhatsAppDialogOpen(true)
+                                              } else {
+                                                toast.error('Telefon numarası yok', 'Müşterinin telefon numarası bulunamadı')
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  } catch (error) {
+                                    console.error('Customer fetch error:', error)
+                                  }
+                                } else {
+                                  toast.error('Teklif yok', 'Bu fatura için teklif bilgisi bulunamadı')
+                                }
+                              }}
+                              disabled={!invoice.quoteId}
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                              WhatsApp Gönder
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+
                         <Button
                           variant="ghost"
                           size="icon"
@@ -924,9 +1167,147 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                   )
                 })
               )}
-            </TableBody>
-          </Table>
-        </div>
+              </TableBody>
+              </Table>
+            </div>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {invoices.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                {t('noInvoicesFound')}
+              </div>
+            ) : (
+              invoices.map((invoice) => {
+                const isFromQuote = !!invoice.quoteId
+                const isShipped = invoice.status === 'SHIPPED'
+                const isReceived = invoice.status === 'RECEIVED'
+                const isLocked = isFromQuote || isShipped || isReceived
+                
+                return (
+                  <div
+                    key={invoice.id}
+                    className={`bg-white rounded-lg border p-4 shadow-sm ${
+                      isLocked 
+                        ? isFromQuote 
+                          ? 'border-indigo-200 bg-indigo-50/50' 
+                          : isShipped
+                          ? 'border-green-200 bg-green-50/50'
+                          : 'border-teal-200 bg-teal-50/50'
+                        : 'border-gray-200'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-900 truncate">
+                          {invoice.title}
+                          {isLocked && (
+                            <span className="ml-2 text-xs font-semibold">
+                              {isFromQuote 
+                                ? t('fromQuote')
+                                : isShipped
+                                ? `(${statusLabels.SHIPPED})`
+                                : `(${statusLabels.RECEIVED})`}
+                            </span>
+                          )}
+                        </h3>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          <InlineEditBadge
+                            value={invoice.status}
+                            options={[
+                              { value: 'DRAFT', label: statusLabels['DRAFT'] || 'Taslak' },
+                              { value: 'SENT', label: statusLabels['SENT'] || 'Gönderildi' },
+                              { value: 'SHIPPED', label: statusLabels['SHIPPED'] || 'Gönderildi' },
+                              { value: 'RECEIVED', label: statusLabels['RECEIVED'] || 'Alındı' },
+                              { value: 'PAID', label: statusLabels['PAID'] || 'Ödendi' },
+                              { value: 'OVERDUE', label: statusLabels['OVERDUE'] || 'Vadesi Geçti' },
+                              { value: 'CANCELLED', label: statusLabels['CANCELLED'] || 'İptal Edildi' },
+                            ]}
+                            onSave={async (newStatus) => {
+                              try {
+                                const res = await fetch(`/api/invoices/${invoice.id}`, {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ status: newStatus }),
+                                })
+                                if (!res.ok) {
+                                  const error = await res.json().catch(() => ({}))
+                                  throw new Error(error.error || 'Durum güncellenemedi')
+                                }
+                                await Promise.all([
+                                  mutate('/api/invoices', undefined, { revalidate: true }),
+                                  mutate('/api/invoices?', undefined, { revalidate: true }),
+                                ])
+                                toast.success('Durum güncellendi', `Fatura "${statusLabels[newStatus] || newStatus}" durumuna taşındı.`)
+                              } catch (error: any) {
+                                toast.error('Durum güncellenemedi', error?.message || 'Bir hata oluştu.')
+                                throw error
+                              }
+                            }}
+                            disabled={invoice.status === 'PAID' || invoice.status === 'SHIPPED' || invoice.status === 'RECEIVED' || !!invoice.quoteId}
+                          />
+                          <Badge className="font-semibold text-xs">
+                            {formatCurrency(getInvoiceValue(invoice))}
+                          </Badge>
+                          {isSuperAdmin && invoice.Company?.name && (
+                            <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                              {invoice.Company.name}
+                            </Badge>
+                          )}
+                        </div>
+                        {invoice.quoteId && (
+                          <Link 
+                            href={`/${locale}/quotes/${invoice.quoteId}`}
+                            className="text-xs text-primary-600 hover:underline mt-1 block"
+                            prefetch={true}
+                          >
+                            Teklif: {invoice.quoteId.substring(0, 8)}
+                          </Link>
+                        )}
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(invoice.createdAt).toLocaleDateString('tr-TR')}
+                        </p>
+                      </div>
+                      <div className="flex gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => {
+                            setSelectedInvoiceId(invoice.id)
+                            setSelectedInvoiceData(invoice)
+                            setDetailModalOpen(true)
+                          }}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => handleEdit(invoice)}
+                          disabled={isLocked}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-red-600"
+                          onClick={() => handleDelete(invoice.id, invoice.title)}
+                          disabled={invoice.status === 'PAID' || invoice.status === 'SHIPPED' || invoice.status === 'RECEIVED'}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </>
       )}
 
       {/* Detail Modal */}
@@ -940,6 +1321,15 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
         }}
         initialData={selectedInvoiceData || undefined}
       />
+      
+      {/* DEBUG: Invoice ID kontrolü */}
+      {process.env.NODE_ENV === 'development' && detailModalOpen && (
+        <div className="fixed bottom-4 right-4 bg-yellow-100 border border-yellow-300 rounded-lg p-3 text-xs z-50 max-w-xs">
+          <p className="font-semibold text-yellow-800">Debug Info:</p>
+          <p>selectedInvoiceId: {selectedInvoiceId || 'null'}</p>
+          <p>detailModalOpen: {String(detailModalOpen)}</p>
+        </div>
+      )}
 
       {/* Form Modal */}
       <InvoiceForm
@@ -1055,6 +1445,107 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
           }, 500)
         }}
       />
+
+      {/* Quick Action Form Modals */}
+      <ShipmentForm
+        open={quickAction?.type === 'shipment'}
+        onClose={closeQuickAction}
+        onSuccess={async (savedShipment) => {
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+        }}
+        invoiceId={quickAction?.invoice.id}
+        customerCompanyId={quickAction?.invoice.companyId}
+      />
+      <TaskForm
+        open={quickAction?.type === 'task'}
+        onClose={closeQuickAction}
+        onSuccess={async (savedTask) => {
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+        }}
+        defaultTitle={quickAction?.invoice.title}
+      />
+      <MeetingForm
+        open={quickAction?.type === 'meeting'}
+        onClose={closeQuickAction}
+        onSuccess={async (savedMeeting) => {
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+        }}
+        invoiceId={quickAction?.invoice.id}
+        customerCompanyId={quickAction?.invoice.companyId}
+      />
+      
+      {/* Communication Modals */}
+      {emailDialogOpen && selectedInvoiceForCommunication && selectedCustomer && (
+        <AutomationConfirmationModal
+          type="email"
+          options={{
+            entityType: 'INVOICE',
+            entityId: selectedInvoiceForCommunication.id,
+            entityTitle: selectedInvoiceForCommunication.title,
+            customerEmail: selectedCustomer.email,
+            customerPhone: selectedCustomer.phone,
+            customerName: selectedCustomer.name,
+            defaultSubject: `Fatura: ${selectedInvoiceForCommunication.title}`,
+            defaultMessage: `Merhaba ${selectedCustomer.name},\n\nFatura bilgisi: ${selectedInvoiceForCommunication.title}\n\nTutar: ${selectedInvoiceForCommunication.total ? `₺${selectedInvoiceForCommunication.total.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}\nDurum: ${selectedInvoiceForCommunication.status || 'DRAFT'}`,
+            defaultHtml: `<p>Merhaba ${selectedCustomer.name},</p><p>Fatura bilgisi: <strong>${selectedInvoiceForCommunication.title}</strong></p><p>Tutar: ${selectedInvoiceForCommunication.total ? `₺${selectedInvoiceForCommunication.total.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}</p><p>Durum: ${selectedInvoiceForCommunication.status || 'DRAFT'}</p>`,
+            onSent: () => {
+              toast.success('E-posta gönderildi', 'Müşteriye invoice bilgisi gönderildi')
+            },
+          }}
+          open={emailDialogOpen}
+          onClose={() => {
+            setEmailDialogOpen(false)
+            setSelectedInvoiceForCommunication(null)
+            setSelectedCustomer(null)
+          }}
+        />
+      )}
+      
+      {smsDialogOpen && selectedInvoiceForCommunication && selectedCustomer && (
+        <AutomationConfirmationModal
+          type="sms"
+          options={{
+            entityType: 'INVOICE',
+            entityId: selectedInvoiceForCommunication.id,
+            entityTitle: selectedInvoiceForCommunication.title,
+            customerPhone: selectedCustomer.phone,
+            customerName: selectedCustomer.name,
+            defaultMessage: `Merhaba ${selectedCustomer.name}, Fatura: ${selectedInvoiceForCommunication.title}. Tutar: ${selectedInvoiceForCommunication.total ? `₺${selectedInvoiceForCommunication.total.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
+            onSent: () => {
+              toast.success('SMS gönderildi', 'Müşteriye invoice bilgisi gönderildi')
+            },
+          }}
+          open={smsDialogOpen}
+          onClose={() => {
+            setSmsDialogOpen(false)
+            setSelectedInvoiceForCommunication(null)
+            setSelectedCustomer(null)
+          }}
+        />
+      )}
+      
+      {whatsAppDialogOpen && selectedInvoiceForCommunication && selectedCustomer && (
+        <AutomationConfirmationModal
+          type="whatsapp"
+          options={{
+            entityType: 'INVOICE',
+            entityId: selectedInvoiceForCommunication.id,
+            entityTitle: selectedInvoiceForCommunication.title,
+            customerPhone: selectedCustomer.phone,
+            customerName: selectedCustomer.name,
+            defaultMessage: `Merhaba ${selectedCustomer.name}, Fatura: ${selectedInvoiceForCommunication.title}. Tutar: ${selectedInvoiceForCommunication.total ? `₺${selectedInvoiceForCommunication.total.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
+            onSent: () => {
+              toast.success('WhatsApp mesajı gönderildi', 'Müşteriye invoice bilgisi gönderildi')
+            },
+          }}
+          open={whatsAppDialogOpen}
+          onClose={() => {
+            setWhatsAppDialogOpen(false)
+            setSelectedInvoiceForCommunication(null)
+            setSelectedCustomer(null)
+          }}
+        />
+      )}
     </div>
   )
 }

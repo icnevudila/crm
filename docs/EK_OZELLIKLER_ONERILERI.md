@@ -219,3 +219,7 @@
 Hangi özellikle başlayalım? 🚀
 
 
+
+
+
+

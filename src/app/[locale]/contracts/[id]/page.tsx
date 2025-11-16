@@ -2,7 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { ArrowLeft, Edit, Trash2, AlertTriangle, RefreshCw, FileText } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, AlertTriangle, RefreshCw, FileText, Mail, MessageSquare, Calendar } from 'lucide-react'
 import { useLocale } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -11,6 +11,16 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useData } from '@/hooks/useData'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import ContractForm from '@/components/contracts/ContractForm'
+import InvoiceForm from '@/components/invoices/InvoiceForm'
+import { toastError } from '@/lib/toast'
+import SendEmailButton from '@/components/integrations/SendEmailButton'
+import SendSmsButton from '@/components/integrations/SendSmsButton'
+import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
+import DocumentList from '@/components/documents/DocumentList'
+import ActivityTimeline from '@/components/ui/ActivityTimeline'
+import ContextualActionsBar from '@/components/ui/ContextualActionsBar'
+import { useQuickActionSuccess } from '@/lib/quick-action-helper'
+import { formatCurrency } from '@/lib/utils'
 
 interface Contract {
   id: string
@@ -32,7 +42,9 @@ export default function ContractDetailPage() {
   const locale = useLocale()
   const contractId = params.id as string
   const [formOpen, setFormOpen] = useState(false)
+  const [invoiceFormOpen, setInvoiceFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const { handleQuickActionSuccess } = useQuickActionSuccess()
 
   const { data: contract, isLoading, mutate } = useData<Contract>(`/api/contracts/${contractId}`)
 
@@ -52,7 +64,7 @@ export default function ContractDetailPage() {
       }
       router.push(`/${locale}/contracts`)
     } catch (error: any) {
-      alert(error?.message || 'Silme işlemi başarısız oldu')
+      toastError('Silme işlemi başarısız oldu', error?.message)
     } finally {
       setDeleteLoading(false)
     }
@@ -97,6 +109,28 @@ export default function ContractDetailPage() {
 
   return (
     <div className="space-y-6">
+      {/* Contextual Actions Bar */}
+      <ContextualActionsBar
+        entityType="contract"
+        entityId={contractId}
+        onEdit={() => setFormOpen(true)}
+        onDelete={handleDelete}
+        onCreateRelated={(type) => {
+          if (type === 'invoice') {
+            setInvoiceFormOpen(true) // Modal form aç
+          }
+        }}
+        onSendEmail={contract.customer?.email ? () => {
+          // Email gönderme işlemi SendEmailButton ile yapılıyor
+        } : undefined}
+        onSendSms={contract.customer?.phone ? () => {
+          // SMS gönderme işlemi SendSmsButton ile yapılıyor
+        } : undefined}
+        onSendWhatsApp={contract.customer?.phone ? () => {
+          // WhatsApp gönderme işlemi SendWhatsAppButton ile yapılıyor
+        } : undefined}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -229,6 +263,73 @@ export default function ContractDetailPage() {
         </Card>
       </div>
 
+      {/* Quick Actions */}
+      {contract.customer && (contract.customer.email || contract.customer.phone) && (
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Hızlı İşlemler</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {contract.customer.email && (
+              <SendEmailButton
+                to={contract.customer.email}
+                subject={`Sözleşme: ${contract.title}`}
+                html={`
+                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px;">
+                      Sözleşme Bilgileri
+                    </h2>
+                    <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                      <p><strong>Sözleşme:</strong> ${contract.title}</p>
+                      <p><strong>Durum:</strong> ${statusLabels[contract.status] || contract.status}</p>
+                      <p><strong>Değer:</strong> ${formatCurrency(contract.value)}</p>
+                      <p><strong>Başlangıç:</strong> ${new Date(contract.startDate).toLocaleDateString('tr-TR')}</p>
+                      <p><strong>Bitiş:</strong> ${new Date(contract.endDate).toLocaleDateString('tr-TR')}</p>
+                    </div>
+                    <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">
+                      Bu e-posta CRM Enterprise V3 sisteminden gönderilmiştir.
+                    </p>
+                  </div>
+                `}
+                category="GENERAL"
+                entityData={contract}
+                onSuccess={() => handleQuickActionSuccess({
+                  entityType: 'contract',
+                  entityName: contract.title,
+                  entityId: contract.id,
+                  actionType: 'updated',
+                  onClose: () => {},
+                })}
+              />
+            )}
+            {contract.customer.phone && (
+              <>
+                <SendSmsButton
+                  to={contract.customer.phone}
+                  message={`Merhaba ${contract.customer.name}, sözleşme ${contract.title} hakkında size ulaşmak istiyoruz.`}
+                  onSuccess={() => handleQuickActionSuccess({
+                    entityType: 'contract',
+                    entityName: contract.title,
+                    entityId: contract.id,
+                    actionType: 'updated',
+                    onClose: () => {},
+                  })}
+                />
+                <SendWhatsAppButton
+                  to={contract.customer.phone}
+                  message={`Merhaba ${contract.customer.name}, sözleşme ${contract.title} hakkında size ulaşmak istiyoruz.`}
+                  onSuccess={() => handleQuickActionSuccess({
+                    entityType: 'contract',
+                    entityName: contract.title,
+                    entityId: contract.id,
+                    actionType: 'updated',
+                    onClose: () => {},
+                  })}
+                />
+              </>
+            )}
+          </div>
+        </Card>
+      )}
+
       {/* Customer Info */}
       {(contract.customer || contract.customerCompany) && (
         <Card className="p-6">
@@ -270,6 +371,15 @@ export default function ContractDetailPage() {
         </Card>
       )}
 
+      {/* Document List */}
+      <DocumentList relatedTo="Contract" relatedId={contractId} />
+
+      {/* Activity Timeline */}
+      <Card className="p-6">
+        <h2 className="text-xl font-semibold mb-4">İşlem Geçmişi</h2>
+        <ActivityTimeline entityType="Contract" entityId={contractId} />
+      </Card>
+
       {/* Contract Form Modal */}
       <ContractForm
         contract={contract}
@@ -278,6 +388,20 @@ export default function ContractDetailPage() {
         onSuccess={() => {
           mutate()
           setFormOpen(false)
+        }}
+      />
+
+      {/* Invoice Form Modal - İlişkili kayıt oluşturma */}
+      <InvoiceForm
+        invoice={undefined}
+        open={invoiceFormOpen}
+        onClose={() => setInvoiceFormOpen(false)}
+        contractId={contractId}
+        customerId={contract.customer?.id}
+        customerCompanyId={contract.customerCompany?.id}
+        onSuccess={async (savedInvoice: any) => {
+          await mutate(undefined, { revalidate: true })
+          setInvoiceFormOpen(false)
         }}
       />
     </div>

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
 import { useSession } from '@/hooks/useSession'
-import { Plus, Search, Edit, Trash2, Eye, FileText, LayoutGrid, Table as TableIcon } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Eye, FileText, LayoutGrid, Table as TableIcon, Sparkles, Calendar, CheckSquare, Receipt, Mail, MessageSquare, MessageCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useData } from '@/hooks/useData'
@@ -28,6 +28,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -35,6 +43,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { AutomationConfirmationModal } from '@/lib/automations/toast-confirmation'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import SkeletonList from '@/components/skeletons/SkeletonList'
@@ -44,6 +53,8 @@ import { formatCurrency } from '@/lib/utils'
 import dynamic from 'next/dynamic'
 import { AutomationInfo } from '@/components/automation/AutomationInfo'
 import RefreshButton from '@/components/ui/RefreshButton'
+import { getStatusBadgeClass } from '@/lib/crm-colors'
+import InlineEditBadge from '@/components/ui/InlineEditBadge'
 
 // Lazy load büyük componentler - performans için
 const QuoteForm = dynamic(() => import('./QuoteForm'), {
@@ -60,6 +71,12 @@ const QuoteDetailModal = dynamic(() => import('./QuoteDetailModal'), {
   ssr: false,
   loading: () => null,
 })
+
+const InvoiceForm = dynamic(() => import('../invoices/InvoiceForm'), { ssr: false, loading: () => null })
+
+const TaskForm = dynamic(() => import('../tasks/TaskForm'), { ssr: false, loading: () => null })
+
+const MeetingForm = dynamic(() => import('../meetings/MeetingForm'), { ssr: false, loading: () => null })
 
 interface QuoteListProps {
   isOpen?: boolean
@@ -99,14 +116,7 @@ async function fetchKanbanQuotes(search: string, dealId: string, filterCompanyId
   return data.kanban || []
 }
 
-const statusColors: Record<string, string> = {
-  DRAFT: 'bg-gray-100 text-gray-800',
-  SENT: 'bg-blue-100 text-blue-800',
-  ACCEPTED: 'bg-green-100 text-green-800',
-  REJECTED: 'bg-red-100 text-red-800',
-  DECLINED: 'bg-red-100 text-red-800',
-  WAITING: 'bg-yellow-100 text-yellow-800',
-}
+// Status colors - merkezi renk sistemi kullanılıyor (getStatusBadgeClass)
 
 export default function QuoteList({ isOpen = true }: QuoteListProps) {
   const locale = useLocale()
@@ -157,6 +167,12 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null)
   const [selectedQuoteData, setSelectedQuoteData] = useState<Quote | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [quickAction, setQuickAction] = useState<{ type: 'invoice' | 'task' | 'meeting'; quote: Quote } | null>(null)
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false)
+  const [smsDialogOpen, setSmsDialogOpen] = useState(false)
+  const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false)
+  const [selectedQuoteForCommunication, setSelectedQuoteForCommunication] = useState<Quote | null>(null)
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
 
   // Debounced search - performans için
   const [debouncedSearch, setDebouncedSearch] = useState(search)
@@ -225,7 +241,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
   }, [mutateQuotes, apiUrl, queryClient])
   // SuperAdmin için filterCompanyId'yi normalize et - boş string yerine undefined kullan
   const normalizedFilterCompanyId = filterCompanyId && filterCompanyId !== '' ? filterCompanyId : undefined
-  const { data: kanbanDataFromQuery = [], isLoading: isLoadingKanban } = useQuery({
+  const { data: kanbanDataFromQuery = [], isLoading: isLoadingKanban, isError: isErrorKanban, error: errorKanban, refetch: refetchKanban } = useQuery({
     queryKey: ['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId, isSuperAdmin],
     queryFn: () => fetchKanbanQuotes(debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId || undefined),
     staleTime: 0, // ✅ ÇÖZÜM: Cache'i kapat - refresh sonrası her zaman yeni data çek
@@ -259,6 +275,10 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
       setIsInitialLoad(false)
     }
   }, [kanbanDataFromQuery, isInitialLoad, isOpen])
+
+  const closeQuickAction = useCallback(() => {
+    setQuickAction(null)
+  }, [])
 
   const handleEdit = useCallback((quote: Quote) => {
     setSelectedQuote(quote)
@@ -377,9 +397,8 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
     revalidateOnFocus: false,
   })
 
-  if (!isOpen) {
-    return null
-  }
+  // ✅ ÇÖZÜM: isOpen kontrolünü kaldırdık - AccordionContent zaten accordion kapalıyken render edilmiyor
+  // Query'ler enabled prop'u ile isOpen kontrolü yapıyor, bu yeterli
 
   if (viewMode === 'table' && isLoading) {
     return <SkeletonList />
@@ -391,6 +410,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
     : kanbanData.reduce((sum: number, col: any) => sum + col.count, 0))
 
   return (
+    <>
     <div className="space-y-6">
       {/* İstatistikler */}
       <ModuleStats module="quotes" statsUrl="/api/stats/quotes" />
@@ -506,11 +526,31 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
 
       {/* Content */}
       {viewMode === 'kanban' ? (
-        <QuoteKanbanChart
-          onView={(quoteId) => {
-            setSelectedQuoteId(quoteId)
-            setDetailModalOpen(true)
-          }} // ✅ ÇÖZÜM: Modal açmak için callback
+        <>
+          {isLoadingKanban && (
+            <div className="flex items-center justify-center h-[400px]">
+              <div className="text-center">
+                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent"></div>
+                <p className="mt-4 text-sm text-gray-600">Kanban yükleniyor...</p>
+              </div>
+            </div>
+          )}
+          {isErrorKanban && (
+            <div className="flex items-center justify-center h-[400px]">
+              <div className="text-center">
+                <p className="text-sm text-red-600">Kanban yüklenirken bir hata oluştu.</p>
+                <Button onClick={() => refetchKanban()} className="mt-4">
+                  Tekrar Dene
+                </Button>
+              </div>
+            </div>
+          )}
+          {!isLoadingKanban && !isErrorKanban && (
+            <QuoteKanbanChart
+              onView={(quoteId) => {
+                setSelectedQuoteId(quoteId)
+                setDetailModalOpen(true)
+              }} // ✅ ÇÖZÜM: Modal açmak için callback
           data={kanbanData}
           onEdit={handleEdit}
           onDelete={handleDelete}
@@ -776,10 +816,15 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
               throw error
             }
           }}
-        />
+            />
+          )}
+        </>
       ) : (
-        <div className="bg-white rounded-lg shadow-card overflow-hidden">
-          <Table>
+        <>
+          {/* Desktop Table View */}
+          <div className="hidden md:block bg-white rounded-lg shadow-card overflow-hidden">
+            <div className="overflow-x-auto">
+              <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>{t('tableHeaders.title')}</TableHead>
@@ -810,9 +855,46 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                       </TableCell>
                     )}
                     <TableCell>
-                      <Badge className={statusColors[quote.status] || 'bg-gray-100'}>
-                        {statusLabels[quote.status] || quote.status}
-                      </Badge>
+                      <InlineEditBadge
+                        value={quote.status}
+                        options={[
+                          { value: 'DRAFT', label: statusLabels['DRAFT'] || 'Taslak' },
+                          { value: 'SENT', label: statusLabels['SENT'] || 'Gönderildi' },
+                          { value: 'ACCEPTED', label: statusLabels['ACCEPTED'] || 'Kabul Edildi' },
+                          { value: 'REJECTED', label: statusLabels['REJECTED'] || 'Reddedildi' },
+                          { value: 'DECLINED', label: statusLabels['DECLINED'] || 'Reddedildi' },
+                          { value: 'WAITING', label: statusLabels['WAITING'] || 'Beklemede' },
+                          { value: 'EXPIRED', label: statusLabels['EXPIRED'] || 'Süresi Doldu' },
+                        ]}
+                        onSave={async (newStatus) => {
+                          // Table view için basit status change handler
+                          try {
+                            const res = await fetch(`/api/quotes/${quote.id}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ status: newStatus }),
+                            })
+                            if (!res.ok) {
+                              const error = await res.json().catch(() => ({}))
+                              throw new Error(error.error || 'Durum güncellenemedi')
+                            }
+                            const updatedQuote = await res.json()
+                            
+                            // Cache'i güncelle
+                            await Promise.all([
+                              mutate('/api/quotes', undefined, { revalidate: true }),
+                              mutate('/api/quotes?', undefined, { revalidate: true }),
+                              mutate((key: string) => typeof key === 'string' && key.startsWith('/api/quotes'), undefined, { revalidate: true }),
+                            ])
+                            
+                            toast.success('Durum güncellendi', `Teklif "${statusLabels[newStatus] || newStatus}" durumuna taşındı.`)
+                          } catch (error: any) {
+                            toast.error('Durum güncellenemedi', error?.message || 'Bir hata oluştu.')
+                            throw error
+                          }
+                        }}
+                        disabled={quote.status === 'ACCEPTED'}
+                      />
                     </TableCell>
                     <TableCell className="font-semibold">
                       {formatCurrency(quote.totalAmount || quote.total || 0)}
@@ -835,6 +917,143 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label={t('quickActions.open', { name: quote.title })}
+                            >
+                              <Sparkles className="h-4 w-4 text-indigo-500" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuLabel>{t('quickActions.title')}</DropdownMenuLabel>
+                            <DropdownMenuItem
+                              onSelect={() => setQuickAction({ type: 'invoice', quote })}
+                              disabled={quote.status !== 'ACCEPTED'}
+                            >
+                              <Receipt className="h-4 w-4" />
+                              {t('quickActions.createInvoice')}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onSelect={() => setQuickAction({ type: 'task', quote })}
+                            >
+                              <CheckSquare className="h-4 w-4" />
+                              {t('quickActions.createTask')}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={() => setQuickAction({ type: 'meeting', quote })}
+                            >
+                              <Calendar className="h-4 w-4" />
+                              {t('quickActions.scheduleMeeting')}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            {/* Email/SMS/WhatsApp Butonları */}
+                            <DropdownMenuItem
+                              onSelect={async () => {
+                                // Deal ve Customer bilgisini çek
+                                if (quote.dealId) {
+                                  try {
+                                    const dealRes = await fetch(`/api/deals/${quote.dealId}`)
+                                    if (dealRes.ok) {
+                                      const deal = await dealRes.json()
+                                      if (deal?.customerId) {
+                                        const customerRes = await fetch(`/api/customers/${deal.customerId}`)
+                                        if (customerRes.ok) {
+                                          const customer = await customerRes.json()
+                                          if (customer?.email) {
+                                            setSelectedQuoteForCommunication(quote)
+                                            setSelectedCustomer(customer)
+                                            setEmailDialogOpen(true)
+                                          } else {
+                                            toast.error('E-posta adresi yok', 'Müşterinin e-posta adresi bulunamadı')
+                                          }
+                                        }
+                                      }
+                                    }
+                                  } catch (error) {
+                                    console.error('Customer fetch error:', error)
+                                  }
+                                } else {
+                                  toast.error('Fırsat yok', 'Bu teklif için fırsat bilgisi bulunamadı')
+                                }
+                              }}
+                              disabled={!quote.dealId}
+                            >
+                              <Mail className="h-4 w-4" />
+                              E-posta Gönder
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={async () => {
+                                if (quote.dealId) {
+                                  try {
+                                    const dealRes = await fetch(`/api/deals/${quote.dealId}`)
+                                    if (dealRes.ok) {
+                                      const deal = await dealRes.json()
+                                      if (deal?.customerId) {
+                                        const customerRes = await fetch(`/api/customers/${deal.customerId}`)
+                                        if (customerRes.ok) {
+                                          const customer = await customerRes.json()
+                                          if (customer?.phone) {
+                                            setSelectedQuoteForCommunication(quote)
+                                            setSelectedCustomer(customer)
+                                            setSmsDialogOpen(true)
+                                          } else {
+                                            toast.error('Telefon numarası yok', 'Müşterinin telefon numarası bulunamadı')
+                                          }
+                                        }
+                                      }
+                                    }
+                                  } catch (error) {
+                                    console.error('Customer fetch error:', error)
+                                  }
+                                } else {
+                                  toast.error('Fırsat yok', 'Bu teklif için fırsat bilgisi bulunamadı')
+                                }
+                              }}
+                              disabled={!quote.dealId}
+                            >
+                              <MessageSquare className="h-4 w-4" />
+                              SMS Gönder
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={async () => {
+                                if (quote.dealId) {
+                                  try {
+                                    const dealRes = await fetch(`/api/deals/${quote.dealId}`)
+                                    if (dealRes.ok) {
+                                      const deal = await dealRes.json()
+                                      if (deal?.customerId) {
+                                        const customerRes = await fetch(`/api/customers/${deal.customerId}`)
+                                        if (customerRes.ok) {
+                                          const customer = await customerRes.json()
+                                          if (customer?.phone) {
+                                            setSelectedQuoteForCommunication(quote)
+                                            setSelectedCustomer(customer)
+                                            setWhatsAppDialogOpen(true)
+                                          } else {
+                                            toast.error('Telefon numarası yok', 'Müşterinin telefon numarası bulunamadı')
+                                          }
+                                        }
+                                      }
+                                    }
+                                  } catch (error) {
+                                    console.error('Customer fetch error:', error)
+                                  }
+                                } else {
+                                  toast.error('Fırsat yok', 'Bu teklif için fırsat bilgisi bulunamadı')
+                                }
+                              }}
+                              disabled={!quote.dealId}
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                              WhatsApp Gönder
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+
                         <Button
                           variant="ghost"
                           size="icon"
@@ -886,8 +1105,142 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                 ))
               )}
             </TableBody>
-          </Table>
-        </div>
+              </Table>
+            </div>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {quotes.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                {tCommon('noData')}
+              </div>
+            ) : (
+              quotes.map((quote) => (
+                <div
+                  key={quote.id}
+                  className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-gray-900 truncate">{quote.title}</h3>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <InlineEditBadge
+                          value={quote.status}
+                          options={[
+                            { value: 'DRAFT', label: statusLabels['DRAFT'] || 'Taslak' },
+                            { value: 'SENT', label: statusLabels['SENT'] || 'Gönderildi' },
+                            { value: 'ACCEPTED', label: statusLabels['ACCEPTED'] || 'Kabul Edildi' },
+                            { value: 'REJECTED', label: statusLabels['REJECTED'] || 'Reddedildi' },
+                            { value: 'DECLINED', label: statusLabels['DECLINED'] || 'Reddedildi' },
+                            { value: 'WAITING', label: statusLabels['WAITING'] || 'Beklemede' },
+                            { value: 'EXPIRED', label: statusLabels['EXPIRED'] || 'Süresi Doldu' },
+                          ]}
+                          onSave={async (newStatus) => {
+                            try {
+                              const res = await fetch(`/api/quotes/${quote.id}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ status: newStatus }),
+                              })
+                              if (!res.ok) {
+                                const error = await res.json().catch(() => ({}))
+                                throw new Error(error.error || 'Durum güncellenemedi')
+                              }
+                              await Promise.all([
+                                mutate('/api/quotes', undefined, { revalidate: true }),
+                                mutate('/api/quotes?', undefined, { revalidate: true }),
+                              ])
+                              toast.success('Durum güncellendi', `Teklif "${statusLabels[newStatus] || newStatus}" durumuna taşındı.`)
+                            } catch (error: any) {
+                              toast.error('Durum güncellenemedi', error?.message || 'Bir hata oluştu.')
+                              throw error
+                            }
+                          }}
+                          disabled={quote.status === 'ACCEPTED'}
+                        />
+                        <Badge className="font-semibold text-xs">
+                          {formatCurrency(quote.total || quote.totalAmount || 0)}
+                        </Badge>
+                        {isSuperAdmin && quote.Company?.name && (
+                          <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                            {quote.Company.name}
+                          </Badge>
+                        )}
+                      </div>
+                      {quote.dealId && (
+                        <Link 
+                          href={`/${locale}/deals/${quote.dealId}`}
+                          className="text-xs text-primary-600 hover:underline mt-1 block"
+                          prefetch={true}
+                        >
+                          Fırsat: {quote.dealId.substring(0, 8)}
+                        </Link>
+                      )}
+                      <p className="text-xs text-gray-500 mt-1">
+                        {new Date(quote.createdAt).toLocaleDateString('tr-TR')}
+                      </p>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
+                          <Sparkles className="h-4 w-4 text-indigo-500" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuItem
+                          onSelect={() => setQuickAction({ type: 'invoice', quote })}
+                          disabled={quote.status !== 'ACCEPTED'}
+                        >
+                          <Receipt className="h-4 w-4 mr-2" />
+                          {t('quickActions.createInvoice')}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            setSelectedQuoteId(quote.id)
+                            setSelectedQuoteData(quote)
+                            setDetailModalOpen(true)
+                          }}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          {tCommon('view')}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            if (quote.status === 'ACCEPTED') {
+                              toast.warning(t('cannotEditAccepted'), t('cannotEditAcceptedMessage'))
+                              return
+                            }
+                            handleEdit(quote)
+                          }}
+                          disabled={quote.status === 'ACCEPTED'}
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          {tCommon('edit')}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            if (quote.status === 'ACCEPTED') {
+                              toast.warning(t('cannotDeleteAccepted'), t('cannotDeleteAcceptedMessage'))
+                              return
+                            }
+                            handleDelete(quote.id, quote.title)
+                          }}
+                          disabled={quote.status === 'ACCEPTED'}
+                          className="text-red-600"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          {tCommon('delete')}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </>
       )}
 
       {/* Detail Modal */}
@@ -1207,6 +1560,111 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Quick Action Form Modals */}
+      <InvoiceForm
+        open={quickAction?.type === 'invoice'}
+        onClose={closeQuickAction}
+        onSuccess={async (savedInvoice) => {
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+        }}
+        quoteId={quickAction?.quote.id}
+        customerCompanyId={quickAction?.quote.companyId}
+      />
+      <TaskForm
+        open={quickAction?.type === 'task'}
+        onClose={closeQuickAction}
+        onSuccess={async (savedTask) => {
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+        }}
+        defaultTitle={quickAction?.quote.title}
+      />
+      <MeetingForm
+        open={quickAction?.type === 'meeting'}
+        onClose={closeQuickAction}
+        onSuccess={async (savedMeeting) => {
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+        }}
+        quoteId={quickAction?.quote.id}
+        customerCompanyId={quickAction?.quote.companyId}
+      />
+
     </div>
+    
+    {/* Email/SMS/WhatsApp Dialog'ları */}
+    {emailDialogOpen && selectedQuoteForCommunication && selectedCustomer && (
+      <AutomationConfirmationModal
+        type="email"
+        options={{
+          entityType: 'QUOTE',
+          entityId: selectedQuoteForCommunication.id,
+          entityTitle: selectedQuoteForCommunication.title,
+          customerEmail: selectedCustomer.email,
+          customerPhone: selectedCustomer.phone,
+          customerName: selectedCustomer.name,
+          defaultSubject: `Teklif Bilgisi: ${selectedQuoteForCommunication.title}`,
+          defaultMessage: `Merhaba ${selectedCustomer.name},\n\nTeklif bilgisi: ${selectedQuoteForCommunication.title}\n\nTutar: ${selectedQuoteForCommunication.totalAmount ? `₺${selectedQuoteForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}\nDurum: ${selectedQuoteForCommunication.status || 'DRAFT'}`,
+          defaultHtml: `<p>Merhaba ${selectedCustomer.name},</p><p>Teklif bilgisi: <strong>${selectedQuoteForCommunication.title}</strong></p><p>Tutar: ${selectedQuoteForCommunication.totalAmount ? `₺${selectedQuoteForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}</p><p>Durum: ${selectedQuoteForCommunication.status || 'DRAFT'}</p>`,
+          onSent: () => {
+            toast.success('E-posta gönderildi', 'Müşteriye quote bilgisi gönderildi')
+          },
+        }}
+        open={emailDialogOpen}
+        onClose={() => {
+          setEmailDialogOpen(false)
+          setSelectedQuoteForCommunication(null)
+          setSelectedCustomer(null)
+        }}
+      />
+    )}
+    
+    {smsDialogOpen && selectedQuoteForCommunication && selectedCustomer && (
+      <AutomationConfirmationModal
+        type="sms"
+        options={{
+          entityType: 'QUOTE',
+          entityId: selectedQuoteForCommunication.id,
+          entityTitle: selectedQuoteForCommunication.title,
+          customerEmail: selectedCustomer.email,
+          customerPhone: selectedCustomer.phone,
+          customerName: selectedCustomer.name,
+          defaultMessage: `Merhaba ${selectedCustomer.name}, Teklif bilgisi: ${selectedQuoteForCommunication.title}. Tutar: ${selectedQuoteForCommunication.totalAmount ? `₺${selectedQuoteForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
+          onSent: () => {
+            toast.success('SMS gönderildi', 'Müşteriye quote bilgisi gönderildi')
+          },
+        }}
+        open={smsDialogOpen}
+        onClose={() => {
+          setSmsDialogOpen(false)
+          setSelectedQuoteForCommunication(null)
+          setSelectedCustomer(null)
+        }}
+      />
+    )}
+    
+    {whatsAppDialogOpen && selectedQuoteForCommunication && selectedCustomer && (
+      <AutomationConfirmationModal
+        type="whatsapp"
+        options={{
+          entityType: 'QUOTE',
+          entityId: selectedQuoteForCommunication.id,
+          entityTitle: selectedQuoteForCommunication.title,
+          customerEmail: selectedCustomer.email,
+          customerPhone: selectedCustomer.phone,
+          customerName: selectedCustomer.name,
+          defaultMessage: `Merhaba ${selectedCustomer.name}, Teklif bilgisi: ${selectedQuoteForCommunication.title}. Tutar: ${selectedQuoteForCommunication.totalAmount ? `₺${selectedQuoteForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
+          onSent: () => {
+            toast.success('WhatsApp mesajı gönderildi', 'Müşteriye quote bilgisi gönderildi')
+          },
+        }}
+        open={whatsAppDialogOpen}
+        onClose={() => {
+          setWhatsAppDialogOpen(false)
+          setSelectedQuoteForCommunication(null)
+          setSelectedCustomer(null)
+        }}
+      />
+    )}
+    </>
   )
 }

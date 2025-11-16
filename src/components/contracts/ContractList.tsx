@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSession } from '@/hooks/useSession'
 import { Plus, Search, Edit, Trash2, Eye, FileText, Calendar, DollarSign } from 'lucide-react'
@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import { AutomationInfo } from '@/components/automation/AutomationInfo'
+import Pagination from '@/components/ui/Pagination'
 import Link from 'next/link'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
@@ -68,6 +69,10 @@ export default function ContractList() {
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [selectedContractId, setSelectedContractId] = useState<string | null>(null)
   const [selectedContractData, setSelectedContractData] = useState<Contract | null>(null)
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
 
   // SuperAdmin için firmaları çek
   const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
@@ -84,25 +89,41 @@ export default function ContractList() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
+      setCurrentPage(1) // Arama değiştiğinde ilk sayfaya dön
     }, 300)
     
     return () => clearTimeout(timer)
   }, [search])
 
   // SWR ile veri çekme
-  const params = new URLSearchParams()
-  if (debouncedSearch) params.append('search', debouncedSearch)
-  if (status) params.append('status', status)
-  if (type) params.append('type', type)
-  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams()
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    if (status) params.append('status', status)
+    if (type) params.append('type', type)
+    if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+    params.append('page', currentPage.toString())
+    params.append('pageSize', pageSize.toString())
+    return `/api/contracts?${params.toString()}`
+  }, [debouncedSearch, status, type, isSuperAdmin, filterCompanyId, currentPage, pageSize])
   
-  const apiUrl = `/api/contracts?${params.toString()}`
-  const { data: response, isLoading, error, mutate: mutateContracts } = useData<{ data: Contract[] }>(apiUrl, {
+  interface ContractsResponse {
+    data: Contract[]
+    pagination: {
+      page: number
+      pageSize: number
+      totalItems: number
+      totalPages: number
+    }
+  }
+  
+  const { data: response, isLoading, error, mutate: mutateContracts } = useData<ContractsResponse>(apiUrl, {
     dedupingInterval: 5000,
     revalidateOnFocus: false,
   })
 
   const contracts = response?.data || []
+  const pagination = response?.pagination || null
 
   // Handlers
   const handleAdd = () => {
@@ -288,7 +309,10 @@ export default function ContractList() {
           />
         </div>
         {isSuperAdmin && (
-          <Select value={filterCompanyId || 'all'} onValueChange={(value) => setFilterCompanyId(value === 'all' ? '' : value)}>
+          <Select value={filterCompanyId || 'all'} onValueChange={(value) => {
+            setFilterCompanyId(value === 'all' ? '' : value)
+            setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+          }}>
             <SelectTrigger className="w-[200px]">
               <SelectValue placeholder="Tüm Firmalar" />
             </SelectTrigger>
@@ -302,7 +326,10 @@ export default function ContractList() {
             </SelectContent>
           </Select>
         )}
-        <Select value={status || 'all'} onValueChange={(value) => setStatus(value === 'all' ? '' : value)}>
+        <Select value={status || 'all'} onValueChange={(value) => {
+          setStatus(value === 'all' ? '' : value)
+          setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+        }}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder={t('selectStatus')} />
           </SelectTrigger>
@@ -316,7 +343,10 @@ export default function ContractList() {
             <SelectItem value="SUSPENDED">{t('statusSuspended')}</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={type || 'all'} onValueChange={(value) => setType(value === 'all' ? '' : value)}>
+        <Select value={type || 'all'} onValueChange={(value) => {
+          setType(value === 'all' ? '' : value)
+          setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+        }}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder={t('selectType')} />
           </SelectTrigger>
@@ -448,6 +478,21 @@ export default function ContractList() {
             )}
           </TableBody>
         </Table>
+        
+        {/* Pagination */}
+        {pagination && (
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            pageSize={pagination.pageSize}
+            totalItems={pagination.totalItems}
+            onPageChange={(page) => setCurrentPage(page)}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              setCurrentPage(1)
+            }}
+          />
+        )}
       </div>
 
       {/* Detail Modal */}

@@ -95,38 +95,101 @@ export default function SmartAutocomplete({
 }: SmartAutocompleteProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState(value)
+  const [debouncedSearch, setDebouncedSearch] = useState(value)
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Value değiştiğinde search'i güncelle
   useEffect(() => {
     setSearch(value)
+    setDebouncedSearch(value)
   }, [value])
 
-  // API'den önerileri çek (eğer apiUrl varsa ve yeterli karakter yazıldıysa)
-  const shouldFetch = apiUrl && search.length >= minChars
-  const { data: apiData = [] } = useData<any[]>(
-    shouldFetch ? apiUrl : null,
+  // Debounce search - kullanıcı yazmayı bitirdikten 300ms sonra güncelle
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+      // Parent'a debounced değeri gönder (API çağrısı için)
+      // Sadece değer değiştiyse gönder (sonsuz döngüyü önle)
+      if (search !== value && search !== debouncedSearch) {
+        onChange(search)
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [search]) // Sadece search değiştiğinde tetikle
+
+  // API'den önerileri çek (debounced search kullan - kullanıcı yazmayı bitirdikten sonra)
+  const shouldFetch = apiUrl && debouncedSearch.length >= minChars
+  
+  // API URL'ini oluştur - eğer apiUrl zaten search parametresi içeriyorsa güncelle, yoksa ekle
+  const apiUrlWithSearch = useMemo(() => {
+    if (!shouldFetch || !apiUrl) return null
+    
+    try {
+      const url = new URL(apiUrl, window.location.origin)
+      url.searchParams.set('search', debouncedSearch)
+      // limit parametresi varsa koru, yoksa ekle
+      if (!url.searchParams.has('limit')) {
+        url.searchParams.set('limit', '10')
+      }
+      // Relative URL döndür
+      return url.pathname + url.search
+    } catch {
+      // URL parse edilemezse, basit string replacement yap
+      if (apiUrl.includes('search=')) {
+        // Mevcut search parametresini değiştir
+        return apiUrl.replace(/search=[^&]*/, `search=${encodeURIComponent(debouncedSearch)}`)
+      } else if (apiUrl.includes('?')) {
+        return `${apiUrl}&search=${encodeURIComponent(debouncedSearch)}`
+      } else {
+        return `${apiUrl}?search=${encodeURIComponent(debouncedSearch)}`
+      }
+    }
+  }, [shouldFetch, apiUrl, debouncedSearch])
+  
+  const { data: apiDataRaw } = useData<any>(
+    apiUrlWithSearch,
     {
       dedupingInterval: 1000,
       revalidateOnFocus: false,
     }
   )
 
+  // API verisini array'e çevir (güvenli)
+  const apiData = useMemo(() => {
+    if (!apiDataRaw) return []
+    if (Array.isArray(apiDataRaw)) return apiDataRaw
+    // Eğer object ise ve data property'si varsa (örn: { data: [...] })
+    if (typeof apiDataRaw === 'object' && 'data' in apiDataRaw && Array.isArray(apiDataRaw.data)) {
+      return apiDataRaw.data
+    }
+    // Eğer object ise ve results property'si varsa (örn: { results: [...] })
+    if (typeof apiDataRaw === 'object' && 'results' in apiDataRaw && Array.isArray(apiDataRaw.results)) {
+      return apiDataRaw.results
+    }
+    // Eğer object ise ve items property'si varsa (örn: { items: [...] })
+    if (typeof apiDataRaw === 'object' && 'items' in apiDataRaw && Array.isArray(apiDataRaw.items)) {
+      return apiDataRaw.items
+    }
+    // Diğer durumlarda boş array döndür
+    return []
+  }, [apiDataRaw])
+
   // Önerileri birleştir
   const allSuggestions = useMemo(() => {
     // Manuel öneriler
-    const manual = suggestions.map((s) => ({
+    const manual = Array.isArray(suggestions) ? suggestions.map((s) => ({
       id: s.id,
       label: s.label,
       value: s.value,
-    }))
+    })) : []
 
     // API önerileri
-    const api = (apiData || []).map((item: any) => ({
+    const api = Array.isArray(apiData) ? apiData.map((item: any) => ({
       id: item[valueField] || item.id,
       label: item[labelField] || item.name || item.label || String(item[valueField] || item.id),
       value: item[valueField] || item.id,
-    }))
+    })) : []
 
     // Birleştir ve tekilleştir
     const combined = [...manual, ...api]
@@ -138,33 +201,36 @@ export default function SmartAutocomplete({
     return unique
   }, [suggestions, apiData, labelField, valueField])
 
-  // Filtrelenmiş öneriler
+  // Filtrelenmiş öneriler - anında filtreleme için search kullan (API sonuçları debouncedSearch'ten gelir)
   const filteredSuggestions = useMemo(() => {
-    if (!search || search.length < minChars) return []
+    const searchTerm = search.length >= minChars ? search : debouncedSearch
+    if (!searchTerm || searchTerm.length < minChars) return []
     
-    const lowerSearch = search.toLowerCase()
+    const lowerSearch = searchTerm.toLowerCase()
     return allSuggestions.filter(
       (item) =>
         item.label.toLowerCase().includes(lowerSearch) ||
         item.value.toLowerCase().includes(lowerSearch)
     )
-  }, [allSuggestions, search, minChars])
+  }, [allSuggestions, search, debouncedSearch, minChars])
 
-  // Input değiştiğinde
+  // Input değiştiğinde - anında UI'ı güncelle, parent'a debounced gönder
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value
-    setSearch(newValue)
-    onChange(newValue)
+    setSearch(newValue) // Anında UI'ı güncelle (yazma hızını yavaşlatmaz)
+    // onChange debounced olarak useEffect'te çağrılacak
     
-    // Eğer tam eşleşme varsa, otomatik seç
-    const exactMatch = allSuggestions.find(
-      (item) =>
-        item.label.toLowerCase() === newValue.toLowerCase() ||
-        item.value.toLowerCase() === newValue.toLowerCase()
-    )
-    
-    if (exactMatch && onSelect) {
-      onSelect(exactMatch)
+    // Manuel önerilerde tam eşleşme kontrolü (API beklemeden)
+    if (suggestions.length > 0) {
+      const exactMatch = suggestions.find(
+        (s) =>
+          s.label.toLowerCase() === newValue.toLowerCase() ||
+          s.value.toLowerCase() === newValue.toLowerCase()
+      )
+      
+      if (exactMatch && onSelect) {
+        onSelect(exactMatch)
+      }
     }
   }
 
@@ -197,7 +263,7 @@ export default function SmartAutocomplete({
         <Input
           ref={inputRef}
           type="text"
-          value={value}
+          value={search}
           onChange={handleInputChange}
           onFocus={handleFocus}
           onBlur={handleBlur}
@@ -209,7 +275,10 @@ export default function SmartAutocomplete({
       {(filteredSuggestions.length > 0 || search.length >= minChars) && (
         <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
           <Command>
-            <CommandInput placeholder="Ara..." value={search} onValueChange={setSearch} />
+            <CommandInput placeholder="Ara..." value={search} onValueChange={(val) => {
+              setSearch(val)
+              // onChange debounced olarak useEffect'te çağrılacak
+            }} />
             <CommandList>
               <CommandEmpty>
                 {search.length < minChars

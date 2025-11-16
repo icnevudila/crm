@@ -19,12 +19,14 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { useSession } from '@/hooks/useSession'
 
 
-import { Plus, Search, Edit, Trash2, Eye, LayoutGrid, Table as TableIcon, Filter } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Eye, LayoutGrid, Table as TableIcon, Filter, Sparkles, FileText, Calendar, CheckSquare, Receipt, Mail, MessageSquare, MessageCircle } from 'lucide-react'
 
 
 import { useData } from '@/hooks/useData'
 import RefreshButton from '@/components/ui/RefreshButton'
-
+import InlineEditBadge from '@/components/ui/InlineEditBadge'
+import { getStatusBadgeClass } from '@/lib/crm-colors'
+import { mutate } from 'swr'
 
 import { Button } from '@/components/ui/button'
 
@@ -32,7 +34,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
 
-import { toast, confirm } from '@/lib/toast'
+import { toast, toastSuccess, toastError, toastWarning, confirm } from '@/lib/toast'
 
 
 import {
@@ -108,7 +110,19 @@ import {
 
 
 } from '@/components/ui/dialog'
+import SendEmailButton from '@/components/integrations/SendEmailButton'
+import SendSmsButton from '@/components/integrations/SendSmsButton'
+import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
+import { AutomationConfirmationModal } from '@/lib/automations/toast-confirmation'
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 import { Textarea } from '@/components/ui/textarea'
 
@@ -156,12 +170,15 @@ const DealForm = dynamic(() => import('./DealForm'), {
 
 
 const DealKanbanChart = dynamic(() => import('@/components/charts/DealKanbanChart'), {
-
-
   ssr: false,
-
-
-  loading: () => <div className="h-[400px] animate-pulse bg-gray-100 rounded" />,
+  loading: () => (
+    <div className="flex items-center justify-center h-[400px]">
+      <div className="text-center">
+        <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent"></div>
+        <p className="mt-4 text-sm text-gray-600">Kanban yükleniyor...</p>
+      </div>
+    </div>
+  ),
 
 
 })
@@ -180,6 +197,14 @@ const DealDetailModal = dynamic(() => import('./DealDetailModal'), {
 
 
 })
+
+const QuoteForm = dynamic(() => import('../quotes/QuoteForm'), { ssr: false, loading: () => null })
+
+const InvoiceForm = dynamic(() => import('../invoices/InvoiceForm'), { ssr: false, loading: () => null })
+
+const TaskForm = dynamic(() => import('../tasks/TaskForm'), { ssr: false, loading: () => null })
+
+const MeetingForm = dynamic(() => import('../meetings/MeetingForm'), { ssr: false, loading: () => null })
 
 
 
@@ -350,7 +375,15 @@ async function fetchDeals(
   })
 
 
-  if (!res.ok) throw new Error('Failed to fetch deals')
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => 'Failed to fetch deals')
+    try {
+      const errorJson = JSON.parse(errorText)
+      throw new Error(errorJson.error || 'Failed to fetch deals')
+    } catch {
+      throw new Error(errorText || 'Failed to fetch deals')
+    }
+  }
 
 
   const data = await res.json()
@@ -437,8 +470,15 @@ async function fetchKanbanDeals(
   })
 
 
-  if (!res.ok) throw new Error('Failed to fetch kanban deals')
-
+  if (!res.ok) {
+    const errorText = await res.text().catch(() => 'Failed to fetch kanban deals')
+    try {
+      const errorJson = JSON.parse(errorText)
+      throw new Error(errorJson.error || 'Failed to fetch kanban deals')
+    } catch {
+      throw new Error(errorText || 'Failed to fetch kanban deals')
+    }
+  }
 
   const data = await res.json()
 
@@ -625,6 +665,18 @@ export default function DealList({ isOpen = true }: DealListProps) {
   
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('kanban')
 
+  // ✅ DEBUG: isOpen ve viewMode durumunu logla
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[DealList] Debug:', {
+        isOpen,
+        viewMode,
+        isSuperAdmin,
+        sessionUser: session?.user?.email,
+      })
+    }
+  }, [isOpen, viewMode, isSuperAdmin, session])
+
 
   const [stage, setStage] = useState('')
 
@@ -676,6 +728,12 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
   const [selectedDealData, setSelectedDealData] = useState<Deal | null>(null)
 
+  const [quickAction, setQuickAction] = useState<{ type: 'quote' | 'invoice' | 'task' | 'meeting'; deal: Deal } | null>(null)
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false)
+  const [smsDialogOpen, setSmsDialogOpen] = useState(false)
+  const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false)
+  const [selectedDealForCommunication, setSelectedDealForCommunication] = useState<Deal | null>(null)
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
 
   const [lostDialogOpen, setLostDialogOpen] = useState(false)
 
@@ -894,7 +952,24 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
   // ✅ ÇÖZÜM: useQuery'den gelen data'yı state'e kopyala - optimistic update için
   // ÖNEMLİ: State-based optimistic update - React Query cache'inden bağımsız
-  const [kanbanData, setKanbanData] = useState<any[]>(kanbanQuery.data || [])
+  const [kanbanData, setKanbanData] = useState<any[]>(Array.isArray(kanbanQuery.data) ? kanbanQuery.data : [])
+
+  // ✅ DEBUG: kanbanQuery durumunu logla
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      const queryData = Array.isArray(kanbanQuery.data) ? kanbanQuery.data : []
+      console.log('[DealList] KanbanQuery Debug:', {
+        enabled: isOpen && viewMode === 'kanban',
+        isLoading: kanbanQuery.isLoading,
+        isError: kanbanQuery.isError,
+        error: kanbanQuery.error,
+        dataLength: queryData.length,
+        kanbanDataLength: kanbanData.length,
+        isOpen,
+        viewMode,
+      })
+    }
+  }, [kanbanQuery.isLoading, kanbanQuery.isError, kanbanQuery.error, kanbanQuery.data, kanbanData, isOpen, viewMode])
   const [isInitialLoad, setIsInitialLoad] = useState(true) // ✅ ÇÖZÜM: Initial load kontrolü
   
   // useQuery'den gelen data değiştiğinde state'i güncelle (sadece initial load'da)
@@ -902,12 +977,13 @@ export default function DealList({ isOpen = true }: DealListProps) {
   // ÖNEMLİ: Refresh sonrası API'den eski data gelirse state'i override etmemek için initial load kontrolü var
   useEffect(() => {
     if (!isOpen || viewMode !== 'kanban') return
-    if (!isInitialLoad && (!kanbanQuery.data || kanbanQuery.data.length === 0)) {
+    const queryData = Array.isArray(kanbanQuery.data) ? kanbanQuery.data : []
+    if (!isInitialLoad && queryData.length === 0) {
       return
     }
 
-    if (kanbanQuery.data && kanbanQuery.data.length > 0) {
-      setKanbanData(kanbanQuery.data)
+    if (queryData.length > 0) {
+      setKanbanData(queryData)
       setIsInitialLoad(false)
     }
   }, [kanbanQuery.data, isInitialLoad, isOpen, viewMode])
@@ -1057,6 +1133,10 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
 
+  const closeQuickAction = useCallback(() => {
+    setQuickAction(null)
+  }, [])
+
   const handleEdit = useCallback((deal: Deal) => {
 
 
@@ -1099,15 +1179,9 @@ export default function DealList({ isOpen = true }: DealListProps) {
       // Başarı bildirimi
 
 
-      toast.success(
-
-
+      toastSuccess(
         t('dealDeleted'),
-
-
         t('dealDeletedMessage', { title })
-
-
       )
 
 
@@ -1156,7 +1230,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
     } catch (error: any) {
 
 
-      toast.error(tCommon('error'), error?.message)
+      toastError(tCommon('error'), error?.message)
 
 
     }
@@ -1246,13 +1320,8 @@ export default function DealList({ isOpen = true }: DealListProps) {
   // Skeleton göster - hook'lardan SONRA (early return)
 
 
-  if (!isOpen) {
-
-
-    return null
-
-
-  }
+  // ✅ ÇÖZÜM: isOpen kontrolünü kaldırdık - AccordionContent zaten accordion kapalıyken render edilmiyor
+  // Query'ler enabled prop'u ile isOpen kontrolü yapıyor, bu yeterli
 
 
 
@@ -2106,14 +2175,53 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
       {/* Content */}
 
+      {/* ✅ DEBUG: isOpen ve viewMode kontrolü */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="mb-4 p-2 bg-yellow-100 text-xs rounded">
+          <strong>Debug:</strong> isOpen={String(isOpen)}, viewMode={viewMode}, 
+          enabled={String(isOpen && viewMode === 'kanban')}, 
+          isLoading={String(kanbanQuery.isLoading)}, 
+          isError={String(kanbanQuery.isError)}, 
+          dataLength={kanbanQuery.data?.length || 0}
+        </div>
+      )}
 
       {viewMode === 'kanban' ? (
+        <>
+          {/* ✅ DEBUG: Query durumu */}
+          {process.env.NODE_ENV === 'development' && (
+            <div className="mb-2 p-2 bg-blue-100 text-xs rounded">
+              <strong>Query Status:</strong> enabled={String(isOpen && viewMode === 'kanban')}, 
+              isLoading={String(kanbanQuery.isLoading)}, 
+              isError={String(kanbanQuery.isError)}, 
+              isFetching={String(kanbanQuery.isFetching)},
+              dataLength={Array.isArray(kanbanQuery.data) ? kanbanQuery.data.length : 0}
+            </div>
+          )}
+          {kanbanQuery.isLoading && (
+            <div className="flex items-center justify-center h-[400px]">
+              <div className="text-center">
+                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent"></div>
+                <p className="mt-4 text-sm text-gray-600">Kanban yükleniyor...</p>
+              </div>
+            </div>
+          )}
+          {kanbanQuery.isError && (
+            <div className="flex items-center justify-center h-[400px]">
+              <div className="text-center">
+                <p className="text-sm text-red-600">Kanban yüklenirken bir hata oluştu.</p>
+                <p className="text-xs text-red-500 mt-2">{String(kanbanQuery.error)}</p>
+                <Button onClick={() => kanbanQuery.refetch()} className="mt-4">
+                  Tekrar Dene
+                </Button>
+              </div>
+            </div>
+          )}
+          {!kanbanQuery.isLoading && !kanbanQuery.isError && (
+            <DealKanbanChart 
 
 
-        <DealKanbanChart 
-
-
-          data={kanbanData || []} 
+              data={kanbanData || []} 
 
 
           onEdit={handleEdit}
@@ -2125,7 +2233,10 @@ export default function DealList({ isOpen = true }: DealListProps) {
             setSelectedDealId(dealId)
             setDetailModalOpen(true)
           }} // ✅ ÇÖZÜM: Modal açmak için callback
-
+          
+          onQuickAction={(type, deal) => {
+            setQuickAction({ type, deal })
+          }}
 
           onStageChange={async (dealId: string, newStage: string) => {
 
@@ -2316,19 +2427,19 @@ export default function DealList({ isOpen = true }: DealListProps) {
               if (toastType === 'success') {
 
 
-                toast.success(toastTitle, toastDescription)
+                toastSuccess(toastTitle, toastDescription)
 
 
               } else if (toastType === 'warning') {
 
 
-                toast.warning(toastTitle, toastDescription)
+                toastWarning(toastTitle, toastDescription)
 
 
               } else {
 
 
-                toast.success(toastTitle, toastDescription)
+                toastSuccess(toastTitle, toastDescription)
 
 
               }
@@ -2406,8 +2517,9 @@ export default function DealList({ isOpen = true }: DealListProps) {
           }}
 
 
-        />
-
+            />
+          )}
+        </>
 
       ) : (
 
@@ -2415,10 +2527,10 @@ export default function DealList({ isOpen = true }: DealListProps) {
         <div className="bg-white rounded-lg shadow-card overflow-hidden">
 
 
-          <Table>
-
-
-          <TableHeader>
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
+            <Table>
+              <TableHeader>
 
 
             <TableRow>
@@ -2518,17 +2630,44 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
                   <TableCell>
-
-
-                    <Badge className={stageColors[deal.stage] || 'bg-gray-100'}>
-
-
-                      {stageLabels[deal.stage] || deal.stage}
-
-
-                    </Badge>
-
-
+                    <InlineEditBadge
+                      value={deal.stage}
+                      options={[
+                        { value: 'LEAD', label: stageLabels['LEAD'] || 'Potansiyel' },
+                        { value: 'CONTACTED', label: stageLabels['CONTACTED'] || 'İletişim Kuruldu' },
+                        { value: 'PROPOSAL', label: stageLabels['PROPOSAL'] || 'Teklif' },
+                        { value: 'NEGOTIATION', label: stageLabels['NEGOTIATION'] || 'Pazarlık' },
+                        { value: 'WON', label: stageLabels['WON'] || 'Kazanıldı' },
+                        { value: 'LOST', label: stageLabels['LOST'] || 'Kaybedildi' },
+                      ]}
+                      onSave={async (newStage) => {
+                        try {
+                          const res = await fetch(`/api/deals/${deal.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ stage: newStage }),
+                          })
+                          if (!res.ok) {
+                            const error = await res.json().catch(() => ({}))
+                            throw new Error(error.error || 'Aşama güncellenemedi')
+                          }
+                          const updatedDeal = await res.json()
+                          
+                          // Cache'i güncelle
+                          await Promise.all([
+                            mutate('/api/deals', undefined, { revalidate: true }),
+                            mutate('/api/deals?', undefined, { revalidate: true }),
+                            mutate((key: string) => typeof key === 'string' && key.startsWith('/api/deals'), undefined, { revalidate: true }),
+                          ])
+                          
+                          toastSuccess('Aşama güncellendi', `Fırsat "${stageLabels[newStage] || newStage}" aşamasına taşındı.`)
+                        } catch (error: any) {
+                          toastError('Aşama güncellenemedi', error?.message || 'Bir hata oluştu.')
+                          throw error
+                        }
+                      }}
+                      disabled={deal.stage === 'WON' || deal.stage === 'LOST'}
+                    />
                   </TableCell>
 
 
@@ -2581,17 +2720,44 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
                   <TableCell>
-
-
-                    <Badge variant={deal.status === 'OPEN' ? 'default' : 'secondary'}>
-
-
-                      {deal.status === 'OPEN' ? 'Açık' : 'Kapalı'}
-
-
-                    </Badge>
-
-
+                    <InlineEditBadge
+                      value={deal.stage}
+                      options={[
+                        { value: 'LEAD', label: 'Potansiyel' },
+                        { value: 'CONTACTED', label: 'İletişim Kuruldu' },
+                        { value: 'PROPOSAL', label: 'Teklif' },
+                        { value: 'NEGOTIATION', label: 'Pazarlık' },
+                        { value: 'WON', label: 'Kazanıldı' },
+                        { value: 'LOST', label: 'Kaybedildi' },
+                      ]}
+                      onSave={async (newStage) => {
+                        try {
+                          const res = await fetch(`/api/deals/${deal.id}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ stage: newStage }),
+                          })
+                          if (!res.ok) {
+                            const error = await res.json().catch(() => ({}))
+                            throw new Error(error.error || 'Aşama güncellenemedi')
+                          }
+                          const updatedDeal = await res.json()
+                          
+                          // Cache'i güncelle
+                          await Promise.all([
+                            mutate('/api/deals', undefined, { revalidate: true }),
+                            mutate('/api/deals?', undefined, { revalidate: true }),
+                            mutate((key: string) => typeof key === 'string' && key.startsWith('/api/deals'), undefined, { revalidate: true }),
+                          ])
+                          
+                          toastSuccess('Aşama güncellendi', `Fırsat "${newStage}" aşamasına taşındı.`)
+                        } catch (error: any) {
+                          toastError('Aşama güncellenemedi', error?.message || 'Bir hata oluştu.')
+                          throw error
+                        }
+                      }}
+                      disabled={deal.stage === 'WON' || deal.stage === 'LOST'}
+                    />
                   </TableCell>
 
 
@@ -2750,6 +2916,128 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
                     <div className="flex justify-end gap-2">
 
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={t('quickActions.open', { name: deal.title })}
+                          >
+                            <Sparkles className="h-4 w-4 text-indigo-500" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
+                          <DropdownMenuLabel>{t('quickActions.title')}</DropdownMenuLabel>
+                          <DropdownMenuItem
+                            onSelect={() => setQuickAction({ type: 'quote', deal })}
+                          >
+                            <FileText className="h-4 w-4" />
+                            {t('quickActions.createQuote')}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => setQuickAction({ type: 'invoice', deal })}
+                          >
+                            <Receipt className="h-4 w-4" />
+                            {t('quickActions.createInvoice')}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onSelect={() => setQuickAction({ type: 'task', deal })}
+                          >
+                            <CheckSquare className="h-4 w-4" />
+                            {t('quickActions.createTask')}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => setQuickAction({ type: 'meeting', deal })}
+                          >
+                            <Calendar className="h-4 w-4" />
+                            {t('quickActions.scheduleMeeting')}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          {/* Email/SMS/WhatsApp Butonları */}
+                          <DropdownMenuItem
+                            onSelect={async () => {
+                              if (deal.customerId) {
+                                try {
+                                  const customerRes = await fetch(`/api/customers/${deal.customerId}`)
+                                  if (customerRes.ok) {
+                                    const customer = await customerRes.json()
+                                    if (customer?.email) {
+                                      setSelectedDealForCommunication(deal)
+                                      setSelectedCustomer(customer)
+                                      setEmailDialogOpen(true)
+                                    } else {
+                                      toastError('E-posta adresi yok', 'Müşterinin e-posta adresi bulunamadı')
+                                    }
+                                  }
+                                } catch (error) {
+                                  console.error('Customer fetch error:', error)
+                                }
+                              } else {
+                                toastError('Müşteri yok', 'Bu fırsat için müşteri bilgisi bulunamadı')
+                              }
+                            }}
+                            disabled={!deal.customerId}
+                          >
+                            <Mail className="h-4 w-4" />
+                            E-posta Gönder
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={async () => {
+                              if (deal.customerId) {
+                                try {
+                                  const customerRes = await fetch(`/api/customers/${deal.customerId}`)
+                                  if (customerRes.ok) {
+                                    const customer = await customerRes.json()
+                                    if (customer?.phone) {
+                                      setSelectedDealForCommunication(deal)
+                                      setSelectedCustomer(customer)
+                                      setSmsDialogOpen(true)
+                                    } else {
+                                      toastError('Telefon numarası yok', 'Müşterinin telefon numarası bulunamadı')
+                                    }
+                                  }
+                                } catch (error) {
+                                  console.error('Customer fetch error:', error)
+                                }
+                              } else {
+                                toastError('Müşteri yok', 'Bu fırsat için müşteri bilgisi bulunamadı')
+                              }
+                            }}
+                            disabled={!deal.customerId}
+                          >
+                            <MessageSquare className="h-4 w-4" />
+                            SMS Gönder
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={async () => {
+                              if (deal.customerId) {
+                                try {
+                                  const customerRes = await fetch(`/api/customers/${deal.customerId}`)
+                                  if (customerRes.ok) {
+                                    const customer = await customerRes.json()
+                                    if (customer?.phone) {
+                                      setSelectedDealForCommunication(deal)
+                                      setSelectedCustomer(customer)
+                                      setWhatsAppDialogOpen(true)
+                                    } else {
+                                      toastError('Telefon numarası yok', 'Müşterinin telefon numarası bulunamadı')
+                                    }
+                                  }
+                                } catch (error) {
+                                  console.error('Customer fetch error:', error)
+                                }
+                              } else {
+                                toastError('Müşteri yok', 'Bu fırsat için müşteri bilgisi bulunamadı')
+                              }
+                            }}
+                            disabled={!deal.customerId}
+                          >
+                            <MessageCircle className="h-4 w-4" />
+                            WhatsApp Gönder
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
 
                       <Button
 
@@ -2826,7 +3114,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                           if (deal.stage === 'WON') {
 
 
-                            toast.warning(t('cannotDeleteWon'), t('cannotDeleteWonMessage'))
+                            toastWarning(t('cannotDeleteWon'), t('cannotDeleteWonMessage'))
 
 
                             return
@@ -2838,7 +3126,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                           if (deal.status === 'CLOSED') {
 
 
-                            toast.warning(t('cannotDeleteClosed'), t('cannotDeleteClosedMessage'))
+                            toastWarning(t('cannotDeleteClosed'), t('cannotDeleteClosedMessage'))
 
 
                             return
@@ -2901,10 +3189,110 @@ export default function DealList({ isOpen = true }: DealListProps) {
             )}
 
 
-          </TableBody>
+              </TableBody>
+            </Table>
+          </div>
 
-
-        </Table>
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {tableDeals.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                {t('noDealsFound')}
+              </div>
+            ) : (
+              tableDeals.map((deal) => (
+                <div
+                  key={deal.id}
+                  className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-gray-900 truncate">{deal.title}</h3>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <InlineEditBadge
+                          value={deal.stage}
+                          options={[
+                            { value: 'LEAD', label: stageLabels['LEAD'] || 'Potansiyel' },
+                            { value: 'CONTACTED', label: stageLabels['CONTACTED'] || 'İletişim Kuruldu' },
+                            { value: 'PROPOSAL', label: stageLabels['PROPOSAL'] || 'Teklif' },
+                            { value: 'NEGOTIATION', label: stageLabels['NEGOTIATION'] || 'Pazarlık' },
+                            { value: 'WON', label: stageLabels['WON'] || 'Kazanıldı' },
+                            { value: 'LOST', label: stageLabels['LOST'] || 'Kaybedildi' },
+                          ]}
+                          onSave={async (newStage) => {
+                            try {
+                              const res = await fetch(`/api/deals/${deal.id}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ stage: newStage }),
+                              })
+                              if (!res.ok) {
+                                const error = await res.json().catch(() => ({}))
+                                throw new Error(error.error || 'Aşama güncellenemedi')
+                              }
+                              await Promise.all([
+                                mutate('/api/deals', undefined, { revalidate: true }),
+                                mutate('/api/deals?', undefined, { revalidate: true }),
+                              ])
+                              toastSuccess('Aşama güncellendi', `Fırsat "${stageLabels[newStage] || newStage}" aşamasına taşındı.`)
+                            } catch (error: any) {
+                              toastError('Aşama güncellenemedi', error?.message || 'Bir hata oluştu.')
+                              throw error
+                            }
+                          }}
+                          disabled={deal.stage === 'WON' || deal.stage === 'LOST'}
+                        />
+                        <Badge className="font-semibold text-xs">
+                          {formatCurrency(deal.value || 0)}
+                        </Badge>
+                        {isSuperAdmin && deal.Company?.name && (
+                          <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                            {deal.Company.name}
+                          </Badge>
+                        )}
+                      </div>
+                      {deal.customerId && (
+                        <Link 
+                          href={`/${locale}/customers/${deal.customerId}`}
+                          className="text-xs text-primary-600 hover:underline mt-1 block"
+                          prefetch={true}
+                        >
+                          {t('customerPrefix')}{deal.customerId.substring(0, 8)}
+                        </Link>
+                      )}
+                      <p className="text-xs text-gray-500 mt-1">
+                        {new Date(deal.createdAt).toLocaleDateString('tr-TR')}
+                      </p>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
+                          <Sparkles className="h-4 w-4 text-indigo-500" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuItem onClick={() => {
+                          setSelectedDealId(deal.id)
+                          setDetailModalOpen(true)
+                        }}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          {t('view')}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleEdit(deal)}>
+                          <Edit className="h-4 w-4 mr-2" />
+                          {t('edit')}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDelete(deal.id, deal.title)} className="text-red-600">
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          {t('delete')}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
 
 
         </div>
@@ -2982,21 +3370,11 @@ export default function DealList({ isOpen = true }: DealListProps) {
           // Başarı bildirimi
 
 
-          toast.success(
-
-
+          toastSuccess(
             selectedDeal ? 'Fırsat güncellendi!' : 'Fırsat oluşturuldu!',
-
-
             selectedDeal 
-
-
               ? `${savedDeal.title} başarıyla güncellendi.`
-
-
               : `${savedDeal.title} başarıyla oluşturuldu.`
-
-
           )
 
 
@@ -3231,7 +3609,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                 if (!lostReason.trim()) {
 
 
-                  toast.error(t('lostDialog.reasonRequired'), t('lostDialog.reasonRequiredMessage'))
+                  toastError(t('lostDialog.reasonRequired'), t('lostDialog.reasonRequiredMessage'))
 
 
                   return
@@ -3246,7 +3624,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                 if (!losingDealId) {
 
 
-                  toast.error(tCommon('error'), t('lostDialog.error'))
+                  toastError(tCommon('error'), t('lostDialog.error'))
 
 
                   setLostDialogOpen(false)
@@ -3339,24 +3717,14 @@ export default function DealList({ isOpen = true }: DealListProps) {
                   // Toast mesajı - analiz görevi oluşturulduğunu bildir
 
 
-                  toast.success(
-
-
+                  toastSuccess(
                     t('lostDialog.dealMarkedAsLost'),
-
-
                     t('lostDialog.dealMarkedAsLostMessage'),
-
-
                     {
-
-
-                      label: t('lostDialog.goToTasksPage'),
-
-
-                      onClick: () => window.location.href = `/${locale}/tasks`,
-
-
+                      action: {
+                        label: t('lostDialog.goToTasksPage'),
+                        onClick: () => window.location.href = `/${locale}/tasks`,
+                      }
                     }
 
 
@@ -3423,7 +3791,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                   console.error('Lost error:', error)
 
 
-                  toast.error(t('lostDialog.markAsLostFailed'), error?.message || t('lostDialog.markAsLostFailedMessage'))
+                  toastError(t('lostDialog.markAsLostFailed'), error?.message || t('lostDialog.markAsLostFailedMessage'))
 
 
                 }
@@ -3452,13 +3820,121 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
       </Dialog>
 
+      {/* Quick Action Form Modals */}
+      <QuoteForm
+        open={quickAction?.type === 'quote'}
+        onClose={closeQuickAction}
+        onSuccess={async (savedQuote) => {
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
+          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
+          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
+        }}
+        dealId={quickAction?.deal.id}
+        customerCompanyId={quickAction?.deal.companyId}
+      />
+      <InvoiceForm
+        open={quickAction?.type === 'invoice'}
+        onClose={closeQuickAction}
+        onSuccess={async (savedInvoice) => {
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+        }}
+        customerCompanyId={quickAction?.deal.companyId}
+      />
+      <TaskForm
+        open={quickAction?.type === 'task'}
+        onClose={closeQuickAction}
+        onSuccess={async (savedTask) => {
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+        }}
+        defaultTitle={quickAction?.deal.title}
+      />
+      <MeetingForm
+        open={quickAction?.type === 'meeting'}
+        onClose={closeQuickAction}
+        onSuccess={async (savedMeeting) => {
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+        }}
+        dealId={quickAction?.deal.id}
+        customerCompanyId={quickAction?.deal.companyId}
+      />
 
+      {/* Email/SMS/WhatsApp Dialog'ları */}
+      {emailDialogOpen && selectedDealForCommunication && selectedCustomer && (
+        <AutomationConfirmationModal
+          type="email"
+          options={{
+            entityType: 'DEAL',
+            entityId: selectedDealForCommunication.id,
+            entityTitle: selectedDealForCommunication.title,
+            customerEmail: selectedCustomer.email,
+            customerPhone: selectedCustomer.phone,
+            customerName: selectedCustomer.name,
+            defaultSubject: `Fırsat Bilgisi: ${selectedDealForCommunication.title}`,
+            defaultMessage: `Merhaba ${selectedCustomer.name},\n\nFırsat bilgisi: ${selectedDealForCommunication.title}\n\nDeğer: ${selectedDealForCommunication.value ? `₺${selectedDealForCommunication.value.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}\nAşama: ${selectedDealForCommunication.stage || 'LEAD'}`,
+            defaultHtml: `<p>Merhaba ${selectedCustomer.name},</p><p>Fırsat bilgisi: <strong>${selectedDealForCommunication.title}</strong></p><p>Değer: ${selectedDealForCommunication.value ? `₺${selectedDealForCommunication.value.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}</p><p>Aşama: ${selectedDealForCommunication.stage || 'LEAD'}</p>`,
+            onSent: () => {
+              toastSuccess('E-posta gönderildi', 'Müşteriye deal bilgisi gönderildi')
+            },
+          }}
+          open={emailDialogOpen}
+          onClose={() => {
+            setEmailDialogOpen(false)
+            setSelectedDealForCommunication(null)
+            setSelectedCustomer(null)
+          }}
+        />
+      )}
+      
+      {smsDialogOpen && selectedDealForCommunication && selectedCustomer && (
+        <AutomationConfirmationModal
+          type="sms"
+          options={{
+            entityType: 'DEAL',
+            entityId: selectedDealForCommunication.id,
+            entityTitle: selectedDealForCommunication.title,
+            customerEmail: selectedCustomer.email,
+            customerPhone: selectedCustomer.phone,
+            customerName: selectedCustomer.name,
+            defaultMessage: `Merhaba ${selectedCustomer.name}, Fırsat bilgisi: ${selectedDealForCommunication.title}. Değer: ${selectedDealForCommunication.value ? `₺${selectedDealForCommunication.value.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
+            onSent: () => {
+              toastSuccess('SMS gönderildi', 'Müşteriye deal bilgisi gönderildi')
+            },
+          }}
+          open={smsDialogOpen}
+          onClose={() => {
+            setSmsDialogOpen(false)
+            setSelectedDealForCommunication(null)
+            setSelectedCustomer(null)
+          }}
+        />
+      )}
+      
+      {whatsAppDialogOpen && selectedDealForCommunication && selectedCustomer && (
+        <AutomationConfirmationModal
+          type="whatsapp"
+          options={{
+            entityType: 'DEAL',
+            entityId: selectedDealForCommunication.id,
+            entityTitle: selectedDealForCommunication.title,
+            customerEmail: selectedCustomer.email,
+            customerPhone: selectedCustomer.phone,
+            customerName: selectedCustomer.name,
+            defaultMessage: `Merhaba ${selectedCustomer.name}, Fırsat bilgisi: ${selectedDealForCommunication.title}. Değer: ${selectedDealForCommunication.value ? `₺${selectedDealForCommunication.value.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
+            onSent: () => {
+              toastSuccess('WhatsApp mesajı gönderildi', 'Müşteriye deal bilgisi gönderildi')
+            },
+          }}
+          open={whatsAppDialogOpen}
+          onClose={() => {
+            setWhatsAppDialogOpen(false)
+            setSelectedDealForCommunication(null)
+            setSelectedCustomer(null)
+          }}
+        />
+      )}
     </div>
-
-
   )
-
-
 }
 
 

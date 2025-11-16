@@ -30,7 +30,6 @@ import {
 } from '@/components/ui/accordion'
 import { useData } from '@/hooks/useData'
 import type { DashboardSpotlightResponse } from '@/types/dashboard'
-import ErrorBoundary from '@/components/ErrorBoundary'
 
 const SectionSkeleton = () => (
   <div className="h-48 animate-pulse rounded-2xl border border-dashed border-slate-200 bg-slate-100/60" />
@@ -46,11 +45,23 @@ const SmartReminder = dynamic(
   }
 )
 
-const NextBestAction = dynamic(
-  () => import('@/components/suggestions/NextBestAction'),
+const SmartSuggestions = dynamic(
+  () => import('@/components/dashboard/SmartSuggestions'),
   {
     ssr: false,
-    loading: () => null,
+    loading: () => (
+      <div className="h-48 animate-pulse rounded-2xl border border-dashed border-slate-200 bg-slate-100/60" />
+    ),
+  }
+)
+
+const WorkflowShortcuts = dynamic(
+  () => import('@/components/dashboard/WorkflowShortcuts'),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="h-48 animate-pulse rounded-2xl border border-dashed border-slate-200 bg-slate-100/60" />
+    ),
   }
 )
 
@@ -113,9 +124,9 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
   {
     id: 'overview',
     titleKey: 'overview',
-    titleFallback: 'Genel Bakış',
+    titleFallback: 'Overview',
     descriptionKey: 'overviewDescription',
-    descriptionFallback: 'KPI özetleri ve anlık göstergeler',
+    descriptionFallback: 'Key performance indicators and real-time metrics',
     Icon: TrendingUp,
     Component: OverviewSection,
     defaultOpen: true,
@@ -123,9 +134,9 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
   {
     id: 'sales-performance',
     titleKey: 'salesPerformanceAnalysis',
-    titleFallback: 'Satış & Performans Analizi',
+    titleFallback: 'Sales & Performance Analysis',
     descriptionKey: 'salesPerformanceDescription',
-    descriptionFallback: 'Aylık trendler ve ekip performansı',
+    descriptionFallback: 'Monthly trends and team performance',
     Icon: BarChart3,
     Component: SalesPerformanceSection,
     defaultOpen: true,
@@ -133,36 +144,36 @@ const SECTION_DEFINITIONS: SectionDefinition[] = [
   {
     id: 'distribution',
     titleKey: 'distributionAnalysis',
-    titleFallback: 'Dağılım Analizi',
+    titleFallback: 'Distribution Analysis',
     descriptionKey: 'distributionAnalysisDescription',
-    descriptionFallback: 'Segment bazlı ürün ve müşteri dağılımları',
+    descriptionFallback: 'Segment-based product and customer distributions',
     Icon: PieChart,
     Component: DistributionSection,
   },
   {
     id: 'deal-status',
     titleKey: 'dealStatus',
-    titleFallback: 'Fırsat Durumu',
+    titleFallback: 'Deal Status',
     descriptionKey: 'dealStatusDescription',
-    descriptionFallback: 'Pipeline aşamaları ve fırsat detayları',
+    descriptionFallback: 'Pipeline stages and deal details',
     Icon: Briefcase,
     Component: DealStatusSection,
   },
   {
     id: 'invoice-status',
     titleKey: 'invoiceStatus',
-    titleFallback: 'Fatura Durumu',
+    titleFallback: 'Invoice Status',
     descriptionKey: 'invoiceStatusDescription',
-    descriptionFallback: 'Ödeme süreçleri ve finansal görünüm',
+    descriptionFallback: 'Payment processes and financial overview',
     Icon: Receipt,
     Component: InvoiceStatusSection,
   },
   {
     id: 'recent-activities',
     titleKey: 'recentActivities',
-    titleFallback: 'Son Aktiviteler',
+    titleFallback: 'Recent Activities',
     descriptionKey: 'recentActivitiesDescription',
-    descriptionFallback: 'Sistem içi aksiyon ve log akışı',
+    descriptionFallback: 'System actions and log flow',
     Icon: ActivityIcon,
     Component: RecentActivitiesSection,
   },
@@ -209,21 +220,24 @@ export default function DashboardPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-[1920px] space-y-4 sm:space-y-6 p-3 sm:p-4">
+      <div className="mx-auto max-w-[1920px] space-y-3 sm:space-y-4 md:space-y-6 p-2 sm:p-3 md:p-4">
         <SmartReminder />
 
         <HeroBanner t={t} userName={session?.user?.name} />
 
-        <DashboardSpotlight />
+        {/* Smart Suggestions ve Workflow Shortcuts */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
+          <SmartSuggestions />
+          <WorkflowShortcuts />
+        </div>
 
-        {/* Next Best Action - Akıllı Öneriler */}
-        <NextBestAction />
+        <DashboardSpotlight />
 
         <Accordion
           type="multiple"
           value={openSections}
           onValueChange={(values) => setOpenSections(values as string[])}
-          className="space-y-4"
+          className="space-y-3 sm:space-y-4"
         >
           {SECTION_DEFINITIONS.map(
             ({
@@ -245,33 +259,25 @@ export default function DashboardPage() {
                 <AccordionItem
                   key={id}
                   value={id}
-                  className="rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow data-[state=open]:shadow-lg"
+                  className="rounded-xl sm:rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow data-[state=open]:shadow-lg"
                 >
-                  <AccordionTrigger className="px-3 sm:px-4 md:px-6 py-3 text-left">
+                  <AccordionTrigger className="px-3 sm:px-4 md:px-6 py-2.5 sm:py-3 text-left">
                     <div className="flex items-center gap-2 sm:gap-3">
-                      <div className="flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 text-indigo-500">
-                        <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                      <div className="flex h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 items-center justify-center rounded-lg sm:rounded-xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 text-indigo-500 flex-shrink-0">
+                        <Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4" />
                       </div>
-                      <div>
-                        <p className="text-xs sm:text-sm font-semibold text-slate-900">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs sm:text-sm font-semibold text-slate-900 truncate">
                           {title}
                         </p>
                         {description ? (
-                          <p className="text-[10px] sm:text-xs text-slate-500">{description}</p>
+                          <p className="text-[10px] sm:text-xs text-slate-500 line-clamp-1">{description}</p>
                         ) : null}
                       </div>
                     </div>
                   </AccordionTrigger>
-                  <AccordionContent className="px-3 sm:px-4 pb-4 sm:pb-6 pt-0 md:px-6">
-                    <ErrorBoundary
-                      fallback={
-                        <div className="p-4 text-center text-sm text-gray-500">
-                          Bu bölüm yüklenirken bir hata oluştu. Lütfen sayfayı yenileyin.
-                        </div>
-                      }
-                    >
-                      <Component isOpen={isOpen} />
-                    </ErrorBoundary>
+                  <AccordionContent className="px-3 sm:px-4 pb-3 sm:pb-4 md:pb-6 pt-0 md:px-6">
+                    <Component isOpen={isOpen} />
                   </AccordionContent>
                 </AccordionItem>
               )
@@ -328,14 +334,14 @@ function HeroBanner({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: 'easeOut' }}
-      className="relative overflow-hidden rounded-[20px] sm:rounded-[28px] border border-white/10 bg-white/40 p-4 sm:p-8 text-slate-900 shadow-[0_24px_80px_-40px_rgba(99,102,241,0.35)] backdrop-blur-lg dark:border-slate-800/60 dark:bg-slate-900/70 dark:text-slate-100"
+      className="relative overflow-hidden rounded-xl sm:rounded-[20px] md:rounded-[28px] border border-white/10 bg-white/40 p-3 sm:p-4 md:p-8 text-slate-900 shadow-[0_24px_80px_-40px_rgba(99,102,241,0.35)] backdrop-blur-lg dark:border-slate-800/60 dark:bg-slate-900/70 dark:text-slate-100"
     >
-      <div className="space-y-6">
-        <span className="inline-flex items-center gap-2 rounded-full border border-slate-200/60 bg-white px-4 py-1 text-xs font-semibold uppercase tracking-[0.35em] text-slate-500 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/70 dark:text-slate-300">
+      <div className="space-y-4 sm:space-y-6">
+        <span className="inline-flex items-center gap-1.5 sm:gap-2 rounded-full border border-slate-200/60 bg-white px-2.5 sm:px-4 py-0.5 sm:py-1 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.25em] sm:tracking-[0.35em] text-slate-500 shadow-sm dark:border-slate-700/60 dark:bg-slate-900/70 dark:text-slate-300">
           {t('title')}
         </span>
-        <div className="space-y-3">
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight">
+        <div className="space-y-2 sm:space-y-3">
+          <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold tracking-tight">
             {t('welcome')},{' '}
             <span className="text-indigo-600 dark:text-indigo-300">
               {userName ??
@@ -344,7 +350,7 @@ function HeroBanner({
                 })}
             </span>
           </h1>
-          <p className="text-sm text-slate-600 dark:text-slate-300">
+          <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
             {localTime
               ? t('heroSummary.timestamp', {
                   defaultMessage: '{time} itibarıyla paneliniz hazır.',
@@ -355,21 +361,21 @@ function HeroBanner({
                 })}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs sm:text-sm text-slate-600 dark:text-slate-200">
-          <span className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white px-3 py-1 font-semibold shadow-sm dark:border-slate-700/60 dark:bg-slate-900/70">
-            <Users className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-300" />
-            {watchersText}
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs md:text-sm text-slate-600 dark:text-slate-200">
+          <span className="inline-flex items-center gap-1 sm:gap-2 rounded-full border border-slate-200/70 bg-white px-2 sm:px-3 py-0.5 sm:py-1 font-semibold shadow-sm dark:border-slate-700/60 dark:bg-slate-900/70">
+            <Users className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-indigo-500 dark:text-indigo-300" />
+            <span className="truncate max-w-[120px] sm:max-w-none">{watchersText}</span>
           </span>
-          <span className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white px-3 py-1 font-semibold shadow-sm dark:border-slate-700/60 dark:bg-slate-900/70">
-            <Clock className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-300" />
-            {localTime}
+          <span className="inline-flex items-center gap-1 sm:gap-2 rounded-full border border-slate-200/70 bg-white px-2 sm:px-3 py-0.5 sm:py-1 font-semibold shadow-sm dark:border-slate-700/60 dark:bg-slate-900/70">
+            <Clock className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-indigo-500 dark:text-indigo-300" />
+            <span className="truncate max-w-[100px] sm:max-w-none">{localTime}</span>
           </span>
           {live ? (
-            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-300/40 bg-emerald-400/15 px-3 py-1 font-semibold text-emerald-600 shadow-sm dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-200">
-              <ActivityIcon className="h-3.5 w-3.5" />
-              {t('heroSummary.live', {
+            <span className="inline-flex items-center gap-1 sm:gap-2 rounded-full border border-emerald-300/40 bg-emerald-400/15 px-2 sm:px-3 py-0.5 sm:py-1 font-semibold text-emerald-600 shadow-sm dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-200">
+              <ActivityIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+              <span className="hidden sm:inline">{t('heroSummary.live', {
                 defaultMessage: 'Canlı izleme açık',
-              })}
+              })}</span>
             </span>
           ) : null}
         </div>

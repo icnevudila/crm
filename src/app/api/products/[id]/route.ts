@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { updateRecord } from '@/lib/crud'
 
 export async function GET(
   request: Request,
@@ -40,7 +41,21 @@ export async function GET(
     // Migration kolonları yoksa hata vermeden atlanır
     // NOT: Migration kolonları (category, sku, barcode, status, minStock, maxStock, unit, weight, dimensions, description, reservedQuantity, incomingQuantity)
     // migration dosyaları çalıştırılmadıysa olmayabilir, bu yüzden sadece temel kolonları kullanıyoruz
-    const selectColumns = 'id, name, price, stock, companyId, createdAt, updatedAt'
+    // Vendor bilgisini de çek (eğer vendorId varsa)
+    // createdBy ve updatedBy bilgilerini User join ile çekiyoruz (audit trail için)
+    // NOT: Foreign key yoksa (migration çalıştırılmamışsa) join'leri kaldırıp tekrar deniyoruz
+    const selectColumns = `
+      id, name, price, stock, companyId, createdAt, updatedAt,
+      createdBy, updatedBy,
+      CreatedByUser:User!Product_createdBy_fkey(id, name, email),
+      UpdatedByUser:User!Product_updatedBy_fkey(id, name, email),
+      vendorId,
+      Vendor:Vendor!Product_vendorId_fkey (
+        id,
+        name,
+        status
+      )
+    `
     
     let productQuery = supabase
       .from('Product')
@@ -52,14 +67,66 @@ export async function GET(
       productQuery = productQuery.eq('companyId', companyId)
     }
     
-    const { data: productData, error } = await productQuery
+    let { data: productData, error } = await productQuery
+    
+    // Foreign key hatası varsa (PGRST200), join'leri kaldırıp tekrar dene
+    if (error && (error.code === 'PGRST200' || error.message?.includes('Could not find a relationship'))) {
+      console.warn('Product GET API: Foreign key bulunamadı, join olmadan tekrar deneniyor...')
+      const selectColumnsWithoutJoin = `
+        id, name, price, stock, companyId, createdAt, updatedAt,
+        createdBy, updatedBy,
+        vendorId,
+        Vendor:Vendor!Product_vendorId_fkey (
+          id,
+          name,
+          status
+        )
+      `
+      
+      let productQueryWithoutJoin = supabase
+        .from('Product')
+        .select(selectColumnsWithoutJoin)
+        .eq('id', id)
+      
+      if (!isSuperAdmin) {
+        productQueryWithoutJoin = productQueryWithoutJoin.eq('companyId', companyId)
+      }
+      
+      const retryResult = await productQueryWithoutJoin
+      const retryProductData: any = Array.isArray(retryResult.data) && retryResult.data.length > 0 ? retryResult.data[0] : retryResult.data
+      error = retryResult.error
+      
+      // createdBy/updatedBy varsa User bilgilerini ayrı query ile çek
+      const productDataTemp: any = retryProductData
+      if (productDataTemp && (productDataTemp.createdBy || productDataTemp.updatedBy)) {
+        const userIds = [productDataTemp.createdBy, productDataTemp.updatedBy].filter(Boolean) as string[]
+        if (userIds.length > 0) {
+          const { data: users } = await supabase
+            .from('User')
+            .select('id, name, email')
+            .in('id', userIds)
+          
+          if (users) {
+            const userMap = new Map(users.map((u: any) => [u.id, u]))
+            if (productDataTemp.createdBy && userMap.has(productDataTemp.createdBy)) {
+              productDataTemp.CreatedByUser = userMap.get(productDataTemp.createdBy)
+            }
+            if (productDataTemp.updatedBy && userMap.has(productDataTemp.updatedBy)) {
+              productDataTemp.UpdatedByUser = userMap.get(productDataTemp.updatedBy)
+            }
+          }
+        }
+        // productData'yı güncelle
+        productData = [productDataTemp] // Array olarak sakla
+      }
+    }
     
     if (error) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 })
     }
     
     // .single() yerine array'in ilk elemanını al
-    const data = Array.isArray(productData) && productData.length > 0 ? productData[0] : productData
+    const data: any = Array.isArray(productData) && productData.length > 0 ? productData[0] : productData
     
     if (!data) {
       return NextResponse.json({ error: 'Product not found' }, { status: 404 })
@@ -257,7 +324,10 @@ export async function PUT(
     // Body parse - hata yakalama ile
     let body
     try {
-      body = await request.json()
+      const bodyRaw = await request.json()
+      // Güvenlik: createdBy ve updatedBy otomatik dolduruluyor (CRUD fonksiyonunda), body'den alınmamalı
+      const { id: bodyId, companyId: bodyCompanyId, createdAt, updatedAt, createdBy, updatedBy, ...cleanBody } = bodyRaw
+      body = cleanBody
     } catch (jsonError: any) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Products PUT API JSON parse error:', jsonError)
@@ -270,8 +340,9 @@ export async function PUT(
 
     // Zorunlu alanları kontrol et
     if (!body.name || body.name.trim() === '') {
+      const { getErrorMessage } = await import('@/lib/api-locale')
       return NextResponse.json(
-        { error: 'Ürün adı gereklidir' },
+        { error: getErrorMessage('errors.api.productNameRequired', request) },
         { status: 400 }
       )
     }
@@ -321,48 +392,15 @@ export async function PUT(
 
     // NOT: imageUrl kolonu veritabanında olmayabilir - GÖNDERME!
     // NOT: vendorId schema-vendor'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
+    // NOT: updatedAt ve updatedBy updateRecord fonksiyonunda otomatik ekleniyor
 
-    // @ts-ignore - Supabase database type tanımları eksik, update metodu dinamik tip bekliyor
-    const { data: updateData, error } = await supabase
-      .from('Product')
-      // @ts-expect-error - Supabase database type tanımları eksik
-      .update(productData)
-      .eq('id', id)
-      .eq('companyId', session.user.companyId)
-      .select('id, name, price, stock, companyId, createdAt, updatedAt')
-    
-    if (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Products PUT API update error:', error)
-      }
-      return NextResponse.json(
-        { error: error.message || 'Failed to update product' },
-        { status: 500 }
-      )
-    }
-    
-    // .single() yerine array'in ilk elemanını al
-    const data = Array.isArray(updateData) && updateData.length > 0 ? updateData[0] : updateData
-
-    // ActivityLog kaydı (hata olsa bile devam et)
-    try {
-      // @ts-ignore - Supabase database type tanımları eksik, insert metodu dinamik tip bekliyor
-      await supabase.from('ActivityLog').insert([
-        {
-          entity: 'Product',
-          action: 'UPDATE',
-          description: `Ürün bilgileri güncellendi: ${body.name || (data as any)?.name || ''}`,
-          meta: { entity: 'Product', action: 'update', id },
-          userId: session.user.id,
-          companyId: session.user.companyId,
-        },
-      ])
-    } catch (activityError) {
-      // ActivityLog hatası ana işlemi engellemez
-      if (process.env.NODE_ENV === 'development') {
-        console.error('ActivityLog error:', activityError)
-      }
-    }
+    // updateRecord kullanarak audit trail desteği (updatedBy otomatik eklenir)
+    const data = await updateRecord(
+      'Product',
+      id,
+      productData,
+      (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.productUpdated.replace('{name}', body.name)
+    )
 
     return NextResponse.json(data)
   } catch (error: any) {
@@ -417,10 +455,11 @@ export async function DELETE(
     }
     
     if (invoiceItems && invoiceItems.length > 0) {
+      const { getErrorMessage } = await import('@/lib/api-locale')
       return NextResponse.json(
         { 
-          error: 'Ürün silinemez',
-          message: 'Bu ürün faturalarda kullanılıyor. Ürünü silmek için önce ilgili fatura kalemlerini silmeniz gerekir.',
+          error: getErrorMessage('errors.api.productCannotBeDeleted', request),
+          message: getErrorMessage('errors.api.productUsedInInvoices', request),
           reason: 'PRODUCT_HAS_INVOICE_ITEMS',
           relatedItems: {
             invoiceItems: invoiceItems.length,
@@ -443,10 +482,11 @@ export async function DELETE(
     }
     
     if (quoteItems && quoteItems.length > 0) {
+      const { getErrorMessage } = await import('@/lib/api-locale')
       return NextResponse.json(
         { 
-          error: 'Ürün silinemez',
-          message: 'Bu ürün tekliflerde kullanılıyor. Ürünü silmek için önce ilgili teklif kalemlerini silmeniz gerekir.',
+          error: getErrorMessage('errors.api.productCannotBeDeleted', request),
+          message: getErrorMessage('errors.api.productUsedInQuotes', request),
           reason: 'PRODUCT_HAS_QUOTE_ITEMS',
           relatedItems: {
             quoteItems: quoteItems.length,
@@ -481,7 +521,7 @@ export async function DELETE(
           {
             entity: 'Product',
             action: 'DELETE',
-            description: `Ürün silindi: ${(product as any)?.name || 'Unknown'}`,
+            description: (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.productDeleted.replace('{name}', (product as any)?.name || (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.defaultProductName),
             meta: { entity: 'Product', action: 'delete', id },
             userId: session.user.id,
             companyId: session.user.companyId,

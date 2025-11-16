@@ -2,8 +2,16 @@
  * İş Akışı Adımları - Her modül için workflow tanımları
  */
 
+interface Step {
+  id: string
+  label: string
+  description: string
+  status: 'completed' | 'current' | 'upcoming' | 'locked'
+  requirements?: string[]
+}
+
 // Deal Workflow Steps
-export function getDealWorkflowSteps(currentStage: string) {
+export function getDealWorkflowSteps(currentStage: string): Step[] {
   const stages = ['LEAD', 'CONTACTED', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST']
   const currentIndex = stages.indexOf(currentStage)
   const isLost = currentStage === 'LOST'
@@ -108,7 +116,13 @@ export function getDealWorkflowSteps(currentStage: string) {
 }
 
 // Quote Workflow Steps
-export function getQuoteWorkflowSteps(currentStatus: string) {
+export function getQuoteWorkflowSteps(currentStatus: string): Array<{
+  id: string
+  label: string
+  description: string
+  status: 'current' | 'completed' | 'upcoming' | 'locked'
+  requirements?: string[]
+}> {
   const statuses = ['DRAFT', 'SENT', 'ACCEPTED', 'REJECTED', 'EXPIRED']
   const currentIndex = statuses.indexOf(currentStatus)
 
@@ -159,14 +173,43 @@ export function getQuoteWorkflowSteps(currentStatus: string) {
           ? 'current'
           : currentStatus === 'REJECTED' || currentStatus === 'EXPIRED'
           ? 'locked'
+          : currentIndex > statuses.indexOf('ACCEPTED')
+          ? 'completed'
           : 'upcoming',
       requirements:
-        currentStatus === 'SENT'
+        currentStatus === 'ACCEPTED'
           ? [
-              'Müşteri onayını alın',
               'Otomatik: Fatura oluşturulacak',
               'Otomatik: Sözleşme oluşturulacak',
             ]
+          : undefined,
+    },
+    {
+      id: 'rejected',
+      label: 'Reddedildi',
+      description: 'Müşteri reddetti',
+      status:
+        currentStatus === 'REJECTED'
+          ? 'current'
+          : currentStatus === 'EXPIRED'
+          ? 'locked'
+          : 'upcoming',
+      requirements:
+        currentStatus === 'REJECTED'
+          ? ['Reddetme sebebini kontrol edin', 'Yeni teklif hazırlayın']
+          : undefined,
+    },
+    {
+      id: 'expired',
+      label: 'Süresi Doldu',
+      description: 'Teklif süresi doldu',
+      status:
+        currentStatus === 'EXPIRED'
+          ? 'current'
+          : 'upcoming',
+      requirements:
+        currentStatus === 'EXPIRED'
+          ? ['Revizyon oluşturun', 'Yeni teklif hazırlayın']
           : undefined,
     },
   ]

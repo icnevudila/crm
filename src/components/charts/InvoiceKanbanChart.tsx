@@ -17,16 +17,27 @@ import {
   XCircle,
   ChevronLeft,
   ChevronRight,
+  StickyNote,
+  Sparkles,
+  Receipt,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
-import { confirm } from '@/lib/toast'
+import { confirm, toast } from '@/lib/toast'
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 
 interface KanbanInvoice {
   id: string
@@ -62,7 +73,7 @@ const STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Taslak',
   SENT: 'Gönderildi',
   SHIPPED: 'Sevkiyat Yapıldı',
-  RECEIVED: 'Mal Kabul',
+  RECEIVED: 'Satın Alma',
   PAID: 'Ödendi',
   OVERDUE: 'Vadesi Geçmiş',
   CANCELLED: 'İptal Edildi',
@@ -70,9 +81,9 @@ const STATUS_LABELS: Record<string, string> = {
 
 const STATUS_INFO: Record<string, string> = {
   DRAFT: '💡 Bu statüde: Fatura taslak halinde. Gönderilmeden önce içerikleri kontrol edin ve "Gönderildi" statüsüne alın.',
-  SENT: '📬 Bu statüde: Fatura müşteriye/tedarikçiye iletildi. Satış faturaları için "Sevkiyat Yapıldı", alış faturaları için "Mal Kabul Edildi", hizmet faturaları için "Ödendi" statüsüne geçin.',
+  SENT: '📬 Bu statüde: Fatura müşteriye/tedarikçiye iletildi. Satış faturaları için "Sevkiyat Yapıldı", alış faturaları için "Satın Alma", hizmet faturaları için "Ödendi" statüsüne geçin.',
   SHIPPED: '🚚 Bu statüde: Sevkiyat yapıldı ve stoktan düşüldü. Ödeme alındığında "Ödendi" statüsüne taşıyın. Sadece satış faturaları için geçerlidir.',
-  RECEIVED: '📦 Bu statüde: Mal kabul edildi ve stoğa giriş yapıldı. Ödeme yapıldığında "Ödendi" statüsüne taşıyın. Sadece alış faturaları için geçerlidir.',
+  RECEIVED: '📦 Bu statüde: Satın alma onaylandı ve stoğa giriş yapıldı. Ödeme yapıldığında "Ödendi" statüsüne taşıyın ve gider finans kaydı oluşturulur. Sadece alış faturaları için geçerlidir.',
   PAID: '✅ Bu statüde: Ödeme alındı/yapıldı. Finans kayıtları otomatik olarak oluşturuldu. Bu durumdaki faturalar değiştirilemez.',
   OVERDUE: '⏰ Bu statüde: Vadesi geçmiş faturalar. Ödeme hatırlatması gönderin ve tahsilatı takip edin. Ödeme alındığında "Ödendi" statüsüne geçin.',
   CANCELLED: '❌ Bu statüde: İptal edilen faturalar. Bu durumdaki faturalar değiştirilemez. Gerekirse yeniden oluşturun veya not ekleyin.',
@@ -204,7 +215,7 @@ const QUICK_ACTIONS: Record<string, QuickActionConfig[]> = {
       targetStatus: 'SENT', 
       icon: Send, 
       variant: 'default',
-      tooltip: 'Faturayı müşteriye/tedarikçiye gönderir. Bu işlemden sonra fatura durumu "Gönderildi" olur ve otomatik sevkiyat/mal kabul kaydı oluşturulur.'
+      tooltip: 'Faturayı müşteriye/tedarikçiye gönderir. Bu işlemden sonra fatura durumu "Gönderildi" olur ve otomatik sevkiyat/satın alma kaydı oluşturulur.'
     },
     { 
       id: 'cancel', 
@@ -226,11 +237,11 @@ const QUICK_ACTIONS: Record<string, QuickActionConfig[]> = {
     },
     { 
       id: 'mark-received', 
-      label: 'Mal Kabul Edildi', 
+      label: 'Satın Alma Onaylandı', 
       targetStatus: 'RECEIVED', 
       icon: Package, 
       variant: 'default',
-      tooltip: 'Ürünlerin teslim alındığını işaretler. Stoğa otomatik olarak giriş yapılır. Sadece alış faturaları için kullanılır.'
+      tooltip: 'Satın alma onaylandığını işaretler. Stoğa otomatik olarak giriş yapılır. Sadece alış faturaları için kullanılır.'
     },
     { 
       id: 'mark-paid', 
@@ -312,9 +323,9 @@ const STATUS_ALIAS_MAP: Record<string, keyof typeof QUICK_ACTIONS> = {
   'SEVKİYAT YAPILDI': 'SHIPPED',
   'SEVKIYAT YAPILDI': 'SHIPPED',
   'SEVKİYAT YAPILDI*': 'SHIPPED',
-  'MAL KABUL': 'RECEIVED',
-  'MAL KABUL EDİLDİ': 'RECEIVED',
-  'MAL KABUL EDILDI': 'RECEIVED',
+  'SATIN ALMA': 'RECEIVED',
+  'SATIN ALMA ONAYLANDI': 'RECEIVED',
+  'SATIN ALMA ONAYLANDI': 'RECEIVED',
   ÖDENDİ: 'PAID',
   ODENDI: 'PAID',
   'VADESİ GEÇMİŞ': 'OVERDUE',
@@ -432,6 +443,11 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange, onVie
   }
 
   const columns = useMemo(() => {
+    // RECEIVED kolonunu dinamik yap: Sadece PURCHASE tipi fatura varsa göster
+    const hasPurchaseInvoices = data.some((col) => 
+      col.invoices?.some((inv: KanbanInvoice) => inv.invoiceType === 'PURCHASE')
+    )
+    
     return STATUS_FLOW.map((status) => {
       const column = data.find((col) => col.status === status)
       const invoices = column?.invoices ?? []
@@ -441,13 +457,23 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange, onVie
         return sum + numeric
       }, 0)
 
+      // RECEIVED kolonunu dinamik olarak filtrele
+      if (status === 'RECEIVED' && !hasPurchaseInvoices) {
+        return null // Kolonu gizle
+      }
+
       return {
         status,
         count: column?.count ?? invoices.length,
         totalValue,
         invoices,
       }
-    })
+    }).filter((col) => col !== null) as Array<{
+      status: string
+      count: number
+      totalValue: number
+      invoices: KanbanInvoice[]
+    }>
   }, [data])
 
   return (
@@ -549,11 +575,15 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange, onVie
                       key={invoice.id}
                       className={`border-2 ${styles.cardBorder} ${styles.cardBg} rounded-2xl transition-all duration-300 hover:-translate-y-1 hover:border-indigo-300 hover:shadow-lg`}
                     >
-                      <div className="flex flex-col gap-3 p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="space-y-1.5 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="text-sm font-semibold text-slate-900 line-clamp-2">{invoice.title}</p>
+                      <div className="p-3">
+                        {/* Başlık ve Badge */}
+                        <div className="flex items-start gap-2 mb-2">
+                          <Receipt className="h-4 w-4 text-indigo-500 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="font-medium text-sm text-gray-900 line-clamp-2 flex-1">
+                                {invoice.title}
+                              </p>
                               {invoice.invoiceType && (
                                 <Badge className={
                                   invoice.invoiceType === 'SALES' 
@@ -578,135 +608,232 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange, onVie
                                 </Badge>
                               )}
                             </div>
-                            {company && <p className="text-xs text-slate-500">{company}</p>}
+                            {company && (
+                              <p className="text-xs text-gray-600 mt-1 line-clamp-1">
+                                🏢 {company}
+                              </p>
+                            )}
                             {(invoice.invoiceType === 'SERVICE_SALES' || invoice.invoiceType === 'SERVICE_PURCHASE') && invoice.serviceDescription && (
-                              <p className="text-xs text-slate-600 line-clamp-2 mt-1">{invoice.serviceDescription}</p>
+                              <p className="text-xs text-gray-600 line-clamp-2 mt-1">{invoice.serviceDescription}</p>
                             )}
                           </div>
-                          <span className={`rounded-full px-3 py-1 text-[11px] font-semibold ${styles.chipBg} ${styles.chipText}`}>
-                            {STATUS_LABELS[invoice.status] || invoice.status}
-                          </span>
                         </div>
 
-                        <div className="flex items-center justify-between text-sm font-semibold text-slate-800">
-                          <span>{formatCurrency(amount)}</span>
-                          {invoice.quoteId && (
-                            <Link
-                              href={`/${locale}/quotes/${invoice.quoteId}`}
-                              prefetch={true}
-                              className="text-xs font-semibold text-indigo-600 hover:underline"
-                            >
-                              Teklif #{invoice.quoteId.substring(0, 6)}
-                            </Link>
-                          )}
-                        </div>
+                        {/* Tutar */}
+                        <p className="text-sm font-semibold text-indigo-600 mt-2 mb-2">
+                          {formatCurrency(amount)}
+                        </p>
 
                         {invoice.createdAt && (
-                          <p className="text-xs text-slate-500">
+                          <p className="text-xs text-gray-500 mb-2">
                             {new Date(invoice.createdAt).toLocaleDateString('tr-TR')}
                           </p>
                         )}
 
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-slate-500 hover:text-indigo-600"
-                              aria-label="Faturayı görüntüle"
-                              onClick={(e) => {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                // ✅ ÇÖZÜM: Modal aç - yeni sekme açma
-                                if (onView) {
-                                  onView(invoice.id)
-                                } else {
-                                  // Fallback: Eğer onView yoksa yeni sekmede aç (eski davranış)
-                                  window.open(`/${locale}/invoices/${invoice.id}`, '_blank')
-                                }
-                              }}
-                            >
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            {onEdit && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-slate-500 hover:text-emerald-600"
-                                onClick={() => onEdit(invoice)}
-                                aria-label="Faturayı düzenle"
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                            )}
-                            {onDelete && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-slate-500 hover:text-rose-600"
-                                onClick={() => onDelete(invoice.id, invoice.title)}
-                                aria-label="Faturayı sil"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-
+                        {/* Quick Action Buttons - Status'e göre değişir (Deal kartları gibi ÜSTTE) */}
                         {onStatusChange && getQuickActions(invoice.status, invoice.invoiceType).length > 0 && (
-                          <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-3">
-                            {getQuickActions(invoice.status, invoice.invoiceType).map((action) => {
-                              const Icon = action.icon
-                              
-                              // İptal Et butonu için özel handler - onay sorusu sor
-                              const handleClick = async () => {
-                                if (action.targetStatus === 'CANCELLED') {
-                                  if (!(await confirm(`"${invoice.title}" faturasını iptal etmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz ve ilgili sevkiyat/stok işlemleri geri alınacaktır.`))) {
-                                    return
+                          <div className="mb-3 pt-2 border-t border-gray-200">
+                            {(() => {
+                              const actions = getQuickActions(invoice.status, invoice.invoiceType)
+                              if (actions.length === 1) {
+                                // Tek buton varsa full width
+                                const action = actions[0]
+                                const Icon = action.icon
+                                const handleClick = async (e: React.MouseEvent) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  if (action.targetStatus === 'CANCELLED') {
+                                    if (!(await confirm(`"${invoice.title}" faturasını iptal etmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz ve ilgili sevkiyat/stok işlemleri geri alınacaktır.`))) {
+                                      return
+                                    }
                                   }
+                                  onStatusChange(invoice.id, action.targetStatus)
                                 }
-                                onStatusChange(invoice.id, action.targetStatus)
-                              }
-                              
-                              const button = (
-                                <Button
-                                  key={action.id}
-                                  variant={action.variant}
-                                  size="sm"
-                                  className={`flex items-center gap-2 text-[11px] font-semibold shadow-sm ${
-                                    action.variant === 'default'
-                                      ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                                      : 'border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600'
-                                  }`}
-                                  onClick={handleClick}
-                                >
-                                  <Icon className="h-3.5 w-3.5" />
-                                  {action.label}
-                                </Button>
-                              )
-                              
-                              // Tooltip varsa ekle
-                              if (action.tooltip) {
                                 return (
-                                  <TooltipProvider key={action.id} delayDuration={200}>
+                                  <TooltipProvider delayDuration={0}>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        {button}
+                                        <Button
+                                          size="sm"
+                                          variant={action.variant}
+                                          className={`w-full text-xs h-7 ${
+                                            action.variant === 'default'
+                                              ? 'text-white bg-indigo-600 hover:bg-indigo-700'
+                                              : 'border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600'
+                                          }`}
+                                          onClick={handleClick}
+                                        >
+                                          <Icon className="h-3.5 w-3.5 mr-2" />
+                                          {action.label}
+                                        </Button>
                                       </TooltipTrigger>
-                                      <TooltipContent className="max-w-xs border-2 border-indigo-200 bg-white p-3 text-left shadow-xl">
-                                        <p className="text-xs font-medium text-slate-700">
-                                          {action.tooltip}
-                                        </p>
-                                      </TooltipContent>
+                                      {action.tooltip && (
+                                        <TooltipContent>
+                                          <p>{action.tooltip}</p>
+                                        </TooltipContent>
+                                      )}
                                     </Tooltip>
                                   </TooltipProvider>
                                 )
+                              } else {
+                                // Birden fazla buton varsa flex gap-2
+                                return (
+                                  <div className="flex gap-2">
+                                    {actions.map((action) => {
+                                      const Icon = action.icon
+                                      const handleClick = async (e: React.MouseEvent) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        if (action.targetStatus === 'CANCELLED') {
+                                          if (!(await confirm(`"${invoice.title}" faturasını iptal etmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz ve ilgili sevkiyat/stok işlemleri geri alınacaktır.`))) {
+                                            return
+                                          }
+                                        }
+                                        onStatusChange(invoice.id, action.targetStatus)
+                                      }
+                                      return (
+                                        <TooltipProvider key={action.id} delayDuration={0}>
+                                          <Tooltip>
+                                            <TooltipTrigger asChild>
+                                              <Button
+                                                size="sm"
+                                                variant={action.variant}
+                                                className={`flex-1 text-xs h-7 ${
+                                                  action.variant === 'default'
+                                                    ? 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                                                    : 'border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600'
+                                                }`}
+                                                onClick={handleClick}
+                                              >
+                                                <Icon className="h-3.5 w-3.5 mr-2" />
+                                                {action.label}
+                                              </Button>
+                                            </TooltipTrigger>
+                                            {action.tooltip && (
+                                              <TooltipContent>
+                                                <p>{action.tooltip}</p>
+                                              </TooltipContent>
+                                            )}
+                                          </Tooltip>
+                                        </TooltipProvider>
+                                      )
+                                    })}
+                                  </div>
+                                )
                               }
-                              
-                              return button
-                            })}
+                            })()}
                           </div>
                         )}
+
+                        {/* Action Buttons - Daha düzenli ve okunabilir (Deal kartları gibi ALTA) */}
+                        <div className="flex flex-wrap gap-1.5 pt-2 border-t border-gray-200 relative z-50" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <TooltipProvider delayDuration={0}>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-7 w-7 p-0 border-0 bg-gradient-to-br from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex-shrink-0 relative overflow-hidden group"
+                                    >
+                                      {/* Shine effect */}
+                                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                                      <Sparkles className="h-4 w-4 relative z-10" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="text-xs">
+                                  <p>Hızlı İşlemler</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <DropdownMenuContent align="end" className="w-48">
+                              <DropdownMenuLabel className="text-xs">Hızlı İşlemler</DropdownMenuLabel>
+                              {invoice.status === 'PAID' && (
+                                <DropdownMenuItem
+                                  className="text-xs"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    toast.info('Sevkiyat oluştur', 'Bu özellik yakında eklenecek.')
+                                  }}
+                                >
+                                  <Package className="h-3 w-3 mr-2" />
+                                  Sevkiyat Oluştur
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-xs"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  if (typeof window !== 'undefined') {
+                                    window.dispatchEvent(new CustomEvent('openStickyNote', {
+                                      detail: {
+                                        relatedTo: 'Invoice',
+                                        relatedId: invoice.id,
+                                        defaultTitle: `Fatura: ${invoice.title}`,
+                                      }
+                                    }))
+                                  }
+                                }}
+                              >
+                                <StickyNote className="h-3 w-3 mr-2" />
+                                Not Ekle
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-gray-500 hover:text-indigo-600"
+                            aria-label="Faturayı görüntüle"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              if (onView) {
+                                onView(invoice.id)
+                              } else {
+                                window.open(`/${locale}/invoices/${invoice.id}`, '_blank')
+                              }
+                            }}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          {onEdit && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-gray-500 hover:text-emerald-600"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                onEdit(invoice)
+                              }}
+                              aria-label="Faturayı düzenle"
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {onDelete && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-gray-500 hover:text-rose-600"
+                              onClick={(e) => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                onDelete(invoice.id, invoice.title)
+                              }}
+                              aria-label="Faturayı sil"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                     </Card>
                   )

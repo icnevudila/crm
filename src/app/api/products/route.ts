@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { createRecord } from '@/lib/crud'
 
 // Dengeli cache - 60 saniye revalidate (performans + veri güncelliği dengesi)
 export const revalidate = 60
@@ -57,7 +58,12 @@ export async function GET(request: Request) {
     const stockFilter = searchParams.get('stock') || '' // inStock, lowStock, outOfStock
     const categoryFilter = searchParams.get('category') || ''
     const statusFilter = searchParams.get('status') || ''
+    const vendorId = searchParams.get('vendorId') || '' // Vendor filtresi
     const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
+
+    // Pagination parametreleri
+    const page = parseInt(searchParams.get('page') || '1', 10)
+    const pageSize = parseInt(searchParams.get('pageSize') || '20', 10) // Default 20 kayıt/sayfa
 
     // OPTİMİZE: Sadece gerekli kolonları seç - performans için
     // SuperAdmin için Company bilgisi ekle
@@ -70,9 +76,8 @@ export async function GET(request: Request) {
     
     let query = supabase
       .from('Product')
-      .select(selectColumns)
+      .select(selectColumns, { count: 'exact' })
       .order('createdAt', { ascending: false })
-      .limit(10000) // Tüm ürünleri getir (limit artırıldı)
     
     // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
@@ -86,6 +91,11 @@ export async function GET(request: Request) {
     if (search) {
       // Sadece name ile arama (migration kolonları yoksa hata vermeden atla)
       query = query.ilike('name', `%${search}%`)
+    }
+
+    if (vendorId) {
+      // Vendor filtresi - vendorId kolonu varsa filtrele
+      query = query.eq('vendorId', vendorId)
     }
 
     if (stockFilter === 'inStock') {
@@ -197,7 +207,7 @@ export async function POST(request: Request) {
     // Zorunlu alanları kontrol et
     if (!body.name || body.name.trim() === '') {
       return NextResponse.json(
-        { error: 'Ürün adı gereklidir' },
+        { error: (await import('@/lib/api-locale')).getErrorMessage('errors.api.productNameRequired', request) },
         { status: 400 }
       )
     }
@@ -247,28 +257,14 @@ export async function POST(request: Request) {
 
     // NOT: imageUrl kolonu veritabanında olmayabilir - GÖNDERME!
     // NOT: vendorId schema-vendor'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
+    // NOT: companyId ve createdBy createRecord fonksiyonunda otomatik ekleniyor
 
-    const { data: insertData, error } = await supabase
-      .from('Product')
-      // @ts-expect-error - Supabase database type tanımları eksik
-      .insert([productData])
-      .select('id, name, price, stock, companyId, createdAt, updatedAt')
-    
-    if (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Products POST API insert error:', error)
-      }
-      return NextResponse.json(
-        { error: error.message || 'Failed to create product' },
-        { status: 500 }
-      )
-    }
-    
-    // .single() yerine array'in ilk elemanını al
-    const data = Array.isArray(insertData) && insertData.length > 0 ? insertData[0] : insertData
-
-    // ActivityLog KALDIRILDI - Sadece kritik işlemler için ActivityLog tutulacak
-    // (Performans optimizasyonu: Gereksiz log'lar veritabanını yavaşlatıyor)
+    // createRecord kullanarak audit trail desteği (createdBy otomatik eklenir)
+    const data = await createRecord(
+      'Product',
+      productData,
+      (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.productCreated.replace('{name}', body.name)
+    )
 
     return NextResponse.json(data, { status: 201 })
   } catch (error: any) {

@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { ArrowLeft, Edit, CheckSquare, User, Trash2 } from 'lucide-react'
@@ -11,6 +10,9 @@ import { Card } from '@/components/ui/card'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import TaskForm from '@/components/tasks/TaskForm'
+import { toastError } from '@/lib/toast'
+import { getStatusBadgeClass } from '@/lib/crm-colors'
+import { useData } from '@/hooks/useData'
 
 interface Task {
   id: string
@@ -29,12 +31,6 @@ interface Task {
   activities?: any[]
 }
 
-async function fetchTask(id: string): Promise<Task> {
-  const res = await fetch(`/api/tasks/${id}`)
-  if (!res.ok) throw new Error('Failed to fetch task')
-  return res.json()
-}
-
 export default function TaskDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -43,38 +39,40 @@ export default function TaskDetailPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
-  const { data: task, isLoading } = useQuery({
-    queryKey: ['task', id],
-    queryFn: () => fetchTask(id),
-  })
+  const { data: task, isLoading, error } = useData<Task>(
+    id ? `/api/tasks/${id}` : null,
+    {
+      dedupingInterval: 30000,
+      revalidateOnFocus: false,
+    }
+  )
 
   if (isLoading) {
     return <SkeletonDetail />
   }
 
-  if (!task) {
+  if (error || !task) {
     return (
-      <div className="text-center py-12">
-        <p className="text-gray-600">Görev bulunamadı</p>
-        <Button
-          variant="outline"
-          className="mt-4"
-          onClick={() => router.push(`/${locale}/tasks`)}
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Geri Dön
-        </Button>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            Görev Bulunamadı
+          </h1>
+          {error && (
+            <p className="text-sm text-gray-600 mb-4">
+              {(error as any)?.message || 'Görev yüklenirken bir hata oluştu'}
+            </p>
+          )}
+          <Button onClick={() => router.push(`/${locale}/tasks`)}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Geri Dön
+          </Button>
+        </div>
       </div>
     )
   }
 
-  const statusColors: Record<string, string> = {
-    TODO: 'bg-gray-100 text-gray-800',
-    IN_PROGRESS: 'bg-blue-100 text-blue-800',
-    DONE: 'bg-green-100 text-green-800',
-    CANCELLED: 'bg-red-100 text-red-800',
-  }
-
+  // Status labels - merkezi renk sistemi kullanılıyor (getStatusBadgeClass)
   const statusLabels: Record<string, string> = {
     TODO: 'Yapılacak',
     IN_PROGRESS: 'Devam Ediyor',
@@ -129,7 +127,7 @@ export default function TaskDetailPage() {
                 }
                 router.push(`/${locale}/tasks`)
               } catch (error: any) {
-                alert(error?.message || 'Silme işlemi başarısız oldu')
+                toastError('Silme işlemi başarısız oldu', error?.message)
               } finally {
                 setDeleteLoading(false)
               }
@@ -149,18 +147,14 @@ export default function TaskDetailPage() {
           <div className="space-y-4">
             <div>
               <p className="text-sm text-gray-600">Durum</p>
-              <Badge className={`mt-1 ${statusColors[task.status] || 'bg-gray-100 text-gray-800'}`}>
+              <Badge className={`mt-1 ${getStatusBadgeClass(task.status)}`}>
                 {statusLabels[task.status] || task.status}
               </Badge>
             </div>
             {task.priority && (
               <div>
                 <p className="text-sm text-gray-600">Öncelik</p>
-                <Badge className={`mt-1 ${
-                  task.priority === 'HIGH' ? 'bg-red-100 text-red-800' :
-                  task.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-gray-100 text-gray-800'
-                }`}>
+                <Badge className={`mt-1 ${getStatusBadgeClass(task.priority || 'LOW')}`}>
                   {task.priority === 'HIGH' ? 'Yüksek' : task.priority === 'MEDIUM' ? 'Orta' : 'Düşük'}
                 </Badge>
               </div>

@@ -15,7 +15,7 @@ import { format } from 'date-fns'
 import { tr } from 'date-fns/locale'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
-import { toast, confirm } from '@/lib/toast'
+import { toast, confirm, toastWarning } from '@/lib/toast'
 import dynamic from 'next/dynamic'
 
 const ApprovalDetailModal = dynamic(() => import('@/components/approvals/ApprovalDetailModal'), {
@@ -87,7 +87,7 @@ export default function ApprovalsPage() {
   const handleReject = async (id: string) => {
     const reason = prompt('Red nedeni:')
     if (!reason || reason.trim() === '') {
-      alert('Red nedeni girmeniz gerekiyor')
+      toastWarning('Red nedeni girmeniz gerekiyor')
       return
     }
 

@@ -47,7 +47,14 @@ export default function EmailCampaignsPage() {
   const [selectedCampaignData, setSelectedCampaignData] = useState<Campaign | null>(null)
 
   const apiUrl = `/api/email-campaigns${search ? `?search=${search}` : ''}`
-  const { data: campaigns = [], isLoading, mutate: mutateCampaigns } = useData<Campaign[]>(apiUrl)
+  const { data: campaignsData, isLoading, mutate: mutateCampaigns } = useData<Campaign[] | { data: Campaign[] }>(apiUrl)
+  
+  // API response'u array'e çevir (güvenli)
+  const campaigns = Array.isArray(campaignsData) 
+    ? campaignsData 
+    : (campaignsData && typeof campaignsData === 'object' && 'data' in campaignsData && Array.isArray(campaignsData.data))
+      ? campaignsData.data
+      : []
 
   const handleEdit = (campaign: Campaign) => {
     setSelectedCampaign(campaign)

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import { toast, confirm } from '@/lib/toast'
+import { toast, toastSuccess, toastError, confirm } from '@/lib/toast'
 import { Plus, Search, Edit, Trash2, Eye, CheckCircle, MoreVertical, Calendar, FileText, PackageCheck, BarChart3, X } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -50,6 +50,13 @@ import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import { formatCurrency } from '@/lib/utils'
 import { Card } from '@/components/ui/card'
+import dynamic from 'next/dynamic'
+
+// Lazy load InvoiceForm - performans için
+const InvoiceForm = dynamic(() => import('../invoices/InvoiceForm'), {
+  ssr: false,
+  loading: () => null,
+})
 
 interface PurchaseShipment {
   id: string
@@ -128,6 +135,7 @@ export default function PurchaseShipmentList() {
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [detailPurchaseShipment, setDetailPurchaseShipment] = useState<PurchaseShipment | null>(null)
   const [approvingId, setApprovingId] = useState<string | null>(null)
+  const [invoiceFormOpen, setInvoiceFormOpen] = useState(false)
 
   // Debounced search
   const [debouncedSearch, setDebouncedSearch] = useState(search)
@@ -300,13 +308,22 @@ export default function PurchaseShipmentList() {
           <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
           <p className="mt-2 text-gray-600">{t('totalRecords', { count: stats.total })}</p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => {}}
-        >
-          <BarChart3 className="mr-2 h-4 w-4" />
-          {t('reports')}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => setInvoiceFormOpen(true)}
+            className="bg-gradient-primary text-white"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Yeni Satın Alma Talebi
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {}}
+          >
+            <BarChart3 className="mr-2 h-4 w-4" />
+            {t('reports')}
+          </Button>
+        </div>
       </div>
 
       {/* Üst Panel - Durum Bazlı KPI Kartları */}
@@ -670,6 +687,32 @@ export default function PurchaseShipmentList() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Yeni Satın Alma Talebi Formu (PURCHASE Faturası) */}
+      <InvoiceForm
+        open={invoiceFormOpen}
+        onClose={() => setInvoiceFormOpen(false)}
+        defaultInvoiceType="PURCHASE"
+        onSuccess={async (newInvoice) => {
+          // Fatura oluşturuldu - otomatik PurchaseTransaction oluşturulacak (SENT olduğunda)
+          // Cache'leri güncelle
+          await Promise.all([
+            mutate('/api/purchase-shipments', undefined, { revalidate: true }),
+            mutate('/api/purchase-shipments?', undefined, { revalidate: true }),
+            mutate(apiUrl, undefined, { revalidate: true }),
+            mutate('/api/invoices', undefined, { revalidate: true }),
+            mutate('/api/invoices?', undefined, { revalidate: true }),
+            mutate('/api/analytics/invoice-kanban', undefined, { revalidate: true }),
+          ])
+          
+          toastSuccess(
+            'Satın Alma Talebi Oluşturuldu',
+            `${newInvoice.title} faturası oluşturuldu. Faturayı "Gönderildi" durumuna taşıdığınızda otomatik olarak satın alma kaydı oluşturulacak.`
+          )
+          
+          setInvoiceFormOpen(false)
+        }}
+      />
     </div>
   )
 }

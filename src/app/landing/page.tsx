@@ -392,189 +392,150 @@ function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-cyan-50 overflow-hidden">
+    <div className="min-h-screen bg-white overflow-hidden">
       <LandingHeader />
 
-      {/* Hero Section - Premium Showcase with Gradient Background */}
+      {/* Hero Section - Zoho Style Ultra Clean & Professional */}
       <section
         id="home"
-        className="relative min-h-screen flex items-center justify-center overflow-hidden"
+        className="relative min-h-screen flex items-center justify-center overflow-hidden bg-white pt-16"
       >
-        {/* Background Layer */}
-        <motion.div
-          className="absolute inset-0 bg-gradient-to-br from-[#d8defa] via-[#c6d4ff] to-[#dbe7ff]"
-          style={{
-            x: useTransform(scrollY, [0, 1000], [0, mousePosition.x * 0.2]),
-            y: useTransform(scrollY, [0, 1000], [0, mousePosition.y * 0.2]),
-          }}
-        >
-          <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-[0.05]" />
+        {/* Ultra Subtle Background - Zoho Style Minimalist */}
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-50/30 via-white to-blue-50/20">
           <motion.div
-            className="absolute top-16 left-16 h-[420px] w-[420px] rounded-full bg-gradient-to-br from-indigo-400/30 via-sky-400/20 to-transparent blur-[110px]"
+            className="absolute top-20 right-20 w-[500px] h-[500px] bg-blue-50/30 rounded-full blur-[120px]"
             animate={{
-              x: [0, 55, 0],
-              y: [0, -30, 0],
-              scale: [1, 1.08, 1],
-              opacity: [0.22, 0.32, 0.22],
-            }}
-            transition={{
-              duration: 18,
-              repeat: Infinity,
-              ease: 'easeInOut',
-            }}
-          />
-          <motion.div
-            className="absolute bottom-20 right-[12%] h-[480px] w-[480px] rounded-full bg-gradient-to-tr from-cyan-400/25 via-indigo-300/18 to-transparent blur-[120px]"
-            animate={{
-              x: [0, -65, 0],
-              y: [0, 40, 0],
               scale: [1, 1.1, 1],
-              opacity: [0.18, 0.3, 0.18],
+              opacity: [0.2, 0.3, 0.2],
             }}
             transition={{
-              duration: 22,
+              duration: 20,
               repeat: Infinity,
               ease: 'easeInOut',
             }}
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-white/60 via-white/45 to-white/25" />
-        </motion.div>
+          <motion.div
+            className="absolute bottom-20 left-20 w-[400px] h-[400px] bg-indigo-50/30 rounded-full blur-[100px]"
+            animate={{
+              scale: [1, 1.15, 1],
+              opacity: [0.2, 0.3, 0.2],
+            }}
+            transition={{
+              duration: 25,
+              repeat: Infinity,
+              ease: 'easeInOut',
+            }}
+          />
+        </div>
 
-        {/* Content with Premium Animations */}
+        {/* Content - Zoho Style Clean Layout */}
         <motion.div
-          style={{
-            opacity: heroOpacity,
-            scale: heroScale,
-            y: heroYSpring,
-          }}
-          className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-20"
         >
-          <div className="grid items-center gap-8 md:gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+          <div className="grid items-center gap-12 lg:grid-cols-2">
+            {/* Left: Text Content */}
             <motion.div
               variants={containerVariants}
               initial="hidden"
               animate="visible"
-              className="space-y-6 md:space-y-10 text-center lg:text-left"
+              className="space-y-8 text-center lg:text-left"
             >
-              <div className="mx-auto w-full max-w-xl rounded-[20px] md:rounded-[26px] border border-white/70 bg-white/65 p-6 md:p-8 shadow-[0_35px_65px_-35px_rgba(79,102,183,0.45)] backdrop-blur-xl lg:mx-0">
-                {/* Premium Badge */}
-                <motion.div
-                  variants={itemVariants}
-                  whileHover={{ scale: 1.05, y: -1 }}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200/70 bg-white/80 px-4 py-2 md:px-5 md:py-2.5 text-xs md:text-sm font-semibold text-slate-600 shadow-sm transition-all duration-300"
-                >
-                  <Sparkles className="h-3.5 w-3.5 md:h-4 md:w-4 text-indigo-500" />
-                  <span className="hidden sm:inline">CRM & İş Süreçleri Platformu</span>
-                  <span className="sm:hidden">CRM Platformu</span>
-                </motion.div>
+              {/* Badge - Genel CRM & İş Yönetimi vurgusu */}
+              <motion.div
+                variants={itemVariants}
+                className="inline-flex items-center gap-2 rounded-full bg-gray-100 border border-gray-200 px-4 py-1.5 text-xs font-medium text-gray-700 tracking-wide uppercase"
+              >
+                <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+                Hızlı CRM & İş Yönetimi Platformu
+              </motion.div>
 
-                {/* Main Title */}
-                <motion.h1
-                  variants={itemVariants}
-                  className="mt-4 md:mt-6 text-3xl sm:text-4xl md:text-5xl font-extrabold leading-tight text-slate-900 lg:text-[3.4rem] lg:leading-[1.08]"
-                >
-                  <span className="block text-slate-900/85">Tüm müşteri ve satış süreçleriniz</span>
-                  <span className="block bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                    tek platformda birleşsin
-                  </span>
-                </motion.h1>
+              {/* Main Title - Sonuç odaklı, sektörden bağımsız */}
+              <motion.h1
+                variants={itemVariants}
+                className="text-5xl sm:text-6xl md:text-7xl lg:text-8xl font-extrabold leading-[1.1] text-gray-900 tracking-tight"
+              >
+                Tüm müşteri{' '}
+                <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 bg-clip-text text-transparent bg-[length:200%_auto] animate-[gradient_3s_ease_infinite]">
+                  sürecinizi
+                </span>
+                <br />
+                <span className="text-gray-800">tek ekrandan yönetin</span>
+              </motion.h1>
 
-                {/* Subtitle */}
-                <motion.p
-                  variants={itemVariants}
-                  className="mt-4 md:mt-5 text-base md:text-lg leading-relaxed text-slate-600 lg:text-[1.1rem] px-2 md:px-0"
-                >
-                  Satış ekiplerinizi hızlandırın, müşteri deneyimini güçlendirin ve tüm işinizi gerçek zamanlı olarak görün. Tek bir platformla tekliften faturaya tüm yolculuğu yönetin.
-                </motion.p>
+              {/* Subtitle - CRM, satış ve operasyon odağı */}
+              <motion.p
+                variants={itemVariants}
+                className="text-xl md:text-2xl lg:text-3xl text-gray-600 leading-relaxed max-w-2xl mx-auto lg:mx-0 font-light"
+              >
+                Enterprise V3 ile müşteri ilişkileri, satış fırsatları, teklifler, faturalar ve görevleri Excel ve dağınık
+                araçlar yerine tek, hızlı ve anlaşılır bir CRM ekranı üzerinden yönetin.
+              </motion.p>
 
-                {/* CTA Buttons */}
-                <motion.div
-                  variants={itemVariants}
-                  className="mt-6 md:mt-8 flex flex-col items-stretch sm:items-center gap-3 sm:gap-4 sm:flex-row sm:justify-center lg:justify-start"
+              {/* CTA Buttons - Zoho Style Professional CTAs */}
+              <motion.div
+                variants={itemVariants}
+                className="flex flex-col sm:flex-row items-center gap-4 justify-center lg:justify-start pt-4"
+              >
+                <Button
+                  size="lg"
+                  onClick={() => scrollToSection('#contact')}
+                  className="w-full sm:w-auto h-14 px-10 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 hover:from-indigo-600 hover:via-purple-600 hover:to-pink-600 text-white font-semibold text-base rounded-md shadow-[0_18px_45px_-20px_rgba(99,102,241,0.65)] hover:shadow-[0_22px_65px_-20px_rgba(99,102,241,0.55)] transition-all duration-200"
                 >
-                  <motion.div whileHover={{ scale: 1.04, y: -2 }} whileTap={{ scale: 0.98 }} className="w-full sm:w-auto">
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      onClick={() => scrollToSection('#contact')}
-                      className="w-full sm:w-auto rounded-2xl border-2 border-slate-300/70 bg-white/90 px-6 py-5 md:px-10 md:py-6 text-sm md:text-base font-semibold text-slate-800 shadow-[0_18px_40px_-25px_rgba(79,102,183,0.55)] backdrop-blur-lg transition-all duration-300 hover:bg-white hover:border-slate-400/70"
-                    >
-                      Ücretsiz Başla
-                    </Button>
-                  </motion.div>
-                  <motion.div whileHover={{ scale: 1.04, y: -2 }} whileTap={{ scale: 0.98 }} className="w-full sm:w-auto">
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      onClick={() => scrollToSection('#features')}
-                      className="w-full sm:w-auto rounded-2xl border-2 border-slate-300/70 bg-white/90 px-6 py-5 md:px-10 md:py-6 text-sm md:text-base font-semibold text-slate-800 shadow-[0_18px_40px_-25px_rgba(79,102,183,0.55)] backdrop-blur-lg transition-all duration-300 hover:bg-white hover:border-slate-400/70"
-                    >
-                      Daha Fazla Bilgi
-                    </Button>
-                  </motion.div>
-                </motion.div>
+                  Demo Talep Et
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Button>
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={() => scrollToSection('#features')}
+                  className="w-full sm:w-auto h-14 px-10 border border-gray-300 hover:border-gray-400 bg-white text-gray-700 font-semibold text-base rounded-md hover:bg-gray-50 transition-all duration-200"
+                >
+                  Özellikleri İncele
+                </Button>
+              </motion.div>
 
-                {/* Supporting points */}
-                <motion.div
-                  variants={itemVariants}
-                  className="mt-5 md:mt-6 flex flex-wrap items-center justify-center gap-3 md:gap-4 text-xs md:text-sm text-slate-500 lg:justify-start"
-                >
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-3.5 w-3.5 md:h-4 md:w-4 text-emerald-500" />
-                    <span className="hidden sm:inline">14 gün ücretsiz deneyin</span>
-                    <span className="sm:hidden">14 gün ücretsiz</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-3.5 w-3.5 md:h-4 md:w-4 text-emerald-500" />
-                    Kurulum gerekmez
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-3.5 w-3.5 md:h-4 md:w-4 text-emerald-500" />
-                    <span className="hidden sm:inline">Gerçek zamanlı raporlama</span>
-                    <span className="sm:hidden">Gerçek zamanlı</span>
-                  </div>
-                </motion.div>
-              </div>
+              {/* Trust Indicators - Zoho Style Minimalist */}
+              <motion.div
+                variants={itemVariants}
+                className="flex flex-wrap items-center justify-center gap-8 text-sm text-gray-500 lg:justify-start pt-6"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  <span className="font-medium">14 gün ücretsiz</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  <span className="font-medium">Kurulum yok</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  <span className="font-medium">Kredi kartı gerekmez</span>
+                </div>
+              </motion.div>
             </motion.div>
 
+            {/* Right: Hero Showcase */}
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 40 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: 0.8, ease: [0.215, 0.61, 0.355, 1] }}
+              initial={{ opacity: 0, scale: 0.95, x: 40 }}
+              animate={{ opacity: 1, scale: 1, x: 0 }}
+              transition={{ delay: 0.3, duration: 0.8, ease: [0.215, 0.61, 0.355, 1] }}
               className="hidden lg:block"
             >
               <HeroShowcase />
             </motion.div>
           </div>
 
+          {/* Mobile Hero Showcase */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6, duration: 0.8 }}
+            transition={{ delay: 0.5, duration: 0.8 }}
             className="mt-12 lg:hidden"
           >
             <HeroShowcase />
-          </motion.div>
-        </motion.div>
-
-        {/* Premium Scroll Indicator */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.5, duration: 0.8 }}
-          className="absolute bottom-12 left-1/2 z-10 hidden -translate-x-1/2 lg:block"
-        >
-          <motion.div
-            animate={{ y: [0, 10, 0] }}
-            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-            whileHover={{ scale: 1.1 }}
-            className="group flex h-14 w-8 items-center justify-center overflow-hidden rounded-full border-2 border-white/50 bg-white/10 backdrop-blur"
-          >
-            <motion.div
-              animate={{ y: [0, 16, 0] }}
-              transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-              className="relative z-10 h-4 w-1.5 rounded-full bg-white/80"
-            />
           </motion.div>
         </motion.div>
       </section>
@@ -621,10 +582,10 @@ function LandingPage() {
             className="mb-16 text-center"
           >
             <h2 className="text-4xl md:text-5xl font-extrabold text-gray-900 mb-4">
-              Sonuç Odaklı Yaklaşım
+              Sonuç Odaklı Çözümler
             </h2>
             <p className="text-lg md:text-xl font-light text-gray-600 max-w-3xl mx-auto">
-              Enterprise V3; satış, operasyon ve müşteri ekiplerini tek çatı altında buluşturarak ekiplerinizin daha az çaba ile daha çok değer üretmesine odaklanır.
+              Enterprise V3, satış, operasyon ve müşteri ekiplerinizi tek platformda birleştirir. Ekipleriniz daha az çaba harcayarak daha fazla değer üretir.
             </p>
           </motion.div>
           <motion.div
@@ -636,30 +597,30 @@ function LandingPage() {
           >
             {[
               {
-                title: 'Ekipler Arası Uyum',
+                title: 'Ekip Uyumu',
                 description:
-                  'CRM, teklif, stok ve finans verileri tek platformda birleşir; satış ve operasyon ekipleri gerçek zamanlı çalışır.',
+                  'CRM, teklif, stok ve finans verileri tek platformda toplanır. Satış ve operasyon ekipleri gerçek zamanlı işbirliği yapar.',
                 icon: Users,
                 gradient: 'primary' as const,
               },
               {
-                title: 'Süreç Otomasyonu',
+                title: 'Otomatik Süreçler',
                 description:
-                  'Hazır otomasyon şablonları ile onay, bildirim, hatırlatıcı akışları otomatik ilerler.',
+                  'Hazır otomasyon şablonlarıyla onay, bildirim ve hatırlatıcı akışları kendiliğinden ilerler.',
                 icon: Workflow,
                 gradient: 'info' as const,
               },
               {
-                title: 'Güvenli İş Süreçleri',
+                title: 'Güvenli Altyapı',
                 description:
-                  'Rol bazlı yetkilendirme ve RLS ile çoklu şirket yapılarında bile veri izolasyonu ve güven sağlanır.',
+                  'Rol bazlı yetkilendirme ve RLS ile çoklu şirket yapılarında veri izolasyonu ve güvenlik garantilenir.',
                 icon: Shield,
                 gradient: 'primary' as const,
               },
               {
-                title: 'Ölçülebilir Büyüme',
+                title: 'Performans Takibi',
                 description:
-                  'KPI panoları ve gerçek zamanlı raporlar sayesinde ekip performansını anında ölçün ve optimize edin.',
+                  'KPI panoları ve gerçek zamanlı raporlarla ekip performansını izleyin ve sürekli iyileştirin.',
                 icon: TrendingUp,
                 gradient: 'info' as const,
               },
@@ -738,7 +699,7 @@ function LandingPage() {
             >
               <span className="block text-slate-900/85">İşiniz İçin</span>
               <span className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
-                Neler Sunuyoruz?
+                Güçlü Çözümler
               </span>
             </motion.h2>
             <motion.p
@@ -748,7 +709,7 @@ function LandingPage() {
               transition={{ duration: 0.6, delay: 0.25 }}
               className="mx-auto mt-6 max-w-3xl text-lg leading-relaxed text-slate-600"
             >
-              Operasyon, satış ve müşteri ekiplerinizi aynı vizyonda buluşturan, ölçeklenebilir ve güvenli bir CRM motoru sunuyoruz. Süreçlerinizi dijitalleştirirken premium kullanıcı deneyimi ve yüksek performans önceliğimiz.
+              Operasyon, satış ve müşteri ekiplerinizi aynı vizyonda buluşturan, ölçeklenebilir ve güvenli bir CRM platformu. Süreçlerinizi dijitalleştirirken premium kullanıcı deneyimi ve yüksek performansı önceliyoruz.
             </motion.p>
           </motion.div>
 
@@ -762,27 +723,27 @@ function LandingPage() {
             {[
               {
                 icon: Workflow,
-                title: 'Uçtan Uca Süreçler',
+                title: 'Uçtan Uca Süreç Yönetimi',
                 description:
-                  'Tekliften faturaya kadar tüm iş akışlarını tek platformda yönetin, otomasyon senaryolarıyla manuel işleri ortadan kaldırın.',
+                  'Tekliften faturaya tüm iş akışlarını tek platformda yönetin. Otomasyon senaryolarıyla manuel işleri minimize edin.',
               },
               {
                 icon: Shield,
                 title: 'Kurumsal Güvenlik',
                 description:
-                  'RLS, rol bazlı yetki ve audit log’lar ile verilerinizi güvenle saklayın; çoklu şirket mimarisinde bile izolasyonu koruyun.',
+                  'RLS, rol bazlı yetkilendirme ve audit loglar ile verilerinizi güvenle saklayın. Çoklu şirket yapılarında veri izolasyonu sağlanır.',
               },
               {
                 icon: Sparkles,
-                title: 'Akıllı İçgörüler',
+                title: 'Akıllı Analitik',
                 description:
-                  'Detaylı analiz ve öneriler ile fırsatları önceliklendirin, satış dönüşümlerinizi gerçek zamanlı olarak takip edin.',
+                  'Detaylı analiz ve önerilerle fırsatları önceliklendirin. Satış dönüşümlerinizi gerçek zamanlı takip edin.',
               },
               {
                 icon: TrendingUp,
-                title: 'Ölçülebilir Büyüme',
+                title: 'Performans Yönetimi',
                 description:
-                  'Canlı dashboard’lar, KPI panoları ve ileri raporlama araçları ile ekip performansını anında izleyin ve optimize edin.',
+                  'Canlı dashboardlar, KPI panoları ve gelişmiş raporlama araçlarıyla ekip performansını izleyin ve sürekli iyileştirin.',
               },
             ].map(({ icon: Icon, title, description }) => (
               <motion.div
@@ -817,11 +778,10 @@ function LandingPage() {
                 Dijital dönüşüm
               </p>
               <h3 className="mt-3 text-2xl font-bold text-slate-900">
-                İş süreçlerinizi premium bir deneyimle hızlandırmaya hazır mısınız?
+                İş süreçlerinizi hızlandırmaya hazır mısınız?
               </h3>
               <p className="mt-3 text-sm text-slate-600">
-                Demo ekibimiz, çoklu şirket mimarisi ve otomasyon senaryoları ile sizi dakikalar içinde
-                canlı sisteme taşıyabilir.
+                Demo ekibimiz, çoklu şirket mimarisi ve otomasyon senaryolarıyla sizi dakikalar içinde canlı sisteme taşır.
               </p>
             </div>
             <Button
@@ -863,7 +823,7 @@ function LandingPage() {
               transition={{ duration: 0.6 }}
               className="text-5xl md:text-6xl font-extrabold text-gray-900 mb-6"
             >
-              Size Ne Kazandırıyor?
+              Size Ne Sunuyoruz?
             </motion.h2>
             <motion.div
               initial={{ width: 0 }}
@@ -879,7 +839,7 @@ function LandingPage() {
               transition={{ duration: 0.6, delay: 0.4 }}
               className="text-xl text-gray-600 max-w-2xl mx-auto font-light"
             >
-              Zamanınızı kazandıran, satışlarınızı artıran ve işinizi kolaylaştıran araçlar
+              Zaman kazandıran, satışları artıran ve iş süreçlerini kolaylaştıran profesyonel araçlar
             </motion.p>
                         </motion.div>
 
@@ -893,29 +853,29 @@ function LandingPage() {
             {[
               {
                 icon: BarChart3,
-                title: 'Daha İyi Kararlar Alın',
-                description: 'Gerçek zamanlı verilerle iş performansınızı görün, hızlı kararlar alın ve satışlarınızı artırın',
+                title: 'Veriye Dayalı Kararlar',
+                description: 'Gerçek zamanlı verilerle iş performansınızı görün. Hızlı kararlar alın ve satışlarınızı artırın.',
                 gradient: 'primary' as const,
                 color: 'blue',
               },
               {
                 icon: Shield,
-                title: 'Verileriniz Güvende',
-                description: 'Verileriniz endüstri standardı güvenlik ile korunur, siz rahatça işinize odaklanın',
+                title: 'Güvenli Altyapı',
+                description: 'Verileriniz endüstri standardı güvenlikle korunur. İşinize odaklanın, güvenlik bizim işimiz.',
                 gradient: 'info' as const,
                 color: 'indigo',
               },
               {
                 icon: RefreshCw,
-                title: 'Kolay Geçiş',
-                description: 'Mevcut sistemlerinizle sorunsuz entegrasyon, veri kaybı olmadan hızlı geçiş yapın',
+                title: 'Sorunsuz Entegrasyon',
+                description: 'Mevcut sistemlerinizle uyumlu çalışır. Veri kaybı olmadan hızlı geçiş yapın.',
                 gradient: 'primary' as const,
                 color: 'cyan',
               },
               {
                 icon: Smartphone,
-                title: 'Her Yerden Çalışın',
-                description: 'Ofis dışından da işlerinizi yönetin, seyahat ederken bile bağlı kalın',
+                title: 'Mobil Erişim',
+                description: 'Ofis dışından da işlerinizi yönetin. Seyahat ederken bile bağlı kalın.',
                 gradient: 'info' as const,
                 color: 'blue',
               },
@@ -988,7 +948,7 @@ function LandingPage() {
               transition={{ duration: 0.6 }}
               className="text-5xl md:text-6xl font-extrabold text-gray-900 mb-6"
             >
-              İhtiyacınıza Göre Modüller
+              İhtiyacınıza Özel Modüller
             </motion.h2>
             <motion.div
               initial={{ width: 0 }}
@@ -1004,7 +964,7 @@ function LandingPage() {
               transition={{ duration: 0.6, delay: 0.4 }}
               className="text-xl text-gray-600 max-w-2xl mx-auto font-light"
             >
-              İşinize değer katan, sadece ihtiyacınız olan modülleri seçin
+              İşinize değer katan, yalnızca ihtiyacınız olan modülleri seçin
             </motion.p>
                       </motion.div>
 
@@ -1031,7 +991,7 @@ function LandingPage() {
                     Müşteri Yönetimi
                   </h3>
                   <p className="text-gray-600 text-lg font-light">
-                    Müşteri ilişkilerinizi güçlendirin, satışlarınızı artırın ve daha fazla kazanç elde edin
+                    Müşteri ilişkilerinizi güçlendirin, satışlarınızı artırın ve kazancınızı yükseltin.
                   </p>
                 </div>
                 <ul className="space-y-4 relative z-10">
@@ -1086,7 +1046,7 @@ function LandingPage() {
                     İş Süreçleri Yönetimi
                   </h3>
                   <p className="text-gray-600 text-lg font-light">
-                    Stok, üretim ve finans süreçlerinizi otomatikleştirin, operasyonel maliyetlerinizi düşürün
+                    Stok, üretim ve finans süreçlerinizi otomatikleştirin. Operasyonel maliyetlerinizi düşürün.
                   </p>
                 </div>
                 <ul className="space-y-4 relative z-10">
@@ -1142,7 +1102,7 @@ function LandingPage() {
               transition={{ duration: 0.6 }}
               className="text-5xl md:text-6xl font-extrabold text-gray-900 mb-6"
             >
-              Size Ne Sunuyoruz?
+              Güçlü Özellikler
             </motion.h2>
             <motion.div
               initial={{ width: 0 }}
@@ -1158,7 +1118,7 @@ function LandingPage() {
               transition={{ duration: 0.6, delay: 0.4 }}
               className="text-xl text-gray-600 max-w-2xl mx-auto font-light"
             >
-              İşinizi büyütmenize yardımcı olacak özellikler
+              İşinizi büyütmenize yardımcı olan kapsamlı özellikler
                       </motion.p>
           </motion.div>
 

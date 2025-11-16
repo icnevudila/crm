@@ -232,3 +232,7 @@ const roleLabel = getRoleLabel('SALES') // "Satış Temsilcisi"
 **Test Durumu:** ✅ Hazır  
 **Production Ready:** ✅ Evet
 
+
+
+
+

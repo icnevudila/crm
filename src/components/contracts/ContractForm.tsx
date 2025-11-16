@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox'
 import { useData } from '@/hooks/useData'
 import { toast } from '@/lib/toast'
+import { useNavigateToDetailToast } from '@/lib/quick-action-helper'
 
 interface ContractFormProps {
   contract?: any
@@ -60,6 +61,12 @@ export default function ContractForm({
     status: z.string().default('DRAFT'),
     terms: z.string().optional(),
     notes: z.string().optional(),
+  }).refine((data) => {
+    // customerId veya customerCompanyId en az biri zorunlu
+    return !!(data.customerId && data.customerId.trim() !== '') || !!(data.customerCompanyId && data.customerCompanyId.trim() !== '')
+  }, {
+    message: 'Müşteri veya Firma seçimi zorunludur',
+    path: ['customerId'],
   }).refine((data) => {
     // endDate startDate'den sonra olmalı
     if (data.startDate && data.endDate) {
@@ -251,7 +258,8 @@ export default function ContractForm({
       if (contract) {
         toast.success(t('contractUpdated'), t('contractUpdatedMessage', { title: savedContract.title }))
       } else {
-        toast.success(t('contractCreated'), t('contractCreatedMessage', { title: savedContract.title }))
+        // Yeni contract oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
+        navigateToDetailToast('contract', savedContract.id, savedContract.title)
       }
       
       if (onSuccess) {
@@ -311,11 +319,12 @@ export default function ContractForm({
           {/* Müşteri Seçimi */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="customerId">{t('customerLabel')}</Label>
+              <Label htmlFor="customerId">{t('customerLabel')} *</Label>
               <select
                 id="customerId"
                 {...register('customerId')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                aria-invalid={errors.customerId ? 'true' : 'false'}
               >
                 <option value="">{t('customerPlaceholder')}</option>
                 {customers.map((customer) => (
@@ -324,14 +333,18 @@ export default function ContractForm({
                   </option>
                 ))}
               </select>
+              {errors.customerId && (
+                <p className="text-red-600 text-sm mt-1">{errors.customerId.message}</p>
+              )}
             </div>
 
             <div>
-              <Label htmlFor="customerCompanyId">{t('customerCompanyLabel')}</Label>
+              <Label htmlFor="customerCompanyId">{t('customerCompanyLabel')} *</Label>
               <select
                 id="customerCompanyId"
                 {...register('customerCompanyId')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                aria-invalid={errors.customerCompanyId ? 'true' : 'false'}
               >
                 <option value="">{t('customerCompanyPlaceholder')}</option>
                 {customerCompanies.map((company: any) => (
@@ -340,18 +353,23 @@ export default function ContractForm({
                   </option>
                 ))}
               </select>
+              {errors.customerCompanyId && (
+                <p className="text-red-600 text-sm mt-1">{errors.customerCompanyId.message}</p>
+              )}
+            </div>
+            <div className="col-span-2">
+              <p className="text-xs text-gray-500">Müşteri veya Firma seçimi zorunludur</p>
             </div>
           </div>
 
           {/* Tip ve Kategori */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <Label htmlFor="type">{t('typeLabel')} *</Label>
+              <Label htmlFor="type">{t('typeLabel')}</Label>
               <select
                 id="type"
                 {...register('type')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                required
                 aria-invalid={errors.type ? 'true' : 'false'}
               >
                 <option value="SERVICE">{t('typeService')}</option>

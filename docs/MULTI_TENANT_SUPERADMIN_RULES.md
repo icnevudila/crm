@@ -216,3 +216,7 @@ const { data } = useData(`/api/resource?companyId=${companyId}`, {
 **Son Güncelleme:** 2024
 **Versiyon:** 1.0.0
 
+
+
+
+

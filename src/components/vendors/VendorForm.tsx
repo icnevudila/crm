@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { toast } from '@/lib/toast'
+import { useNavigateToDetailToast } from '@/lib/quick-action-helper'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -156,10 +157,12 @@ export default function VendorForm({
       
       // onSuccess callback'i çağır - optimistic update için
       // Success toast göster
-      toast.success(
-        vendor ? 'Tedarikçi güncellendi' : 'Tedarikçi kaydedildi',
-        vendor ? `${data.name} başarıyla güncellendi.` : `${data.name} başarıyla eklendi.`
-      )
+      if (vendor) {
+        toast.success('Tedarikçi güncellendi', `${data.name} başarıyla güncellendi.`)
+      } else {
+        // Yeni vendor oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
+        navigateToDetailToast('vendor', savedVendor.id, savedVendor.name)
+      }
 
       if (onSuccess) {
         onSuccess(savedVendor)

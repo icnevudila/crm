@@ -16,14 +16,45 @@
  */
 
 // Sentry'yi opsiyonel olarak import et (paket yoksa hata vermez)
+// Next.js build sırasında paket yoksa hata vermemesi için tamamen opsiyonel yapıyoruz
+// Build sırasında require/import kullanmak Next.js'i hata veriyor, bu yüzden runtime'da dynamic import kullanıyoruz
 let Sentry: any = null
-try {
-  Sentry = require('@sentry/nextjs')
-} catch (error) {
-  // Paket yüklü değilse Sentry devre dışı
-  if (process.env.NODE_ENV === 'development') {
-    console.warn('Sentry paketi yüklü değil. Hata takibi devre dışı. Yüklemek için: npm install @sentry/nextjs')
+let SentryLoaded = false
+
+// Build sırasında kontrol etmemek için - sadece runtime'da çalışır
+const isBuildTime = typeof window === 'undefined' && process.env.NODE_ENV !== 'production' && !process.env.NEXT_RUNTIME
+
+// Runtime'da Sentry'yi yükle (build sırasında değil)
+async function loadSentry() {
+  if (SentryLoaded) return Sentry
+  
+  // Build sırasında hiçbir şey yapma
+  if (isBuildTime) {
+    Sentry = null
+    SentryLoaded = true
+    return Sentry
   }
+  
+  // Paket yüklü mü kontrol et - build sırasında hata vermemesi için
+  try {
+    // @ts-expect-error - Paket yoksa hata vermemesi için
+    const sentryModule = await import('@sentry/nextjs').catch(() => null)
+    if (sentryModule) {
+      Sentry = sentryModule.default || sentryModule
+    } else {
+      Sentry = null
+    }
+  } catch (error: any) {
+    // Paket yüklü değilse veya başka bir hata varsa - sessizce devam et
+    if (error?.code !== 'MODULE_NOT_FOUND') {
+      console.warn('[Sentry] Yükleme hatası:', error?.message || error)
+    }
+    Sentry = null
+  } finally {
+    SentryLoaded = true
+  }
+  
+  return Sentry
 }
 
 const SENTRY_DSN = process.env.NEXT_PUBLIC_SENTRY_DSN
@@ -31,14 +62,15 @@ const SENTRY_DSN = process.env.NEXT_PUBLIC_SENTRY_DSN
 /**
  * Sentry'yi başlat (sadece production'da)
  */
-export function initSentry() {
-  // Sentry paketi yüklü değilse hiçbir şey yapma
-  if (!Sentry) return
+export async function initSentry() {
+  // Sentry'yi runtime'da yükle
+  const loadedSentry = await loadSentry()
+  if (!loadedSentry) return
   
   if (typeof window === 'undefined') {
     // Server-side
     if (process.env.NODE_ENV === 'production' && SENTRY_DSN) {
-      Sentry.init({
+      loadedSentry.init({
         dsn: SENTRY_DSN,
         environment: process.env.NODE_ENV,
         tracesSampleRate: 0.1, // %10 of transactions (performance monitoring)
@@ -70,7 +102,7 @@ export function initSentry() {
   } else {
     // Client-side
     if (process.env.NODE_ENV === 'production' && SENTRY_DSN) {
-      Sentry.init({
+      loadedSentry.init({
         dsn: SENTRY_DSN,
         environment: process.env.NODE_ENV,
         tracesSampleRate: 0.1,
@@ -87,7 +119,7 @@ export function initSentry() {
           return event
         },
         integrations: [
-          new Sentry.BrowserTracing({
+          new loadedSentry.BrowserTracing({
             // Performance monitoring
             tracePropagationTargets: ['localhost', /^https:\/\/.*\.vercel\.app/],
           }),
@@ -100,15 +132,17 @@ export function initSentry() {
 /**
  * Hata yakalama ve Sentry'ye gönderme
  */
-export function captureException(error: Error, context?: Record<string, any>) {
-  if (!Sentry) {
+export async function captureException(error: Error, context?: Record<string, any>) {
+  const loadedSentry = await loadSentry()
+  
+  if (!loadedSentry) {
     // Sentry yoksa sadece console'a yazdır
     console.error('Error captured:', error, context)
     return
   }
   
   if (process.env.NODE_ENV === 'production' && SENTRY_DSN) {
-    Sentry.captureException(error, {
+    loadedSentry.captureException(error, {
       extra: context,
     })
   } else if (process.env.NODE_ENV === 'development') {
@@ -120,14 +154,16 @@ export function captureException(error: Error, context?: Record<string, any>) {
 /**
  * Mesaj yakalama (non-error events)
  */
-export function captureMessage(message: string, level: 'info' | 'warning' | 'error' | 'debug' | 'fatal' = 'info') {
-  if (!Sentry) {
+export async function captureMessage(message: string, level: 'info' | 'warning' | 'error' | 'debug' | 'fatal' = 'info') {
+  const loadedSentry = await loadSentry()
+  
+  if (!loadedSentry) {
     console.log(`[${level}]:`, message)
     return
   }
   
   if (process.env.NODE_ENV === 'production' && SENTRY_DSN) {
-    Sentry.captureMessage(message, level)
+    loadedSentry.captureMessage(message, level)
   } else if (process.env.NODE_ENV === 'development') {
     console.log(`[Sentry ${level}]:`, message)
   }
@@ -136,11 +172,12 @@ export function captureMessage(message: string, level: 'info' | 'warning' | 'err
 /**
  * Kullanıcı bilgilerini Sentry'ye ekle
  */
-export function setUser(user: { id: string; email?: string; companyId?: string }) {
-  if (!Sentry) return
+export async function setUser(user: { id: string; email?: string; companyId?: string }) {
+  const loadedSentry = await loadSentry()
+  if (!loadedSentry) return
   
   if (process.env.NODE_ENV === 'production' && SENTRY_DSN) {
-    Sentry.setUser({
+    loadedSentry.setUser({
       id: user.id,
       email: user.email,
       // companyId'yi tag olarak ekle (filtreleme için)
@@ -152,22 +189,24 @@ export function setUser(user: { id: string; email?: string; companyId?: string }
 /**
  * Context ekle (ekstra bilgi)
  */
-export function setContext(name: string, context: Record<string, any>) {
-  if (!Sentry) return
+export async function setContext(name: string, context: Record<string, any>) {
+  const loadedSentry = await loadSentry()
+  if (!loadedSentry) return
   
   if (process.env.NODE_ENV === 'production' && SENTRY_DSN) {
-    Sentry.setContext(name, context)
+    loadedSentry.setContext(name, context)
   }
 }
 
 /**
  * Tag ekle (filtreleme için)
  */
-export function setTag(key: string, value: string) {
-  if (!Sentry) return
+export async function setTag(key: string, value: string) {
+  const loadedSentry = await loadSentry()
+  if (!loadedSentry) return
   
   if (process.env.NODE_ENV === 'production' && SENTRY_DSN) {
-    Sentry.setTag(key, value)
+    loadedSentry.setTag(key, value)
   }
 }
 

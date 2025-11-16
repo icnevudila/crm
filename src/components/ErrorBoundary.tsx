@@ -3,7 +3,22 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-import { captureException } from '@/lib/sentry'
+
+// Sentry opsiyonel - build sırasında hata vermemesi için runtime'da yükle
+function captureExceptionSafely(error: Error, context?: Record<string, any>) {
+  // Fire-and-forget - async işlemi başlat ama bekleme
+  if (typeof window !== 'undefined') {
+    import('@/lib/sentry')
+      .then((sentryModule) => {
+        if (sentryModule?.captureException) {
+          sentryModule.captureException(error, context)
+        }
+      })
+      .catch(() => {
+        // Sentry yoksa sessizce devam et
+      })
+  }
+}
 
 interface Props {
   children: ReactNode
@@ -26,8 +41,8 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    // Sentry'ye gönder
-    captureException(error, {
+    // Sentry'ye gönder (opsiyonel - paket yoksa hata vermez)
+    captureExceptionSafely(error, {
       errorInfo,
       componentStack: errorInfo.componentStack,
     })

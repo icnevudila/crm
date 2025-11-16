@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { updateRecord } from '@/lib/crud'
 import { 
   isValidQuoteTransition, 
   isQuoteImmutable, 
@@ -26,7 +27,9 @@ export async function GET(
       return sessionError
     }
 
-    if (!session?.user?.companyId) {
+    // ✅ ÇÖZÜM: SuperAdmin için companyId kontrolü bypass et
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    if (!isSuperAdmin && !session?.user?.companyId) {
       return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 })
     }
 
@@ -44,22 +47,29 @@ export async function GET(
     const supabase = getSupabaseWithServiceRole()
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
-    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
-    const companyId = session.user.companyId
+    // ✅ ÇÖZÜM: SuperAdmin'in companyId'si null olabilir, bu durumda filtreleme yapma
+    const companyId = session.user.companyId || null
 
     // Quote'u sadece gerekli kolonlarla çek (performans için)
+    // createdBy ve updatedBy bilgilerini User join ile çekiyoruz (audit trail için)
+    // NOT: Foreign key yoksa (migration çalıştırılmamışsa) join'leri kaldırıp tekrar deniyoruz
     let query = supabase
       .from('Quote')
       .select(
         `
-        id, title, status, totalAmount, dealId, customerCompanyId, companyId, createdAt, updatedAt, validUntil,
+        id, title, status, totalAmount, dealId, customerCompanyId, companyId, notes, validUntil, discount, taxRate, createdAt, updatedAt,
+        createdBy, updatedBy,
+        CreatedByUser:User!Quote_createdBy_fkey(id, name, email),
+        UpdatedByUser:User!Quote_updatedBy_fkey(id, name, email),
         Deal (
           id,
           title,
           Customer (
             id,
             name,
-            email
+            email,
+            phone,
+            address
           )
         ),
         Invoice (
@@ -73,26 +83,103 @@ export async function GET(
       )
       .eq('id', id)
     
-    // SuperAdmin değilse companyId filtresi ekle
-    if (!isSuperAdmin) {
+    // SuperAdmin değilse ve companyId varsa filtrele
+    if (!isSuperAdmin && companyId) {
       query = query.eq('companyId', companyId)
     }
     
-    const { data, error } = await query.maybeSingle() // .single() yerine .maybeSingle() kullan - hata vermez, sadece null döner
+    let { data, error } = await query.maybeSingle()
+    
+    // Foreign key hatası varsa (PGRST200), join'leri kaldırıp tekrar dene
+    if (error && (error.code === 'PGRST200' || error.message?.includes('Could not find a relationship'))) {
+      console.warn('Quote GET API: Foreign key bulunamadı, join olmadan tekrar deneniyor...')
+      let queryWithoutJoin = supabase
+        .from('Quote')
+        .select(
+          `
+          id, title, status, totalAmount, dealId, customerCompanyId, companyId, notes, validUntil, discount, taxRate, createdAt, updatedAt,
+          createdBy, updatedBy,
+          Deal (
+            id,
+            title,
+            Customer (
+              id,
+              name,
+              email,
+              phone,
+              address
+            )
+          ),
+          Invoice (
+            id,
+            title,
+            status,
+            totalAmount,
+            createdAt
+          )
+        `
+        )
+        .eq('id', id)
+      
+      if (!isSuperAdmin && companyId) {
+        queryWithoutJoin = queryWithoutJoin.eq('companyId', companyId)
+      }
+      
+      const retryResult = await queryWithoutJoin.maybeSingle()
+      const retryData: any = retryResult.data
+      error = retryResult.error
+      
+      // createdBy/updatedBy varsa User bilgilerini ayrı query ile çek
+      if (retryData && (retryData.createdBy || retryData.updatedBy)) {
+        const userIds = [retryData.createdBy, retryData.updatedBy].filter(Boolean) as string[]
+        if (userIds.length > 0) {
+          const { data: users } = await supabase
+            .from('User')
+            .select('id, name, email')
+            .in('id', userIds)
+          
+          if (users) {
+            const userMap = new Map(users.map((u: any) => [u.id, u]))
+            if (retryData.createdBy && userMap.has(retryData.createdBy)) {
+              retryData.CreatedByUser = userMap.get(retryData.createdBy)
+            }
+            if (retryData.updatedBy && userMap.has(retryData.updatedBy)) {
+              retryData.UpdatedByUser = userMap.get(retryData.updatedBy)
+            }
+          }
+        }
+      }
+      data = retryData
+    }
 
     if (error) {
       console.error('Quote GET error:', error)
+      const { getErrorMessage } = await import('@/lib/api-locale')
       return NextResponse.json(
-        { error: error.message || 'Teklif getirilemedi' },
+        { error: error.message || getErrorMessage('errors.api.quoteCannotBeFetched', request) },
         { status: 500 }
       )
     }
 
     if (!data) {
+      const { getErrorMessage } = await import('@/lib/api-locale')
       return NextResponse.json(
-        { error: 'Quote bulunamadı' },
+        { error: getErrorMessage('errors.api.quoteNotFound', request) },
         { status: 404 }
       )
+    }
+
+    // DEBUG: SuperAdmin için quote verilerini kontrol et
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Quotes [id] API] 🔍 Quote Data Check:', {
+        quoteId: id,
+        isSuperAdmin,
+        companyId,
+        hasStatus: !!data.status,
+        status: data.status,
+        statusType: typeof data.status,
+        quoteKeys: Object.keys(data),
+      })
     }
 
     // QuoteItem'ları çek (hata olsa bile devam et)
@@ -104,8 +191,8 @@ export async function GET(
         .select('*, Product(id, name, price, stock)')
         .eq('quoteId', id)
       
-      // SuperAdmin değilse companyId filtresi ekle
-      if (!isSuperAdmin) {
+      // SuperAdmin değilse ve companyId varsa filtrele
+      if (!isSuperAdmin && companyId) {
         itemQuery = itemQuery.eq('companyId', companyId)
       }
       
@@ -118,24 +205,6 @@ export async function GET(
       }
     }
 
-    if (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Quote API error:', error)
-      }
-      // Eğer kayıt bulunamadıysa 404, diğer hatalar için 500
-      if (error.code === 'PGRST116' || error.message?.includes('No rows')) {
-        return NextResponse.json({ error: 'Teklif bulunamadı' }, { status: 404 })
-      }
-      return NextResponse.json(
-        { error: error.message || 'Teklif yüklenirken bir hata oluştu' },
-        { status: 500 }
-      )
-    }
-
-    if (!data) {
-      return NextResponse.json({ error: 'Teklif bulunamadı' }, { status: 404 })
-    }
-
     // ActivityLog'lar KALDIRILDI - Lazy load için ayrı endpoint kullanılacak (/api/activity?entity=Quote&id=...)
     // (Performans optimizasyonu: Detay sayfası daha hızlı açılır, ActivityLog'lar gerektiğinde yüklenir)
     
@@ -145,10 +214,11 @@ export async function GET(
       activities: [], // Boş array - lazy load için ayrı endpoint kullanılacak
     })
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Teklif getirilemedi' },
-      { status: 500 }
-    )
+      const { getErrorMessage } = await import('@/lib/api-locale')
+      return NextResponse.json(
+        { error: getErrorMessage('errors.api.quoteCannotBeFetched', request) },
+        { status: 500 }
+      )
   }
 }
 
@@ -178,7 +248,9 @@ export async function PUT(
     }
 
     const { id } = await params
-    const body = await request.json()
+    const bodyRaw = await request.json()
+    // Güvenlik: createdBy ve updatedBy otomatik dolduruluyor (CRUD fonksiyonunda), body'den alınmamalı
+    const { id: bodyId, companyId: bodyCompanyId, createdAt, updatedAt, createdBy, updatedBy, ...body } = bodyRaw
     const supabase = getSupabaseWithServiceRole()
 
     // ÖNEMLİ: Mevcut quote'u çek - validation için
@@ -200,8 +272,9 @@ export async function PUT(
       if (process.env.NODE_ENV === 'development') {
         console.error('Quote fetch error in PUT:', quoteError)
       }
+      const { getErrorMessage } = await import('@/lib/api-locale')
       return NextResponse.json(
-        { error: 'Teklif bulunamadı', message: quoteError.message || 'Teklif bilgisi getirilemedi' },
+        { error: getErrorMessage('errors.api.quoteNotFound', request), message: quoteError.message || getErrorMessage('errors.api.quoteCannotBeFetched', request) },
         { status: 404 }
       )
     }
@@ -296,9 +369,8 @@ export async function PUT(
     // schema.sql: title, status, total, dealId, companyId, updatedAt
     // schema-extension.sql: description, validUntil, discount, taxRate (migration çalıştırılmamış olabilir - GÖNDERME!)
     // schema-vendor.sql: vendorId (migration çalıştırılmamış olabilir - GÖNDERME!)
-    const updateData: Record<string, unknown> = {
-      updatedAt: new Date().toISOString(),
-    }
+    // NOT: updatedAt ve updatedBy updateRecord fonksiyonunda otomatik ekleniyor
+    const updateData: Record<string, unknown> = {}
 
     // Sadece gönderilen alanları güncelle (status güncellemesi için sadece status gönderilebilir)
     if (body.title !== undefined) updateData.title = body.title
@@ -331,37 +403,41 @@ export async function PUT(
     }
 
     if (!existingQuote) {
-      return NextResponse.json({ error: 'Quote bulunamadı' }, { status: 404 })
+      const { getErrorMessage } = await import('@/lib/api-locale')
+      return NextResponse.json({ error: getErrorMessage('errors.api.quoteNotFound', request) }, { status: 404 })
     }
 
     // ✅ ÇÖZÜM: companyId kontrolü - SuperAdmin değilse companyId eşleşmeli
     if (!isSuperAdminPUT && (existingQuote as any).companyId !== session.user.companyId) {
-      return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 403 })
+      const { getErrorMessage } = await import('@/lib/api-locale')
+      return NextResponse.json({ error: getErrorMessage('errors.unauthorized', request) }, { status: 403 })
     }
 
-    // ✅ %100 KESİN ÇÖZÜM: Service role ile update yap - RLS bypass
-    // ÖNEMLİ: Service role zaten RLS bypass ediyor, companyId kontrolünü kaldıralım
-    // ÖNEMLİ: Sadece id ile update yap - service role zaten RLS bypass ediyor
-    const { data: updateResult, error: updateError } = await supabase
-      .from('Quote')
-      // @ts-ignore - Supabase database type tanımları eksik, update metodu dinamik tip bekliyor
-      .update(updateData)
-      .eq('id', id)
-      .select('id, status, updatedAt') // ✅ ÇÖZÜM: Update sonrası data döndür
+    // updateRecord kullanarak audit trail desteği (updatedBy otomatik eklenir)
+    const { getErrorMessage, getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const locale = getLocaleFromRequest(request)
+    const msgs = getMessages(locale)
+    const quoteTitle = body.title || currentQuote?.title || id
+    const updateDescription = msgs.activity.quoteUpdated.replace('{title}', quoteTitle)
+    
+    const updateResult = await updateRecord(
+      'Quote',
+      id,
+      updateData,
+      updateDescription
+    )
 
-    if (updateError) {
-      console.error('Quote update error:', updateError)
-      console.error('Quote update data:', updateData)
-      console.error('Existing quote:', existingQuote)
-      return NextResponse.json({ error: updateError.message }, { status: 500 })
+    // updateRecord'dan dönen data'yı kontrol et
+    if (!updateResult) {
+      console.error('Quote update failed: No data returned from updateRecord')
+      return NextResponse.json({ error: getErrorMessage('errors.api.quoteCannotBeUpdated', request) }, { status: 500 })
     }
     
     // ✅ %100 KESİN ÇÖZÜM: Update işleminin gerçekten başarılı olup olmadığını kontrol et
     // ÖNEMLİ: Eğer updateResult boşsa, update başarısız demektir
-    if (!updateResult || updateResult.length === 0) {
+    if (!updateResult || (Array.isArray(updateResult) && updateResult.length === 0)) {
       console.error('Quote update failed: No rows updated', {
         updateData,
-        updateError,
         existingQuote,
         id,
         companyId: session.user.companyId,
@@ -374,7 +450,7 @@ export async function PUT(
     
     // ✅ %100 KESİN ÇÖZÜM: Update sonrası dönen data'da status doğru mu kontrol et
     // ÖNEMLİ: Eğer status yanlışsa, update işlemi başarısız olmuş demektir
-    const updatedQuoteFromUpdate = updateResult[0] as any
+    const updatedQuoteFromUpdate = (Array.isArray(updateResult) ? updateResult[0] : updateResult) as any
     if (body.status !== undefined && updatedQuoteFromUpdate.status !== body.status) {
       console.error('Quote update failed: Status mismatch in update result', {
         expected: body.status,
@@ -503,7 +579,8 @@ export async function PUT(
     }
 
     if (!data) {
-      return NextResponse.json({ error: 'Quote bulunamadı veya güncellenemedi' }, { status: 404 })
+      const { getErrorMessage } = await import('@/lib/api-locale')
+      return NextResponse.json({ error: getErrorMessage('errors.api.quoteNotFoundOrDeleted', request) }, { status: 404 })
     }
 
     // Otomasyon bilgilerini sakla (response'a eklemek için)
@@ -511,8 +588,13 @@ export async function PUT(
     
     // Quote ACCEPTED olduğunda otomatik Invoice oluştur
     if (body.status === 'ACCEPTED' && data) {
+      const { getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
+      const localeForInvoice = getLocaleFromRequest(request)
+      const msgsForInvoice = getMessages(localeForInvoice)
+      const invoiceTitle = msgsForInvoice.activity.invoiceTitlePrefix.replace('{title}', (data as any).title || msgsForInvoice.activity.defaultQuoteTitle)
+      
       const invoiceData = {
-        title: `Fatura - ${(data as any).title}`,
+        title: invoiceTitle,
         status: 'DRAFT',
         totalAmount: (data as any).totalAmount || 0,
         quoteId: (data as any).id,
@@ -549,7 +631,7 @@ export async function PUT(
             // Email gönder
             const emailResult = await sendEmail({
               to: variables.customerEmail as string,
-              subject: emailTemplate.subject || 'Teklifiniz Kabul Edildi',
+              subject: emailTemplate.subject || msgsForInvoice.activity.quoteAcceptedEmailSubject,
               html: emailTemplate.body,
             })
             
@@ -571,10 +653,12 @@ export async function PUT(
 
       if (invoice) {
         // ActivityLog kaydı
+        // msgsForActivity zaten yukarıda tanımlanmış (satır 659), tekrar tanımlamaya gerek yok
+        
         const activityData = {
           entity: 'Invoice',
           action: 'CREATE',
-          description: `Teklif kabul edildi, fatura oluşturuldu`,
+          description: msgsForInvoice.activity.quoteAcceptedInvoiceCreated,
           meta: { entity: 'Invoice', action: 'create', id: (invoice as any).id, fromQuote: (data as any).id },
           userId: session.user.id,
           companyId: session.user.companyId,
@@ -588,8 +672,8 @@ export async function PUT(
         await createNotificationForRole({
           companyId: session.user.companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-          title: 'Fatura Oluşturuldu',
-          message: `Teklif kabul edildi ve fatura oluşturuldu. Faturayı görmek ister misiniz?`,
+          title: msgs.activity.invoiceCreated,
+          message: msgs.activity.invoiceCreatedMessage,
           type: 'success',
           relatedTo: 'Invoice',
           relatedId: (invoice as any).id,
@@ -598,31 +682,39 @@ export async function PUT(
     }
 
     // AutoNoteOnEdit: Değişiklik günlüğü - fiyat güncellemeleri
+    // msgs zaten yukarıda tanımlanmış (satır 420), tekrar tanımlamaya gerek yok
+    
     let changeDescription = ''
     if (body.status) {
-      changeDescription = `Teklif durumu güncellendi: ${body.status}`
+      changeDescription = msgs.activity.quoteStatusUpdated.replace('{status}', body.status)
     } else if (body.totalAmount !== undefined && (data as any)?.totalAmount !== undefined) {
       const oldTotal = parseFloat((data as any).totalAmount) || 0
       const newTotal = parseFloat(body.totalAmount) || 0
       if (oldTotal !== newTotal) {
-        changeDescription = `Fiyat güncellendi (eski: ${oldTotal.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })} → yeni: ${newTotal.toLocaleString('tr-TR', { style: 'currency', currency: 'TRY' })})`
+        const localeStr = locale === 'en' ? 'en-US' : 'tr-TR'
+        const currency = locale === 'en' ? 'USD' : 'TRY'
+        changeDescription = msgs.activity.quotePriceUpdated
+          .replace('{oldTotal}', oldTotal.toLocaleString(localeStr, { style: 'currency', currency }))
+          .replace('{newTotal}', newTotal.toLocaleString(localeStr, { style: 'currency', currency }))
       } else {
-        changeDescription = `Teklif güncellendi: ${body.title || (data as any)?.title || 'Teklif'}`
+        const quoteTitle = body.title || (data as any)?.title || msgs.activity.defaultQuoteTitle
+        changeDescription = msgs.activity.quoteUpdated.replace('{title}', quoteTitle)
       }
     } else {
-      changeDescription = `Teklif güncellendi: ${body.title || (data as any)?.title || 'Teklif'}`
+      const quoteTitle = body.title || (data as any)?.title || msgs.activity.defaultQuoteTitle
+      changeDescription = msgs.activity.quoteUpdated.replace('{title}', quoteTitle)
     }
 
     // ÖNEMLİ: Quote DECLINED olduğunda özel ActivityLog ve bildirim
     if (body.status === 'DECLINED' && (data as any)?.status !== 'DECLINED') {
       try {
-        const quoteTitle = body.title || (data as any)?.title || 'Teklif'
+        const quoteTitle = body.title || (data as any)?.title || msgs.activity.defaultQuoteTitle
         
         // Özel ActivityLog kaydı
         const declinedActivityData = {
           entity: 'Quote',
           action: 'UPDATE',
-          description: `Teklif reddedildi: ${quoteTitle}`,
+          description: msgs.activity.quoteRejected.replace('{title}', quoteTitle),
           meta: { 
             entity: 'Quote', 
             action: 'declined', 
@@ -642,8 +734,8 @@ export async function PUT(
         await createNotificationForRole({
           companyId: session.user.companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-          title: 'Teklif Reddedildi',
-          message: `${quoteTitle} teklifi reddedildi. Detayları görmek ister misiniz?`,
+          title: msgs.activity.quoteRejectedTitle,
+          message: msgs.activity.quoteRejectedMessage.replace('{title}', quoteTitle),
           type: 'warning',
           relatedTo: 'Quote',
           relatedId: id,
@@ -673,18 +765,18 @@ export async function PUT(
       companyId: session.user.companyId,
     }
 
-    // @ts-expect-error - Supabase database type tanımları eksik, insert metodu dinamik tip bekliyor
     await supabase.from('ActivityLog').insert([activityData])
 
     // Bildirim: Teklif güncellendi (sadece önemli değişiklikler için)
     if (body.status || (body.totalAmount !== undefined && (data as any)?.totalAmount !== undefined)) {
       try {
         const { createNotificationForRole } = await import('@/lib/notification-helper')
+        const viewDetailsMsg = locale === 'en' ? ' Would you like to view details?' : ' Detayları görmek ister misiniz?'
         await createNotificationForRole({
           companyId: session.user.companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-          title: 'Teklif Güncellendi',
-          message: changeDescription + ' Detayları görmek ister misiniz?',
+          title: msgs.activity.quoteUpdatedTitle,
+          message: changeDescription + viewDetailsMsg,
           type: 'info',
           relatedTo: 'Quote',
           relatedId: id,
@@ -694,9 +786,23 @@ export async function PUT(
       }
     }
 
-    // REJECTED/DECLINED durumunda Task oluşturuldu mu kontrol et
+    // REJECTED/DECLINED durumunda Task oluşturuldu mu kontrol et ve Notification gönder
     if ((body.status === 'REJECTED' || body.status === 'DECLINED') && (data as any)?.status !== body.status) {
       try {
+        // REJECTED notification gönder
+        const { createNotificationForRole } = await import('@/lib/notification-helper')
+        const rejectedQuoteTitle = (data as any)?.title || msgs.activity.defaultQuoteTitle
+        await createNotificationForRole({
+          companyId: session.user.companyId,
+          role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+          title: msgs.activity.quoteRejectedWarningTitle,
+          message: msgs.activity.quoteRejectedWarningMessage.replace('{title}', rejectedQuoteTitle),
+          type: 'warning',
+          priority: 'high',
+          relatedTo: 'Quote',
+          relatedId: id,
+        }).catch(() => {}) // Notification hatası ana işlemi engellemez
+
         const { data: tasks } = await supabase
           .from('Task')
           .select('id')
@@ -817,9 +923,10 @@ export async function DELETE(
         .eq('companyId', session.user.companyId)
         .maybeSingle()
 
+      const { getErrorMessage } = await import('@/lib/api-locale')
       return NextResponse.json(
         { 
-          error: 'Bu teklif silinemez',
+          error: getErrorMessage('errors.api.quoteCannotBeDeleted', request),
           message: deleteCheck.error,
           reason: 'CANNOT_DELETE_QUOTE',
           status: quote?.status,
@@ -868,7 +975,8 @@ export async function DELETE(
           match: quoteWithoutCompany?.companyId === session.user.companyId,
         })
       }
-      return NextResponse.json({ error: 'Teklif bulunamadı veya silinemedi' }, { status: 404 })
+      const { getErrorMessage } = await import('@/lib/api-locale')
+      return NextResponse.json({ error: getErrorMessage('errors.api.quoteNotFoundOrDeleted', request) }, { status: 404 })
     }
 
     // Debug: Silme işleminin başarılı olduğunu logla
@@ -883,17 +991,19 @@ export async function DELETE(
     // ActivityLog kaydı - hata olsa bile ana işlem başarılı
     // quote null olabilir (maybeSingle() kullandık), o yüzden deletedData'dan title al
     try {
-      const quoteTitle = quote?.title || deletedData[0]?.title || 'Teklif'
+      const { getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
+      const deleteLocale = getLocaleFromRequest(request)
+      const deleteMsgs = getMessages(deleteLocale)
+      const quoteTitle = quote?.title || deletedData[0]?.title || deleteMsgs.activity.defaultQuoteTitle
       const activityData = {
         entity: 'Quote',
         action: 'DELETE',
-        description: `Teklif silindi: ${quoteTitle}`,
+        description: deleteMsgs.activity.quoteDeleted.replace('{title}', quoteTitle),
         meta: { entity: 'Quote', action: 'delete', id },
         userId: session.user.id,
         companyId: session.user.companyId,
       }
       
-      // @ts-expect-error - Supabase database type tanımları eksik, insert metodu dinamik tip bekliyor
       await supabase.from('ActivityLog').insert([activityData])
     } catch (logError) {
       // ActivityLog hatası ana işlemi etkilemez
@@ -924,6 +1034,7 @@ export async function DELETE(
     )
   }
 }
+
 
 
 

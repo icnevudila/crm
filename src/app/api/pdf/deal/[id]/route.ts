@@ -3,7 +3,7 @@ import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import React from 'react'
 import { renderToBuffer } from '@react-pdf/renderer'
-import DealPDFComponent from '@/components/pdf/DealPDF'
+import DealRecordPDF from '@/components/pdf/DealRecordPDF'
 
 // Edge Runtime desteklemiyor, Node.js runtime kullan
 // export const runtime = 'edge'
@@ -39,7 +39,14 @@ export async function GET(
           name,
           email,
           phone,
-          city
+          city,
+          address,
+          CustomerCompany:customerCompanyId (
+            id,
+            name,
+            address,
+            city
+          )
         )
       `
       )
@@ -60,7 +67,7 @@ export async function GET(
         
         const { data: company, error: companyError } = await supabase
           .from('Company')
-          .select('id, name, taxNumber, address, city, phone, email')
+          .select('id, name, address, city, phone, email')
           .eq('id', dealCompanyId)
           .maybeSingle()
         
@@ -100,8 +107,8 @@ export async function GET(
     // PDF oluştur - InvoicePDF pattern'i ile (daha güvenli)
     try {
       // Component'i doğru şekilde cast et
-      const PDFComponent = DealPDFComponent as React.ComponentType<{ deal: any }>
-      const pdfElement = React.createElement(PDFComponent, { deal: dealData })
+      const DealRecordPDFComponent = DealRecordPDF as React.ComponentType<{ deal: any }>
+      const pdfElement = React.createElement(DealRecordPDFComponent, { deal: dealData })
       
       if (!pdfElement) {
         throw new Error('PDF element oluşturulamadı')
@@ -117,7 +124,7 @@ export async function GET(
       return new NextResponse(pdfBuffer as any, {
         headers: {
           'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="firsat-${dealData.id.substring(0, 8)}.pdf"`,
+          'Content-Disposition': `attachment; filename="kayit_ozeti_${dealData.id.substring(0, 8)}.pdf"`,
         },
       })
     } catch (renderError: any) {

@@ -105,9 +105,9 @@ export default function RelatedRecordsSuggestions({
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4">İlişkili Kayıtlar</h3>
           <div className="space-y-2">
-            {relatedRecords.map((record) => (
+            {relatedRecords.map((record, index) => (
               <Link
-                key={record.id}
+                key={record.id ? `${record.type}-${record.id}` : `${record.type}-${index}`}
                 href={record.link}
                 className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 transition-colors"
               >

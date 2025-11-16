@@ -1,8 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import { useSession } from '@/hooks/useSession'
 import { useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import NotificationMenu from '@/components/NotificationMenu'
 import Breadcrumbs from '@/components/layout/Breadcrumbs'
 import LocaleSwitcher from '@/components/layout/LocaleSwitcher'
@@ -17,14 +20,77 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { User, LogOut, Settings, HelpCircle, BookOpen, MessageCircle } from 'lucide-react'
-import Link from 'next/link'
+import { User, LogOut, Settings, HelpCircle, BookOpen, MessageCircle, Command, Menu, Plus } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import RecentItems from '@/components/layout/RecentItems'
 
-export default function Header() {
+const CustomerForm = dynamic(() => import('@/components/customers/CustomerForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
+const DealForm = dynamic(() => import('@/components/deals/DealForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
+const QuoteForm = dynamic(() => import('@/components/quotes/QuoteForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
+const InvoiceForm = dynamic(() => import('@/components/invoices/InvoiceForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
+const TaskForm = dynamic(() => import('@/components/tasks/TaskForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
+interface HeaderProps {
+  onMenuClick?: () => void
+}
+
+export default function Header({ onMenuClick }: HeaderProps) {
   const { data: session } = useSession()
   const locale = useLocale()
   const router = useRouter()
+
+  const [quickCreate, setQuickCreate] = useState<'customer' | 'deal' | 'quote' | 'invoice' | 'task' | null>(null)
+
+  const quickActions: {
+    key: 'customer' | 'deal' | 'quote' | 'invoice' | 'task'
+    label: string
+    description: string
+  }[] = [
+    {
+      key: 'customer',
+      label: 'Yeni Müşteri',
+      description: 'Müşteri ve firma bilgisi ekle',
+    },
+    {
+      key: 'deal',
+      label: 'Yeni Fırsat',
+      description: 'Satış fırsatı oluştur',
+    },
+    {
+      key: 'quote',
+      label: 'Yeni Teklif',
+      description: 'Teklif hazırla ve gönder',
+    },
+    {
+      key: 'invoice',
+      label: 'Yeni Fatura',
+      description: 'Satış ya da alış faturası kes',
+    },
+    {
+      key: 'task',
+      label: 'Yeni Görev',
+      description: 'Takip görevi oluştur',
+    },
+  ]
 
   const handleSignOut = async () => {
     try {
@@ -40,15 +106,85 @@ export default function Header() {
   }
 
   return (
-    <header className="fixed top-0 left-64 right-0 h-16 bg-white border-b border-gray-200 z-40 flex items-center justify-between px-6">
-      <div className="flex items-center gap-4 flex-1">
-        <Breadcrumbs items={[]} />
+    <header className="fixed top-0 left-0 lg:left-64 right-0 h-16 bg-white border-b border-gray-200 z-40 flex items-center justify-between px-3 sm:px-4 lg:px-6">
+      <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+        {/* Mobile Menu Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="lg:hidden h-10 w-10 flex-shrink-0"
+          onClick={onMenuClick}
+          aria-label="Menüyü aç"
+        >
+          <Menu className="h-5 w-5" />
+        </Button>
+        
+        {/* Breadcrumbs - Mobilde gizle, tablet ve üzerinde göster */}
+        <div className="hidden sm:block flex-1 min-w-0">
+          <Breadcrumbs items={[]} />
+        </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        {/* Global Search */}
+      <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3 flex-shrink-0">
+        {/* Recent Items - Mobilde gizle */}
+        <div className="hidden md:block">
+          <RecentItems />
+        </div>
+
+        {/* Quick Create Menu - Header sağ üstte + menüsü */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              className="hidden sm:inline-flex h-9 w-9 border-indigo-100 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-900"
+              title="Hızlı Oluştur (Müşteri, Fırsat, Teklif, Fatura, Görev)"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuLabel>Hızlı Oluştur</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {quickActions.map((action) => (
+              <DropdownMenuItem
+                key={action.key}
+                onSelect={(e) => {
+                  e.preventDefault()
+                  setQuickCreate(action.key)
+                }}
+                className="flex flex-col items-start cursor-pointer"
+              >
+                <span className="text-sm font-medium">{action.label}</span>
+                <span className="text-xs text-muted-foreground">{action.description}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        {/* Command Palette Trigger - Tek buton (hem Ctrl+K hem Ctrl+N ile açılır) */}
+        <Button
+          variant="default"
+          size="sm"
+          className="hidden sm:flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-md"
+          onClick={() => {
+            // Command Palette'i açmak için custom event gönder
+            document.dispatchEvent(new CustomEvent('open-command-palette'))
+          }}
+          title="Komut Paleti - Ara, Yeni Kayıt Oluştur (Cmd+K / Ctrl+K veya Cmd+N / Ctrl+N)"
+        >
+          <Command className="h-4 w-4" />
+          <span className="hidden lg:inline">Ara</span>
+          <kbd className="hidden xl:inline-flex h-5 select-none items-center gap-1 rounded border bg-white/20 px-1.5 font-mono text-[10px] font-medium opacity-100">
+            <span className="text-xs">⌘</span>K
+          </kbd>
+        </Button>
+
+        {/* Global Search - Mobilde küçült */}
         {FEATURE_FLAGS.GLOBAL_SEARCH && (
-          <GlobalSearchBar />
+          <div className="hidden sm:block">
+            <GlobalSearchBar />
+          </div>
         )}
         
         {/* Bildirimler */}
@@ -56,8 +192,10 @@ export default function Header() {
           <NotificationMenu userId={session.user.id} />
         )}
 
-        {/* Dil Değiştirici */}
-        <LocaleSwitcher />
+        {/* Dil Değiştirici - Mobilde küçült */}
+        <div className="hidden sm:block">
+          <LocaleSwitcher />
+        </div>
 
         {/* Kullanıcı Menüsü */}
         {session?.user && (
@@ -123,6 +261,28 @@ export default function Header() {
           </DropdownMenu>
         )}
       </div>
+
+      {/* Quick Create Modals - global header seviyesinde, her sayfadan erişilebilir */}
+      <CustomerForm
+        open={quickCreate === 'customer'}
+        onClose={() => setQuickCreate(null)}
+      />
+      <DealForm
+        open={quickCreate === 'deal'}
+        onClose={() => setQuickCreate(null)}
+      />
+      <QuoteForm
+        open={quickCreate === 'quote'}
+        onClose={() => setQuickCreate(null)}
+      />
+      <InvoiceForm
+        open={quickCreate === 'invoice'}
+        onClose={() => setQuickCreate(null)}
+      />
+      <TaskForm
+        open={quickCreate === 'task'}
+        onClose={() => setQuickCreate(null)}
+      />
     </header>
   )
 }

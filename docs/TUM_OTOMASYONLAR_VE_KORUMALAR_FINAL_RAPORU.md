@@ -204,10 +204,18 @@ Sistemdeki **tüm kritik eksik otomasyonlar ve korumalar** tespit edildi ve baş
 
 ## 📊 İSTATİSTİKLER
 
-**Toplam Özellikler:**
-- ✅ Otomasyonlar: 6
+**Toplam Özellikler (Bu Raporun Kapsamı):**
+- ✅ Otomasyonlar (kritik batch): 6
 - ✅ Korumalar: 5
-- **Toplam:** 11 özellik
+- **Toplam:** 11 kritik özellik
+
+**Sistem Geneli Ek Otomasyon Setleri (Ayrı Rehberlerde Detaylı):**
+- `YENI_AKILLI_OTOMASYONLAR_REHBERI.md` → ✅ 10 akıllı otomasyon
+- `ILERI_SEVIYE_OTOMASYONLAR_REHBERI.md` → ✅ 10 ileri seviye otomasyon + 6 cron job
+- `OTOMASYON_SISTEMI_REHBERI.md` → Ana satış akışı otomasyonları (Deal → Quote → Invoice → Contract → Finance → Shipment)
+
+> Not: Bu dosya, yalnızca **kritik eksiklerin kapatıldığı 6 otomasyon + 5 korumayı** belgeleyen final batch raporudur.  
+> Toplam sistem otomasyon sayısı (baz akış + akıllı + ileri seviye) güncel olarak **91+** seviyesindedir; detay için ilgili rehber dosyalara bakılmalıdır.
 
 **Dosya Değişiklikleri:**
 - ✅ Yeni dosya: 5 (cron job'lar)

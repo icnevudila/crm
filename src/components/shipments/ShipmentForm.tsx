@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { toast } from '@/lib/toast'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { useNavigateToDetailToast } from '@/lib/quick-action-helper'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -28,7 +29,7 @@ import {
 const shipmentSchema = z.object({
   tracking: z.string().max(100, 'Takip numarası en fazla 100 karakter olabilir').optional(),
   status: z.enum(['DRAFT', 'PENDING', 'APPROVED', 'IN_TRANSIT', 'DELIVERED', 'CANCELLED']).default('PENDING'),
-  invoiceId: z.string().optional(),
+  invoiceId: z.string().min(1, 'Fatura seçimi zorunludur'),
   shippingCompany: z.string().max(200, 'Kargo firması en fazla 200 karakter olabilir').optional(),
   estimatedDelivery: z.string().optional(),
   deliveryAddress: z.string().max(500, 'Teslimat adresi en fazla 500 karakter olabilir').optional(),
@@ -53,6 +54,8 @@ interface ShipmentFormProps {
   open: boolean
   onClose: () => void
   onSuccess?: (savedShipment: any) => void | Promise<void>
+  invoiceId?: string // Prop olarak invoiceId geçilebilir (modal içinde kullanım için)
+  skipDialog?: boolean // Wizard içinde kullanım için Dialog wrapper'ı atla
 }
 
 async function fetchInvoices() {
@@ -65,11 +68,15 @@ async function fetchInvoices() {
   return Array.isArray(data) ? data : []
 }
 
-export default function ShipmentForm({ shipment, open, onClose, onSuccess }: ShipmentFormProps) {
+export default function ShipmentForm({ shipment, open, onClose, onSuccess, invoiceId: invoiceIdProp, skipDialog = false }: ShipmentFormProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
   const invoiceIdFromUrl = searchParams.get('invoiceId') || undefined // URL'den invoiceId al
+  
+  // Prop öncelikli - prop varsa prop'u kullan, yoksa URL'den al
+  const invoiceId = invoiceIdProp || invoiceIdFromUrl
+  
   const [loading, setLoading] = useState(false)
 
   const { data: invoicesData } = useQuery({
@@ -101,7 +108,7 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess }: Shi
   })
 
   const status = watch('status')
-  const invoiceId = watch('invoiceId')
+  const watchedInvoiceId = watch('invoiceId')
   
   // Durum bazlı koruma kontrolü - form alanlarını devre dışı bırakmak için
   const isProtected = shipment && shipment.status === 'DELIVERED'
@@ -129,18 +136,18 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess }: Shi
           deliveryAddress: shipment.deliveryAddress || '',
         })
       } else {
-        // Yeni kayıt modu - form'u temizle
+        // Yeni kayıt modu - form'u temizle (invoiceId prop'u varsa kullan)
         reset({
           tracking: '',
           status: 'PENDING',
-          invoiceId: '',
+          invoiceId: invoiceId || '',
           shippingCompany: '',
           estimatedDelivery: '',
           deliveryAddress: '',
         })
       }
     }
-  }, [shipment, open, reset])
+  }, [shipment, open, reset, invoiceId])
 
   const mutation = useMutation({
     mutationFn: async (data: ShipmentFormData) => {
@@ -161,6 +168,14 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess }: Shi
       return res.json()
     },
     onSuccess: (savedShipment) => {
+      // Toast mesajı göster
+      if (shipment) {
+        toast.success('Sevkiyat güncellendi', `"${savedShipment.tracking || 'Sevkiyat'}" başarıyla güncellendi.`)
+      } else {
+        // Yeni shipment oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
+        navigateToDetailToast('shipment', savedShipment.id, savedShipment.tracking || 'Sevkiyat')
+      }
+      
       // onSuccess callback'i çağır - optimistic update için
       if (onSuccess) {
         onSuccess(savedShipment)
@@ -182,9 +197,9 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess }: Shi
     }
   }
 
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+  const formContent = (
+    <div className="space-y-4">
+      {!skipDialog && (
         <DialogHeader>
           <DialogTitle>
             {shipment ? 'Sevkiyat Düzenle' : 'Yeni Sevkiyat'}
@@ -193,8 +208,9 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess }: Shi
             {shipment ? 'Sevkiyat bilgilerini güncelleyin' : 'Yeni sevkiyat oluşturun'}
           </DialogDescription>
         </DialogHeader>
+      )}
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           {/* ÖNEMLİ: Durum bazlı koruma bilgilendirmeleri */}
           {shipment && shipment.status === 'DELIVERED' && (
             <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-4">
@@ -218,7 +234,7 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess }: Shi
             <div className="space-y-2">
               <label className="text-sm font-medium">Fatura</label>
               <Select
-                value={invoiceId || 'none'}
+                value={watchedInvoiceId || 'none'}
                 onValueChange={(value) => setValue('invoiceId', value === 'none' ? '' : value)}
                 disabled={loading || isProtected}
               >
@@ -317,11 +333,23 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess }: Shi
               type="submit"
               className="bg-gradient-primary text-white w-full sm:w-auto"
               disabled={loading || isProtected}
+              loading={loading}
             >
               {loading ? 'Kaydediliyor...' : shipment ? (isProtected ? 'Değiştirilemez' : 'Güncelle') : 'Kaydet'}
             </Button>
           </div>
         </form>
+    </div>
+  )
+
+  if (skipDialog) {
+    return formContent
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+        {formContent}
       </DialogContent>
     </Dialog>
   )

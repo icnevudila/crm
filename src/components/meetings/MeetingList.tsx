@@ -1,9 +1,9 @@
 ﻿'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { toast, confirm } from '@/lib/toast'
 import { useLocale, useTranslations } from 'next-intl'
-import { Plus, Search, Edit, Trash2, Eye, Calendar, Building2, User, FileText, Download, FileSpreadsheet, FileText as FileTextIcon, AlertCircle } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Eye, Calendar, Building2, User, FileText, Download, FileSpreadsheet, FileText as FileTextIcon, AlertCircle, Mail, MessageSquare, MessageCircle, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -22,8 +22,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { AutomationConfirmationModal } from '@/lib/automations/toast-confirmation'
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import { AutomationInfo } from '@/components/automation/AutomationInfo'
+import Pagination from '@/components/ui/Pagination'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useData } from '@/hooks/useData'
@@ -41,6 +51,11 @@ const MeetingForm = dynamic(() => import('./MeetingForm'), {
 })
 
 const MeetingDetailModal = dynamic(() => import('./MeetingDetailModal'), {
+  ssr: false,
+  loading: () => null,
+})
+
+const FinanceForm = dynamic(() => import('@/components/finance/FinanceForm'), {
   ssr: false,
   loading: () => null,
 })
@@ -114,6 +129,17 @@ export default function MeetingList() {
   const [selectedMeetingData, setSelectedMeetingData] = useState<Meeting | null>(null)
   const [expenseWarningOpen, setExpenseWarningOpen] = useState(false)
   const [newMeetingId, setNewMeetingId] = useState<string | null>(null)
+  const [financeFormOpen, setFinanceFormOpen] = useState(false)
+  const [financeFormMeetingId, setFinanceFormMeetingId] = useState<string | null>(null)
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false)
+  const [smsDialogOpen, setSmsDialogOpen] = useState(false)
+  const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false)
+  const [selectedMeetingForCommunication, setSelectedMeetingForCommunication] = useState<Meeting | null>(null)
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
 
   // Debounced search - performans için
   const [debouncedSearch, setDebouncedSearch] = useState(search)
@@ -121,6 +147,7 @@ export default function MeetingList() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
+      setCurrentPage(1) // Arama değiştiğinde ilk sayfaya dön
     }, 300)
     
     return () => clearTimeout(timer)
@@ -137,21 +164,51 @@ export default function MeetingList() {
   )
 
   // SWR ile veri çekme - debounced search kullanıyoruz
-  const params = new URLSearchParams()
-  if (debouncedSearch) params.append('search', debouncedSearch)
-  if (status) params.append('status', status)
-  if (dateFrom) params.append('dateFrom', dateFrom)
-  if (dateTo) params.append('dateTo', dateTo)
-  if (userId && (session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPER_ADMIN')) {
-    params.append('userId', userId)
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams()
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    if (status) params.append('status', status)
+    if (dateFrom) params.append('dateFrom', dateFrom)
+    if (dateTo) params.append('dateTo', dateTo)
+    if (userId && (session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPER_ADMIN')) {
+      params.append('userId', userId)
+    }
+    if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+    params.append('page', currentPage.toString())
+    params.append('pageSize', pageSize.toString())
+    return `/api/meetings?${params.toString()}`
+  }, [debouncedSearch, status, dateFrom, dateTo, userId, session?.user?.role, isSuperAdmin, filterCompanyId, currentPage, pageSize])
+
+  interface MeetingsResponse {
+    data: Meeting[]
+    pagination: {
+      page: number
+      pageSize: number
+      totalItems: number
+      totalPages: number
+    }
   }
-  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
   
-  const apiUrl = `/api/meetings?${params.toString()}`
-  const { data: meetings = [], isLoading, error, mutate: mutateMeetings } = useData<Meeting[]>(apiUrl, {
-    dedupingInterval: 5000, // 5 saniye cache (daha kısa - güncellemeler daha hızlı)
-    revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
+  const { data: meetingsData, isLoading, error, mutate: mutateMeetings } = useData<Meeting[] | MeetingsResponse>(apiUrl, {
+    dedupingInterval: 5000,
+    revalidateOnFocus: false,
   })
+  
+  const meetings = useMemo(() => {
+    if (Array.isArray(meetingsData)) return meetingsData
+    if (meetingsData && typeof meetingsData === 'object' && 'data' in meetingsData) {
+      return (meetingsData as MeetingsResponse).data || []
+    }
+    return []
+  }, [meetingsData])
+  
+  const pagination = useMemo(() => {
+    if (!meetingsData || Array.isArray(meetingsData)) return null
+    if (meetingsData && typeof meetingsData === 'object' && 'pagination' in meetingsData) {
+      return (meetingsData as MeetingsResponse).pagination || null
+    }
+    return null
+  }, [meetingsData])
 
   // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
   const handleRefresh = async () => {
@@ -186,7 +243,8 @@ export default function MeetingList() {
   }
 
   const handleDelete = async (id: string, title: string) => {
-    if (!(await confirm(`${title} görüşmesini silmek istediğinize emin misiniz?`))) {
+    const tCommon = useTranslations('common')
+    if (!(await confirm(tCommon('deleteConfirm', { name: title, item: 'görüşme' })))) {
       return
     }
 
@@ -212,7 +270,7 @@ export default function MeetingList() {
       ])
 
       toast.dismiss(toastId)
-      toast.success('Silindi', 'Görüşme başarıyla silindi.')
+      toast.success(tCommon('meetingDeletedSuccess'), tCommon('meetingDeletedSuccessMessage'))
     } catch (error: any) {
       console.error('Delete error:', error)
       toast.dismiss(toastId)
@@ -457,6 +515,7 @@ export default function MeetingList() {
                     <Link
                       href={`/${locale}/meetings/${meeting.id}`}
                       className="text-primary-600 hover:underline font-medium"
+                      prefetch={true}
                     >
                       {meeting.title}
                     </Link>
@@ -518,17 +577,11 @@ export default function MeetingList() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setSelectedMeetingId(meeting.id)
-                          setSelectedMeetingData(meeting)
-                          setDetailModalOpen(true)
-                        }}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
+                      <Link href={`/${locale}/meetings/${meeting.id}`} prefetch={true}>
+                        <Button variant="ghost" size="icon">
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </Link>
                       {(session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPER_ADMIN' || meeting.createdBy === session?.user?.id) && (
                         <>
                           <Button
@@ -548,6 +601,98 @@ export default function MeetingList() {
                           </Button>
                         </>
                       )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" aria-label="Hızlı İşlemler">
+                            <Sparkles className="h-4 w-4 text-indigo-500" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
+                          <DropdownMenuLabel>Hızlı İşlemler</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onSelect={async () => {
+                              if (meeting.customerId) {
+                                try {
+                                  const customerRes = await fetch(`/api/customers/${meeting.customerId}`)
+                                  if (customerRes.ok) {
+                                    const customer = await customerRes.json()
+                                    if (customer?.email) {
+                                      setSelectedMeetingForCommunication(meeting)
+                                      setSelectedCustomer(customer)
+                                      setEmailDialogOpen(true)
+                                    } else {
+                                      toast.error('E-posta adresi yok', 'Müşterinin e-posta adresi bulunamadı')
+                                    }
+                                  }
+                                } catch (error) {
+                                  console.error('Customer fetch error:', error)
+                                }
+                              } else {
+                                toast.error('Müşteri yok', 'Bu toplantı için müşteri bilgisi bulunamadı')
+                              }
+                            }}
+                            disabled={!meeting.customerId}
+                          >
+                            <Mail className="h-4 w-4" />
+                            E-posta Gönder
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={async () => {
+                              if (meeting.customerId) {
+                                try {
+                                  const customerRes = await fetch(`/api/customers/${meeting.customerId}`)
+                                  if (customerRes.ok) {
+                                    const customer = await customerRes.json()
+                                    if (customer?.phone) {
+                                      setSelectedMeetingForCommunication(meeting)
+                                      setSelectedCustomer(customer)
+                                      setSmsDialogOpen(true)
+                                    } else {
+                                      toast.error('Telefon numarası yok', 'Müşterinin telefon numarası bulunamadı')
+                                    }
+                                  }
+                                } catch (error) {
+                                  console.error('Customer fetch error:', error)
+                                }
+                              } else {
+                                toast.error('Müşteri yok', 'Bu toplantı için müşteri bilgisi bulunamadı')
+                              }
+                            }}
+                            disabled={!meeting.customerId}
+                          >
+                            <MessageSquare className="h-4 w-4" />
+                            SMS Gönder
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={async () => {
+                              if (meeting.customerId) {
+                                try {
+                                  const customerRes = await fetch(`/api/customers/${meeting.customerId}`)
+                                  if (customerRes.ok) {
+                                    const customer = await customerRes.json()
+                                    if (customer?.phone) {
+                                      setSelectedMeetingForCommunication(meeting)
+                                      setSelectedCustomer(customer)
+                                      setWhatsAppDialogOpen(true)
+                                    } else {
+                                      toast.error('Telefon numarası yok', 'Müşterinin telefon numarası bulunamadı')
+                                    }
+                                  }
+                                } catch (error) {
+                                  console.error('Customer fetch error:', error)
+                                }
+                              } else {
+                                toast.error('Müşteri yok', 'Bu toplantı için müşteri bilgisi bulunamadı')
+                              }
+                            }}
+                            disabled={!meeting.customerId}
+                          >
+                            <MessageCircle className="h-4 w-4" />
+                            WhatsApp Gönder
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </TableCell>
                 </motion.tr>
@@ -555,6 +700,21 @@ export default function MeetingList() {
             )}
           </TableBody>
         </Table>
+        
+        {/* Pagination */}
+        {pagination && (
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            pageSize={pagination.pageSize}
+            totalItems={pagination.totalItems}
+            onPageChange={(page) => setCurrentPage(page)}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              setCurrentPage(1)
+            }}
+          />
+        )}
       </div>
 
       {/* Form Modal */}
@@ -635,7 +795,8 @@ export default function MeetingList() {
               <Button
                 onClick={() => {
                   setExpenseWarningOpen(false)
-                  window.location.href = `/${locale}/finance?relatedTo=Meeting&relatedId=${newMeetingId}`
+                  setFinanceFormMeetingId(newMeetingId)
+                  setFinanceFormOpen(true)
                   setNewMeetingId(null)
                 }}
                 className="bg-amber-600 hover:bg-amber-700"
@@ -645,6 +806,114 @@ export default function MeetingList() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Finance Form Modal - Operasyon Gideri Ekleme */}
+      {financeFormOpen && financeFormMeetingId && (
+        <FinanceForm
+          open={financeFormOpen}
+          onClose={() => {
+            setFinanceFormOpen(false)
+            setFinanceFormMeetingId(null)
+          }}
+          onSuccess={async (savedFinance: any) => {
+            // Finance kaydı başarıyla oluşturuldu
+            // Meeting listesini yenile
+            await mutateMeetings(undefined, { revalidate: true })
+            await Promise.all([
+              mutate('/api/meetings', undefined, { revalidate: true }),
+              mutate('/api/meetings?', undefined, { revalidate: true }),
+              mutate(apiUrl || '/api/meetings', undefined, { revalidate: true }),
+            ])
+            
+            // Modal'ı kapat
+            setFinanceFormOpen(false)
+            setFinanceFormMeetingId(null)
+            
+            // Başarı mesajı göster
+            toast.success('Başarılı', 'Operasyon gideri başarıyla eklendi!')
+            
+            // Finans sayfasına yönlendir (yeni sekmede açılması için)
+            setTimeout(() => {
+              window.open(`/${locale}/finance?relatedTo=Meeting&relatedId=${financeFormMeetingId}`, '_blank')
+            }, 500)
+          }}
+          relatedTo="Meeting"
+          relatedId={financeFormMeetingId}
+        />
+      )}
+      
+      {/* Communication Modals */}
+      {emailDialogOpen && selectedMeetingForCommunication && selectedCustomer && (
+        <AutomationConfirmationModal
+          type="email"
+          options={{
+            entityType: 'MEETING',
+            entityId: selectedMeetingForCommunication.id,
+            entityTitle: selectedMeetingForCommunication.title,
+            customerEmail: selectedCustomer.email,
+            customerPhone: selectedCustomer.phone,
+            customerName: selectedCustomer.name,
+            defaultSubject: `Toplantı: ${selectedMeetingForCommunication.title}`,
+            defaultMessage: `Merhaba ${selectedCustomer.name},\n\nToplantı bilgisi: ${selectedMeetingForCommunication.title}\n\nTarih: ${selectedMeetingForCommunication.meetingDate ? new Date(selectedMeetingForCommunication.meetingDate).toLocaleString('tr-TR') : 'Belirtilmemiş'}\nLokasyon: ${selectedMeetingForCommunication.location || 'Belirtilmemiş'}`,
+            defaultHtml: `<p>Merhaba ${selectedCustomer.name},</p><p>Toplantı bilgisi: <strong>${selectedMeetingForCommunication.title}</strong></p><p>Tarih: ${selectedMeetingForCommunication.meetingDate ? new Date(selectedMeetingForCommunication.meetingDate).toLocaleString('tr-TR') : 'Belirtilmemiş'}</p><p>Lokasyon: ${selectedMeetingForCommunication.location || 'Belirtilmemiş'}</p>`,
+            onSent: () => {
+              toast.success('E-posta gönderildi', 'Müşteriye meeting bilgisi gönderildi')
+            },
+          }}
+          open={emailDialogOpen}
+          onClose={() => {
+            setEmailDialogOpen(false)
+            setSelectedMeetingForCommunication(null)
+            setSelectedCustomer(null)
+          }}
+        />
+      )}
+      
+      {smsDialogOpen && selectedMeetingForCommunication && selectedCustomer && (
+        <AutomationConfirmationModal
+          type="sms"
+          options={{
+            entityType: 'MEETING',
+            entityId: selectedMeetingForCommunication.id,
+            entityTitle: selectedMeetingForCommunication.title,
+            customerPhone: selectedCustomer.phone,
+            customerName: selectedCustomer.name,
+            defaultMessage: `Merhaba ${selectedCustomer.name}, Toplantı: ${selectedMeetingForCommunication.title}. Tarih: ${selectedMeetingForCommunication.meetingDate ? new Date(selectedMeetingForCommunication.meetingDate).toLocaleString('tr-TR') : 'Belirtilmemiş'}`,
+            onSent: () => {
+              toast.success('SMS gönderildi', 'Müşteriye meeting bilgisi gönderildi')
+            },
+          }}
+          open={smsDialogOpen}
+          onClose={() => {
+            setSmsDialogOpen(false)
+            setSelectedMeetingForCommunication(null)
+            setSelectedCustomer(null)
+          }}
+        />
+      )}
+      
+      {whatsAppDialogOpen && selectedMeetingForCommunication && selectedCustomer && (
+        <AutomationConfirmationModal
+          type="whatsapp"
+          options={{
+            entityType: 'MEETING',
+            entityId: selectedMeetingForCommunication.id,
+            entityTitle: selectedMeetingForCommunication.title,
+            customerPhone: selectedCustomer.phone,
+            customerName: selectedCustomer.name,
+            defaultMessage: `Merhaba ${selectedCustomer.name}, Toplantı: ${selectedMeetingForCommunication.title}. Tarih: ${selectedMeetingForCommunication.meetingDate ? new Date(selectedMeetingForCommunication.meetingDate).toLocaleString('tr-TR') : 'Belirtilmemiş'}`,
+            onSent: () => {
+              toast.success('WhatsApp mesajı gönderildi', 'Müşteriye meeting bilgisi gönderildi')
+            },
+          }}
+          open={whatsAppDialogOpen}
+          onClose={() => {
+            setWhatsAppDialogOpen(false)
+            setSelectedMeetingForCommunication(null)
+            setSelectedCustomer(null)
+          }}
+        />
       )}
     </div>
   )

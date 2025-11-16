@@ -4,6 +4,7 @@
  */
 
 import { toast as sonnerToast } from 'sonner'
+import { parseError, formatErrorWithRetry, type ErrorInfo } from './error-messages'
 
 // Export toast objesi - doğrudan kullanım için
 export const toast = sonnerToast
@@ -56,6 +57,49 @@ export function toastError(
     onDismiss: options?.onDismiss,
     onAutoClose: options?.onAutoClose,
   })
+}
+
+/**
+ * Hata objesini parse eder ve kullanıcı dostu mesaj gösterir
+ * Retry desteği ile
+ */
+export function toastErrorWithRetry(
+  error: any,
+  onRetry?: () => void
+) {
+  const errorInfo = formatErrorWithRetry(error, onRetry)
+  
+  return sonnerToast.error(errorInfo.title, {
+    description: errorInfo.message,
+    duration: 6000, // Retry için daha uzun süre
+    action: errorInfo.action,
+    ...(process.env.NODE_ENV === 'development' && errorInfo.code && {
+      // Development modunda error code göster
+      description: `${errorInfo.message}\n\n[${errorInfo.code}]`,
+    }),
+  })
+}
+
+/**
+ * Hata objesini parse eder ve kullanıcı dostu mesaj gösterir
+ */
+export function toastErrorParsed(
+  error: any,
+  customMessage?: string
+) {
+  const errorInfo = parseError(error)
+  
+  return sonnerToast.error(
+    customMessage || errorInfo.title,
+    {
+      description: errorInfo.message,
+      duration: 5000,
+      ...(process.env.NODE_ENV === 'development' && errorInfo.code && {
+        // Development modunda error code göster
+        description: `${errorInfo.message}\n\n[${errorInfo.code}]`,
+      }),
+    }
+  )
 }
 
 /**
@@ -136,4 +180,25 @@ export function toastPromise<T>(
         ? messages.error(error)
         : messages.error,
   })
+}
+
+/**
+ * Confirm dialog - window.confirm() yerine kullanılacak
+ * Kullanıcıya onay mesajı gösterir
+ */
+export function confirm(message: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const result = window.confirm(message)
+    resolve(result)
+  })
+}
+
+/**
+ * API hatalarını handle eder ve toast gösterir
+ * Hata objesini parse eder ve kullanıcı dostu mesaj gösterir
+ */
+export function handleApiError(error: any, customMessage?: string) {
+  const errorInfo = parseError(error)
+  
+  return toastErrorParsed(error, customMessage)
 }

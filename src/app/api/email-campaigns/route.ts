@@ -13,7 +13,10 @@ export async function GET(request: NextRequest) {
     if (sessionError) {
       return sessionError
     }
-    if (!session?.user?.companyId) {
+    
+    // SuperAdmin için companyId kontrolünü bypass et
+    const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+    if (!isSuperAdmin && !session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -27,6 +30,7 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseWithServiceRole()
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
+    const filterCompanyId = searchParams.get('filterCompanyId') || ''
 
     let query = supabase
       .from('EmailCampaign')
@@ -36,8 +40,16 @@ export async function GET(request: NextRequest) {
         createdAt,
         createdBy:User!EmailCampaign_createdBy_fkey(id, name, email)
       `)
-      .eq('companyId', session.user.companyId)
       .order('createdAt', { ascending: false })
+    
+    // SuperAdmin için companyId filtresi
+    if (!isSuperAdmin) {
+      query = query.eq('companyId', session.user.companyId)
+    } else if (filterCompanyId) {
+      // SuperAdmin firma filtresi seçtiyse sadece o firmayı göster
+      query = query.eq('companyId', filterCompanyId)
+    }
+    // SuperAdmin ve firma filtresi yoksa tüm firmaları göster
 
     if (status) query = query.eq('status', status)
 
@@ -61,7 +73,10 @@ export async function POST(request: NextRequest) {
     if (sessionError) {
       return sessionError
     }
-    if (!session?.user?.companyId) {
+    
+    // SuperAdmin için companyId kontrolünü bypass et
+    const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+    if (!isSuperAdmin && !session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -89,6 +104,15 @@ export async function POST(request: NextRequest) {
 
     const validatedData = validationResult.data
 
+    // SuperAdmin için companyId body'den alınabilir, yoksa session'dan
+    const companyId = isSuperAdmin && body.companyId 
+      ? body.companyId 
+      : session.user.companyId
+
+    if (!companyId) {
+      return NextResponse.json({ error: 'Company ID is required' }, { status: 400 })
+    }
+
     // scheduledAt varsa SCHEDULED, yoksa DRAFT
     const status = validatedData.scheduledAt && new Date(validatedData.scheduledAt) > new Date()
       ? 'SCHEDULED'
@@ -99,7 +123,7 @@ export async function POST(request: NextRequest) {
       .insert({
         ...validatedData,
         createdBy: session.user.id,
-        companyId: session.user.companyId,
+        companyId: companyId,
         status, // scheduledAt varsa SCHEDULED, yoksa DRAFT
       })
       .select()

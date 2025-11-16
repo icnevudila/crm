@@ -216,9 +216,10 @@ export default function VendorList() {
         </Select>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow-card overflow-hidden">
-        <Table>
+      {/* Table - Desktop View */}
+      <div className="hidden md:block bg-white rounded-lg shadow-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Tedarikçi Adı</TableHead>
@@ -309,7 +310,94 @@ export default function VendorList() {
               ))
             )}
           </TableBody>
-        </Table>
+          </Table>
+        </div>
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-3">
+        {vendors.length === 0 ? (
+          <EmptyState
+            icon={Building2}
+            title="Henüz tedarikçi yok"
+            description="Yeni tedarikçi ekleyerek başlayın"
+            action={{
+              label: 'Yeni Tedarikçi Ekle',
+              onClick: handleAdd,
+            }}
+          />
+        ) : (
+          vendors.map((vendor) => (
+            <div
+              key={vendor.id}
+              className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-gray-900 truncate">{vendor.name}</h3>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {vendor.sector && (
+                      <Badge variant="outline" className="text-xs">{vendor.sector}</Badge>
+                    )}
+                    {vendor.city && (
+                      <Badge variant="outline" className="text-xs">{vendor.city}</Badge>
+                    )}
+                    <Badge
+                      className={`text-xs ${
+                        vendor.status === 'ACTIVE'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}
+                    >
+                      {vendor.status === 'ACTIVE' ? 'Aktif' : 'Pasif'}
+                    </Badge>
+                  </div>
+                  <div className="space-y-1 mt-2">
+                    {vendor.email && (
+                      <p className="text-xs text-gray-600 truncate">{vendor.email}</p>
+                    )}
+                    {vendor.phone && (
+                      <p className="text-xs text-gray-600">{vendor.phone}</p>
+                    )}
+                    <p className="text-xs text-gray-500">
+                      {new Date(vendor.createdAt).toLocaleDateString('tr-TR')}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => {
+                      setSelectedVendorId(vendor.id)
+                      setSelectedVendorData(vendor)
+                      setDetailModalOpen(true)
+                    }}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handleEdit(vendor)}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-red-600"
+                    onClick={() => handleDelete(vendor.id, vendor.name)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Detail Modal */}

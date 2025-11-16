@@ -26,6 +26,7 @@ import {
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import { toastSuccess, toastError } from '@/lib/toast'
 import Link from 'next/link'
 import UserForm from '@/components/users/UserForm'
 
@@ -307,12 +308,12 @@ export default function AdminPage() {
       await mutatePermissions()
       await mutate(`/api/permissions?userId=${selectedUser.id}`)
 
-      alert('Yetkiler başarıyla kaydedildi!')
+      toastSuccess('Yetkiler başarıyla kaydedildi!')
       setSelectedUser(null) // Başarılı kayıt sonrası seçimi temizle
     } catch (error: any) {
       console.error('Error saving permissions:', error)
       setError(error?.message || 'Yetkiler kaydedilemedi')
-      alert(error?.message || 'Yetkiler kaydedilemedi')
+      toastError('Yetkiler kaydedilemedi', error?.message)
     } finally {
       setSaving(false)
     }
@@ -606,7 +607,7 @@ export default function AdminPage() {
                                         ])
                                       } catch (error: any) {
                                         console.error('Delete error:', error)
-                                        alert(error?.message || 'Silme işlemi başarısız oldu')
+                                        toastError('Silme işlemi başarısız oldu', error?.message)
                                       }
                                     }}
                                     className="text-red-600 hover:text-red-700"

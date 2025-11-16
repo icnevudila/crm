@@ -295,3 +295,7 @@ export function getMenuPriorityByRole(role: string) {
 **Son Güncelleme:** 2024  
 **Durum:** ✅ Aktif ve Çalışıyor
 
+
+
+
+

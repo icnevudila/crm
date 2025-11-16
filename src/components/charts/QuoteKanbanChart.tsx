@@ -4,7 +4,8 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { toast } from '@/lib/toast'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { FileText, Edit, Trash2, Eye, Send, CheckCircle, XCircle, GripVertical, RefreshCw, Mail, Clock, History, ChevronLeft, ChevronRight } from 'lucide-react'
+import { FileText, Edit, Trash2, Eye, Send, CheckCircle, XCircle, GripVertical, RefreshCw, Mail, Clock, History, ChevronLeft, ChevronRight, StickyNote, Sparkles } from 'lucide-react'
+import { getStatusColor, getStatusBadgeClass, getStatusCardClass, getStatusHeaderClass } from '@/lib/crm-colors'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -12,6 +13,14 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
 import { Button } from '@/components/ui/button'
@@ -49,6 +58,10 @@ import { CSS } from '@dnd-kit/utilities'
 import { isValidQuoteTransition, isQuoteImmutable } from '@/lib/stageValidation'
 import { translateStage, getStageMessage } from '@/lib/stageTranslations'
 import RelatedRecordsDialog from '@/components/activity/RelatedRecordsDialog'
+import SendEmailButton from '@/components/integrations/SendEmailButton'
+import SendSmsButton from '@/components/integrations/SendSmsButton'
+import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
+import AddToCalendarButton from '@/components/integrations/AddToCalendarButton'
 
 interface QuoteKanbanChartProps {
   data: Array<{
@@ -89,48 +102,15 @@ const statusInfoMessages: Record<string, string> = {
 }
 
 
-// Premium renk kodları - daha belirgin ve okunabilir
-const statusColors: Record<string, { bg: string; text: string; border: string }> = {
-  DRAFT: {
-    bg: 'bg-gray-50',
-    text: 'text-gray-700',
-    border: 'border-gray-300',
-  },
-  SENT: {
-    bg: 'bg-blue-50',
-    text: 'text-blue-700',
-    border: 'border-blue-300',
-  },
-  ACCEPTED: {
-    bg: 'bg-green-50',
-    text: 'text-green-700',
-    border: 'border-green-300',
-  },
-  REJECTED: {
-    bg: 'bg-red-50',
-    text: 'text-red-700',
-    border: 'border-red-300',
-  },
-  DECLINED: {
-    bg: 'bg-red-50',
-    text: 'text-red-700',
-    border: 'border-red-300',
-  },
-  WAITING: {
-    bg: 'bg-yellow-50',
-    text: 'text-yellow-700',
-    border: 'border-yellow-300',
-  },
-}
+// ✅ CRM Renk Sistemi - Merkezi renk kullanımı
+// Status renkleri artık merkezi sistemden geliyor
+const statusColors = (status: string) => ({
+  bg: getStatusColor(status, 'bg'),
+  text: getStatusColor(status, 'text'),
+  border: getStatusColor(status, 'border'),
+})
 
-const statusBadgeColors: Record<string, string> = {
-  DRAFT: 'bg-gray-500 text-white',
-  SENT: 'bg-blue-500 text-white',
-  ACCEPTED: 'bg-green-500 text-white',
-  REJECTED: 'bg-red-500 text-white',
-  DECLINED: 'bg-red-500 text-white',
-  WAITING: 'bg-yellow-500 text-white',
-}
+const statusBadgeColors = (status: string) => getStatusBadgeClass(status)
 
 // ✅ PREMIUM: Droppable Column Component - Smooth hover effects
 function DroppableColumn({ status, children }: { status: string; children: React.ReactNode }) {
@@ -162,55 +142,49 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
   onView?: (quoteId: string) => void // ✅ ÇÖZÜM: Modal açmak için callback
 }) {
   const locale = useLocale()
-  const [dragMode, setDragMode] = useState(false)
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
   
   // Kilitli durum kontrolü - ACCEPTED ve REJECTED durumları taşınamaz
   const isLocked = isQuoteImmutable(status)
   
+  // ✅ Drag & drop şimdilik olduğu gibi - sonra düzeltilecek
   const {
     attributes,
     listeners,
     setNodeRef,
     transform,
     isDragging,
-  } = useSortable({ id: quote.id, disabled: !dragMode || isLocked })
+  } = useSortable({ id: quote.id, disabled: isLocked })
 
-  // ✅ PREMIUM: Ultra-smooth drag animations with GPU acceleration
+  // ✅ PREMIUM: Ultra-smooth drag animations with GPU acceleration - Optimized for performance
   const x = transform?.x ?? 0
   const y = transform?.y ?? 0
   const style: React.CSSProperties = transform 
     ? {
-        transform: `translate3d(${x}px,${y}px,0) scale(1)`,
-        WebkitTransform: `translate3d(${x}px,${y}px,0) scale(1) translateZ(0)`,
-        transition: isDragging ? 'none' : 'transform 150ms cubic-bezier(0.25, 0.46, 0.45, 0.94)', // ✅ Daha hızlı ve smooth transition
+        transform: `translate3d(${x}px,${y}px,0)`,
+        WebkitTransform: `translate3d(${x}px,${y}px,0) translateZ(0)`,
+        transition: 'none', // ✅ Drag sırasında transition YOK - daha smooth
         willChange: 'transform',
-        opacity: isDragging ? 0.7 : 1, // ✅ Daha görünür opacity
-        cursor: dragMode && !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'default',
+        opacity: isDragging ? 0.95 : 1, // ✅ Daha görünür (0.7 yerine 0.95)
+        cursor: !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'not-allowed',
         transformOrigin: 'center center',
         backfaceVisibility: 'hidden',
-        perspective: 1000,
         isolation: 'isolate',
-        zIndex: isDragging ? 50 : 1, // ✅ Drag sırasında üstte
-        // ✅ GPU acceleration optimizations
+        zIndex: isDragging ? 9999 : 1, // ✅ Drag sırasında en üstte
+        // ✅ GPU acceleration optimizations - Minimal properties for better performance
         WebkitBackfaceVisibility: 'hidden',
-        WebkitPerspective: 1000,
-        WebkitTransformStyle: 'preserve-3d',
-        transformStyle: 'preserve-3d',
+        pointerEvents: isDragging ? 'none' : 'auto', // ✅ Drag sırasında pointer events kapalı
       }
     : {
-        transition: 'transform 150ms cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 150ms ease-out', // ✅ Daha hızlı transitions
-        willChange: dragMode && !isLocked ? 'transform' : 'auto',
-        opacity: isDragging ? 0.7 : 1,
-        cursor: dragMode && !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'default',
-        // ✅ GPU acceleration optimizations
+        transition: isDragging ? 'none' : 'transform 100ms ease-out, opacity 100ms ease-out', // ✅ Daha hızlı (100ms)
+        willChange: !isLocked ? 'transform' : 'auto',
+        opacity: 1,
+        cursor: !isLocked ? 'grab' : 'not-allowed',
+        // ✅ Minimal GPU optimizations
         WebkitBackfaceVisibility: 'hidden',
-        WebkitPerspective: 1000,
-        WebkitTransformStyle: 'preserve-3d',
-        transformStyle: 'preserve-3d',
       }
 
-  const colors = statusColors[status] || statusColors.DRAFT
+  const colors = statusColors(status)
 
   const handleEdit = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -229,20 +203,24 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
       <ContextMenuTrigger asChild>
         <Card
           ref={setNodeRef}
+          {...(!isLocked ? attributes : {})}
           style={{
             ...style,
             contain: 'layout style paint', // CSS containment for performance
             isolation: 'isolate', // Force GPU layer
           }}
-          className={`bg-white border-2 transition-all duration-200 ${
+          className={`bg-white border-2 ${
+            isDragging ? '' : 'transition-all duration-150' // ✅ Drag sırasında transition YOK
+          } ${
             isLocked 
               ? status === 'ACCEPTED'
-                ? 'border-green-300 bg-green-50/30 hover:border-green-400'
-                : 'border-red-300 bg-red-50/30 hover:border-red-400'
-              : `${colors.border} hover:border-primary-400 hover:shadow-lg`
-          } relative ${dragMode && !isLocked ? 'ring-2 ring-primary-400 ring-opacity-50' : ''} ${
-            isDragging ? 'shadow-2xl scale-105 rotate-1' : 'hover:scale-[1.02]'
+                ? 'border-green-300 bg-green-50/30 hover:border-green-400 cursor-not-allowed'
+                : 'border-red-300 bg-red-50/30 hover:border-red-400 cursor-not-allowed'
+              : `${colors.border} hover:border-primary-400 hover:shadow-lg cursor-grab active:cursor-grabbing`
+          } relative ${
+            isDragging ? 'shadow-xl scale-[1.05] rotate-2 z-50' : 'hover:scale-[1.01]' // ✅ Drag sırasında daha belirgin
           }`}
+          {...(!isLocked ? listeners : {})}
         >
           {/* Kilitli Durum Badge - Kilitli kartlarda göster */}
           {isLocked && (
@@ -255,69 +233,23 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
             </div>
           )}
           
-          {/* Drag Handle Button - Sadece kilitli değilse göster */}
-          {!isLocked && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setDragMode(!dragMode)
-              }}
-              className={`absolute top-2 right-2 z-50 p-1.5 rounded-md ${isDragging ? 'transition-none' : 'transition-all'} ${
-                dragMode
-                  ? 'bg-primary-500 text-white shadow-md hover:bg-primary-600'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-              title={dragMode ? 'Sürükle-bırak modunu kapat' : 'Sürükle-bırak modunu aç'}
-            >
-              <GripVertical className="h-4 w-4" />
-            </button>
-          )}
-
-          {/* Drag Handle Overlay - Sadece drag mode aktifken ve kilitli değilse */}
-          {dragMode && !isLocked && (
-            <div
-              {...attributes}
-              {...listeners}
-              className="absolute inset-0 z-40 cursor-grab active:cursor-grabbing rounded-lg"
-              style={{
-                willChange: 'transform, opacity',
-                touchAction: 'none',
-                backfaceVisibility: 'hidden',
-                WebkitTransform: 'translateZ(0)', // Force GPU acceleration
-                transform: 'translateZ(0)', // Force GPU acceleration
-              }}
-              onClick={(e) => {
-                if (isDragging) {
-                  e.preventDefault()
-                  e.stopPropagation()
-                }
-              }}
-              onContextMenu={(e) => {
-                e.stopPropagation()
-              }}
-            />
-          )}
-
           <Link
             href={`/${locale}/quotes/${quote.id}`}
             prefetch={true}
-            className={`block relative z-0 ${dragMode ? 'pointer-events-none' : ''}`}
+            className={`block relative z-0 ${isDragging ? 'pointer-events-none' : ''}`}
             onClick={(e) => {
-              // Drag mode aktifken link'e tıklamayı engelle
-              if (dragMode || isDragging) {
+              if (isDragging) {
                 e.preventDefault()
                 e.stopPropagation()
               }
             }}
           >
-        <div className="p-3">
+        <div className="p-3 relative z-20">
           <div className="flex items-start gap-2 mb-2">
             <FileText className={`h-4 w-4 ${colors.text} mt-0.5 flex-shrink-0`} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <p className="font-medium text-sm text-gray-900 line-clamp-2">
+                <p className="font-medium text-sm text-gray-900 line-clamp-2 flex-1">
                   {quote.title}
                 </p>
                 {/* REJECTED durumunda not simgesi - hover ile tooltip */}
@@ -577,7 +509,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
         </div>
       </Link>
           {/* Action Buttons - Kartın altında, drag & drop'u etkilemez */}
-          <div className={`px-3 pb-3 pt-2 border-t border-gray-200 bg-white relative z-50 ${dragMode ? 'pointer-events-none opacity-50' : ''}`}>
+          <div className="px-3 pb-3 pt-2 border-t border-gray-200 bg-white relative z-50" onPointerDown={(e) => e.stopPropagation()}>
             <div className="flex gap-2 flex-wrap">
               {/* DRAFT → Gönder */}
               {quote.status === 'DRAFT' && (
@@ -854,23 +786,80 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
               )}
             </div>
             
-            {/* Geçmiş Butonu */}
-            <div className="flex gap-1 pt-2 border-t border-gray-200 mt-2">
+            {/* Premium Quick Action ve Diğer Butonlar */}
+            <div className="flex items-center gap-1.5 pt-2 border-t border-gray-200 mt-2 relative z-50" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+              {/* Premium Quick Action Button */}
+              <DropdownMenu>
+                <TooltipProvider delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7 p-0 border-0 bg-gradient-to-br from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex-shrink-0 relative overflow-hidden group"
+                        >
+                          {/* Shine effect */}
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                          <Sparkles className="h-4 w-4 relative z-10" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">
+                      <p>Hızlı İşlemler</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuLabel className="text-xs">Hızlı İşlemler</DropdownMenuLabel>
+                  {/* ACCEPTED: Invoice oluştur */}
+                  {status === 'ACCEPTED' && (
+                    <DropdownMenuItem
+                      className="text-xs"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        // Invoice oluştur - parent component'e bildir
+                        if (onStatusChange) {
+                          // Bu durumda invoice zaten oluşturulmuş olmalı
+                          toast.info('Fatura zaten oluşturulmuş', 'Bu teklif için fatura mevcut.')
+                        }
+                      }}
+                    >
+                      <FileText className="h-3 w-3 mr-2" />
+                      Fatura Oluştur
+                    </DropdownMenuItem>
+                  )}
+                  {/* Diğer durumlar için genel işlemler */}
+                  <DropdownMenuItem
+                    className="text-xs"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setHistoryDialogOpen(true)
+                    }}
+                  >
+                    <History className="h-3 w-3 mr-2" />
+                    İşlem Geçmişi
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              
+              {/* Geçmiş Butonu - Sadece ikon */}
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="flex-1 h-6 text-xs px-1"
+                      className="h-7 w-7 p-0 flex-shrink-0"
                       onClick={(e) => {
                         e.preventDefault()
                         e.stopPropagation()
                         setHistoryDialogOpen(true)
                       }}
                     >
-                      <History className="h-3 w-3 mr-1" />
-                      Geçmiş
+                      <History className="h-4 w-4 text-gray-600" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -878,6 +867,91 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+              
+              {/* Görüntüle Butonu - Sadece ikon */}
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 flex-shrink-0"
+                      onClick={async (e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        // ✅ ÇÖZÜM: Modal aç - yeni sekme açma
+                        if (onView) {
+                          try {
+                            onView(quote.id)
+                          } catch (error) {
+                            console.error('View error:', error)
+                            // Fallback: Eğer hata olursa yeni sekmede aç
+                            window.open(`/${locale}/quotes/${quote.id}`, '_blank')
+                          }
+                        } else {
+                          // Fallback: Eğer onView yoksa yeni sekmede aç (eski davranış)
+                          window.open(`/${locale}/quotes/${quote.id}`, '_blank')
+                        }
+                      }}
+                    >
+                      <Eye className="h-4 w-4 text-blue-600" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Teklif detaylarını görüntüle</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              {/* Düzenle Butonu - Sadece ikon */}
+              {onEdit && (
+                <TooltipProvider delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 flex-shrink-0"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleEdit(e)
+                        }}
+                      >
+                        <Edit className="h-4 w-4 text-indigo-600" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Teklif bilgilerini düzenle</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              
+              {/* Sil Butonu - Sadece ikon */}
+              {onDelete && (
+                <TooltipProvider delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 flex-shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleDelete(e)
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Teklifi sil</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             </div>
           </div>
         </Card>
@@ -1001,17 +1075,13 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
   // ✅ ÇÖZÜM: dragLocalData null ise localData'yı kullan - optimistic update için
   const displayData = dragLocalData || localData
 
-  // ✅ PREMIUM: Optimized sensors for smooth drag & drop
+  // ✅ ÇÖZÜM: Anında aktif olan drag & drop - activation constraint yok
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5, // ✅ 5px - Daha hassas, daha hızlı aktivasyon
-      },
-    }),
+    useSensor(PointerSensor), // ✅ Activation constraint yok - anında başlar
     useSensor(TouchSensor, {
       activationConstraint: {
-        distance: 5, // ✅ 5px - Touch için de aynı
-        delay: 50, // ✅ 50ms - Daha hızlı aktivasyon, yanlışlıkla drag'i önle
+        delay: 0, // ✅ 0ms delay - anında başlar
+        tolerance: 5, // ✅ 5px tolerance - yanlışlıkla drag'i önler ama çok hızlı
       },
     }),
     useSensor(KeyboardSensor, {
@@ -1233,7 +1303,6 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      {/* Horizontal Scroll Controls */}
       <div className="sticky top-0 z-20 mb-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white/95 px-4 py-2 shadow-sm backdrop-blur">
         <p className="text-sm font-medium text-slate-600">
           Kanbanı yatay kaydırmak için okları ya da trackpad&apos;inizi kullanın.
@@ -1267,7 +1336,7 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
         style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}
       >
         {displayData.map((column) => {
-          const colors = statusColors[column.status] || statusColors.DRAFT
+          const colors = statusColors(column.status)
           return (
             <Card
               key={column.status}
@@ -1309,7 +1378,7 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
                       </Tooltip>
                     </TooltipProvider>
                   </div>
-                  <Badge className={statusBadgeColors[column.status] || 'bg-gray-500 text-white'}>
+                  <Badge className={statusBadgeColors(column.status)}>
                     {column.count}
                   </Badge>
                 </div>

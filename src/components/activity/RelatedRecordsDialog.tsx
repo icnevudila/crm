@@ -38,130 +38,259 @@ export default function RelatedRecordsDialog({
   const [activeTab, setActiveTab] = useState<'records' | 'history'>('records')
 
   const fetchRelatedData = useCallback(async () => {
+    if (!entityId) {
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
+    setRelatedRecords([])
+    setActivities([])
+    
     try {
       // Deal için ilişkili kayıtları çek
       if (entity === 'Deal') {
-        const res = await fetch(`/api/deals/${entityId}`)
-        if (res.ok) {
-          const deal = await res.json()
+        try {
+          const res = await fetch(`/api/deals/${entityId}`, {
+            credentials: 'include',
+            cache: 'no-store',
+          })
           
-          // İlişkili kayıtları formatla
-          const records: any[] = []
-          
-          // Quotes
-          if (deal.Quote && Array.isArray(deal.Quote)) {
-            deal.Quote.forEach((q: any) => {
-              records.push({
-                id: q.id,
-                type: 'quote',
-                title: q.title,
-                link: `/${locale}/quotes/${q.id}`,
+          if (!res.ok) {
+            // 404 veya diğer hatalar için boş array döndür
+            if (res.status === 404) {
+              console.warn(`Deal ${entityId} bulunamadı`)
+            } else {
+              const errorText = await res.text().catch(() => '')
+              console.error(`Deal fetch error (${res.status}):`, errorText.substring(0, 200))
+            }
+            setRelatedRecords([])
+          } else {
+            // Content-Type kontrolü
+            const contentType = res.headers.get('content-type') || ''
+            if (!contentType.includes('application/json')) {
+              console.error('Deal API JSON döndürmedi:', contentType)
+              setRelatedRecords([])
+            } else {
+              const deal = await res.json().catch((jsonError) => {
+                console.error('Deal JSON parse error:', jsonError)
+                return null
               })
-            })
+              
+              if (deal) {
+                // İlişkili kayıtları formatla
+                const records: any[] = []
+                
+                // Quotes
+                if (deal.Quote && Array.isArray(deal.Quote)) {
+                  deal.Quote.forEach((q: any) => {
+                    if (q?.id) {
+                      records.push({
+                        id: q.id,
+                        type: 'quote',
+                        title: q.title || 'Teklif',
+                        link: `/${locale}/quotes/${q.id}`,
+                      })
+                    }
+                  })
+                }
+                
+                // Meetings
+                if (deal.Meeting && Array.isArray(deal.Meeting)) {
+                  deal.Meeting.forEach((m: any) => {
+                    if (m?.id) {
+                      records.push({
+                        id: m.id,
+                        type: 'meeting',
+                        title: m.title || 'Görüşme',
+                        link: `/${locale}/meetings/${m.id}`,
+                      })
+                    }
+                  })
+                }
+                
+                // Contracts
+                if (deal.Contract && Array.isArray(deal.Contract)) {
+                  deal.Contract.forEach((c: any) => {
+                    if (c?.id) {
+                      records.push({
+                        id: c.id,
+                        type: 'contract',
+                        title: c.title || 'Sözleşme',
+                        link: `/${locale}/contracts/${c.id}`,
+                      })
+                    }
+                  })
+                }
+                
+                setRelatedRecords(records)
+              }
+            }
           }
-          
-          // Meetings
-          if (deal.Meeting && Array.isArray(deal.Meeting)) {
-            deal.Meeting.forEach((m: any) => {
-              records.push({
-                id: m.id,
-                type: 'meeting',
-                title: m.title,
-                link: `/${locale}/meetings/${m.id}`,
-              })
-            })
-          }
-          
-          // Contracts
-          if (deal.Contract && Array.isArray(deal.Contract)) {
-            deal.Contract.forEach((c: any) => {
-              records.push({
-                id: c.id,
-                type: 'contract',
-                title: c.title,
-                link: `/${locale}/contracts/${c.id}`,
-              })
-            })
-          }
-          
-          setRelatedRecords(records)
+        } catch (fetchError: any) {
+          console.error('Deal fetch network error:', fetchError?.message || fetchError)
+          setRelatedRecords([])
         }
       } else if (entity === 'Quote') {
-        const res = await fetch(`/api/quotes/${entityId}`)
-        if (res.ok) {
-          const quote = await res.json()
-          const records: any[] = []
+        try {
+          const res = await fetch(`/api/quotes/${entityId}`, {
+            credentials: 'include',
+            cache: 'no-store',
+          })
           
-          if (quote.Deal) {
-            records.push({
-              id: quote.Deal.id,
-              type: 'deal',
-              title: quote.Deal.title,
-              link: `/${locale}/deals/${quote.Deal.id}`,
-            })
-          }
-          
-          if (quote.Invoice && Array.isArray(quote.Invoice)) {
-            quote.Invoice.forEach((i: any) => {
-              records.push({
-                id: i.id,
-                type: 'invoice',
-                title: i.title,
-                link: `/${locale}/invoices/${i.id}`,
+          if (!res.ok) {
+            if (res.status === 404) {
+              console.warn(`Quote ${entityId} bulunamadı`)
+            } else {
+              const errorText = await res.text().catch(() => '')
+              console.error(`Quote fetch error (${res.status}):`, errorText.substring(0, 200))
+            }
+            setRelatedRecords([])
+          } else {
+            const contentType = res.headers.get('content-type') || ''
+            if (!contentType.includes('application/json')) {
+              console.error('Quote API JSON döndürmedi:', contentType)
+              setRelatedRecords([])
+            } else {
+              const quote = await res.json().catch((jsonError) => {
+                console.error('Quote JSON parse error:', jsonError)
+                return null
               })
-            })
+              
+              if (quote) {
+                const records: any[] = []
+                
+                if (quote.Deal?.id) {
+                  records.push({
+                    id: quote.Deal.id,
+                    type: 'deal',
+                    title: quote.Deal.title || 'Fırsat',
+                    link: `/${locale}/deals/${quote.Deal.id}`,
+                  })
+                }
+                
+                if (quote.Invoice && Array.isArray(quote.Invoice)) {
+                  quote.Invoice.forEach((i: any) => {
+                    if (i?.id) {
+                      records.push({
+                        id: i.id,
+                        type: 'invoice',
+                        title: i.title || 'Fatura',
+                        link: `/${locale}/invoices/${i.id}`,
+                      })
+                    }
+                  })
+                }
+                
+                setRelatedRecords(records)
+              }
+            }
           }
-          
-          setRelatedRecords(records)
+        } catch (fetchError: any) {
+          console.error('Quote fetch network error:', fetchError?.message || fetchError)
+          setRelatedRecords([])
         }
       } else if (entity === 'Invoice') {
-        const res = await fetch(`/api/invoices/${entityId}`)
-        if (res.ok) {
-          const invoice = await res.json()
-          const records: any[] = []
+        try {
+          const res = await fetch(`/api/invoices/${entityId}`, {
+            credentials: 'include',
+            cache: 'no-store',
+          })
           
-          if (invoice.Quote) {
-            records.push({
-              id: invoice.Quote.id,
-              type: 'quote',
-              title: invoice.Quote.title,
-              link: `/${locale}/quotes/${invoice.Quote.id}`,
-            })
-          }
-          
-          if (invoice.Deal) {
-            records.push({
-              id: invoice.Deal.id,
-              type: 'deal',
-              title: invoice.Deal.title,
-              link: `/${locale}/deals/${invoice.Deal.id}`,
-            })
-          }
-          
-          if (invoice.Shipment && Array.isArray(invoice.Shipment)) {
-            invoice.Shipment.forEach((s: any) => {
-              records.push({
-                id: s.id,
-                type: 'shipment',
-                title: s.tracking || 'Sevkiyat',
-                link: `/${locale}/shipments/${s.id}`,
+          if (!res.ok) {
+            if (res.status === 404) {
+              console.warn(`Invoice ${entityId} bulunamadı`)
+            } else {
+              const errorText = await res.text().catch(() => '')
+              console.error(`Invoice fetch error (${res.status}):`, errorText.substring(0, 200))
+            }
+            setRelatedRecords([])
+          } else {
+            const contentType = res.headers.get('content-type') || ''
+            if (!contentType.includes('application/json')) {
+              console.error('Invoice API JSON döndürmedi:', contentType)
+              setRelatedRecords([])
+            } else {
+              const invoice = await res.json().catch((jsonError) => {
+                console.error('Invoice JSON parse error:', jsonError)
+                return null
               })
-            })
+              
+              if (invoice) {
+                const records: any[] = []
+                
+                if (invoice.Quote?.id) {
+                  records.push({
+                    id: invoice.Quote.id,
+                    type: 'quote',
+                    title: invoice.Quote.title || 'Teklif',
+                    link: `/${locale}/quotes/${invoice.Quote.id}`,
+                  })
+                }
+                
+                if (invoice.Deal?.id) {
+                  records.push({
+                    id: invoice.Deal.id,
+                    type: 'deal',
+                    title: invoice.Deal.title || 'Fırsat',
+                    link: `/${locale}/deals/${invoice.Deal.id}`,
+                  })
+                }
+                
+                if (invoice.Shipment && Array.isArray(invoice.Shipment)) {
+                  invoice.Shipment.forEach((s: any) => {
+                    if (s?.id) {
+                      records.push({
+                        id: s.id,
+                        type: 'shipment',
+                        title: s.tracking || 'Sevkiyat',
+                        link: `/${locale}/shipments/${s.id}`,
+                      })
+                    }
+                  })
+                }
+                
+                setRelatedRecords(records)
+              }
+            }
           }
-          
-          setRelatedRecords(records)
+        } catch (fetchError: any) {
+          console.error('Invoice fetch network error:', fetchError?.message || fetchError)
+          setRelatedRecords([])
         }
       }
       
       // ActivityLog'ları çek
-      const activityRes = await fetch(`/api/activity?entity=${entity}&entityId=${entityId}`)
-      if (activityRes.ok) {
-        const activityData = await activityRes.json()
-        setActivities(activityData || [])
+      try {
+        const activityRes = await fetch(`/api/activity?entity=${entity}&entityId=${entityId}`, {
+          credentials: 'include',
+          cache: 'no-store',
+        })
+        
+        if (activityRes.ok) {
+          const contentType = activityRes.headers.get('content-type') || ''
+          if (contentType.includes('application/json')) {
+            const activityData = await activityRes.json().catch((jsonError) => {
+              console.error('Activity JSON parse error:', jsonError)
+              return []
+            })
+            setActivities(Array.isArray(activityData) ? activityData : [])
+          } else {
+            console.error('Activity API JSON döndürmedi:', contentType)
+            setActivities([])
+          }
+        } else {
+          // Activity log yoksa boş array
+          setActivities([])
+        }
+      } catch (activityError: any) {
+        console.error('Activity fetch network error:', activityError?.message || activityError)
+        setActivities([])
       }
-    } catch (error) {
-      console.error('Error fetching related data:', error)
+    } catch (error: any) {
+      console.error('Error fetching related data:', error?.message || error)
+      setRelatedRecords([])
+      setActivities([])
     } finally {
       setLoading(false)
     }

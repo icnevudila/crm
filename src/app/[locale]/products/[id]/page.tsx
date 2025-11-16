@@ -1,7 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { mutate } from 'swr'
@@ -13,18 +12,14 @@ import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { formatCurrency } from '@/lib/utils'
+import { toast, toastError } from '@/lib/toast'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import StockMovementForm from '@/components/stock/StockMovementForm'
 import Link from 'next/link'
 import { useData } from '@/hooks/useData'
 import ProductForm from '@/components/products/ProductForm'
-
-async function fetchProduct(id: string) {
-  const res = await fetch(`/api/products/${id}`)
-  if (!res.ok) throw new Error('Failed to fetch product')
-  return res.json()
-}
+import ContextualActionsBar from '@/components/ui/ContextualActionsBar'
 
 export default function ProductDetailPage() {
   const params = useParams()
@@ -36,47 +31,57 @@ export default function ProductDetailPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
-  const { data: product, isLoading, refetch: refetchProduct } = useQuery({
-    queryKey: ['product', id],
-    queryFn: () => fetchProduct(id),
-  })
+  // useData hook ile veri çekme (SWR cache) - standardize edilmiş veri çekme stratejisi
+  const { data: product, isLoading, error, mutate: mutateProduct } = useData<any>(
+    id ? `/api/products/${id}` : null,
+    {
+      dedupingInterval: 30000, // 30 saniye cache (detay sayfası için optimal)
+      revalidateOnFocus: false, // Focus'ta revalidate yapma (instant navigation)
+    }
+  )
 
-  // Stok hareketlerini çek
-  // ÖNEMLİ: Cache'i her zaman fresh tut (stok hareketleri sık güncellenir)
+  // Stok hareketlerini çek - dengeli cache stratejisi (stok hareketleri sık güncellenir ama cache de önemli)
   const stockMovementsUrl = `/api/stock-movements?productId=${id}&limit=10`
   const { data: stockMovements = [], mutate: mutateStockMovements } = useData<any[]>(
     stockMovementsUrl,
     {
-      dedupingInterval: 0, // Cache'i devre dışı bırak (her zaman fresh data)
-      revalidateOnFocus: true, // Focus'ta yeniden fetch yap
-      refreshInterval: 0, // Otomatik refresh yok (manuel kontrol)
+      dedupingInterval: 5000, // 5 saniye cache (dengeli - güncellemeler hızlı görünür ama gereksiz API çağrısı yok)
+      revalidateOnFocus: false, // Focus'ta revalidate yapma (instant navigation)
     }
   )
 
   // İlgili Quote ve Invoice'ları çek
-  const { data: relatedQuotes = [] } = useData<any[]>(`/api/products/${id}/quotes`)
-  const { data: relatedInvoices = [] } = useData<any[]>(`/api/products/${id}/invoices`)
-
-  // Sayfa yüklendiğinde cache'i invalidate et (fresh data için)
-  useEffect(() => {
-    // Sayfa yüklendiğinde stok hareketlerini yeniden fetch et
-    mutateStockMovements(undefined, { revalidate: true })
-    // Tüm stok hareketi cache'lerini invalidate et
-    mutate('/api/stock-movements', undefined, { revalidate: true })
-    mutate(stockMovementsUrl, undefined, { revalidate: true })
-  }, [id, stockMovementsUrl, mutateStockMovements]) // productId veya URL değiştiğinde çalışsın
+  const { data: relatedQuotes = [] } = useData<any[]>(
+    id ? `/api/products/${id}/quotes` : null,
+    {
+      dedupingInterval: 30000, // 30 saniye cache
+      revalidateOnFocus: false,
+    }
+  )
+  const { data: relatedInvoices = [] } = useData<any[]>(
+    id ? `/api/products/${id}/invoices` : null,
+    {
+      dedupingInterval: 30000, // 30 saniye cache
+      revalidateOnFocus: false,
+    }
+  )
 
   if (isLoading) {
     return <SkeletonDetail />
   }
 
-  if (!product) {
+  if (error || !product) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
             Ürün Bulunamadı
           </h1>
+          {error && (
+            <p className="text-sm text-gray-600 mb-4">
+              {(error as any)?.message || 'Ürün yüklenirken bir hata oluştu'}
+            </p>
+          )}
           <Button onClick={() => router.push(`/${locale}/products`)}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Geri Dön
@@ -141,8 +146,80 @@ export default function ProductDetailPage() {
     }
   }
 
+  // Product status'leri için available statuses
+  const availableStatuses = [
+    { value: 'ACTIVE', label: 'Aktif' },
+    { value: 'INACTIVE', label: 'Pasif' },
+    { value: 'DISCONTINUED', label: 'Üretimden Kaldırıldı' },
+  ]
+
   return (
     <div className="space-y-6">
+      {/* Contextual Actions Bar */}
+      <ContextualActionsBar
+        entityType="product"
+        entityId={id}
+        currentStatus={product.status || 'ACTIVE'}
+        availableStatuses={availableStatuses}
+        onStatusChange={async (newStatus) => {
+          const res = await fetch(`/api/products/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus }),
+          })
+          if (!res.ok) {
+            const error = await res.json().catch(() => ({}))
+            throw new Error(error.error || 'Durum değiştirilemedi')
+          }
+          const updatedProduct = await res.json()
+          await mutateProduct(updatedProduct, { revalidate: false })
+          await Promise.all([
+            mutate('/api/products', undefined, { revalidate: true }),
+            mutate('/api/products?', undefined, { revalidate: true }),
+          ])
+        }}
+        onEdit={() => setFormOpen(true)}
+        onDelete={async () => {
+          if (!confirm(`${product.name} ürününü silmek istediğinize emin misiniz?`)) {
+            return
+          }
+          setDeleteLoading(true)
+          try {
+            const res = await fetch(`/api/products/${id}`, {
+              method: 'DELETE',
+            })
+            if (!res.ok) {
+              const errorData = await res.json().catch(() => ({}))
+              throw new Error(errorData.error || 'Silme işlemi başarısız')
+            }
+            router.push(`/${locale}/products`)
+          } catch (error: any) {
+            toastError('Silme işlemi başarısız oldu', error?.message)
+            throw error
+          } finally {
+            setDeleteLoading(false)
+          }
+        }}
+        onDuplicate={async () => {
+          try {
+            const res = await fetch(`/api/products/${id}/duplicate`, {
+              method: 'POST',
+            })
+            if (!res.ok) {
+              const errorData = await res.json().catch(() => ({}))
+              throw new Error(errorData.error || 'Kopyalama işlemi başarısız')
+            }
+            const duplicatedProduct = await res.json()
+            toast.success('Ürün kopyalandı')
+            router.push(`/${locale}/products/${duplicatedProduct.id}`)
+          } catch (error: any) {
+            toastError('Kopyalama işlemi başarısız oldu', error?.message)
+          }
+        }}
+        canEdit={true}
+        canDelete={true}
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -187,7 +264,7 @@ export default function ProductDetailPage() {
                 }
                 router.push(`/${locale}/products`)
               } catch (error: any) {
-                alert(error?.message || 'Silme işlemi başarısız oldu')
+                toastError('Silme işlemi başarısız oldu', error?.message)
               } finally {
                 setDeleteLoading(false)
               }
@@ -274,6 +351,17 @@ export default function ProductDetailPage() {
               <div>
                 <p className="text-sm text-gray-600 mb-1">Kategori</p>
                 <p className="font-medium">{product.category}</p>
+              </div>
+            )}
+            {product.vendorId && product.Vendor && (
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Tedarikçi</p>
+                <Link
+                  href={`/${locale}/vendors/${product.Vendor.id}`}
+                  className="font-medium text-indigo-600 hover:underline"
+                >
+                  {product.Vendor.name}
+                </Link>
               </div>
             )}
             {product.unit && (
@@ -564,9 +652,18 @@ export default function ProductDetailPage() {
           setStockFormOpen(false)
           setStockFormType(undefined)
         }}
-        onSuccess={() => {
-          refetchProduct()
-          mutateStockMovements()
+        onSuccess={async () => {
+          // Stok hareketi başarılı olduğunda cache'leri güncelle
+          await mutateStockMovements(undefined, { revalidate: true })
+          await mutateProduct(undefined, { revalidate: true })
+          
+          // Tüm ilgili cache'leri güncelle
+          await Promise.all([
+            mutate('/api/products', undefined, { revalidate: true }),
+            mutate('/api/products?', undefined, { revalidate: true }),
+            mutate((key: string) => typeof key === 'string' && key.startsWith('/api/products'), undefined, { revalidate: true }),
+            mutate('/api/stock-movements', undefined, { revalidate: true }),
+          ])
         }}
       />
 
@@ -575,9 +672,17 @@ export default function ProductDetailPage() {
         product={product}
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        onSuccess={async () => {
-          // Form başarılı olduğunda sayfayı yenile
-          refetchProduct()
+        onSuccess={async (savedProduct: any) => {
+          // Form başarılı olduğunda cache'i güncelle (sayfa reload yok)
+          // Optimistic update - güncellenmiş product'ı cache'e ekle
+          await mutateProduct(savedProduct, { revalidate: false })
+          
+          // Tüm ilgili cache'leri güncelle
+          await Promise.all([
+            mutate('/api/products', undefined, { revalidate: true }),
+            mutate('/api/products?', undefined, { revalidate: true }),
+            mutate((key: string) => typeof key === 'string' && key.startsWith('/api/products'), undefined, { revalidate: true }),
+          ])
         }}
       />
     </div>

@@ -142,9 +142,8 @@ export async function GET(request: Request) {
         Customer:Customer(id, name, email, phone),
         Deal:Deal(id, title, stage),
         CreatedBy:User!Meeting_createdBy_fkey(id, name, email)
-      `)
+      `, { count: 'exact' })
       .order('meetingDate', { ascending: false })
-      .limit(100) // Dengeli limit - 100 kayıt (performans + veri dengesi)
 
     // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
@@ -174,13 +173,19 @@ export async function GET(request: Request) {
     }
 
     // Kullanıcı filtresi (Admin için) - Normal kullanıcılar sadece kendi görüşmelerini görür
+    // SuperAdmin tüm görüşmeleri görebilir (filtre yoksa)
     if (!isSuperAdmin && session.user.role !== 'ADMIN') {
       // Normal kullanıcı sadece kendi görüşmelerini görür
       query = query.eq('createdBy', session.user.id)
-    } else if (userId && userId !== 'all' && (session.user.role === 'ADMIN' || isSuperAdmin)) {
+    } else if (userId && userId !== 'all' && userId !== '' && (session.user.role === 'ADMIN' || isSuperAdmin)) {
       // Admin belirli bir kullanıcının görüşmelerini filtreleyebilir
-      // NOT: userId='all' ise filtreleme yapma (UUID hatası vermemesi için)
-      query = query.eq('createdBy', userId)
+      // NOT: userId='all' veya boş ise filtreleme yapma (UUID hatası vermemesi için)
+      try {
+        query = query.eq('createdBy', userId)
+      } catch (uuidError) {
+        // UUID hatası varsa filtreleme yapma
+        console.warn('Invalid userId filter:', userId)
+      }
     }
 
     // Müşteri filtresi
@@ -194,6 +199,20 @@ export async function GET(request: Request) {
 
     // Participant'ları da çek (çoklu kullanıcı atama)
     const { data: meetings, error } = await query
+
+    // DEBUG: Query sonuçlarını logla
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Meetings API] Query Results:', {
+        meetingsCount: meetings?.length || 0,
+        isSuperAdmin,
+        companyId,
+        filterCompanyId,
+        userId,
+        statusFilter,
+        search,
+        error: error?.message,
+      })
+    }
 
     // Her meeting için participant'ları çek - OPTİMİZE: User bilgilerini de çek + SuperAdmin filtrele
     if (meetings && meetings.length > 0) {
@@ -223,11 +242,11 @@ export async function GET(request: Request) {
               // User bilgisi yoksa filtrele
               if (!p.User) return false
               
-              // SuperAdmin kontrolü
+              // SuperAdmin kontrolü - SuperAdmin'ler her zaman gösterilmez (participant olarak)
               if (p.User.role === 'SUPER_ADMIN') return false
               
-              // companyId kontrolü (SuperAdmin'ler farklı companyId'ye sahip olabilir)
-              if (p.User.companyId !== companyId) return false
+              // companyId kontrolü - SuperAdmin ise tüm participant'ları göster, değilse sadece aynı companyId'yi göster
+              if (!isSuperAdmin && p.User.companyId !== companyId) return false
               
               return true
             })
@@ -305,7 +324,15 @@ export async function GET(request: Request) {
       })
     )
 
-    return NextResponse.json(meetingsWithExpenses, {
+    return NextResponse.json({
+      data: meetingsWithExpenses || [],
+      pagination: {
+        page,
+        pageSize,
+        totalItems: count || 0,
+        totalPages,
+      },
+    }, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
       },
@@ -394,7 +421,10 @@ export async function POST(request: Request) {
     const { data: meeting, error } = await supabase
       .from('Meeting')
       .insert([meetingData])
-      .select()
+      .select(`
+        *,
+        Customer:Customer(id, name, email, phone)
+      `)
       .single()
 
     if (error) {
@@ -403,6 +433,48 @@ export async function POST(request: Request) {
         { error: error.message || 'Failed to create meeting' },
         { status: 500 }
       )
+    }
+
+    // Google Calendar'a otomatik ekle (eğer meetingUrl varsa ve Google Calendar entegrasyonu aktifse)
+    try {
+      const { checkGoogleCalendarIntegration } = await import('@/lib/integrations/check-integration')
+      const calendarStatus = await checkGoogleCalendarIntegration(session.user.companyId)
+      
+      if (calendarStatus.hasIntegration && calendarStatus.isActive && meeting.meetingUrl) {
+        // Kullanıcının Google Calendar'ına ekle
+        const { addToUserCalendar, createCalendarEventFromRecord } = await import('@/lib/integrations/calendar')
+        
+        const endTime = meeting.meetingDuration 
+          ? new Date(new Date(meeting.meetingDate).getTime() + meeting.meetingDuration * 60000).toISOString()
+          : new Date(new Date(meeting.meetingDate).getTime() + 60 * 60 * 1000).toISOString() // Varsayılan 1 saat
+        
+        const calendarEvent = createCalendarEventFromRecord('meeting', meeting, {
+          startTime: new Date(meeting.meetingDate).toISOString(),
+          endTime,
+          location: meeting.location || undefined,
+          attendees: meeting.Customer?.email ? [{ email: meeting.Customer.email, displayName: meeting.Customer.name }] : undefined,
+        })
+        
+        // Toplantı linkini açıklamaya ekle
+        calendarEvent.description = `${calendarEvent.description || ''}\n\nToplantı Linki: ${meeting.meetingUrl}${meeting.meetingPassword ? `\nŞifre: ${meeting.meetingPassword}` : ''}`
+        
+        const calendarResult = await addToUserCalendar(
+          session.user.id,
+          session.user.companyId,
+          calendarEvent
+        )
+        
+        if (calendarResult.success) {
+          // Google Calendar event ID'sini kaydet
+          await supabase
+            .from('Meeting')
+            .update({ googleCalendarEventId: calendarResult.eventId })
+            .eq('id', meeting.id)
+        }
+      }
+    } catch (calendarError: any) {
+      // Calendar hatası ana işlemi engellemez
+      console.error('Auto-add to calendar error:', calendarError)
     }
 
     // ActivityLog kaydı - Meeting için
@@ -709,9 +781,33 @@ export async function POST(request: Request) {
     // Gider uyarısı kontrolü - eğer gider yoksa expenseWarning true olacak (trigger ile)
     // Frontend'de kullanıcıya uyarı gösterilecek
 
+    // ✅ Otomasyon: Meeting oluşturulduğunda email gönder (kullanıcı tercihine göre)
+    try {
+      const automationRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/automations/meeting-created-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          meeting: meeting,
+        }),
+      })
+      // Automation hatası ana işlemi engellemez (sadece log)
+      if (!automationRes.ok) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[Meeting Automation] Email gönderimi başarısız veya kullanıcı tercihi ASK')
+        }
+      }
+    } catch (automationError) {
+      // Automation hatası ana işlemi engellemez
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[Meeting Automation] Error:', automationError)
+      }
+    }
+
     return NextResponse.json(responseData, { status: 201 })
   } catch (error: any) {
-    console.error('Meetings POST API exception:', error)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Meetings POST API error:', error)
+    }
     return NextResponse.json(
       { error: 'Failed to create meeting', message: error?.message || 'Unknown error' },
       { status: 500 }

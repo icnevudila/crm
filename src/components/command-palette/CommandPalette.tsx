@@ -30,6 +30,15 @@ import {
   ArrowRight,
 } from 'lucide-react'
 import { useData } from '@/hooks/useData'
+import dynamic from 'next/dynamic'
+
+// Form component'lerini lazy load et
+const CustomerForm = dynamic(() => import('@/components/customers/CustomerForm'), { ssr: false })
+const DealForm = dynamic(() => import('@/components/deals/DealForm'), { ssr: false })
+const QuoteForm = dynamic(() => import('@/components/quotes/QuoteForm'), { ssr: false })
+const InvoiceForm = dynamic(() => import('@/components/invoices/InvoiceForm'), { ssr: false })
+const TaskForm = dynamic(() => import('@/components/tasks/TaskForm'), { ssr: false })
+const MeetingForm = dynamic(() => import('@/components/meetings/MeetingForm'), { ssr: false })
 
 interface CommandPaletteProps {
   open: boolean
@@ -40,7 +49,8 @@ interface QuickAction {
   id: string
   label: string
   icon: React.ReactNode
-  href: string
+  href?: string
+  formType?: 'customer' | 'deal' | 'quote' | 'invoice' | 'task' | 'meeting'
   keywords: string[]
 }
 
@@ -52,6 +62,11 @@ export default function CommandPalette({
   const pathname = usePathname()
   const locale = useLocale()
   const [search, setSearch] = useState('')
+  
+  // Form modal state'leri
+  const [formOpen, setFormOpen] = useState<{
+    type: 'customer' | 'deal' | 'quote' | 'invoice' | 'task' | 'meeting' | null
+  }>({ type: null })
 
   // Son görüntülenen kayıtlar (localStorage'dan)
   const [recentItems, setRecentItems] = useState<Array<{
@@ -159,43 +174,57 @@ export default function CommandPalette({
     [locale]
   )
 
-  // Hızlı işlemler (yeni kayıt oluşturma)
+  // Hızlı işlemler (yeni kayıt oluşturma - modal olarak açılacak)
   const quickActions: QuickAction[] = useMemo(
     () => [
       {
         id: 'new-customer',
         label: 'Yeni Müşteri',
         icon: <Plus className="h-4 w-4" />,
-        href: `/${locale}/customers/new`,
+        formType: 'customer',
         keywords: ['yeni müşteri', 'new customer', 'müşteri ekle'],
       },
       {
         id: 'new-deal',
         label: 'Yeni Fırsat',
         icon: <Plus className="h-4 w-4" />,
-        href: `/${locale}/deals/new`,
+        formType: 'deal',
         keywords: ['yeni fırsat', 'new deal', 'fırsat ekle'],
       },
       {
         id: 'new-quote',
         label: 'Yeni Teklif',
         icon: <Plus className="h-4 w-4" />,
-        href: `/${locale}/quotes/new`,
+        formType: 'quote',
         keywords: ['yeni teklif', 'new quote', 'teklif ekle'],
       },
       {
         id: 'new-invoice',
         label: 'Yeni Fatura',
         icon: <Plus className="h-4 w-4" />,
-        href: `/${locale}/invoices/new`,
+        formType: 'invoice',
         keywords: ['yeni fatura', 'new invoice', 'fatura ekle'],
       },
       {
         id: 'new-task',
         label: 'Yeni Görev',
         icon: <Plus className="h-4 w-4" />,
-        href: `/${locale}/tasks/new`,
+        formType: 'task',
         keywords: ['yeni görev', 'new task', 'görev ekle'],
+      },
+      {
+        id: 'new-meeting',
+        label: 'Yeni Toplantı',
+        icon: <Plus className="h-4 w-4" />,
+        formType: 'meeting',
+        keywords: ['yeni toplantı', 'new meeting', 'toplantı ekle'],
+      },
+      {
+        id: 'integration-analytics',
+        label: 'Entegrasyon İstatistikleri',
+        icon: <TrendingUp className="h-4 w-4" />,
+        href: `/${locale}/integrations/analytics`,
+        keywords: ['entegrasyon', 'analytics', 'istatistik', 'integration'],
       },
     ],
     [locale]
@@ -249,10 +278,28 @@ export default function CommandPalette({
   }, [deals, search, dealsUrl])
 
   // Navigate fonksiyonu
-  const handleSelect = (href: string) => {
-    router.push(href)
-    onOpenChange(false)
-    setSearch('')
+  const handleSelect = (action: QuickAction) => {
+    if (action.formType) {
+      // Form modal aç
+      setFormOpen({ type: action.formType })
+      onOpenChange(false)
+      setSearch('')
+    } else if (action.href) {
+      // Normal sayfa navigasyonu - prefetch ile hızlı geçiş
+      router.prefetch(action.href) // Önce prefetch et
+      router.push(action.href)
+      onOpenChange(false)
+      setSearch('')
+    }
+  }
+  
+  // Form başarılı kayıt sonrası callback
+  const handleFormSuccess = (savedItem: any, formType: string) => {
+    setFormOpen({ type: null })
+    // Kaydedilen kaydın detay sayfasına yönlendir - prefetch ile hızlı geçiş
+    const detailPath = `/${locale}/${formType === 'customer' ? 'customers' : formType === 'deal' ? 'deals' : formType === 'quote' ? 'quotes' : formType === 'invoice' ? 'invoices' : formType === 'task' ? 'tasks' : 'meetings'}/${savedItem.id}`
+    router.prefetch(detailPath) // Önce prefetch et
+    router.push(detailPath)
   }
 
   // Recent items'ı localStorage'dan yükle
@@ -322,7 +369,7 @@ export default function CommandPalette({
               {recentItems.map((item) => (
                 <CommandItem
                   key={item.id}
-                  onSelect={() => handleSelect(item.href)}
+                  onSelect={() => handleSelect({ id: item.id, label: item.label, href: item.href, keywords: [] })}
                   className="flex items-center gap-2"
                 >
                   <ArrowRight className="h-4 w-4 text-gray-400" />
@@ -342,7 +389,7 @@ export default function CommandPalette({
                 <CommandItem
                   key={customer.id}
                   onSelect={() =>
-                    handleSelect(`/${locale}/customers/${customer.id}`)
+                    handleSelect({ id: customer.id, label: customer.name, href: `/${locale}/customers/${customer.id}`, keywords: [] })
                   }
                   className="flex items-center gap-2"
                 >
@@ -367,7 +414,7 @@ export default function CommandPalette({
               {filteredDeals.map((deal: any) => (
                 <CommandItem
                   key={deal.id}
-                  onSelect={() => handleSelect(`/${locale}/deals/${deal.id}`)}
+                  onSelect={() => handleSelect({ id: deal.id, label: deal.title, href: `/${locale}/deals/${deal.id}`, keywords: [] })}
                   className="flex items-center gap-2"
                 >
                   <TrendingUp className="h-4 w-4" />
@@ -391,7 +438,7 @@ export default function CommandPalette({
               {filteredQuickActions.map((action) => (
                 <CommandItem
                   key={action.id}
-                  onSelect={() => handleSelect(action.href)}
+                  onSelect={() => handleSelect(action)}
                   className="flex items-center gap-2"
                 >
                   {action.icon}
@@ -409,7 +456,7 @@ export default function CommandPalette({
             {filteredPages.map((page) => (
               <CommandItem
                 key={page.id}
-                onSelect={() => handleSelect(page.href)}
+                onSelect={() => handleSelect({ ...page, formType: undefined })}
                 className="flex items-center gap-2"
               >
                 {page.icon}
@@ -419,6 +466,55 @@ export default function CommandPalette({
           </CommandGroup>
         )}
       </CommandList>
+      
+      {/* Form Modalleri */}
+      {formOpen.type === 'customer' && (
+        <CustomerForm
+          open={true}
+          onClose={() => setFormOpen({ type: null })}
+          onSuccess={(savedCustomer) => handleFormSuccess(savedCustomer, 'customer')}
+        />
+      )}
+      
+      {formOpen.type === 'deal' && (
+        <DealForm
+          open={true}
+          onClose={() => setFormOpen({ type: null })}
+          onSuccess={(savedDeal) => handleFormSuccess(savedDeal, 'deal')}
+        />
+      )}
+      
+      {formOpen.type === 'quote' && (
+        <QuoteForm
+          open={true}
+          onClose={() => setFormOpen({ type: null })}
+          onSuccess={(savedQuote) => handleFormSuccess(savedQuote, 'quote')}
+        />
+      )}
+      
+      {formOpen.type === 'invoice' && (
+        <InvoiceForm
+          open={true}
+          onClose={() => setFormOpen({ type: null })}
+          onSuccess={(savedInvoice) => handleFormSuccess(savedInvoice, 'invoice')}
+        />
+      )}
+      
+      {formOpen.type === 'task' && (
+        <TaskForm
+          open={true}
+          onClose={() => setFormOpen({ type: null })}
+          onSuccess={(savedTask) => handleFormSuccess(savedTask, 'task')}
+        />
+      )}
+      
+      {formOpen.type === 'meeting' && (
+        <MeetingForm
+          open={true}
+          onClose={() => setFormOpen({ type: null })}
+          onSuccess={(savedMeeting) => handleFormSuccess(savedMeeting, 'meeting')}
+        />
+      )}
     </CommandDialog>
   )
 }

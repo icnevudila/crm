@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSession } from '@/hooks/useSession'
 import { Plus, Search, Edit, Trash2, Eye, User } from 'lucide-react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -24,6 +25,7 @@ import {
 } from '@/components/ui/select'
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import EmptyState from '@/components/ui/EmptyState'
+import Pagination from '@/components/ui/Pagination'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import { toast, confirm } from '@/lib/toast'
@@ -78,6 +80,10 @@ export default function ContactList() {
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [selectedContactId, setSelectedContactId] = useState<string | null>(null)
   const [selectedContactData, setSelectedContactData] = useState<Contact | null>(null)
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
 
   // SuperAdmin için firmaları çek
   const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
@@ -95,19 +101,24 @@ export default function ContactList() {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
+      setCurrentPage(1) // Arama değiştiğinde ilk sayfaya dön
     }, 300)
     
     return () => clearTimeout(timer)
   }, [search])
 
   // SWR ile veri çekme
-  const params = new URLSearchParams()
-  if (debouncedSearch) params.append('search', debouncedSearch)
-  if (status) params.append('status', status)
-  if (role) params.append('role', role)
-  if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams()
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    if (status) params.append('status', status)
+    if (role) params.append('role', role)
+    if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+    params.append('page', currentPage.toString())
+    params.append('pageSize', pageSize.toString())
+    return `/api/contacts?${params.toString()}`
+  }, [debouncedSearch, status, role, isSuperAdmin, filterCompanyId, currentPage, pageSize])
   
-  const apiUrl = `/api/contacts?${params.toString()}`
   const { data: response, isLoading, error, mutate: mutateContacts } = useData<any>(apiUrl, {
     dedupingInterval: 5000,
     revalidateOnFocus: false,
@@ -118,6 +129,11 @@ export default function ContactList() {
     if (Array.isArray(response)) return response
     if (response.data && Array.isArray(response.data)) return response.data
     return []
+  }, [response])
+  
+  const pagination = useMemo(() => {
+    if (!response || Array.isArray(response)) return null
+    return response.pagination || null
   }, [response])
 
   const handleDelete = useCallback(async (id: string, name: string) => {
@@ -238,7 +254,10 @@ export default function ContactList() {
         </div>
         
         {isSuperAdmin && (
-          <Select value={filterCompanyId || 'all'} onValueChange={(value) => setFilterCompanyId(value === 'all' ? '' : value)}>
+          <Select value={filterCompanyId || 'all'} onValueChange={(value) => {
+            setFilterCompanyId(value === 'all' ? '' : value)
+            setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+          }}>
             <SelectTrigger>
               <SelectValue placeholder="Tüm Firmalar" />
             </SelectTrigger>
@@ -253,7 +272,10 @@ export default function ContactList() {
           </Select>
         )}
         
-        <Select value={status || 'all'} onValueChange={(value) => setStatus(value === 'all' ? '' : value)}>
+        <Select value={status || 'all'} onValueChange={(value) => {
+          setStatus(value === 'all' ? '' : value)
+          setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+        }}>
           <SelectTrigger>
             <SelectValue placeholder={t('allStatuses')} />
           </SelectTrigger>
@@ -264,7 +286,10 @@ export default function ContactList() {
           </SelectContent>
         </Select>
 
-        <Select value={role || 'all'} onValueChange={(value) => setRole(value === 'all' ? '' : value)}>
+        <Select value={role || 'all'} onValueChange={(value) => {
+          setRole(value === 'all' ? '' : value)
+          setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+        }}>
           <SelectTrigger>
             <SelectValue placeholder={t('allRoles')} />
           </SelectTrigger>
@@ -291,8 +316,11 @@ export default function ContactList() {
           }}
         />
       ) : (
-        <div className="border rounded-lg overflow-hidden">
-          <Table>
+        <>
+          {/* Desktop Table View */}
+          <div className="hidden md:block border rounded-lg overflow-hidden">
+            <div className="overflow-x-auto">
+              <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>{t('tableHeaders.name')}</TableHead>
@@ -345,17 +373,11 @@ export default function ContactList() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setSelectedContactId(contact.id)
-                          setSelectedContactData(contact)
-                          setDetailModalOpen(true)
-                        }}
-                      >
-                        <Eye className="h-4 w-4 text-gray-600" />
-                      </Button>
+                      <Link href={`/${locale}/contacts/${contact.id}`} prefetch={true}>
+                        <Button variant="ghost" size="icon">
+                          <Eye className="h-4 w-4 text-gray-600" />
+                        </Button>
+                      </Link>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -381,8 +403,107 @@ export default function ContactList() {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
-        </div>
+              </Table>
+            </div>
+            {/* Pagination */}
+            {pagination && (
+              <Pagination
+                currentPage={pagination.page}
+                totalPages={pagination.totalPages}
+                pageSize={pagination.pageSize}
+                totalItems={pagination.totalItems}
+                onPageChange={(page) => setCurrentPage(page)}
+                onPageSizeChange={(size) => {
+                  setPageSize(size)
+                  setCurrentPage(1)
+                }}
+              />
+            )}
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="md:hidden space-y-3">
+            {contacts.map((contact: Contact) => (
+              <div
+                key={contact.id}
+                className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      {contact.isPrimary && (
+                        <Badge variant="outline" className="text-xs">
+                          Ana
+                        </Badge>
+                      )}
+                      <h3 className="font-semibold text-gray-900 truncate">
+                        {contact.firstName} {contact.lastName}
+                      </h3>
+                    </div>
+                    <div className="space-y-1">
+                      {contact.email && (
+                        <p className="text-xs text-gray-600 truncate">{contact.email}</p>
+                      )}
+                      {contact.phone && (
+                        <p className="text-xs text-gray-600">{contact.phone}</p>
+                      )}
+                      {contact.title && (
+                        <p className="text-xs text-gray-500">{contact.title}</p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      <Badge className={getRoleBadgeColor(contact.role)}>
+                        {getRoleText(contact.role)}
+                      </Badge>
+                      <Badge
+                        variant={contact.status === 'ACTIVE' ? 'default' : 'secondary'}
+                      >
+                        {contact.status === 'ACTIVE' ? 'Aktif' : 'Pasif'}
+                      </Badge>
+                      {contact.CustomerCompany?.name && (
+                        <Badge variant="outline" className="text-xs">
+                          {contact.CustomerCompany.name}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <Link href={`/${locale}/contacts/${contact.id}`} prefetch={true}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </Link>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => handleEdit(contact)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-red-600"
+                      onClick={() =>
+                        handleDelete(
+                          contact.id,
+                          `${contact.firstName} ${contact.lastName || ''}`
+                        )
+                      }
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
 
       {/* Form Modal */}

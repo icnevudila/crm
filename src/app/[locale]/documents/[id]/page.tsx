@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
+import { toastError } from '@/lib/toast'
 
 interface Document {
   id: string
@@ -87,7 +88,7 @@ export default function DocumentDetailPage() {
       router.push(`/${locale}/documents`)
     } catch (error: any) {
       console.error('Delete error:', error)
-      alert(error?.message || 'Silme işlemi başarısız oldu')
+      toastError('Silme işlemi başarısız oldu', error?.message)
     }
   }
 

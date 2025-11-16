@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { toast, handleApiError } from '@/lib/toast'
+import { useNavigateToDetailToast } from '@/lib/quick-action-helper'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -279,10 +280,12 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
     },
     onSuccess: (result) => {
       // Success toast göster
-      toast.success(
-        product ? 'Ürün güncellendi' : 'Ürün kaydedildi',
-        product ? `${result.name} başarıyla güncellendi.` : `${result.name} başarıyla eklendi.`
-      )
+      if (product) {
+        toast.success('Ürün güncellendi', `${result.name} başarıyla güncellendi.`)
+      } else {
+        // Yeni ürün oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
+        navigateToDetailToast('product', result.id, result.name)
+      }
       
       // Parent component'e callback gönder - optimistic update için
       if (onSuccess) {

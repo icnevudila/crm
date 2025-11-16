@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
-import { Plus, Search, Edit, Trash2, Eye, Upload, Download, CheckSquare, Square, Building2, Sparkles, Briefcase, FileText, Receipt, Calendar } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Eye, Upload, Download, CheckSquare, Square, Building2, Sparkles, Briefcase, FileText, Receipt, Calendar, Send } from 'lucide-react'
 import { useSession } from '@/hooks/useSession'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
@@ -82,6 +82,10 @@ const TaskForm = dynamic(() => import('../tasks/TaskForm'), {
   loading: () => null,
 })
 const MeetingForm = dynamic(() => import('../meetings/MeetingForm'), {
+  ssr: false,
+  loading: () => null,
+})
+const BulkSendDialog = dynamic(() => import('../integrations/BulkSendDialog'), {
   ssr: false,
   loading: () => null,
 })
@@ -200,6 +204,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
   )
   
   // URL'den gelen parametreleri state'e set et
+  // ✅ ÇÖZÜM: Dependency array'den city ve sector'ü kaldırdık - sonsuz döngüyü önlemek için
   useEffect(() => {
     if (cityFromUrl && cityFromUrl !== city) {
       setCity(cityFromUrl)
@@ -207,7 +212,8 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
     if (sectorFromUrl && sectorFromUrl !== sector) {
       setSector(sectorFromUrl)
     }
-  }, [cityFromUrl, sectorFromUrl, city, sector])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cityFromUrl, sectorFromUrl]) // Sadece URL parametrelerini dinle, state değişikliklerini dinleme
   const [formOpen, setFormOpen] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [quickAction, setQuickAction] = useState<{ type: 'deal' | 'quote' | 'invoice' | 'task' | 'meeting'; customer: Customer } | null>(null)
@@ -227,6 +233,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
   const [importOpen, setImportOpen] = useState(false)
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importing, setImporting] = useState(false)
+  const [bulkSendOpen, setBulkSendOpen] = useState(false)
 
   // Debounced search - performans için (kullanıcı yazmayı bitirdikten 300ms sonra arama)
   const [debouncedSearch, setDebouncedSearch] = useState(search)
@@ -748,12 +755,28 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
 
       {/* Bulk Actions */}
       {selectedIds.length > 0 && (
-        <BulkActions
-          selectedIds={selectedIds}
-          onBulkDelete={handleBulkDelete}
-          onClearSelection={handleClearSelection}
-          itemName={t('title').toLowerCase()}
-        />
+        <div className="space-y-2">
+          <BulkActions
+            selectedIds={selectedIds}
+            onBulkDelete={handleBulkDelete}
+            onClearSelection={handleClearSelection}
+            itemName={t('title').toLowerCase()}
+          />
+          <div className="flex items-center gap-2 p-3 bg-indigo-50 border border-indigo-200 rounded-lg">
+            <Badge variant="outline" className="bg-white text-gray-700 border-gray-300">
+              {selectedIds.length} seçili
+            </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setBulkSendOpen(true)}
+              className="border-indigo-300 text-indigo-700 hover:bg-indigo-100"
+            >
+              <Send className="h-4 w-4 mr-2" />
+              Toplu Mesaj Gönder
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* Table */}
@@ -1147,6 +1170,16 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         customerCompanyId={quickAction?.customer.customerCompanyId}
         customerCompanyName={quickAction?.customer.CustomerCompany?.name}
         customerId={quickAction?.customer.id}
+      />
+      <BulkSendDialog
+        open={bulkSendOpen}
+        onClose={() => setBulkSendOpen(false)}
+        customers={customers}
+        selectedCustomerIds={selectedIds}
+        onSuccess={() => {
+          setSelectedIds([])
+          setSelectAll(false)
+        }}
       />
     </div>
   )

@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { toast } from '@/lib/toast'
+import { toastError, toastSuccess } from '@/lib/toast'
 
 export default function SettingsPage() {
   const { data: session, status } = useSession()
@@ -120,7 +120,7 @@ export default function SettingsPage() {
 
   const handleSaveIntegrations = async () => {
     if (!session?.user?.companyId) {
-      toast.error('Hata', 'Oturum bilgisi bulunamadı')
+      toastError('Hata', 'Oturum bilgisi bulunamadı')
       return
     }
 
@@ -137,10 +137,10 @@ export default function SettingsPage() {
         throw new Error(error.error || 'Entegrasyonlar kaydedilemedi')
       }
 
-      toast.success('Başarılı', 'API entegrasyonları başarıyla kaydedildi')
+      toastSuccess('Başarılı', 'API entegrasyonları başarıyla kaydedildi')
     } catch (error: any) {
       console.error('Integrations save error:', error)
-      toast.error('Hata', error?.message || 'Entegrasyonlar kaydedilemedi')
+      toastError('Hata', error?.message || 'Entegrasyonlar kaydedilemedi')
     } finally {
       setIntegrationsLoading(false)
     }
@@ -148,7 +148,7 @@ export default function SettingsPage() {
 
   const handleSaveEmailIntegration = async () => {
     if (!session?.user?.companyId) {
-      toast.error('Hata', 'Oturum bilgisi bulunamadı')
+      toastError('Hata', 'Oturum bilgisi bulunamadı')
       return
     }
 
@@ -165,13 +165,13 @@ export default function SettingsPage() {
         throw new Error(error.error || 'E-posta entegrasyonları kaydedilemedi')
       }
 
-      toast.success('Başarılı', 'E-posta entegrasyonları başarıyla kaydedildi')
+      toastSuccess('Başarılı', 'E-posta entegrasyonları başarıyla kaydedildi')
       
       // Sayfayı yenile (emailStatus güncellemesi için)
       router.refresh()
     } catch (error: any) {
       console.error('Email integration save error:', error)
-      toast.error('Hata', error?.message || 'E-posta entegrasyonları kaydedilemedi')
+      toastError('Hata', error?.message || 'E-posta entegrasyonları kaydedilemedi')
     } finally {
       setEmailIntegrationLoading(false)
     }
@@ -187,7 +187,7 @@ export default function SettingsPage() {
 
   const handleTestEmail = async () => {
     if (!session?.user?.email) {
-      toast.error('Hata', 'Email adresi bulunamadı')
+      toastError('Hata', 'Email adresi bulunamadı')
       return
     }
 
@@ -204,10 +204,10 @@ export default function SettingsPage() {
         throw new Error(data.error || 'Test email gönderilemedi')
       }
 
-      toast.success('Başarılı', data.message || 'Test email başarıyla gönderildi! Gelen kutunuzu kontrol edin.')
+      toastSuccess('Başarılı', data.message || 'Test email başarıyla gönderildi! Gelen kutunuzu kontrol edin.')
     } catch (error: any) {
       console.error('Test email error:', error)
-      toast.error('Hata', error?.message || 'Test email gönderilemedi')
+      toastError('Hata', error?.message || 'Test email gönderilemedi')
     } finally {
       setTestEmailLoading(false)
     }
@@ -238,7 +238,7 @@ export default function SettingsPage() {
 
   const handleSave = async () => {
     if (!session?.user?.id) {
-      toast.error('Hata', 'Oturum bilgisi bulunamadı')
+      toastError('Hata', 'Oturum bilgisi bulunamadı')
       return
     }
 
@@ -257,13 +257,13 @@ export default function SettingsPage() {
         throw new Error(error.error || 'Ayarlar kaydedilemedi')
       }
 
-      toast.success('Başarılı', 'Ayarlar başarıyla kaydedildi')
+      toastSuccess('Başarılı', 'Ayarlar başarıyla kaydedildi')
       
       // Session'ı yenile
       router.refresh()
     } catch (error: any) {
       console.error('Settings save error:', error)
-      toast.error('Hata', error?.message || 'Ayarlar kaydedilemedi')
+      toastError('Hata', error?.message || 'Ayarlar kaydedilemedi')
     } finally {
       setLoading(false)
     }
