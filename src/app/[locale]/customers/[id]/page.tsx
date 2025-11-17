@@ -3,7 +3,8 @@
 import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { ArrowLeft, Edit, Mail, Phone, MapPin, Building2, Briefcase, FileText, Receipt, Trash2, User } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { ArrowLeft, Edit, Mail, Phone, MapPin, Building2, Briefcase, FileText, Receipt, Trash2, User, Zap } from 'lucide-react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
@@ -169,33 +170,63 @@ export default function CustomerDetailPage() {
         } : undefined}
       />
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push(`/${locale}/customers`)}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          {/* Logo */}
-          {customer.logoUrl && (
-            <div className="w-16 h-16 rounded-lg bg-white border-2 border-gray-300 flex items-center justify-center overflow-hidden flex-shrink-0">
-              <Image
-                src={customer.logoUrl}
-                alt={customer.name}
-                width={64}
-                height={64}
-                className="object-cover"
-              />
-            </div>
-          )}
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">{customer.name}</h1>
-            <p className="text-gray-600 mt-1">Müşteri Detayları</p>
-          </div>
+      {/* Header - Premium Tasarım */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border border-indigo-100 p-6 shadow-lg"
+      >
+        {/* Arka plan pattern */}
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute inset-0" style={{
+            backgroundImage: `radial-gradient(circle at 2px 2px, rgb(99, 102, 241) 1px, transparent 0)`,
+            backgroundSize: '40px 40px'
+          }} />
         </div>
+        
+        <div className="relative flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => router.push(`/${locale}/customers`)}
+                className="bg-white/80 hover:bg-white shadow-sm"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </motion.div>
+            {/* Logo - Premium Tasarım */}
+            {customer.logoUrl ? (
+              <motion.div
+                whileHover={{ scale: 1.05, rotate: 2 }}
+                className="relative w-20 h-20 rounded-xl bg-white border-2 border-indigo-200 shadow-lg flex items-center justify-center overflow-hidden flex-shrink-0 ring-4 ring-indigo-100/50"
+              >
+                <Image
+                  src={customer.logoUrl}
+                  alt={customer.name}
+                  width={80}
+                  height={80}
+                  className="object-cover"
+                />
+                {/* Glow efekti */}
+                <div className="absolute inset-0 bg-gradient-to-br from-indigo-400/20 to-purple-400/20 pointer-events-none" />
+              </motion.div>
+            ) : (
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                className="w-20 h-20 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg ring-4 ring-indigo-100/50"
+              >
+                <Building2 className="h-10 w-10 text-white" />
+              </motion.div>
+            )}
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+                {customer.name}
+              </h1>
+              <p className="text-gray-600 mt-1 font-medium">Müşteri Detayları</p>
+            </div>
+          </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => router.push(`/${locale}/customers`)}>
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -285,10 +316,22 @@ export default function CustomerDetailPage() {
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold mb-4">Hızlı İşlemler</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+      {/* Quick Actions - Premium Tasarım */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+      >
+        <Card className="p-6 bg-gradient-to-br from-white to-gray-50 border-indigo-100 shadow-lg hover:shadow-xl transition-shadow">
+          <div className="flex items-center gap-2 mb-6">
+            <div className="p-2 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 shadow-md">
+              <Zap className="h-5 w-5 text-white" />
+            </div>
+            <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+              Hızlı İşlemler
+            </h2>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
           {customer.email && (
             <SendEmailButton
               to={customer.email}
@@ -349,7 +392,8 @@ export default function CustomerDetailPage() {
             Teklif Oluştur
           </Button>
         </div>
-      </Card>
+        </Card>
+      </motion.div>
 
       {/* Customer Info */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -408,9 +452,20 @@ export default function CustomerDetailPage() {
             )}
           </div>
         </Card>
-
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Durum ve Bilgiler</h2>
+        <motion.div
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <Card className="p-6 bg-gradient-to-br from-white to-purple-50/30 border-purple-100 shadow-lg hover:shadow-xl transition-all duration-300 hover:border-purple-200">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 shadow-md">
+                <User className="h-5 w-5 text-white" />
+              </div>
+              <h2 className="text-xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+                Durum ve Bilgiler
+              </h2>
+            </div>
           <div className="space-y-3">
             <div>
               <span className="text-sm text-gray-600">Durum:</span>
@@ -462,13 +517,28 @@ export default function CustomerDetailPage() {
             )}
           </div>
         </Card>
+        </motion.div>
 
-        {/* Notes Card */}
+        {/* Notes Card - Premium Tasarım */}
         {customer.notes && (
-          <Card className="p-6">
-            <h2 className="text-xl font-semibold mb-4">Notlar</h2>
-            <p className="text-gray-700 whitespace-pre-wrap">{customer.notes}</p>
-          </Card>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="md:col-span-2"
+          >
+            <Card className="p-6 bg-gradient-to-br from-white to-amber-50/30 border-amber-100 shadow-lg hover:shadow-xl transition-all duration-300 hover:border-amber-200">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-2 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 shadow-md">
+                  <FileText className="h-5 w-5 text-white" />
+                </div>
+                <h2 className="text-xl font-bold bg-gradient-to-r from-amber-600 to-orange-600 bg-clip-text text-transparent">
+                  Notlar
+                </h2>
+              </div>
+              <p className="text-gray-700 whitespace-pre-wrap leading-relaxed">{customer.notes}</p>
+            </Card>
+          </motion.div>
         )}
 
         {/* Finansal Özet */}
@@ -482,12 +552,21 @@ export default function CustomerDetailPage() {
             : null
           
           return (
-            <Card className="p-6 border-l-4 border-indigo-500">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-indigo-600" />
-                  Finansal Özet
-                </h2>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              <Card className="p-6 bg-gradient-to-br from-white via-emerald-50/30 to-teal-50/30 border-l-4 border-emerald-500 shadow-lg hover:shadow-xl transition-all duration-300">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 shadow-md">
+                      <DollarSign className="h-5 w-5 text-white" />
+                    </div>
+                    <h2 className="text-xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
+                      Finansal Özet
+                    </h2>
+                  </div>
                 <Link href={`/${locale}/finance?customerId=${id}`}>
                   <Button variant="outline" size="sm">
                     Tüm Finans Kayıtları →
@@ -526,6 +605,7 @@ export default function CustomerDetailPage() {
                 )}
               </div>
             </Card>
+            </motion.div>
           )
         })()}
       </div>
@@ -713,6 +793,88 @@ export default function CustomerDetailPage() {
 
       {/* Form Modals */}
       <CustomerForm
+        customer={customer}
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSuccess={async (savedCustomer: any) => {
+          // Form başarılı olduğunda cache'i güncelle (sayfa reload yok)
+          // Optimistic update - güncellenmiş customer'ı cache'e ekle
+          await mutateCustomer(savedCustomer, { revalidate: false })
+          
+          // Tüm ilgili cache'leri güncelle
+          await Promise.all([
+            mutate('/api/customers', undefined, { revalidate: true }),
+            mutate('/api/customers?', undefined, { revalidate: true }),
+            mutate((key: string) => typeof key === 'string' && key.startsWith('/api/customers'), undefined, { revalidate: true }),
+          ])
+        }}
+      />
+
+      <DealForm
+        open={dealFormOpen}
+        onClose={() => setDealFormOpen(false)}
+        onSuccess={async (savedDeal) => {
+          // Cache'i güncelle - optimistic update
+          await mutateCustomer(undefined, { revalidate: true })
+          // Toast zaten DealForm içinde gösteriliyor (navigateToDetailToast)
+        }}
+        customerId={id}
+      />
+
+      <QuoteForm
+        open={quoteFormOpen}
+        onClose={() => setQuoteFormOpen(false)}
+        onSuccess={async (savedQuote) => {
+          // Cache'i güncelle - optimistic update
+          await mutateCustomer(undefined, { revalidate: true })
+          // Toast zaten QuoteForm içinde gösteriliyor (navigateToDetailToast)
+        }}
+        customerId={id}
+      />
+
+      <MeetingForm
+        open={meetingFormOpen}
+        onClose={() => setMeetingFormOpen(false)}
+        onSuccess={async (savedMeeting) => {
+          // Cache'i güncelle - optimistic update
+          await mutateCustomer(undefined, { revalidate: true })
+          // Toast zaten MeetingForm içinde gösteriliyor (navigateToDetailToast)
+        }}
+        customerId={id}
+        customerCompanyId={customer.companyId}
+        customerCompanyName={customer.name}
+      />
+
+      <TaskForm
+        task={undefined}
+        open={taskFormOpen}
+        onClose={() => setTaskFormOpen(false)}
+        customerName={customer.name}
+        onSuccess={async (savedTask) => {
+          await mutateCustomer(undefined, { revalidate: true })
+          setTaskFormOpen(false)
+        }}
+      />
+
+      <TicketForm
+        ticket={undefined}
+        open={ticketFormOpen}
+        onClose={() => setTicketFormOpen(false)}
+        customerId={id}
+        onSuccess={async (savedTicket) => {
+          await mutateCustomer(undefined, { revalidate: true })
+          setTicketFormOpen(false)
+        }}
+      />
+    </div>
+  )
+}
+
+
+
+
+
+
         customer={customer}
         open={formOpen}
         onClose={() => setFormOpen(false)}

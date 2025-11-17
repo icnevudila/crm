@@ -395,6 +395,136 @@ export async function POST(request: Request) {
 
     const supabase = getSupabaseWithServiceRole()
 
+    // ✅ ZAMAN ÇAKIŞMASI KONTROLÜ - Meeting oluşturulmadan önce kontrol et
+    const meetingDate = new Date(body.meetingDate)
+    const meetingDuration = body.meetingDuration || 60 // dakika cinsinden
+    const meetingEndTime = new Date(meetingDate.getTime() + meetingDuration * 60000)
+
+    // Çakışan meeting'leri kontrol et
+    const conflictChecks: string[] = []
+
+    // 1. Participant bazlı çakışma kontrolü (eğer participantIds varsa)
+    if (body.participantIds && Array.isArray(body.participantIds) && body.participantIds.length > 0) {
+      // Tüm participant'ların o zaman aralığındaki meeting'lerini kontrol et
+      const { data: participantMeetings, error: participantError } = await supabase
+        .from('Meeting')
+        .select(`
+          id,
+          title,
+          meetingDate,
+          meetingDuration,
+          status,
+          MeetingParticipant:MeetingParticipant!inner(userId)
+        `)
+        .eq('companyId', session.user.companyId)
+        .eq('status', 'PLANNED') // Sadece planlanmış meeting'leri kontrol et
+        .neq('id', body.id || '') // Update durumunda kendi ID'sini hariç tut
+        .in('MeetingParticipant.userId', body.participantIds)
+
+      if (!participantError && participantMeetings) {
+        for (const existingMeeting of participantMeetings) {
+          const existingStart = new Date(existingMeeting.meetingDate)
+          const existingDuration = existingMeeting.meetingDuration || 60
+          const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000)
+
+          // Zaman aralıkları çakışıyor mu?
+          if (
+            (meetingDate >= existingStart && meetingDate < existingEnd) ||
+            (meetingEndTime > existingStart && meetingEndTime <= existingEnd) ||
+            (meetingDate <= existingStart && meetingEndTime >= existingEnd)
+          ) {
+            // Çakışan participant'ları bul
+            const conflictingParticipants = body.participantIds.filter((pid: string) => {
+              return existingMeeting.MeetingParticipant?.some((mp: any) => mp.userId === pid)
+            })
+
+            if (conflictingParticipants.length > 0) {
+              // Kullanıcı isimlerini al
+              const { data: conflictingUsers } = await supabase
+                .from('User')
+                .select('id, name, email')
+                .in('id', conflictingParticipants)
+
+              const userNames = conflictingUsers?.map((u: any) => u.name || u.email).join(', ') || 'Kullanıcılar'
+              conflictChecks.push(
+                `${userNames} için "${existingMeeting.title}" görüşmesi ile çakışma var (${new Date(existingMeeting.meetingDate).toLocaleString('tr-TR')})`
+              )
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Customer bazlı çakışma kontrolü (eğer customerId varsa)
+    if (body.customerId) {
+      const { data: customerMeetings, error: customerError } = await supabase
+        .from('Meeting')
+        .select('id, title, meetingDate, meetingDuration, status')
+        .eq('companyId', session.user.companyId)
+        .eq('customerId', body.customerId)
+        .eq('status', 'PLANNED') // Sadece planlanmış meeting'leri kontrol et
+        .neq('id', body.id || '') // Update durumunda kendi ID'sini hariç tut
+
+      if (!customerError && customerMeetings) {
+        for (const existingMeeting of customerMeetings) {
+          const existingStart = new Date(existingMeeting.meetingDate)
+          const existingDuration = existingMeeting.meetingDuration || 60
+          const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000)
+
+          // Zaman aralıkları çakışıyor mu?
+          if (
+            (meetingDate >= existingStart && meetingDate < existingEnd) ||
+            (meetingEndTime > existingStart && meetingEndTime <= existingEnd) ||
+            (meetingDate <= existingStart && meetingEndTime >= existingEnd)
+          ) {
+            conflictChecks.push(
+              `Müşteri için "${existingMeeting.title}" görüşmesi ile çakışma var (${new Date(existingMeeting.meetingDate).toLocaleString('tr-TR')})`
+            )
+          }
+        }
+      }
+    }
+
+    // 3. CreatedBy (oluşturan kullanıcı) bazlı çakışma kontrolü
+    const { data: creatorMeetings, error: creatorError } = await supabase
+      .from('Meeting')
+      .select('id, title, meetingDate, meetingDuration, status')
+      .eq('companyId', session.user.companyId)
+      .eq('createdBy', session.user.id)
+      .eq('status', 'PLANNED') // Sadece planlanmış meeting'leri kontrol et
+      .neq('id', body.id || '') // Update durumunda kendi ID'sini hariç tut
+
+    if (!creatorError && creatorMeetings) {
+      for (const existingMeeting of creatorMeetings) {
+        const existingStart = new Date(existingMeeting.meetingDate)
+        const existingDuration = existingMeeting.meetingDuration || 60
+        const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000)
+
+        // Zaman aralıkları çakışıyor mu?
+        if (
+          (meetingDate >= existingStart && meetingDate < existingEnd) ||
+          (meetingEndTime > existingStart && meetingEndTime <= existingEnd) ||
+          (meetingDate <= existingStart && meetingEndTime >= existingEnd)
+        ) {
+          conflictChecks.push(
+            `Sizin "${existingMeeting.title}" görüşmeniz ile çakışma var (${new Date(existingMeeting.meetingDate).toLocaleString('tr-TR')})`
+          )
+        }
+      }
+    }
+
+    // Çakışma varsa hata döndür
+    if (conflictChecks.length > 0) {
+      return NextResponse.json(
+        {
+          error: 'Zaman çakışması tespit edildi',
+          conflicts: conflictChecks,
+          message: conflictChecks.join('\n'),
+        },
+        { status: 409 } // 409 Conflict
+      )
+    }
+
     // Meeting verilerini oluştur
     const meetingData: any = {
       title: body.title.trim(),
@@ -415,6 +545,14 @@ export async function POST(request: Request) {
       actionItems: body.actionItems || null,
       attendees: body.attendees || null,
       createdBy: session.user.id,
+      // ✅ Recurring meeting alanları
+      isRecurring: body.isRecurring || false,
+      parentMeetingId: null, // Parent meeting (ilk meeting)
+      recurrenceType: body.recurrenceType || null,
+      recurrenceInterval: body.recurrenceInterval || null,
+      recurrenceEndDate: body.recurrenceEndDate || null,
+      recurrenceCount: body.recurrenceCount || null,
+      recurrenceDaysOfWeek: body.recurrenceDaysOfWeek || null, // JSONB - direkt array gönderilebilir
     }
 
     const { data: meeting, error } = await supabase

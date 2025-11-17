@@ -65,25 +65,6 @@ const WorkflowShortcuts = dynamic(
   }
 )
 
-const UserBadges = dynamic(
-  () => import('@/components/badges/UserBadges'),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-48 animate-pulse rounded-2xl border border-dashed border-slate-200 bg-slate-100/60" />
-    ),
-  }
-)
-
-const UserStreak = dynamic(
-  () => import('@/components/streaks/UserStreak'),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="h-48 animate-pulse rounded-2xl border border-dashed border-slate-200 bg-slate-100/60" />
-    ),
-  }
-)
 
 const DashboardSpotlight = dynamic(
   () => import('@/components/dashboard/DashboardSpotlight'),
@@ -249,12 +230,6 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
           <SmartSuggestions />
           <WorkflowShortcuts />
-        </div>
-
-        {/* Badges ve Streak */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
-          <UserBadges />
-          <UserStreak />
         </div>
 
         <DashboardSpotlight />

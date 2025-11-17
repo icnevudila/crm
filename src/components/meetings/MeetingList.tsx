@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { toast, confirm } from '@/lib/toast'
 import { useLocale, useTranslations } from 'next-intl'
-import { Plus, Search, Edit, Trash2, Eye, Calendar, Building2, User, FileText, Download, FileSpreadsheet, FileText as FileTextIcon, AlertCircle, Mail, MessageSquare, MessageCircle, Sparkles } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Eye, Calendar, Building2, User, FileText, Download, FileSpreadsheet, FileText as FileTextIcon, AlertCircle, Mail, MessageSquare, MessageCircle, Sparkles, List, CalendarDays } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -53,6 +53,11 @@ const MeetingForm = dynamic(() => import('./MeetingForm'), {
 const MeetingDetailModal = dynamic(() => import('./MeetingDetailModal'), {
   ssr: false,
   loading: () => null,
+})
+
+const MeetingCalendar = dynamic(() => import('./MeetingCalendar'), {
+  ssr: false,
+  loading: () => <SkeletonList />,
 })
 
 const FinanceForm = dynamic(() => import('@/components/finance/FinanceForm'), {
@@ -140,6 +145,10 @@ export default function MeetingList() {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
+  
+  // View mode: 'list' or 'calendar'
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list')
+  const [selectedDateForForm, setSelectedDateForForm] = useState<Date | null>(null)
 
   // Debounced search - performans için
   const [debouncedSearch, setDebouncedSearch] = useState(search)
@@ -355,6 +364,27 @@ export default function MeetingList() {
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          {/* View Mode Toggle */}
+          <div className="flex gap-2 border rounded-lg p-1 bg-gray-50">
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('list')}
+              className={viewMode === 'list' ? 'bg-indigo-600 text-white' : ''}
+            >
+              <List className="h-4 w-4 mr-2" />
+              Liste
+            </Button>
+            <Button
+              variant={viewMode === 'calendar' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('calendar')}
+              className={viewMode === 'calendar' ? 'bg-indigo-600 text-white' : ''}
+            >
+              <CalendarDays className="h-4 w-4 mr-2" />
+              Takvim
+            </Button>
+          </div>
           <div className="flex gap-2">
             <RefreshButton onRefresh={handleRefresh} />
             <Button
@@ -459,7 +489,31 @@ export default function MeetingList() {
         </div>
       )}
 
-      {/* Table */}
+      {/* Calendar View */}
+      {viewMode === 'calendar' && (
+        <MeetingCalendar
+          meetings={meetings}
+          onDateClick={(date) => {
+            // Tarih tıklandığında yeni meeting formu aç
+            setSelectedMeeting(null)
+            setSelectedDateForForm(date)
+            setFormOpen(true)
+          }}
+          onMeetingClick={(meeting) => {
+            // Meeting tıklandığında detay sayfasına git
+            router.push(`/${locale}/meetings/${meeting.id}`)
+          }}
+          onCreateMeeting={(date) => {
+            // Tarih seçildiğinde yeni meeting formu aç
+            setSelectedMeeting(null)
+            setSelectedDateForForm(date)
+            setFormOpen(true)
+          }}
+        />
+      )}
+
+      {/* List View */}
+      {viewMode === 'list' && (
       <div className="border rounded-lg">
         <Table>
           <TableHeader>
@@ -716,12 +770,17 @@ export default function MeetingList() {
           />
         )}
       </div>
+      )}
 
       {/* Form Modal */}
       <MeetingForm
         meeting={selectedMeeting || undefined}
         open={formOpen}
-        onClose={handleFormClose}
+        onClose={() => {
+          handleFormClose()
+          setSelectedDateForForm(null)
+        }}
+        initialDate={selectedDateForForm || undefined}
         onSuccess={async (savedMeeting: Meeting) => {
           // Optimistic update
           let updatedMeetings: Meeting[]

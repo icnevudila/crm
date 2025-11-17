@@ -80,15 +80,19 @@ export default function CommandPalette({
   const searchUrl = search.length > 2 ? `/api/customers?search=${encodeURIComponent(search)}&limit=5` : null
   const dealsUrl = search.length > 2 ? `/api/deals?search=${encodeURIComponent(search)}&limit=5` : null
   
-  const { data: customers = [] } = useData<any[]>(searchUrl, {
+  const { data: customersResponse } = useData<{ data?: any[]; pagination?: any }>(searchUrl, {
     dedupingInterval: 2000,
     revalidateOnFocus: false,
   })
 
-  const { data: deals = [] } = useData<any[]>(dealsUrl, {
+  const { data: dealsResponse } = useData<{ data?: any[]; pagination?: any }>(dealsUrl, {
     dedupingInterval: 2000,
     revalidateOnFocus: false,
   })
+
+  // API response'dan data array'ini çıkar
+  const customers = customersResponse?.data || []
+  const deals = dealsResponse?.data || []
 
   // Sayfa navigasyonu için hızlı erişim
   const pages: QuickAction[] = useMemo(
@@ -255,7 +259,9 @@ export default function CommandPalette({
   const filteredCustomers = useMemo(() => {
     if (!search || search.length <= 2 || !searchUrl) return []
     const lowerSearch = search.toLowerCase()
-    return (customers || [])
+    // customers'ın array olduğundan emin ol
+    const customersArray = Array.isArray(customers) ? customers : []
+    return customersArray
       .filter(
         (customer: any) =>
           customer?.name?.toLowerCase().includes(lowerSearch) ||
@@ -268,7 +274,9 @@ export default function CommandPalette({
   const filteredDeals = useMemo(() => {
     if (!search || search.length <= 2 || !dealsUrl) return []
     const lowerSearch = search.toLowerCase()
-    return (deals || [])
+    // deals'ın array olduğundan emin ol
+    const dealsArray = Array.isArray(deals) ? deals : []
+    return dealsArray
       .filter(
         (deal: any) =>
           deal?.title?.toLowerCase().includes(lowerSearch) ||

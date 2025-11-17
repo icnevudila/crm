@@ -3,10 +3,12 @@
 import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { ArrowLeft, Edit, Trash2, MessageSquare, User, AlertCircle, Mail, MessageSquare as MessageSquareIcon, Calendar } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { ArrowLeft, Edit, Trash2, MessageSquare, User, AlertCircle, Mail, MessageSquare as MessageSquareIcon, Calendar, Clock, Tag, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import GradientCard from '@/components/ui/GradientCard'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import CommentsSection from '@/components/ui/CommentsSection'
 import TicketForm from '@/components/tickets/TicketForm'
@@ -18,6 +20,7 @@ import SendSmsButton from '@/components/integrations/SendSmsButton'
 import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
 import { useQuickActionSuccess } from '@/lib/quick-action-helper'
 import { useData } from '@/hooks/useData'
+import ContextualActionsBar from '@/components/ui/ContextualActionsBar'
 
 interface Ticket {
   id: string
@@ -59,6 +62,10 @@ export default function TicketDetailPage() {
       revalidateOnFocus: false,
     }
   )
+
+  const refetch = () => {
+    mutateTicket(undefined, { revalidate: true })
+  }
 
   if (isLoading) {
     return <SkeletonDetail />
@@ -152,51 +159,73 @@ export default function TicketDetailPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push(`/${locale}/tickets`)}
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-              <MessageSquare className="h-8 w-8" />
-              {ticket.subject}
-            </h1>
-            <p className="mt-1 text-gray-600">Destek Talebi Detayları</p>
+      {/* Contextual Actions Bar */}
+      <ContextualActionsBar
+        entityType="ticket"
+        entityId={id}
+        onEdit={() => setFormOpen(true)}
+        onDelete={(ticket.status !== 'RESOLVED' && ticket.status !== 'CLOSED') ? handleDelete : undefined}
+      />
+
+      {/* Header - Premium Tasarım */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-orange-50 via-amber-50 to-yellow-50 border border-orange-100 p-6 shadow-lg"
+      >
+        {/* Arka plan pattern */}
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute inset-0" style={{
+            backgroundImage: `radial-gradient(circle at 2px 2px, rgb(249, 115, 22) 1px, transparent 0)`,
+            backgroundSize: '40px 40px'
+          }} />
+        </div>
+        
+        <div className="relative flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => router.push(`/${locale}/tickets`)}
+                className="bg-white/80 hover:bg-white shadow-sm"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </motion.div>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="w-20 h-20 rounded-xl bg-gradient-to-br from-orange-500 via-amber-500 to-yellow-500 flex items-center justify-center shadow-lg ring-4 ring-orange-100/50"
+            >
+              <MessageSquare className="h-10 w-10 text-white" />
+            </motion.div>
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-orange-600 via-amber-600 to-yellow-600 bg-clip-text text-transparent">
+                {ticket.subject}
+              </h1>
+              <p className="text-gray-600 mt-1 font-medium">Destek Talebi Detayları</p>
+            </div>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setFormOpen(true)}
-          >
-            <Edit className="mr-2 h-4 w-4" />
-            Düzenle
-          </Button>
-          {(ticket.status !== 'RESOLVED' && ticket.status !== 'CLOSED') && (
-            <Button
-              variant="outline"
-              onClick={handleDelete}
-              disabled={deleteLoading}
-              className="text-red-600 hover:text-red-700"
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              {deleteLoading ? 'Siliniyor...' : 'Sil'}
-            </Button>
-          )}
-        </div>
-      </div>
+      </motion.div>
 
-      {/* Quick Actions */}
+      {/* Quick Actions - Premium Tasarım */}
       {ticket.Customer && (ticket.Customer.email || ticket.Customer.phone) && (
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Hızlı İşlemler</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <Card className="p-6 bg-gradient-to-br from-white to-gray-50 border-orange-100 shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center gap-2 mb-6">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 shadow-md">
+                <Zap className="h-5 w-5 text-white" />
+              </div>
+              <h2 className="text-xl font-bold bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
+                Hızlı İşlemler
+              </h2>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {ticket.Customer.email && (
               <SendEmailButton
                 to={ticket.Customer.email}
@@ -256,83 +285,248 @@ export default function TicketDetailPage() {
             )}
           </div>
         </Card>
+        </motion.div>
       )}
 
-      {/* Ticket Info */}
+      {/* Ticket Info - Premium Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Talep Bilgileri</h2>
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm text-gray-600">Durum</p>
-              <Badge className={`mt-1 ${statusColors[ticket.status] || 'bg-gray-100 text-gray-800'}`}>
-                {statusLabels[ticket.status] || ticket.status}
-              </Badge>
+        {/* Talep Bilgileri - Premium Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <GradientCard
+            gradientFrom="from-orange-500"
+            gradientTo="to-amber-500"
+            className="p-6"
+          >
+            <div className="flex items-center gap-2 mb-6">
+              <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                <MessageSquare className="h-5 w-5 text-white" />
+              </div>
+              <h2 className="text-xl font-bold text-white">Talep Bilgileri</h2>
             </div>
-            <div>
-              <p className="text-sm text-gray-600">Öncelik</p>
-              <Badge className={`mt-1 ${priorityColors[ticket.priority] || 'bg-gray-100 text-gray-800'}`}>
-                {priorityLabels[ticket.priority] || ticket.priority}
-              </Badge>
-            </div>
-            {ticket.Customer && (
+            <div className="space-y-4">
               <div>
-                <p className="text-sm text-gray-600">Müşteri</p>
-                <Link href={`/${locale}/customers/${ticket.Customer.id}`}>
-                  <div className="flex items-center gap-2 mt-1 p-2 border rounded hover:bg-gray-50 cursor-pointer">
-                    <User className="h-4 w-4 text-gray-400" />
+                <p className="text-sm text-white/80 mb-2">Durum</p>
+                <Badge className={`${statusColors[ticket.status] || 'bg-gray-100 text-gray-800'} text-sm font-semibold`}>
+                  {statusLabels[ticket.status] || ticket.status}
+                </Badge>
+              </div>
+              <div>
+                <p className="text-sm text-white/80 mb-2">Öncelik</p>
+                <Badge className={`${priorityColors[ticket.priority] || 'bg-gray-100 text-gray-800'} text-sm font-semibold`}>
+                  {priorityLabels[ticket.priority] || ticket.priority}
+                </Badge>
+              </div>
+              {ticket.Customer && (
+                <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <User className="h-5 w-5 text-white" />
+                  <Link href={`/${locale}/customers/${ticket.Customer.id}`} className="flex-1">
                     <div>
-                      <p className="font-medium">{ticket.Customer.name}</p>
+                      <p className="text-sm text-white/80">Müşteri</p>
+                      <p className="font-semibold text-white mt-1">{ticket.Customer.name}</p>
                       {ticket.Customer.email && (
-                        <p className="text-sm text-gray-600">{ticket.Customer.email}</p>
+                        <p className="text-sm text-white/70">{ticket.Customer.email}</p>
                       )}
                     </div>
+                  </Link>
+                </div>
+              )}
+              {ticket.description && (
+                <div className="pt-4 border-t border-white/20">
+                  <p className="text-sm text-white/80 mb-2">Açıklama</p>
+                  <p className="text-sm text-white/90 whitespace-pre-wrap bg-white/10 p-3 rounded-lg backdrop-blur-sm">
+                    {ticket.description}
+                  </p>
+                </div>
+              )}
+              {ticket.tags && ticket.tags.length > 0 && (
+                <div className="pt-4 border-t border-white/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Tag className="h-4 w-4 text-white/80" />
+                    <p className="text-sm text-white/80">Etiketler</p>
                   </div>
-                </Link>
+                  <div className="flex flex-wrap gap-2">
+                    {ticket.tags.map((tag: string, index: number) => (
+                      <Badge key={index} variant="outline" className="bg-white/20 text-white border-white/30">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </GradientCard>
+        </motion.div>
+
+        {/* Bilgiler - Premium Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <GradientCard
+            gradientFrom="from-red-500"
+            gradientTo="to-rose-500"
+            className="p-6"
+          >
+            <div className="flex items-center gap-2 mb-6">
+              <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                <AlertCircle className="h-5 w-5 text-white" />
               </div>
-            )}
-            {ticket.description && (
-              <div className="pt-4 border-t">
-                <p className="text-sm text-gray-600 mb-2">Açıklama</p>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{ticket.description}</p>
+              <h2 className="text-xl font-bold text-white">Bilgiler</h2>
+            </div>
+            <div className="space-y-4">
+              <div className="p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                <p className="text-sm text-white/80 mb-1">Talep ID</p>
+                <p className="font-mono text-sm text-white/90 break-all">{ticket.id}</p>
               </div>
-            )}
-            {ticket.tags && ticket.tags.length > 0 && (
-              <div className="pt-4 border-t">
-                <p className="text-sm text-gray-600 mb-2">Etiketler</p>
-                <div className="flex flex-wrap gap-2">
-                  {ticket.tags.map((tag: string, index: number) => (
-                    <Badge key={index} variant="outline">{tag}</Badge>
-                  ))}
+              <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                <Calendar className="h-5 w-5 text-white" />
+                <div>
+                  <p className="text-sm text-white/80">Oluşturulma Tarihi</p>
+                  <p className="font-semibold text-white mt-1">
+                    {new Date(ticket.createdAt).toLocaleDateString('tr-TR', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </p>
                 </div>
               </div>
-            )}
-          </div>
-        </Card>
+              {ticket.updatedAt && (
+                <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <Clock className="h-5 w-5 text-white" />
+                  <div>
+                    <p className="text-sm text-white/80">Son Güncelleme</p>
+                    <p className="font-semibold text-white mt-1">
+                      {new Date(ticket.updatedAt).toLocaleDateString('tr-TR', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {ticket.User && (
+                <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <User className="h-5 w-5 text-white" />
+                  <div>
+                    <p className="text-sm text-white/80">Atanan Kullanıcı</p>
+                    <p className="font-semibold text-white mt-1">{ticket.User.name}</p>
+                    {ticket.User.email && (
+                      <p className="text-sm text-white/70">{ticket.User.email}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </GradientCard>
+        </motion.div>
+      </div>
 
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Bilgiler</h2>
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm text-gray-600">Talep ID</p>
-              <p className="font-mono text-sm mt-1">{ticket.id}</p>
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">Oluşturulma Tarihi</p>
-              <p className="font-medium mt-1">
-                {new Date(ticket.createdAt).toLocaleDateString('tr-TR')}
-              </p>
-            </div>
-            {ticket.updatedAt && (
-              <div>
-                <p className="text-sm text-gray-600">Son Güncelleme</p>
-                <p className="font-medium mt-1">
-                  {new Date(ticket.updatedAt).toLocaleDateString('tr-TR')}
-                </p>
+      {/* Yorumlar Bölümü */}
+      <CommentsSection
+        entityType="Ticket"
+        entityId={ticket.id}
+      />
+
+      {/* Activity Timeline */}
+      {ticket.activities && ticket.activities.length > 0 && (
+        <ActivityTimeline activities={ticket.activities} />
+      )}
+
+      {/* Form Modal */}
+      <TicketForm
+        ticket={ticket}
+        open={formOpen}
+        onClose={handleFormClose}
+        onSuccess={async () => {
+          refetch() // Form kapandığında veriyi yenile
+        }}
+      />
+    </div>
+  )
+}
+
+
+
+
+
+
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <GradientCard
+            gradientFrom="from-red-500"
+            gradientTo="to-rose-500"
+            className="p-6"
+          >
+            <div className="flex items-center gap-2 mb-6">
+              <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                <AlertCircle className="h-5 w-5 text-white" />
               </div>
-            )}
-          </div>
-        </Card>
+              <h2 className="text-xl font-bold text-white">Bilgiler</h2>
+            </div>
+            <div className="space-y-4">
+              <div className="p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                <p className="text-sm text-white/80 mb-1">Talep ID</p>
+                <p className="font-mono text-sm text-white/90 break-all">{ticket.id}</p>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                <Calendar className="h-5 w-5 text-white" />
+                <div>
+                  <p className="text-sm text-white/80">Oluşturulma Tarihi</p>
+                  <p className="font-semibold text-white mt-1">
+                    {new Date(ticket.createdAt).toLocaleDateString('tr-TR', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                </div>
+              </div>
+              {ticket.updatedAt && (
+                <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <Clock className="h-5 w-5 text-white" />
+                  <div>
+                    <p className="text-sm text-white/80">Son Güncelleme</p>
+                    <p className="font-semibold text-white mt-1">
+                      {new Date(ticket.updatedAt).toLocaleDateString('tr-TR', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {ticket.User && (
+                <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <User className="h-5 w-5 text-white" />
+                  <div>
+                    <p className="text-sm text-white/80">Atanan Kullanıcı</p>
+                    <p className="font-semibold text-white mt-1">{ticket.User.name}</p>
+                    {ticket.User.email && (
+                      <p className="text-sm text-white/70">{ticket.User.email}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </GradientCard>
+        </motion.div>
       </div>
 
       {/* Yorumlar Bölümü */}

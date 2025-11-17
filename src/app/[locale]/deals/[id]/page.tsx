@@ -2,11 +2,13 @@
 
 import { useParams, useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { ArrowLeft, Calendar, DollarSign, User, TrendingUp, Clock, FileText, AlertTriangle, Edit, Trash2 } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { ArrowLeft, Calendar, DollarSign, User, TrendingUp, Clock, FileText, AlertTriangle, Edit, Trash2, Briefcase, FileText as FileTextIcon, Zap, Target, Percent } from 'lucide-react'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import GradientCard from '@/components/ui/GradientCard'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { formatCurrency } from '@/lib/utils'
@@ -30,7 +32,6 @@ import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import ContextualActionsBar from '@/components/ui/ContextualActionsBar'
 import DocumentList from '@/components/documents/DocumentList'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
-import { Briefcase, FileText as FileTextIcon } from 'lucide-react'
 
 interface DealHistory {
   id: string
@@ -257,11 +258,80 @@ export default function DealDetailPage() {
         canDelete={deal.stage !== 'WON' && deal.stage !== 'LOST'}
       />
 
-      {/* Quick Actions */}
+      {/* Header - Premium Tasarım */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-100 p-6 shadow-lg"
+      >
+        {/* Arka plan pattern */}
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute inset-0" style={{
+            backgroundImage: `radial-gradient(circle at 2px 2px, rgb(59, 130, 246) 1px, transparent 0)`,
+            backgroundSize: '40px 40px'
+          }} />
+        </div>
+        
+        <div className="relative flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => router.push(`/${locale}/deals`)}
+                className="bg-white/80 hover:bg-white shadow-sm"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </motion.div>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="w-20 h-20 rounded-xl bg-gradient-to-br from-blue-500 via-indigo-500 to-purple-500 flex items-center justify-center shadow-lg ring-4 ring-blue-100/50"
+            >
+              <Briefcase className="h-10 w-10 text-white" />
+            </motion.div>
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                {deal.title}
+              </h1>
+              <div className="flex items-center gap-3 mt-2">
+                <Badge className={getStatusBadgeClass(deal.stage)}>
+                  {stageLabels[deal.stage] || deal.stage}
+                </Badge>
+                {deal.value && (
+                  <p className="text-gray-600 font-semibold">
+                    {formatCurrency(deal.value)}
+                  </p>
+                )}
+                {deal.winProbability && (
+                  <div className="flex items-center gap-1 text-gray-600">
+                    <Target className="h-4 w-4" />
+                    <span className="text-sm font-medium">{deal.winProbability}%</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Quick Actions - Premium Tasarım */}
       {deal.Customer && (
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Hızlı İşlemler</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <Card className="p-6 bg-gradient-to-br from-white to-gray-50 border-blue-100 shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center gap-2 mb-6">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 shadow-md">
+                <Zap className="h-5 w-5 text-white" />
+              </div>
+              <h2 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                Hızlı İşlemler
+              </h2>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {deal.Customer.email && (
               <SendEmailButton
                 to={deal.Customer.email}
@@ -322,90 +392,8 @@ export default function DealDetailPage() {
             </Button>
           </div>
         </Card>
+        </motion.div>
       )}
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push(`/${locale}/deals`)}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold">{deal.title}</h1>
-            <p className="text-gray-600">
-              #{dealId.substring(0, 8)} • {new Date(deal.createdAt).toLocaleDateString('tr-TR')}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge className={getStatusBadgeClass(deal.stage)}>
-            {stageLabels[deal.stage] || deal.stage}
-          </Badge>
-          <Button variant="outline" onClick={() => router.push(`/${locale}/deals`)}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Geri
-          </Button>
-          <Button variant="outline" onClick={() => setFormOpen(true)}>
-            <Edit className="mr-2 h-4 w-4" />
-            Düzenle
-          </Button>
-          {deal.Customer?.email && (
-            <SendEmailButton
-              to={deal.Customer.email}
-              subject={`Fırsat: ${deal.title}`}
-              html={`
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                  <h2 style="color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px;">
-                    Fırsat Bilgileri
-                  </h2>
-                  <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px;">
-                    <p><strong>Fırsat:</strong> ${deal.title}</p>
-                    <p><strong>Durum:</strong> ${stageLabels[deal.stage] || deal.stage}</p>
-                    ${deal.value ? `<p><strong>Tutar:</strong> ${formatCurrency(deal.value)}</p>` : ''}
-                    ${deal.expectedCloseDate ? `<p><strong>Beklenen Kapanış:</strong> ${new Date(deal.expectedCloseDate).toLocaleDateString('tr-TR')}</p>` : ''}
-                    ${deal.description ? `<p><strong>Açıklama:</strong><br>${deal.description.replace(/\n/g, '<br>')}</p>` : ''}
-                  </div>
-                  <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">
-                    Bu e-posta CRM Enterprise V3 sisteminden gönderilmiştir.
-                  </p>
-                </div>
-              `}
-            />
-          )}
-          <Button
-            variant="outline"
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-            onClick={async () => {
-              if (!confirm(`${deal.title} fırsatını silmek istediğinize emin misiniz?`)) {
-                return
-              }
-              setDeleteLoading(true)
-              try {
-                const res = await fetch(`/api/deals/${dealId}`, {
-                  method: 'DELETE',
-                })
-                if (!res.ok) {
-                  const errorData = await res.json().catch(() => ({}))
-                  throw new Error(errorData.error || 'Silme işlemi başarısız')
-                }
-                router.push(`/${locale}/deals`)
-              } catch (error: any) {
-                toastError('Silme işlemi başarısız oldu', error?.message)
-              } finally {
-                setDeleteLoading(false)
-              }
-            }}
-            disabled={deleteLoading}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Sil
-          </Button>
-        </div>
-      </div>
 
       {/* Workflow Stepper */}
       <WorkflowStepper
@@ -568,118 +556,462 @@ export default function DealDetailPage() {
         </Card>
       )}
 
-      {/* Info Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-2 text-gray-600 mb-2">
-            <DollarSign className="h-4 w-4" />
-            <span className="text-sm">Değer</span>
-          </div>
-          <p className="text-2xl font-bold">{formatCurrency(deal.value)}</p>
-        </Card>
+      {/* İstatistikler ve Özet - Premium Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Değer - Premium Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <GradientCard
+            gradientFrom="from-emerald-500"
+            gradientTo="to-teal-500"
+            className="p-6"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                <DollarSign className="h-5 w-5 text-white" />
+              </div>
+              <h3 className="text-sm font-semibold text-white/90">Fırsat Değeri</h3>
+            </div>
+            <p className="text-3xl font-bold text-white mb-2">{formatCurrency(deal.value)}</p>
+            {deal.expectedCloseDate && (
+              <p className="text-xs text-white/80">
+                Beklenen: {new Date(deal.expectedCloseDate).toLocaleDateString('tr-TR')}
+              </p>
+            )}
+          </GradientCard>
+        </motion.div>
 
+        {/* Lead Score - Premium Card */}
         {deal.leadScore && deal.leadScore.length > 0 && (
-          <Card className="p-4">
-            <div className="flex items-center gap-2 text-gray-600 mb-2">
-              <TrendingUp className="h-4 w-4" />
-              <span className="text-sm">Lead Score</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <p className="text-2xl font-bold">{deal.leadScore[0].score}</p>
-              <Badge
-                className={
-                  deal.leadScore[0].temperature === 'HOT'
-                    ? 'bg-red-100 text-red-800'
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <GradientCard
+              gradientFrom="from-orange-500"
+              gradientTo="to-red-500"
+              className="p-6"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                  <TrendingUp className="h-5 w-5 text-white" />
+                </div>
+                <h3 className="text-sm font-semibold text-white/90">Lead Score</h3>
+              </div>
+              <div className="flex items-center gap-3">
+                <p className="text-3xl font-bold text-white">{deal.leadScore[0].score}</p>
+                <Badge
+                  className={
+                    deal.leadScore[0].temperature === 'HOT'
+                      ? 'bg-white/30 text-white border-white/50'
+                      : deal.leadScore[0].temperature === 'WARM'
+                      ? 'bg-white/20 text-white border-white/40'
+                      : 'bg-white/10 text-white border-white/30'
+                  }
+                >
+                  {deal.leadScore[0].temperature === 'HOT'
+                    ? '🔥 Sıcak'
                     : deal.leadScore[0].temperature === 'WARM'
-                    ? 'bg-orange-100 text-orange-800'
-                    : 'bg-blue-100 text-blue-800'
-                }
-              >
-                {deal.leadScore[0].temperature === 'HOT'
-                  ? '🔥 Sıcak'
-                  : deal.leadScore[0].temperature === 'WARM'
-                  ? '☀️ Ilık'
-                  : '❄️ Soğuk'}
-              </Badge>
-            </div>
-          </Card>
+                    ? '☀️ Ilık'
+                    : '❄️ Soğuk'}
+                </Badge>
+              </div>
+            </GradientCard>
+          </motion.div>
         )}
 
+        {/* Kazanma İhtimali - Premium Card */}
         {deal.winProbability && (
-          <Card className="p-4">
-            <div className="flex items-center gap-2 text-gray-600 mb-2">
-              <TrendingUp className="h-4 w-4" />
-              <span className="text-sm">Kazanma İhtimali</span>
-            </div>
-            <p className="text-2xl font-bold">%{deal.winProbability}</p>
-          </Card>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+          >
+            <GradientCard
+              gradientFrom="from-blue-500"
+              gradientTo="to-indigo-500"
+              className="p-6"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                  <Target className="h-5 w-5 text-white" />
+                </div>
+                <h3 className="text-sm font-semibold text-white/90">Kazanma İhtimali</h3>
+              </div>
+              <p className="text-3xl font-bold text-white">%{deal.winProbability}</p>
+              <div className="mt-3 w-full bg-white/20 rounded-full h-2">
+                <div
+                  className="bg-white rounded-full h-2 transition-all"
+                  style={{ width: `${deal.winProbability}%` }}
+                />
+              </div>
+            </GradientCard>
+          </motion.div>
         )}
 
-        {deal.customer && (
-          <Card className="p-4">
-            <div className="flex items-center gap-2 text-gray-600 mb-2">
-              <User className="h-4 w-4" />
-              <span className="text-sm">Müşteri</span>
-            </div>
-            <p className="text-lg font-semibold truncate">{deal.customer.name}</p>
-          </Card>
-        )}
-
+        {/* Lead Kaynağı - Premium Card */}
         {deal.leadSource && (
-          <Card className="p-4">
-            <div className="flex items-center gap-2 text-gray-600 mb-2">
-              <TrendingUp className="h-4 w-4" />
-              <span className="text-sm">Lead Kaynağı</span>
-            </div>
-            <p className="text-lg font-semibold">{deal.leadSource}</p>
-          </Card>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+          >
+            <GradientCard
+              gradientFrom="from-purple-500"
+              gradientTo="to-pink-500"
+              className="p-6"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                  <TrendingUp className="h-5 w-5 text-white" />
+                </div>
+                <h3 className="text-sm font-semibold text-white/90">Lead Kaynağı</h3>
+              </div>
+              <p className="text-lg font-bold text-white">{deal.leadSource}</p>
+            </GradientCard>
+          </motion.div>
         )}
       </div>
 
-      {/* Description Card */}
-      {deal.description && (
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Açıklama</h2>
-          <p className="text-gray-700 whitespace-pre-wrap">{deal.description}</p>
-        </Card>
-      )}
-
-      {/* Audit Trail Info */}
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold mb-4">Kayıt Bilgileri</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <p className="text-sm text-gray-600">Oluşturulma</p>
-            <p className="font-medium mt-1">
-              {new Date(deal.createdAt).toLocaleString('tr-TR')}
-            </p>
-            {deal.CreatedByUser && (
-              <div className="flex items-center gap-2 mt-2">
-                <User className="h-4 w-4 text-gray-400" />
-                <span className="text-sm text-gray-600">
-                  {deal.CreatedByUser.name}
-                </span>
+      {/* İlişkili Kayıtlar Özeti - Premium Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {/* Teklifler - Premium Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <GradientCard
+            gradientFrom="from-green-500"
+            gradientTo="to-emerald-500"
+            className="p-6 cursor-pointer hover:scale-105 transition-transform"
+            onClick={() => {
+              if (deal.Quote && deal.Quote.length > 0) {
+                router.push(`/${locale}/quotes?dealId=${dealId}`)
+              }
+            }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                  <FileText className="h-5 w-5 text-white" />
+                </div>
+                <h3 className="text-sm font-semibold text-white/90">Teklifler</h3>
+              </div>
+              <Badge className="bg-white/30 text-white border-white/50">
+                {deal.Quote?.length || 0}
+              </Badge>
+            </div>
+            {deal.Quote && deal.Quote.length > 0 && (
+              <div className="space-y-2">
+                {deal.Quote.slice(0, 2).map((quote: any) => (
+                  <div key={quote.id} className="p-2 bg-white/10 rounded-lg backdrop-blur-sm">
+                    <p className="text-sm font-semibold text-white truncate">{quote.title}</p>
+                    <p className="text-xs text-white/80">
+                      {formatCurrency(quote.totalAmount || 0)}
+                    </p>
+                  </div>
+                ))}
+                {deal.Quote.length > 2 && (
+                  <p className="text-xs text-white/70">+{deal.Quote.length - 2} daha fazla</p>
+                )}
               </div>
             )}
+            {(!deal.Quote || deal.Quote.length === 0) && (
+              <p className="text-sm text-white/70">Henüz teklif oluşturulmamış</p>
+            )}
+          </GradientCard>
+        </motion.div>
+
+        {/* Toplantılar - Premium Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+        >
+          <GradientCard
+            gradientFrom="from-violet-500"
+            gradientTo="to-purple-500"
+            className="p-6 cursor-pointer hover:scale-105 transition-transform"
+            onClick={() => {
+              if (deal.Meeting && deal.Meeting.length > 0) {
+                router.push(`/${locale}/meetings?dealId=${dealId}`)
+              }
+            }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                  <Calendar className="h-5 w-5 text-white" />
+                </div>
+                <h3 className="text-sm font-semibold text-white/90">Toplantılar</h3>
+              </div>
+              <Badge className="bg-white/30 text-white border-white/50">
+                {deal.Meeting?.length || 0}
+              </Badge>
+            </div>
+            {deal.Meeting && deal.Meeting.length > 0 && (
+              <div className="space-y-2">
+                {deal.Meeting.slice(0, 2).map((meeting: any) => (
+                  <div key={meeting.id} className="p-2 bg-white/10 rounded-lg backdrop-blur-sm">
+                    <p className="text-sm font-semibold text-white truncate">{meeting.title}</p>
+                    <p className="text-xs text-white/80">
+                      {new Date(meeting.meetingDate).toLocaleDateString('tr-TR')}
+                    </p>
+                  </div>
+                ))}
+                {deal.Meeting.length > 2 && (
+                  <p className="text-xs text-white/70">+{deal.Meeting.length - 2} daha fazla</p>
+                )}
+              </div>
+            )}
+            {(!deal.Meeting || deal.Meeting.length === 0) && (
+              <p className="text-sm text-white/70">Henüz toplantı planlanmamış</p>
+            )}
+          </GradientCard>
+        </motion.div>
+
+        {/* Sözleşmeler - Premium Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+        >
+          <GradientCard
+            gradientFrom="from-amber-500"
+            gradientTo="to-orange-500"
+            className="p-6 cursor-pointer hover:scale-105 transition-transform"
+            onClick={() => {
+              if (deal.Contract && deal.Contract.length > 0) {
+                router.push(`/${locale}/contracts?dealId=${dealId}`)
+              }
+            }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                  <FileTextIcon className="h-5 w-5 text-white" />
+                </div>
+                <h3 className="text-sm font-semibold text-white/90">Sözleşmeler</h3>
+              </div>
+              <Badge className="bg-white/30 text-white border-white/50">
+                {deal.Contract?.length || 0}
+              </Badge>
+            </div>
+            {deal.Contract && deal.Contract.length > 0 && (
+              <div className="space-y-2">
+                {deal.Contract.slice(0, 2).map((contract: any) => (
+                  <div key={contract.id} className="p-2 bg-white/10 rounded-lg backdrop-blur-sm">
+                    <p className="text-sm font-semibold text-white truncate">{contract.title}</p>
+                    <Badge className="mt-1 bg-white/20 text-white border-white/30 text-xs">
+                      {contract.status}
+                    </Badge>
+                  </div>
+                ))}
+                {deal.Contract.length > 2 && (
+                  <p className="text-xs text-white/70">+{deal.Contract.length - 2} daha fazla</p>
+                )}
+              </div>
+            )}
+            {(!deal.Contract || deal.Contract.length === 0) && (
+              <p className="text-sm text-white/70">Henüz sözleşme oluşturulmamış</p>
+            )}
+          </GradientCard>
+        </motion.div>
+
+        {/* Müşteri Bilgisi - Premium Card */}
+        {deal.Customer && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6 }}
+          >
+            <GradientCard
+              gradientFrom="from-cyan-500"
+              gradientTo="to-blue-500"
+              className="p-6 cursor-pointer hover:scale-105 transition-transform"
+              onClick={() => router.push(`/${locale}/customers/${deal.Customer?.id}`)}
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                  <User className="h-5 w-5 text-white" />
+                </div>
+                <h3 className="text-sm font-semibold text-white/90">Müşteri</h3>
+              </div>
+              <p className="text-lg font-bold text-white mb-2 truncate">{deal.Customer.name}</p>
+              {deal.Customer.email && (
+                <p className="text-xs text-white/80 truncate">{deal.Customer.email}</p>
+              )}
+              {deal.Customer.phone && (
+                <p className="text-xs text-white/80 mt-1">{deal.Customer.phone}</p>
+              )}
+            </GradientCard>
+          </motion.div>
+        )}
+      </div>
+
+      {/* Finansal Özet - Premium Card */}
+      {deal.Quote && deal.Quote.length > 0 && (() => {
+        const totalQuoteValue = deal.Quote.reduce((sum: number, q: any) => sum + (q.totalAmount || 0), 0)
+        const acceptedQuotes = deal.Quote.filter((q: any) => q.status === 'ACCEPTED')
+        const totalAcceptedValue = acceptedQuotes.reduce((sum: number, q: any) => sum + (q.totalAmount || 0), 0)
+        
+        return (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+          >
+            <GradientCard
+              gradientFrom="from-indigo-500"
+              gradientTo="to-blue-500"
+              className="p-6"
+            >
+              <div className="flex items-center gap-2 mb-6">
+                <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                  <DollarSign className="h-5 w-5 text-white" />
+                </div>
+                <h2 className="text-xl font-bold text-white">Finansal Özet</h2>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <p className="text-sm text-white/80 mb-2">Toplam Teklif Değeri</p>
+                  <p className="text-2xl font-bold text-white">{formatCurrency(totalQuoteValue)}</p>
+                  <p className="text-xs text-white/70 mt-1">{deal.Quote.length} teklif</p>
+                </div>
+                <div className="p-4 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <p className="text-sm text-white/80 mb-2">Kabul Edilen Teklifler</p>
+                  <p className="text-2xl font-bold text-white">{formatCurrency(totalAcceptedValue)}</p>
+                  <p className="text-xs text-white/70 mt-1">{acceptedQuotes.length} kabul edildi</p>
+                </div>
+                <div className="p-4 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <p className="text-sm text-white/80 mb-2">Fırsat Değeri</p>
+                  <p className="text-2xl font-bold text-white">{formatCurrency(deal.value)}</p>
+                  <p className="text-xs text-white/70 mt-1">
+                    {deal.winProbability ? `%${deal.winProbability} kazanma ihtimali` : 'Beklemede'}
+                  </p>
+                </div>
+              </div>
+            </GradientCard>
+          </motion.div>
+        )
+      })()}
+
+      {/* Açıklama - Premium Card */}
+      {deal.description && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+        >
+          <GradientCard
+            gradientFrom="from-slate-500"
+            gradientTo="to-gray-500"
+            className="p-6"
+          >
+            <div className="flex items-center gap-2 mb-6">
+              <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                <FileText className="h-5 w-5 text-white" />
+              </div>
+              <h2 className="text-xl font-bold text-white">Açıklama</h2>
+            </div>
+            <div className="bg-white/10 p-4 rounded-lg backdrop-blur-sm">
+              <p className="text-white/90 whitespace-pre-wrap leading-relaxed">{deal.description}</p>
+            </div>
+          </GradientCard>
+        </motion.div>
+      )}
+
+      {/* Kayıt Bilgileri - Premium Card */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.6 }}
+      >
+        <GradientCard
+          gradientFrom="from-gray-500"
+          gradientTo="to-slate-500"
+          className="p-6"
+        >
+          <div className="flex items-center gap-2 mb-6">
+            <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+              <AlertCircle className="h-5 w-5 text-white" />
+            </div>
+            <h2 className="text-xl font-bold text-white">Kayıt Bilgileri</h2>
           </div>
-      {deal.updatedAt && (
-            <div>
-              <p className="text-sm text-gray-600">Son Güncelleme</p>
-              <p className="font-medium mt-1">
-                {new Date(deal.updatedAt).toLocaleString('tr-TR')}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 bg-white/10 rounded-lg backdrop-blur-sm">
+              <p className="text-sm text-white/80 mb-2">Oluşturulma</p>
+              <p className="font-semibold text-white mb-2">
+                {new Date(deal.createdAt).toLocaleString('tr-TR', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
               </p>
-              {deal.UpdatedByUser && (
+              {deal.CreatedByUser && (
                 <div className="flex items-center gap-2 mt-2">
-                  <User className="h-4 w-4 text-gray-400" />
-                  <span className="text-sm text-gray-600">
-                    {deal.UpdatedByUser.name}
+                  <User className="h-4 w-4 text-white/70" />
+                  <span className="text-sm text-white/80">
+                    {deal.CreatedByUser.name}
                   </span>
                 </div>
               )}
             </div>
-          )}
-        </div>
-      </Card>
+            {deal.updatedAt && (
+              <div className="p-4 bg-white/10 rounded-lg backdrop-blur-sm">
+                <p className="text-sm text-white/80 mb-2">Son Güncelleme</p>
+                <p className="font-semibold text-white mb-2">
+                  {new Date(deal.updatedAt).toLocaleString('tr-TR', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </p>
+                {deal.UpdatedByUser && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <User className="h-4 w-4 text-white/70" />
+                    <span className="text-sm text-white/80">
+                      {deal.UpdatedByUser.name}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+            {deal.expectedCloseDate && (
+              <div className="p-4 bg-white/10 rounded-lg backdrop-blur-sm">
+                <p className="text-sm text-white/80 mb-2">Beklenen Kapanış</p>
+                <p className="font-semibold text-white mb-2">
+                  {new Date(deal.expectedCloseDate).toLocaleDateString('tr-TR', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                </p>
+                {new Date(deal.expectedCloseDate) < new Date() && (
+                  <Badge className="bg-red-500/30 text-white border-red-400/50 text-xs mt-2">
+                    Gecikmiş
+                  </Badge>
+                )}
+              </div>
+            )}
+            {deal.leadSource && (
+              <div className="p-4 bg-white/10 rounded-lg backdrop-blur-sm">
+                <p className="text-sm text-white/80 mb-2">Lead Kaynağı</p>
+                <p className="font-semibold text-white">{deal.leadSource}</p>
+              </div>
+            )}
+          </div>
+        </GradientCard>
+      </motion.div>
 
       {/* Form Modals */}
       <DealForm

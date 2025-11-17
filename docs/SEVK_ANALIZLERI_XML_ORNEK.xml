@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SevkAnalizleri>
+  <Satir>
+    <sevk_kriterleri>Sevk Sayısı</sevk_kriterleri>
+    <acil_sevk>125</acil_sevk>
+    <yogunbakim_sevk>45</yogunbakim_sevk>
+    <112_sevk>89</112_sevk>
+    <112_disi_sevk>67</112_disi_sevk>
+    <yatakli_sevk>234</yatakli_sevk>
+    <yillik_toplam>560</yillik_toplam>
+  </Satir>
+  <Satir>
+    <sevk_kriterleri>Toplam İl İçi Sevk</sevk_kriterleri>
+    <acil_sevk>98</acil_sevk>
+    <yogunbakim_sevk>32</yogunbakim_sevk>
+    <112_sevk>65</112_sevk>
+    <112_disi_sevk>45</112_disi_sevk>
+    <yatakli_sevk>178</yatakli_sevk>
+    <yillik_toplam>418</yillik_toplam>
+  </Satir>
+  <Satir>
+    <sevk_kriterleri>Toplam İl Dışı Sevk</sevk_kriterleri>
+    <acil_sevk>27</acil_sevk>
+    <yogunbakim_sevk>13</yogunbakim_sevk>
+    <112_sevk>24</112_sevk>
+    <112_disi_sevk>22</112_disi_sevk>
+    <yatakli_sevk>56</yatakli_sevk>
+    <yillik_toplam>142</yillik_toplam>
+  </Satir>
+  <Satir>
+    <sevk_kriterleri>Muayene Başına Toplam Sevk</sevk_kriterleri>
+    <acil_sevk>2.45</acil_sevk>
+    <yogunbakim_sevk>0.88</yogunbakim_sevk>
+    <112_sevk>1.74</112_sevk>
+    <112_disi_sevk>1.31</112_disi_sevk>
+    <yatakli_sevk>4.58</yatakli_sevk>
+    <yillik_toplam>10.96</yillik_toplam>
+  </Satir>
+  <Satir>
+    <sevk_kriterleri>Muayene Başına İl İçi Sevk</sevk_kriterleri>
+    <acil_sevk>1.92</acil_sevk>
+    <yogunbakim_sevk>0.63</yogunbakim_sevk>
+    <112_sevk>1.27</112_sevk>
+    <112_disi_sevk>0.88</112_disi_sevk>
+    <yatakli_sevk>3.49</yatakli_sevk>
+    <yillik_toplam>8.19</yillik_toplam>
+  </Satir>
+  <Satir>
+    <sevk_kriterleri>Muayene Başına İl Dışı Sevk</sevk_kriterleri>
+    <acil_sevk>0.53</acil_sevk>
+    <yogunbakim_sevk>0.25</yogunbakim_sevk>
+    <112_sevk>0.47</112_sevk>
+    <112_disi_sevk>0.43</112_disi_sevk>
+    <yatakli_sevk>1.10</yatakli_sevk>
+    <yillik_toplam>2.78</yillik_toplam>
+  </Satir>
+  <Satir>
+    <sevk_kriterleri>Toplam Sevk İçindeki İl Dışı Sevk Oranı(%)</sevk_kriterleri>
+    <acil_sevk>21.60</acil_sevk>
+    <yogunbakim_sevk>28.89</yogunbakim_sevk>
+    <112_sevk>26.97</112_sevk>
+    <112_disi_sevk>32.84</112_disi_sevk>
+    <yatakli_sevk>23.93</yatakli_sevk>
+    <yillik_toplam>25.36</yillik_toplam>
+  </Satir>
+</SevkAnalizleri>

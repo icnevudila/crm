@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
+import { motion } from 'framer-motion'
 import { Plus, Search, Edit, Trash2, Eye, Upload, Download, CheckSquare, Square, Building2, Sparkles, Briefcase, FileText, Receipt, Calendar, Send } from 'lucide-react'
 import { useSession } from '@/hooks/useSession'
 import { useQueryClient } from '@tanstack/react-query'
@@ -623,14 +624,37 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       {/* İstatistikler */}
       <ModuleStats module="customers" statsUrl="/api/stats/customers" />
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{t('title')}</h1>
-          <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600">
-            {t('totalCustomers', { count: stats?.total || pagination.totalItems || customers.length })}
-          </p>
+      {/* Header - Premium Tasarım */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-50 via-purple-50 to-pink-50 border border-indigo-100 p-6 shadow-lg"
+      >
+        {/* Arka plan pattern */}
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute inset-0" style={{
+            backgroundImage: `radial-gradient(circle at 2px 2px, rgb(99, 102, 241) 1px, transparent 0)`,
+            backgroundSize: '40px 40px'
+          }} />
         </div>
+        
+        <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <motion.div
+              whileHover={{ scale: 1.05, rotate: 2 }}
+              className="p-3 rounded-xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 shadow-lg ring-4 ring-indigo-100/50"
+            >
+              <Users className="h-8 w-8 text-white" />
+            </motion.div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+                {t('title')}
+              </h1>
+              <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600 font-medium">
+                {t('totalCustomers', { count: stats?.total || pagination.totalItems || customers.length })}
+              </p>
+            </div>
+          </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <div className="flex gap-2">
             <RefreshButton onRefresh={handleRefresh} />
@@ -663,7 +687,8 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
             {t('newCustomer')}
           </Button>
         </div>
-      </div>
+        </div>
+      </motion.div>
 
       {/* Quick Filters & Filter Chips */}
       <div className="flex flex-col gap-3">

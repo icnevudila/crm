@@ -192,6 +192,140 @@ export async function PUT(
       return NextResponse.json({ error: 'Görüşme bulunamadı' }, { status: 404 })
     }
 
+    // ✅ ZAMAN ÇAKIŞMASI KONTROLÜ - Meeting güncellenmeden önce kontrol et
+    const meetingDate = new Date(body.meetingDate)
+    const meetingDuration = body.meetingDuration || 60 // dakika cinsinden
+    const meetingEndTime = new Date(meetingDate.getTime() + meetingDuration * 60000)
+
+    // Çakışan meeting'leri kontrol et
+    const conflictChecks: string[] = []
+
+    // 1. Participant bazlı çakışma kontrolü (eğer participantIds varsa)
+    if (body.participantIds && Array.isArray(body.participantIds) && body.participantIds.length > 0) {
+      // Tüm participant'ların o zaman aralığındaki meeting'lerini kontrol et
+      const { data: participantMeetings, error: participantError } = await supabase
+        .from('Meeting')
+        .select(`
+          id,
+          title,
+          meetingDate,
+          meetingDuration,
+          status,
+          MeetingParticipant:MeetingParticipant!inner(userId)
+        `)
+        .eq('companyId', companyId)
+        .eq('status', 'PLANNED') // Sadece planlanmış meeting'leri kontrol et
+        .neq('id', id) // Kendi ID'sini hariç tut
+
+      if (!participantError && participantMeetings) {
+        // Participant meetings'leri filtrele - sadece ilgili participant'ları içerenleri al
+        const relevantMeetings = participantMeetings.filter((m: any) => {
+          return m.MeetingParticipant?.some((mp: any) => body.participantIds.includes(mp.userId))
+        })
+
+        for (const existingMeeting of relevantMeetings) {
+          const existingStart = new Date(existingMeeting.meetingDate)
+          const existingDuration = existingMeeting.meetingDuration || 60
+          const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000)
+
+          // Zaman aralıkları çakışıyor mu?
+          if (
+            (meetingDate >= existingStart && meetingDate < existingEnd) ||
+            (meetingEndTime > existingStart && meetingEndTime <= existingEnd) ||
+            (meetingDate <= existingStart && meetingEndTime >= existingEnd)
+          ) {
+            // Çakışan participant'ları bul
+            const conflictingParticipants = body.participantIds.filter((pid: string) => {
+              return existingMeeting.MeetingParticipant?.some((mp: any) => mp.userId === pid)
+            })
+
+            if (conflictingParticipants.length > 0) {
+              // Kullanıcı isimlerini al
+              const { data: conflictingUsers } = await supabase
+                .from('User')
+                .select('id, name, email')
+                .in('id', conflictingParticipants)
+
+              const userNames = conflictingUsers?.map((u: any) => u.name || u.email).join(', ') || 'Kullanıcılar'
+              conflictChecks.push(
+                `${userNames} için "${existingMeeting.title}" görüşmesi ile çakışma var (${new Date(existingMeeting.meetingDate).toLocaleString('tr-TR')})`
+              )
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Customer bazlı çakışma kontrolü (eğer customerId varsa)
+    if (body.customerId) {
+      const { data: customerMeetings, error: customerError } = await supabase
+        .from('Meeting')
+        .select('id, title, meetingDate, meetingDuration, status')
+        .eq('companyId', companyId)
+        .eq('customerId', body.customerId)
+        .eq('status', 'PLANNED') // Sadece planlanmış meeting'leri kontrol et
+        .neq('id', id) // Kendi ID'sini hariç tut
+
+      if (!customerError && customerMeetings) {
+        for (const existingMeeting of customerMeetings) {
+          const existingStart = new Date(existingMeeting.meetingDate)
+          const existingDuration = existingMeeting.meetingDuration || 60
+          const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000)
+
+          // Zaman aralıkları çakışıyor mu?
+          if (
+            (meetingDate >= existingStart && meetingDate < existingEnd) ||
+            (meetingEndTime > existingStart && meetingEndTime <= existingEnd) ||
+            (meetingDate <= existingStart && meetingEndTime >= existingEnd)
+          ) {
+            conflictChecks.push(
+              `Müşteri için "${existingMeeting.title}" görüşmesi ile çakışma var (${new Date(existingMeeting.meetingDate).toLocaleString('tr-TR')})`
+            )
+          }
+        }
+      }
+    }
+
+    // 3. CreatedBy (oluşturan kullanıcı) bazlı çakışma kontrolü
+    const { data: creatorMeetings, error: creatorError } = await supabase
+      .from('Meeting')
+      .select('id, title, meetingDate, meetingDuration, status')
+      .eq('companyId', companyId)
+      .eq('createdBy', session.user.id)
+      .eq('status', 'PLANNED') // Sadece planlanmış meeting'leri kontrol et
+      .neq('id', id) // Kendi ID'sini hariç tut
+
+    if (!creatorError && creatorMeetings) {
+      for (const existingMeeting of creatorMeetings) {
+        const existingStart = new Date(existingMeeting.meetingDate)
+        const existingDuration = existingMeeting.meetingDuration || 60
+        const existingEnd = new Date(existingStart.getTime() + existingDuration * 60000)
+
+        // Zaman aralıkları çakışıyor mu?
+        if (
+          (meetingDate >= existingStart && meetingDate < existingEnd) ||
+          (meetingEndTime > existingStart && meetingEndTime <= existingEnd) ||
+          (meetingDate <= existingStart && meetingEndTime >= existingEnd)
+        ) {
+          conflictChecks.push(
+            `Sizin "${existingMeeting.title}" görüşmeniz ile çakışma var (${new Date(existingMeeting.meetingDate).toLocaleString('tr-TR')})`
+          )
+        }
+      }
+    }
+
+    // Çakışma varsa hata döndür
+    if (conflictChecks.length > 0) {
+      return NextResponse.json(
+        {
+          error: 'Zaman çakışması tespit edildi',
+          conflicts: conflictChecks,
+          message: conflictChecks.join('\n'),
+        },
+        { status: 409 } // 409 Conflict
+      )
+    }
+
     // Meeting verilerini güncelle
     const updateData: any = {
       title: body.title.trim(),
@@ -211,6 +345,13 @@ export async function PUT(
       actionItems: body.actionItems || null,
       attendees: body.attendees || null,
       updatedAt: new Date().toISOString(),
+      // ✅ Recurring meeting alanları (sadece parent meeting için güncellenebilir)
+      isRecurring: body.isRecurring || false,
+      recurrenceType: body.recurrenceType || null,
+      recurrenceInterval: body.recurrenceInterval || null,
+      recurrenceEndDate: body.recurrenceEndDate || null,
+      recurrenceCount: body.recurrenceCount || null,
+      recurrenceDaysOfWeek: body.recurrenceDaysOfWeek || null, // JSONB - direkt array gönderilebilir
     }
 
     // Update işlemi - SuperAdmin için companyId filtresi yok
@@ -260,6 +401,185 @@ export async function PUT(
       console.error('Meetings [id] PUT API select error:', error)
       return NextResponse.json(
         { 
+          error: error.message || 'Güncellenmiş toplantı bulunamadı',
+          code: error.code || 'SELECT_ERROR',
+        },
+        { status: 500 }
+      )
+    }
+
+    // Participant'ları güncelle (çoklu kullanıcı atama)
+    if (body.participantIds !== undefined) {
+      try {
+        // Mevcut participant'ları sil
+        // @ts-ignore - Supabase type inference issue
+        await supabase
+          .from('MeetingParticipant')
+          .delete()
+          .eq('meetingId', id)
+          .eq('companyId', session.user.companyId)
+
+        // Yeni participant'ları ekle
+        if (Array.isArray(body.participantIds) && body.participantIds.length > 0) {
+          const participants = body.participantIds.map((userId: string) => ({
+            meetingId: id,
+            userId: userId,
+            companyId: session.user.companyId,
+            role: 'PARTICIPANT',
+            status: 'PENDING',
+          }))
+
+          // @ts-ignore - Supabase type inference issue
+          const { error: participantError } = await supabase
+            .from('MeetingParticipant')
+            .insert(participants)
+
+          if (participantError) {
+            console.error('MeetingParticipant update error:', participantError)
+            // Participant hatası ana işlemi engellemez, sadece log
+          }
+          // Trigger otomatik olarak yeni eklenen participant'lara bildirim gönderecek
+        }
+      } catch (participantError) {
+        console.error('MeetingParticipant update error:', participantError)
+        // Participant hatası ana işlemi engellemez
+      }
+    }
+
+    // ActivityLog kaydı
+    try {
+      // @ts-ignore - Supabase type inference issue
+      await supabase.from('ActivityLog').insert([
+        {
+          entity: 'Meeting',
+          action: 'UPDATE',
+          description: `Görüşme bilgileri güncellendi: ${body.title}`,
+          meta: { 
+            entity: 'Meeting', 
+            action: 'update', 
+            meetingId: id,
+            companyId: session.user.companyId,
+            createdBy: session.user.id,
+            ...body 
+          },
+          userId: session.user.id,
+          companyId: session.user.companyId,
+        },
+      ] as any)
+    } catch (activityError) {
+      console.error('ActivityLog error:', activityError)
+    }
+
+    return NextResponse.json(meeting)
+  } catch (error: any) {
+    console.error('Meetings [id] PUT API exception:', error)
+    return NextResponse.json(
+      { error: 'Failed to update meeting', message: error?.message || 'Unknown error' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    // Session kontrolü - hata yakalama ile
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
+    }
+
+    if (!session?.user?.companyId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Permission check - canDelete kontrolü (meeting modülü için activity yetkisi kullanıyoruz)
+    const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
+    const canDelete = await hasPermission('activity', 'delete', session.user.id)
+    if (!canDelete) {
+      return buildPermissionDeniedResponse()
+    }
+
+    const { id } = await params
+    const supabase = getSupabaseWithServiceRole()
+
+    // SuperAdmin kontrolü
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    const companyId = session.user.companyId
+
+    // Meeting'in var olup olmadığını ve yetki kontrolü yap
+    let checkQuery = supabase
+      .from('Meeting')
+      .select('id, title, companyId')
+      .eq('id', id)
+
+    if (!isSuperAdmin) {
+      checkQuery = checkQuery.eq('companyId', companyId)
+    }
+
+    const { data: meeting } = await checkQuery.single()
+
+    if (!meeting) {
+      return NextResponse.json({ error: 'Görüşme bulunamadı' }, { status: 404 })
+    }
+
+    // Önce giderleri sil (Finance tablosundan)
+    await supabase
+      .from('Finance')
+      .delete()
+      .eq('relatedTo', 'Meeting')
+      .eq('relatedId', id)
+
+    // Meeting'i sil
+    const { error } = await supabase
+      .from('Meeting')
+      .delete()
+      .eq('id', id)
+
+    if (error) {
+      console.error('Meetings [id] DELETE API error:', error)
+      return NextResponse.json(
+        { error: error.message || 'Toplantı silinemedi' },
+        { status: 500 }
+      )
+    }
+
+    // ActivityLog kaydı
+    try {
+      // @ts-ignore - Supabase type inference issue
+      await supabase.from('ActivityLog').insert([
+        {
+          entity: 'Meeting',
+          action: 'DELETE',
+          description: `Görüşme silindi: ${(meeting as any)?.title || 'Unknown'}`,
+          meta: { 
+            entity: 'Meeting', 
+            action: 'delete', 
+            meetingId: id,
+            companyId: session.user.companyId,
+            createdBy: session.user.id,
+          },
+          userId: session.user.id,
+          companyId: session.user.companyId,
+        },
+      ] as any)
+    } catch (activityError) {
+      console.error('ActivityLog error:', activityError)
+    }
+
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    console.error('Meetings [id] DELETE API exception:', error)
+    return NextResponse.json(
+      { error: 'Toplantı silinemedi', message: error?.message || 'Bilinmeyen hata' },
+      { status: 500 }
+    )
+  }
+}
+
+
           error: error.message || 'Güncellenmiş toplantı bulunamadı',
           code: error.code || 'SELECT_ERROR',
         },

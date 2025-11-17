@@ -23,10 +23,15 @@ CREATE TABLE IF NOT EXISTS "Contact" (
   linkedin VARCHAR(255),
   notes TEXT,
   status VARCHAR(20) DEFAULT 'ACTIVE',
+  imageUrl TEXT, -- Profil fotoğrafı URL'i
   companyId UUID NOT NULL REFERENCES "Company"(id) ON DELETE CASCADE,
   createdAt TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updatedAt TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- imageUrl kolonu ekle (eğer tablo zaten varsa)
+ALTER TABLE "Contact" 
+ADD COLUMN IF NOT EXISTS imageUrl TEXT;
 
 -- Contact indexes
 CREATE INDEX IF NOT EXISTS idx_contact_customer_company ON "Contact"("customerCompanyId");
@@ -523,6 +528,11 @@ BEGIN
     (SELECT COUNT(*) FROM "Contact"),
     (SELECT COUNT(*) FROM "LeadScore"),
     (SELECT COUNT(*) FROM "DealStageHistory");
+END $$;
+
+
+
+
 END $$;
 
 

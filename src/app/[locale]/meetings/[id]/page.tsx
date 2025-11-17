@@ -3,9 +3,11 @@
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { useData } from '@/hooks/useData'
-import { ArrowLeft, Edit, Trash2, Calendar, Building2, User, FileText, DollarSign, Plus } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { ArrowLeft, Edit, Trash2, Calendar, Building2, User, FileText, DollarSign, Plus, Clock, MapPin, Video, Zap, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import GradientCard from '@/components/ui/GradientCard'
 import { Badge } from '@/components/ui/badge'
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import { useState } from 'react'
@@ -20,6 +22,7 @@ import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
 import AddToCalendarButton from '@/components/integrations/AddToCalendarButton'
 import SendMeetingLinkButton from '@/components/integrations/SendMeetingLinkButton'
 import ContextualActionsBar from '@/components/ui/ContextualActionsBar'
+import ActivityTimeline from '@/components/ui/ActivityTimeline'
 
 // Lazy load MeetingForm - performans için
 const MeetingForm = dynamic(() => import('@/components/meetings/MeetingForm'), {
@@ -177,130 +180,78 @@ export default function MeetingDetailPage() {
         canDelete={canEdit}
       />
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            onClick={() => router.push(`/${locale}/meetings`)}
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Geri
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">{meeting.title}</h1>
-            <p className="mt-2 text-gray-600">
-              {new Date(meeting.meetingDate).toLocaleDateString('tr-TR', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </p>
+      {/* Header - Premium Tasarım */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-violet-50 via-purple-50 to-fuchsia-50 border border-violet-100 p-6 shadow-lg"
+      >
+        {/* Arka plan pattern */}
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute inset-0" style={{
+            backgroundImage: `radial-gradient(circle at 2px 2px, rgb(139, 92, 246) 1px, transparent 0)`,
+            backgroundSize: '40px 40px'
+          }} />
+        </div>
+        
+        <div className="relative flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => router.push(`/${locale}/meetings`)}
+                className="bg-white/80 hover:bg-white shadow-sm"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </motion.div>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="w-20 h-20 rounded-xl bg-gradient-to-br from-violet-500 via-purple-500 to-fuchsia-500 flex items-center justify-center shadow-lg ring-4 ring-violet-100/50"
+            >
+              <Calendar className="h-10 w-10 text-white" />
+            </motion.div>
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 bg-clip-text text-transparent">
+                {meeting.title}
+              </h1>
+              <div className="flex items-center gap-3 mt-2">
+                <Badge className={statusColors[meeting.status] || 'bg-gray-100 text-gray-800'}>
+                  {statusLabels[meeting.status] || meeting.status}
+                </Badge>
+                <p className="text-gray-600 font-medium">
+                  {new Date(meeting.meetingDate).toLocaleDateString('tr-TR', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
-        <div className="flex gap-2">
-          {canEdit && !editMode && (
-            <>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setEditMode(true)
-                  setFormOpen(true)
-                }}
-              >
-                <Edit className="mr-2 h-4 w-4" />
-                Düzenle
-              </Button>
-              {meeting.Customer?.email && (
-                <SendEmailButton
-                  to={meeting.Customer.email}
-                  subject={`Toplantı: ${meeting.title}`}
-                  html={`
-                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                      <h2 style="color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px;">
-                        Toplantı Bilgileri
-                      </h2>
-                      <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px;">
-                        <p><strong>Toplantı:</strong> ${meeting.title}</p>
-                        <p><strong>Tarih:</strong> ${new Date(meeting.meetingDate).toLocaleString('tr-TR')}</p>
-                        ${meeting.location ? `<p><strong>Konum:</strong> ${meeting.location}</p>` : ''}
-                        ${meeting.description ? `<p><strong>Açıklama:</strong><br>${meeting.description.replace(/\n/g, '<br>')}</p>` : ''}
-                      </div>
-                      <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">
-                        Bu e-posta CRM Enterprise V3 sisteminden gönderilmiştir.
-                      </p>
-                    </div>
-                  `}
-                  category="GENERAL"
-                  entityData={meeting}
-                />
-              )}
-              {meeting.Customer?.phone && (
-                <>
-                  <SendSmsButton
-                    to={meeting.Customer.phone.startsWith('+') 
-                      ? meeting.Customer.phone 
-                      : `+${meeting.Customer.phone.replace(/\D/g, '')}`}
-                    message={`Merhaba, ${meeting.title} toplantısı ${new Date(meeting.meetingDate).toLocaleString('tr-TR')} tarihinde planlanmıştır.`}
-                  />
-                  <SendWhatsAppButton
-                    to={meeting.Customer.phone.startsWith('+') 
-                      ? meeting.Customer.phone 
-                      : `+${meeting.Customer.phone.replace(/\D/g, '')}`}
-                    message={`Merhaba, ${meeting.title} toplantısı ${new Date(meeting.meetingDate).toLocaleString('tr-TR')} tarihinde planlanmıştır.`}
-                  />
-                </>
-              )}
-              <AddToCalendarButton
-                recordType="meeting"
-                record={meeting}
-                startTime={meeting.meetingDate}
-                endTime={meeting.meetingDuration 
-                  ? new Date(new Date(meeting.meetingDate).getTime() + meeting.meetingDuration * 60000).toISOString()
-                  : meeting.meetingDate}
-                location={meeting.location}
-                attendees={meeting.Customer?.email ? [{ email: meeting.Customer.email, displayName: meeting.Customer.name }] : undefined}
-              />
-              {meeting.meetingUrl && (
-                <SendMeetingLinkButton
-                  meetingUrl={meeting.meetingUrl}
-                  meetingTitle={meeting.title}
-                  meetingDate={meeting.meetingDate}
-                  meetingDuration={meeting.meetingDuration}
-                  meetingPassword={meeting.meetingPassword}
-                  meetingType={meeting.meetingType as any}
-                  customerEmail={meeting.Customer?.email}
-                  customerPhone={meeting.Customer?.phone}
-                  customerName={meeting.Customer?.name}
-                />
-              )}
-              <Button
-                variant="outline"
-                onClick={handleDelete}
-                className="text-red-600 hover:text-red-700"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Sil
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+      </motion.div>
 
-      {/* Status Badge */}
-      <div>
-        <Badge className={statusColors[meeting.status] || 'bg-gray-100 text-gray-800'}>
-          {statusLabels[meeting.status] || meeting.status}
-        </Badge>
-      </div>
-
-      {/* Quick Actions */}
+      {/* Quick Actions - Premium Tasarım */}
       {meeting.Customer && (
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Hızlı İşlemler</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <Card className="p-6 bg-gradient-to-br from-white to-gray-50 border-violet-100 shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center gap-2 mb-6">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 shadow-md">
+                <Zap className="h-5 w-5 text-white" />
+              </div>
+              <h2 className="text-xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
+                Hızlı İşlemler
+              </h2>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {meeting.Customer.email && (
               <SendEmailButton
                 to={meeting.Customer.email}
@@ -377,196 +328,357 @@ export default function MeetingDetailPage() {
             )}
           </div>
         </Card>
+        </motion.div>
       )}
 
-      {/* Main Content */}
+      {/* Main Content - Premium Cards */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column - Main Info */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Görüşme Notu */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Görüşme Notu
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-gray-700 whitespace-pre-wrap">
-                {meeting.description || 'Not eklenmemiş'}
-              </p>
-            </CardContent>
-          </Card>
+          {/* Görüşme Notu - Premium Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <GradientCard
+              gradientFrom="from-amber-500"
+              gradientTo="to-orange-500"
+              className="p-6"
+            >
+              <div className="flex items-center gap-2 mb-6">
+                <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                  <FileText className="h-5 w-5 text-white" />
+                </div>
+                <h2 className="text-xl font-bold text-white">Görüşme Notu</h2>
+              </div>
+              <div className="bg-white/10 p-4 rounded-lg backdrop-blur-sm">
+                <p className="text-white/90 whitespace-pre-wrap">
+                  {meeting.description || 'Not eklenmemiş'}
+                </p>
+              </div>
+            </GradientCard>
+          </motion.div>
 
-          {/* İlgili Bilgiler */}
-          <Card>
-            <CardHeader>
-              <CardTitle>İlgili Bilgiler</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {meeting.Company && (
-                <div className="flex items-center gap-3">
-                  <Building2 className="h-5 w-5 text-gray-400" />
-                  <div>
-                    <p className="text-sm text-gray-500">Firma</p>
-                    <Link
-                      href={`/${locale}/companies/${meeting.companyId}`}
-                      className="text-primary-600 hover:underline"
-                    >
-                      {meeting.Company.name}
-                    </Link>
-                  </div>
+          {/* İlgili Bilgiler - Premium Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <GradientCard
+              gradientFrom="from-indigo-500"
+              gradientTo="to-blue-500"
+              className="p-6"
+            >
+              <div className="flex items-center gap-2 mb-6">
+                <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                  <AlertCircle className="h-5 w-5 text-white" />
                 </div>
-              )}
-              {meeting.Customer && (
-                <div className="flex items-center gap-3">
-                  <User className="h-5 w-5 text-gray-400" />
-                  <div>
-                    <p className="text-sm text-gray-500">Müşteri</p>
-                    <Link
-                      href={`/${locale}/customers/${meeting.customerId}`}
-                      className="text-primary-600 hover:underline"
-                    >
-                      {meeting.Customer.name}
-                    </Link>
+                <h2 className="text-xl font-bold text-white">İlgili Bilgiler</h2>
+              </div>
+              <div className="space-y-4">
+                {meeting.Company && (
+                  <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                    <Building2 className="h-5 w-5 text-white" />
+                    <div>
+                      <p className="text-sm text-white/80">Firma</p>
+                      <Link
+                        href={`/${locale}/companies/${meeting.companyId}`}
+                        className="text-white font-semibold hover:underline"
+                      >
+                        {meeting.Company.name}
+                      </Link>
+                    </div>
                   </div>
-                </div>
-              )}
-              {meeting.Deal && (
-                <div className="flex items-center gap-3">
-                  <FileText className="h-5 w-5 text-gray-400" />
-                  <div>
-                    <p className="text-sm text-gray-500">Fırsat</p>
-                    <Link
-                      href={`/${locale}/deals/${meeting.dealId}`}
-                      className="text-primary-600 hover:underline"
-                    >
-                      {meeting.Deal.title}
-                    </Link>
+                )}
+                {meeting.Customer && (
+                  <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                    <User className="h-5 w-5 text-white" />
+                    <div>
+                      <p className="text-sm text-white/80">Müşteri</p>
+                      <Link
+                        href={`/${locale}/customers/${meeting.customerId}`}
+                        className="text-white font-semibold hover:underline"
+                      >
+                        {meeting.Customer.name}
+                      </Link>
+                      {meeting.Customer.email && (
+                        <p className="text-sm text-white/70">{meeting.Customer.email}</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
-              {meeting.location && (
-                <div className="flex items-center gap-3">
-                  <Calendar className="h-5 w-5 text-gray-400" />
-                  <div>
-                    <p className="text-sm text-gray-500">Konum</p>
-                    <p className="text-gray-900">{meeting.location}</p>
+                )}
+                {meeting.Deal && (
+                  <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                    <FileText className="h-5 w-5 text-white" />
+                    <div>
+                      <p className="text-sm text-white/80">Fırsat</p>
+                      <Link
+                        href={`/${locale}/deals/${meeting.dealId}`}
+                        className="text-white font-semibold hover:underline"
+                      >
+                        {meeting.Deal.title}
+                      </Link>
+                      {meeting.Deal.value && (
+                        <p className="text-sm text-white/70">{formatCurrency(meeting.Deal.value)}</p>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                )}
+                {meeting.location && (
+                  <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                    <MapPin className="h-5 w-5 text-white" />
+                    <div>
+                      <p className="text-sm text-white/80">Konum</p>
+                      <p className="text-white font-semibold">{meeting.location}</p>
+                    </div>
+                  </div>
+                )}
+                {meeting.meetingDuration && (
+                  <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                    <Clock className="h-5 w-5 text-white" />
+                    <div>
+                      <p className="text-sm text-white/80">Süre</p>
+                      <p className="text-white font-semibold">{meeting.meetingDuration} dakika</p>
+                    </div>
+                  </div>
+                )}
+                {meeting.meetingUrl && (
+                  <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                    <Video className="h-5 w-5 text-white" />
+                    <div>
+                      <p className="text-sm text-white/80">Toplantı Linki</p>
+                      <a
+                        href={meeting.meetingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-white font-semibold hover:underline"
+                      >
+                        {meeting.meetingType || 'Video Toplantı'}
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </GradientCard>
+          </motion.div>
 
-          {/* Giderler */}
+          {/* Giderler - Premium Card */}
           {meeting.expenseBreakdown && meeting.expenseBreakdown.total > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="h-5 w-5" />
-                  Görüşme Giderleri
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {meeting.expenseBreakdown.fuel > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Araç Yakıt:</span>
-                    <span className="font-semibold">{formatCurrency(meeting.expenseBreakdown.fuel)}</span>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+            >
+              <GradientCard
+                gradientFrom="from-emerald-500"
+                gradientTo="to-teal-500"
+                className="p-6"
+              >
+                <div className="flex items-center gap-2 mb-6">
+                  <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                    <DollarSign className="h-5 w-5 text-white" />
                   </div>
-                )}
-                {meeting.expenseBreakdown.accommodation > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Konaklama:</span>
-                    <span className="font-semibold">{formatCurrency(meeting.expenseBreakdown.accommodation)}</span>
-                  </div>
-                )}
-                {meeting.expenseBreakdown.food > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Yemek:</span>
-                    <span className="font-semibold">{formatCurrency(meeting.expenseBreakdown.food)}</span>
-                  </div>
-                )}
-                {meeting.expenseBreakdown.other > 0 && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Diğer:</span>
-                    <span className="font-semibold">{formatCurrency(meeting.expenseBreakdown.other)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between pt-2 border-t">
-                  <span className="font-semibold text-gray-900">Toplam:</span>
-                  <span className="font-bold text-primary-600">{formatCurrency(meeting.expenseBreakdown.total)}</span>
+                  <h2 className="text-xl font-bold text-white">Görüşme Giderleri</h2>
                 </div>
-              </CardContent>
-            </Card>
+                <div className="space-y-3">
+                  {meeting.expenseBreakdown.fuel > 0 && (
+                    <div className="flex justify-between p-2 bg-white/10 rounded-lg backdrop-blur-sm">
+                      <span className="text-white/90">Araç Yakıt:</span>
+                      <span className="font-semibold text-white">{formatCurrency(meeting.expenseBreakdown.fuel)}</span>
+                    </div>
+                  )}
+                  {meeting.expenseBreakdown.accommodation > 0 && (
+                    <div className="flex justify-between p-2 bg-white/10 rounded-lg backdrop-blur-sm">
+                      <span className="text-white/90">Konaklama:</span>
+                      <span className="font-semibold text-white">{formatCurrency(meeting.expenseBreakdown.accommodation)}</span>
+                    </div>
+                  )}
+                  {meeting.expenseBreakdown.food > 0 && (
+                    <div className="flex justify-between p-2 bg-white/10 rounded-lg backdrop-blur-sm">
+                      <span className="text-white/90">Yemek:</span>
+                      <span className="font-semibold text-white">{formatCurrency(meeting.expenseBreakdown.food)}</span>
+                    </div>
+                  )}
+                  {meeting.expenseBreakdown.other > 0 && (
+                    <div className="flex justify-between p-2 bg-white/10 rounded-lg backdrop-blur-sm">
+                      <span className="text-white/90">Diğer:</span>
+                      <span className="font-semibold text-white">{formatCurrency(meeting.expenseBreakdown.other)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between pt-3 border-t border-white/20">
+                    <span className="font-bold text-white text-lg">Toplam:</span>
+                    <span className="font-bold text-white text-lg">{formatCurrency(meeting.expenseBreakdown.total)}</span>
+                  </div>
+                </div>
+              </GradientCard>
+            </motion.div>
           )}
 
           {/* Gider Uyarısı */}
           {meeting.expenseWarning && (
-            <Card className="border-amber-200 bg-amber-50">
-              <CardHeader>
-                <CardTitle className="text-amber-800">Gider Uyarısı</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-amber-700 mb-4">
-                  Bu görüşme için operasyon gideri girilmemiş görünüyor.
-                </p>
-                <Button
-                  onClick={() => router.push(`/${locale}/finance?relatedTo=Meeting&relatedId=${meeting.id}`)}
-                  className="bg-amber-600 hover:bg-amber-700"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Gider Ekle
-                </Button>
-              </CardContent>
-            </Card>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}
+            >
+              <Card className="border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 shadow-lg">
+                <CardHeader>
+                  <CardTitle className="text-amber-800 flex items-center gap-2">
+                    <AlertCircle className="h-5 w-5" />
+                    Gider Uyarısı
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-amber-700 mb-4">
+                    Bu görüşme için operasyon gideri girilmemiş görünüyor.
+                  </p>
+                  <Button
+                    onClick={() => router.push(`/${locale}/finance?relatedTo=Meeting&relatedId=${meeting.id}`)}
+                    className="bg-amber-600 hover:bg-amber-700"
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Gider Ekle
+                  </Button>
+                </CardContent>
+              </Card>
+            </motion.div>
           )}
         </div>
 
         {/* Right Column - Actions */}
         <div className="space-y-6">
-          {/* Hızlı Eylemler */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Hızlı Eylemler</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Button
-                variant="outline"
-                className="w-full justify-start"
-                onClick={() => router.push(`/${locale}/finance?relatedTo=Meeting&relatedId=${meeting.id}`)}
-              >
-                <DollarSign className="mr-2 h-4 w-4" />
-                Gider Ekle
-              </Button>
-              {meeting.customerId && (
+          {/* Hızlı Eylemler - Premium Card */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+          >
+            <GradientCard
+              gradientFrom="from-cyan-500"
+              gradientTo="to-blue-500"
+              className="p-6"
+            >
+              <div className="flex items-center gap-2 mb-6">
+                <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                  <Zap className="h-5 w-5 text-white" />
+                </div>
+                <h2 className="text-xl font-bold text-white">Hızlı Eylemler</h2>
+              </div>
+              <div className="space-y-2">
                 <Button
                   variant="outline"
-                  className="w-full justify-start"
-                  onClick={() => setQuoteFormOpen(true)}
+                  className="w-full justify-start bg-white/20 hover:bg-white/30 text-white border-white/30"
+                  onClick={() => router.push(`/${locale}/finance?relatedTo=Meeting&relatedId=${meeting.id}`)}
                 >
-                  <FileText className="mr-2 h-4 w-4" />
-                  Teklif Oluştur
+                  <DollarSign className="mr-2 h-4 w-4" />
+                  Gider Ekle
                 </Button>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Oluşturan */}
-          {meeting.CreatedBy && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Oluşturan</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-900">{meeting.CreatedBy.name}</p>
-                {meeting.CreatedBy.email && (
-                  <p className="text-sm text-gray-500">{meeting.CreatedBy.email}</p>
+                {meeting.customerId && (
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start bg-white/20 hover:bg-white/30 text-white border-white/30"
+                    onClick={() => setQuoteFormOpen(true)}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Teklif Oluştur
+                  </Button>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </GradientCard>
+          </motion.div>
+
+          {/* Oluşturan - Premium Card */}
+          {meeting.CreatedBy && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <GradientCard
+                gradientFrom="from-slate-500"
+                gradientTo="to-gray-500"
+                className="p-6"
+              >
+                <div className="flex items-center gap-2 mb-6">
+                  <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                    <User className="h-5 w-5 text-white" />
+                  </div>
+                  <h2 className="text-xl font-bold text-white">Oluşturan</h2>
+                </div>
+                <div className="p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <p className="text-white font-semibold">{meeting.CreatedBy.name}</p>
+                  {meeting.CreatedBy.email && (
+                    <p className="text-sm text-white/70 mt-1">{meeting.CreatedBy.email}</p>
+                  )}
+                </div>
+              </GradientCard>
+            </motion.div>
           )}
         </div>
       </div>
+
+      {/* Activity Timeline */}
+      {meeting.activities && meeting.activities.length > 0 && (
+        <ActivityTimeline activities={meeting.activities} />
+      )}
+
+      {/* Edit Form Modal */}
+      {formOpen && (
+        <MeetingForm
+          meeting={meeting}
+          open={formOpen}
+          onClose={() => {
+            setFormOpen(false)
+            setEditMode(false)
+          }}
+          onSuccess={async (savedMeeting) => {
+            await mutate()
+            setFormOpen(false)
+            setEditMode(false)
+          }}
+        />
+      )}
+
+      {/* Quote Form Modal */}
+      <QuoteForm
+        quote={undefined}
+        open={quoteFormOpen}
+        onClose={() => setQuoteFormOpen(false)}
+        onSuccess={async (savedQuote: any) => {
+          // Cache'i güncelle - optimistic update
+          await mutate(undefined, { revalidate: true })
+          setQuoteFormOpen(false)
+          // Başarılı kayıt sonrası teklif detay sayfasına yönlendir
+          router.push(`/${locale}/quotes/${savedQuote.id}`)
+        }}
+        dealId={meeting.dealId}
+        customerId={meeting.customerId}
+        customerCompanyId={meeting.companyId}
+      />
+    </div>
+  )
+}
+
+
+                </div>
+                <div className="p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <p className="text-white font-semibold">{meeting.CreatedBy.name}</p>
+                  {meeting.CreatedBy.email && (
+                    <p className="text-sm text-white/70 mt-1">{meeting.CreatedBy.email}</p>
+                  )}
+                </div>
+              </GradientCard>
+            </motion.div>
+          )}
+        </div>
+      </div>
+
+      {/* Activity Timeline */}
+      {meeting.activities && meeting.activities.length > 0 && (
+        <ActivityTimeline activities={meeting.activities} />
+      )}
 
       {/* Edit Form Modal */}
       {formOpen && (

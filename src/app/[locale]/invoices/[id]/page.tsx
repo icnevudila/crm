@@ -3,12 +3,14 @@
 import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
+import { motion } from 'framer-motion'
 import { useData } from '@/hooks/useData'
-import { ArrowLeft, Edit, FileText, FileText as QuoteIcon, Truck, Trash2, Users, Plus, Package, AlertTriangle, Phone, Mail } from 'lucide-react'
+import { ArrowLeft, Edit, FileText, FileText as QuoteIcon, Truck, Trash2, Users, Plus, Package, AlertTriangle, Phone, Mail, Zap, Receipt, DollarSign, Calendar, Briefcase } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import GradientCard from '@/components/ui/GradientCard'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { formatCurrency } from '@/lib/utils'
 import { toast, toastError, toastWarning } from '@/lib/toast'
@@ -208,11 +210,87 @@ export default function InvoiceDetailPage() {
         canDelete={!invoice.quoteId && invoice.status !== 'SHIPPED' && invoice.status !== 'RECEIVED'}
       />
 
-      {/* Quick Actions */}
+      {/* Header - Premium Tasarım */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-50 via-green-50 to-teal-50 border border-emerald-100 p-6 shadow-lg"
+      >
+        {/* Arka plan pattern */}
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute inset-0" style={{
+            backgroundImage: `radial-gradient(circle at 2px 2px, rgb(16, 185, 129) 1px, transparent 0)`,
+            backgroundSize: '40px 40px'
+          }} />
+        </div>
+        
+        <div className="relative flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => router.push(`/${locale}/invoices`)}
+                className="bg-white/80 hover:bg-white shadow-sm"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </motion.div>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="w-20 h-20 rounded-xl bg-gradient-to-br from-emerald-500 via-green-500 to-teal-500 flex items-center justify-center shadow-lg ring-4 ring-emerald-100/50"
+            >
+              <Receipt className="h-10 w-10 text-white" />
+            </motion.div>
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 bg-clip-text text-transparent">
+                {invoice.title}
+              </h1>
+              <div className="flex items-center gap-3 mt-2">
+                <Badge className={getStatusBadgeClass(invoice.status)}>
+                  {statusLabels[invoice.status] || invoice.status}
+                </Badge>
+                {invoice.invoiceNumber && (
+                  <p className="text-gray-600 font-medium">
+                    {invoice.invoiceNumber}
+                  </p>
+                )}
+                {invoice.totalAmount && (
+                  <p className="text-gray-600 font-semibold">
+                    {formatCurrency(invoice.totalAmount || invoice.total || 0)}
+                  </p>
+                )}
+                {invoice.dueDate && (
+                  <div className="flex items-center gap-1 text-gray-600">
+                    <Calendar className="h-4 w-4" />
+                    <span className="text-sm">
+                      {new Date(invoice.dueDate).toLocaleDateString('tr-TR')}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Quick Actions - Premium Tasarım */}
       {invoice.Customer && (
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Hızlı İşlemler</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <Card className="p-6 bg-gradient-to-br from-white to-gray-50 border-emerald-100 shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center gap-2 mb-6">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 shadow-md">
+                <Zap className="h-5 w-5 text-white" />
+              </div>
+              <h2 className="text-xl font-bold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
+                Hızlı İşlemler
+              </h2>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {invoice.Customer.email && (
               <SendEmailButton
                 to={invoice.Customer.email}
@@ -1260,6 +1338,84 @@ export default function InvoiceDetailPage() {
                       ? 'Beklemede'
                       : shipment.status === 'IN_TRANSIT'
                       ? 'Yolda'
+                      : shipment.status === 'CANCELLED'
+                      ? 'İptal'
+                      : shipment.status}
+                  </Badge>
+                </Link>
+              ))}
+            </div>
+          </Card>
+        )}
+      </div>
+
+      {/* Document List */}
+      <DocumentList relatedTo="Invoice" relatedId={id} />
+
+      {/* Activity Timeline */}
+      <Card className="p-6">
+        <h2 className="text-xl font-semibold mb-4">İşlem Geçmişi</h2>
+        <ActivityTimeline entityType="Invoice" entityId={id} />
+      </Card>
+
+      {/* Form Modal */}
+      <InvoiceForm
+        invoice={invoice}
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSuccess={async (savedInvoice: any) => {
+          // Form başarılı olduğunda cache'i güncelle (sayfa reload yok)
+          // Optimistic update - güncellenmiş invoice'u cache'e ekle
+          await mutateInvoice(savedInvoice, { revalidate: false })
+          
+          // Tüm ilgili cache'leri güncelle
+          await Promise.all([
+            mutate('/api/invoices', undefined, { revalidate: true }),
+            mutate('/api/invoices?', undefined, { revalidate: true }),
+            mutate((key: string) => typeof key === 'string' && key.startsWith('/api/invoices'), undefined, { revalidate: true }),
+          ])
+          setFormOpen(false)
+        }}
+      />
+
+      {/* InvoiceItem Form Modal */}
+      <InvoiceItemForm
+        invoiceId={id}
+        open={itemFormOpen}
+        onClose={() => setItemFormOpen(false)}
+        onSuccess={async () => {
+          setItemFormOpen(false)
+          // Cache'i güncelle - optimistic update
+          await mutateInvoice(undefined, { revalidate: true })
+          
+          // Tüm ilgili cache'leri güncelle
+          await Promise.all([
+            mutate('/api/invoices', undefined, { revalidate: true }),
+            mutate('/api/invoices?', undefined, { revalidate: true }),
+            mutate(`/api/invoices/${id}`, undefined, { revalidate: true }),
+          ])
+        }}
+      />
+
+      {/* Shipment Form Modal */}
+      <ShipmentForm
+        shipment={undefined}
+        open={shipmentFormOpen}
+        onClose={() => setShipmentFormOpen(false)}
+        invoiceId={id}
+        onSuccess={async (savedShipment: any) => {
+          // Cache'i güncelle - optimistic update
+          await mutateInvoice(undefined, { revalidate: true })
+          setShipmentFormOpen(false)
+          // Başarılı kayıt sonrası sevkiyat detay sayfasına yönlendir
+          router.push(`/${locale}/shipments/${savedShipment.id}`)
+        }}
+      />
+    </div>
+  )
+}
+
+
                       : shipment.status === 'CANCELLED'
                       ? 'İptal'
                       : shipment.status}

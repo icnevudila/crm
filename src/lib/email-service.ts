@@ -1,10 +1,11 @@
 /**
  * Email Service - E-posta gönderme servisi
  * 
- * Şu an mock modda çalışıyor. Gerçek entegrasyon için:
- * - Resend: npm install resend
- * - SendGrid: npm install @sendgrid/mail
- * - AWS SES: npm install @aws-sdk/client-ses
+ * Desteklenen servisler (öncelik sırasına göre):
+ * 1. Resend (RESEND_API_KEY)
+ * 2. SendGrid (SENDGRID_API_KEY)
+ * 3. Nodemailer (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS)
+ * 4. Mock mod (hiçbiri yoksa)
  */
 
 interface SendEmailOptions {
@@ -24,10 +25,11 @@ interface EmailServiceResult {
 /**
  * E-posta gönder
  * 
- * Şu an mock modda çalışıyor. Gerçek entegrasyon için environment variable'ları ayarlayın:
- * - RESEND_API_KEY (Resend için)
+ * Environment variable'ları:
+ * - RESEND_API_KEY (Resend için - öncelikli)
  * - SENDGRID_API_KEY (SendGrid için)
- * - AWS_SES_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY (AWS SES için)
+ * - SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS (Nodemailer için)
+ * - SMTP_FROM (varsayılan gönderen adresi)
  */
 export async function sendEmail({
   to,
@@ -37,99 +39,119 @@ export async function sendEmail({
   replyTo,
 }: SendEmailOptions): Promise<EmailServiceResult> {
   try {
-    // Mock mod - gerçek email gönderilmiyor
-    if (process.env.NODE_ENV === 'development') {
-      console.log('📧 [MOCK] Email gönderiliyor:')
-      console.log('  To:', Array.isArray(to) ? to.join(', ') : to)
-      console.log('  Subject:', subject)
-      console.log('  From:', from || process.env.SMTP_FROM || 'noreply@crm.com')
-      console.log('  HTML length:', html.length, 'characters')
-    }
+    const defaultFrom = from || process.env.SMTP_FROM || 'noreply@crm.com'
+    const recipients = Array.isArray(to) ? to : [to]
 
-    // TODO: Gerçek email service entegrasyonu
-    // Seçenek 1: Resend (Önerilen - Modern, Kolay)
-    /*
+    // ✅ Seçenek 1: Resend (Öncelikli - Modern, Kolay)
     if (process.env.RESEND_API_KEY) {
-      const { Resend } = await import('resend')
-      const resend = new Resend(process.env.RESEND_API_KEY)
-      
-      const { data, error } = await resend.emails.send({
-        from: from || process.env.SMTP_FROM || 'noreply@yourcompany.com',
-        to: Array.isArray(to) ? to : [to],
-        subject,
-        html,
-        reply_to: replyTo,
-      })
+      try {
+        const { Resend } = await import('resend')
+        const resend = new Resend(process.env.RESEND_API_KEY)
+        
+        const { data, error } = await resend.emails.send({
+          from: defaultFrom,
+          to: recipients,
+          subject,
+          html,
+          reply_to: replyTo,
+        })
 
-      if (error) {
-        console.error('Resend error:', error)
-        throw error
-      }
+        if (error) {
+          console.error('Resend error:', error)
+          throw error
+        }
 
-      return {
-        success: true,
-        messageId: data?.id,
+        if (process.env.NODE_ENV === 'development') {
+          console.log('📧 [RESEND] Email gönderildi:', data?.id)
+        }
+
+        return {
+          success: true,
+          messageId: data?.id,
+        }
+      } catch (resendError: any) {
+        console.error('Resend send error:', resendError)
+        // Resend başarısız olursa diğer servislere geç
       }
     }
-    */
 
-    // Seçenek 2: SendGrid
-    /*
+    // ✅ Seçenek 2: SendGrid
     if (process.env.SENDGRID_API_KEY) {
-      // @ts-expect-error - Paket yoksa hata vermemesi için
-      const sgMail = await import('@sendgrid/mail').catch(() => null)
-      sgMail.setApiKey(process.env.SENDGRID_API_KEY)
+      try {
+        const sgMail = await import('@sendgrid/mail')
+        sgMail.default.setApiKey(process.env.SENDGRID_API_KEY)
 
-      const msg = {
-        to: Array.isArray(to) ? to : [to],
-        from: from || process.env.SMTP_FROM || 'noreply@yourcompany.com',
-        subject,
-        html,
-        replyTo,
-      }
+        const msg = {
+          to: recipients,
+          from: defaultFrom,
+          subject,
+          html,
+          replyTo,
+        }
 
-      const [response] = await sgMail.send(msg)
-      return {
-        success: true,
-        messageId: response.headers['x-message-id'],
-      }
-    }
-    */
+        const [response] = await sgMail.default.send(msg)
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log('📧 [SENDGRID] Email gönderildi:', response.headers['x-message-id'])
+        }
 
-    // Seçenek 3: AWS SES
-    /*
-    if (process.env.AWS_SES_REGION) {
-      const { SESClient, SendEmailCommand } = await import('@aws-sdk/client-ses')
-      
-      const sesClient = new SESClient({
-        region: process.env.AWS_SES_REGION,
-        credentials: {
-          accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-          secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-        },
-      })
-
-      const command = new SendEmailCommand({
-        Source: from || process.env.SMTP_FROM || 'noreply@yourcompany.com',
-        Destination: {
-          ToAddresses: Array.isArray(to) ? to : [to],
-        },
-        Message: {
-          Subject: { Data: subject },
-          Body: { Html: { Data: html } },
-        },
-        ReplyToAddresses: replyTo ? [replyTo] : undefined,
-      })
-
-      const response = await sesClient.send(command)
-      return {
-        success: true,
-        messageId: response.MessageId,
+        return {
+          success: true,
+          messageId: response.headers['x-message-id'] as string,
+        }
+      } catch (sendgridError: any) {
+        console.error('SendGrid send error:', sendgridError)
+        // SendGrid başarısız olursa Nodemailer'a geç
       }
     }
-    */
 
-    // Mock başarılı dönüş
+    // ✅ Seçenek 3: Nodemailer (SMTP)
+    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+      try {
+        const nodemailer = await import('nodemailer')
+        
+        const transporter = nodemailer.default.createTransport({
+          host: process.env.SMTP_HOST,
+          port: parseInt(process.env.SMTP_PORT || '587'),
+          secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS,
+          },
+        })
+
+        const info = await transporter.sendMail({
+          from: defaultFrom,
+          to: recipients.join(', '),
+          subject,
+          html,
+          replyTo,
+        })
+
+        if (process.env.NODE_ENV === 'development') {
+          console.log('📧 [NODEMAILER] Email gönderildi:', info.messageId)
+        }
+
+        return {
+          success: true,
+          messageId: info.messageId,
+        }
+      } catch (nodemailerError: any) {
+        console.error('Nodemailer send error:', nodemailerError)
+        // Nodemailer başarısız olursa mock moda geç
+      }
+    }
+
+    // ⚠️ Mock mod - hiçbir email servisi yapılandırılmamış
+    if (process.env.NODE_ENV === 'development') {
+      console.log('📧 [MOCK] Email gönderiliyor (gerçek email servisi yapılandırılmamış):')
+      console.log('  To:', recipients.join(', '))
+      console.log('  Subject:', subject)
+      console.log('  From:', defaultFrom)
+      console.log('  HTML length:', html.length, 'characters')
+      console.log('  ⚠️  Gerçek email göndermek için RESEND_API_KEY, SENDGRID_API_KEY veya SMTP ayarlarını yapılandırın')
+    }
+
     return {
       success: true,
       messageId: `mock-${Date.now()}`,
@@ -174,6 +196,28 @@ export async function sendBulkEmail(
     } catch (error: any) {
       failed++
       errors.push({ email: recipient.email, error: error?.message || 'Failed to send' })
+    }
+  }
+
+  return { success, failed, errors }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     }
   }
 

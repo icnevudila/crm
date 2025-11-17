@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react'
 import { toast } from '@/lib/toast'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -121,9 +121,9 @@ function DroppableColumn({ status, children }: { status: string; children: React
   return (
     <div
       ref={setNodeRef}
-      className={`flex-1 transition-all duration-300 ease-out ${
+      className={`flex-1 transition-all duration-200 ease-out ${
         isOver 
-          ? 'bg-gradient-to-br from-primary-50 to-primary-100/50 border-2 border-primary-400 border-dashed rounded-xl shadow-lg scale-[1.02]' 
+          ? 'bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border-2 border-indigo-400 border-dashed rounded-xl shadow-xl scale-[1.01] ring-4 ring-indigo-200/50' 
           : ''
       }`}
     >
@@ -156,32 +156,30 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
     isDragging,
   } = useSortable({ id: quote.id, disabled: isLocked })
 
-  // ✅ PREMIUM: Ultra-smooth drag animations with GPU acceleration - Optimized for performance
+  // ✅ PERFORMANCE OPTIMIZED: Ultra-fast drag with minimal transforms
   const x = transform?.x ?? 0
   const y = transform?.y ?? 0
   const style: React.CSSProperties = transform 
     ? {
+        // ✅ Sadece translate3d - en hızlı transform (scale/rotate/filter kaldırıldı - performans için)
         transform: `translate3d(${x}px,${y}px,0)`,
         WebkitTransform: `translate3d(${x}px,${y}px,0) translateZ(0)`,
-        transition: 'none', // ✅ Drag sırasında transition YOK - daha smooth
+        transition: 'none', // ✅ Drag sırasında transition YOK
         willChange: 'transform',
-        opacity: isDragging ? 0.95 : 1, // ✅ Daha görünür (0.7 yerine 0.95)
+        opacity: 1, // ✅ Tam opak - filter yok, opacity değişikliği yok
         cursor: !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'not-allowed',
-        transformOrigin: 'center center',
+        zIndex: isDragging ? 9999 : 1,
+        // ✅ Minimal GPU acceleration - sadece gerekli olanlar
         backfaceVisibility: 'hidden',
-        isolation: 'isolate',
-        zIndex: isDragging ? 9999 : 1, // ✅ Drag sırasında en üstte
-        // ✅ GPU acceleration optimizations - Minimal properties for better performance
         WebkitBackfaceVisibility: 'hidden',
-        pointerEvents: isDragging ? 'none' : 'auto', // ✅ Drag sırasında pointer events kapalı
+        pointerEvents: isDragging ? 'none' : 'auto',
+        // ✅ Filter kaldırıldı - çok ağır, performans sorunu yaratıyor
       }
     : {
-        transition: isDragging ? 'none' : 'transform 100ms ease-out, opacity 100ms ease-out', // ✅ Daha hızlı (100ms)
+        transition: isDragging ? 'none' : 'transform 150ms ease-out', // ✅ Daha hızlı transition
         willChange: !isLocked ? 'transform' : 'auto',
         opacity: 1,
         cursor: !isLocked ? 'grab' : 'not-allowed',
-        // ✅ Minimal GPU optimizations
-        WebkitBackfaceVisibility: 'hidden',
       }
 
   const colors = statusColors(status)
@@ -218,7 +216,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                 : 'border-red-300 bg-red-50/30 hover:border-red-400 cursor-not-allowed'
               : `${colors.border} hover:border-primary-400 hover:shadow-lg cursor-grab active:cursor-grabbing`
           } relative ${
-            isDragging ? 'shadow-xl scale-[1.05] rotate-2 z-50' : 'hover:scale-[1.01]' // ✅ Drag sırasında daha belirgin
+            isDragging ? 'shadow-xl' : 'transition-shadow duration-150' // ✅ Sadece shadow transition - daha hızlı
           }`}
           {...(!isLocked ? listeners : {})}
         >
@@ -1025,6 +1023,17 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
   )
 }
 
+// Memoize the component with custom comparison
+const MemoizedSortableQuoteCard = memo(SortableQuoteCard, (prevProps, nextProps) => {
+  // ✅ Custom comparison - sadece quote.id ve status değiştiğinde re-render
+  return (
+    prevProps.quote.id === nextProps.quote.id &&
+    prevProps.status === nextProps.status &&
+    prevProps.quote.title === nextProps.quote.title &&
+    prevProps.quote.totalAmount === nextProps.quote.totalAmount
+  )
+})
+
 export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChange, onView }: QuoteKanbanChartProps) {
   const locale = useLocale()
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -1075,13 +1084,17 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
   // ✅ ÇÖZÜM: dragLocalData null ise localData'yı kullan - optimistic update için
   const displayData = dragLocalData || localData
 
-  // ✅ ÇÖZÜM: Anında aktif olan drag & drop - activation constraint yok
+  // ✅ PERFORMANCE: Ultra-fast activation - anında başlar
   const sensors = useSensors(
-    useSensor(PointerSensor), // ✅ Activation constraint yok - anında başlar
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 3, // ✅ 3px hareket ettiğinde aktif - çok hızlı
+      },
+    }),
     useSensor(TouchSensor, {
       activationConstraint: {
         delay: 0, // ✅ 0ms delay - anında başlar
-        tolerance: 5, // ✅ 5px tolerance - yanlışlıkla drag'i önler ama çok hızlı
+        tolerance: 3, // ✅ 3px tolerance - daha hassas
       },
     }),
     useSensor(KeyboardSensor, {
@@ -1273,18 +1286,18 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
     .flatMap((col) => col.quotes)
     .find((quote) => quote.id === activeId)
 
-  // ✅ PREMIUM: Smooth drop animation
+  // ✅ PERFORMANCE: Fast drop animation
   const dropAnimation: DropAnimation = useMemo(() => ({
     sideEffects: defaultDropAnimationSideEffects({
       styles: {
         active: {
-          opacity: '0.85',
-          scale: '1.02',
+          opacity: '0.98',
+          scale: '1.05', // ✅ Daha küçük scale - daha hızlı
         },
       },
     }),
-    duration: 150, // ✅ 150ms - Daha hızlı ve smooth drop animation
-    easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)', // ✅ Daha smooth easing (ease-out-quad)
+    duration: 150, // ✅ Daha hızlı - 150ms
+    easing: 'cubic-bezier(0.4, 0, 0.2, 1)', // ✅ Daha hızlı easing - bounce yok
   }), [])
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
@@ -1411,7 +1424,7 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
                       </div>
                     ) : (
                       column.quotes.map((quote) => (
-                        <SortableQuoteCard
+                        <MemoizedSortableQuoteCard
                           key={quote.id}
                           quote={quote}
                           status={column.status}
@@ -1433,20 +1446,17 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
       <DragOverlay dropAnimation={dropAnimation}>
         {activeQuote ? (
           <Card 
-            className="bg-white border-2 border-primary-500 shadow-2xl min-w-[300px] rotate-1 transition-all duration-150"
+            className="bg-white border-2 border-indigo-500 shadow-xl min-w-[300px]"
             style={{
-              willChange: 'transform, opacity',
-              transform: 'translate3d(0, 0, 0) scale(1.02) translateZ(0)',
+              willChange: 'transform, opacity', // ✅ Filter kaldırıldı
+              transform: 'translate3d(0, 0, 0) scale(1.05) translateZ(0)', // ✅ Rotate kaldırıldı - daha hızlı
               backfaceVisibility: 'hidden',
-              WebkitTransform: 'translate3d(0, 0, 0) scale(1.02) translateZ(0)',
+              WebkitTransform: 'translate3d(0, 0, 0) scale(1.05) translateZ(0)',
               WebkitBackfaceVisibility: 'hidden',
-              perspective: 1000,
-              WebkitPerspective: 1000,
               pointerEvents: 'none',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-              // ✅ GPU acceleration optimizations
-              WebkitTransformStyle: 'preserve-3d',
-              transformStyle: 'preserve-3d',
+              // ✅ Daha hafif shadow - performans için
+              boxShadow: '0 20px 40px -10px rgba(99, 102, 241, 0.3)',
+              // ✅ Filter kaldırıldı - çok ağır
             }}
           >
             <div className="p-3">
@@ -1468,8 +1478,3 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
     </DndContext>
   )
 }
-
-
-
-
-
