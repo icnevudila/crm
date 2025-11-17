@@ -227,7 +227,7 @@ export default function CustomerDetailPage() {
               <p className="text-gray-600 mt-1 font-medium">Müşteri Detayları</p>
             </div>
           </div>
-        <div className="flex gap-2">
+          <div className="flex gap-2">
           <Button variant="outline" onClick={() => router.push(`/${locale}/customers`)}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Geri
@@ -313,8 +313,9 @@ export default function CustomerDetailPage() {
             <Trash2 className="mr-2 h-4 w-4" />
             Sil
           </Button>
+          </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Quick Actions - Premium Tasarım */}
       <motion.div
@@ -780,10 +781,10 @@ export default function CustomerDetailPage() {
       <DocumentList relatedTo="Customer" relatedId={id} />
 
       {/* Activity Timeline */}
-        <Card className="p-6">
+      <Card className="p-6">
         <h2 className="text-xl font-semibold mb-4">İşlem Geçmişi</h2>
         <ActivityTimeline entityType="Customer" entityId={id} />
-        </Card>
+      </Card>
 
       {/* Comments & Files */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -869,90 +870,3 @@ export default function CustomerDetailPage() {
     </div>
   )
 }
-
-
-
-
-
-
-        customer={customer}
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
-        onSuccess={async (savedCustomer: any) => {
-          // Form başarılı olduğunda cache'i güncelle (sayfa reload yok)
-          // Optimistic update - güncellenmiş customer'ı cache'e ekle
-          await mutateCustomer(savedCustomer, { revalidate: false })
-          
-          // Tüm ilgili cache'leri güncelle
-          await Promise.all([
-            mutate('/api/customers', undefined, { revalidate: true }),
-            mutate('/api/customers?', undefined, { revalidate: true }),
-            mutate((key: string) => typeof key === 'string' && key.startsWith('/api/customers'), undefined, { revalidate: true }),
-          ])
-        }}
-      />
-
-      <DealForm
-        open={dealFormOpen}
-        onClose={() => setDealFormOpen(false)}
-        onSuccess={async (savedDeal) => {
-          // Cache'i güncelle - optimistic update
-          await mutateCustomer(undefined, { revalidate: true })
-          // Toast zaten DealForm içinde gösteriliyor (navigateToDetailToast)
-        }}
-        customerId={id}
-      />
-
-      <QuoteForm
-        open={quoteFormOpen}
-        onClose={() => setQuoteFormOpen(false)}
-        onSuccess={async (savedQuote) => {
-          // Cache'i güncelle - optimistic update
-          await mutateCustomer(undefined, { revalidate: true })
-          // Toast zaten QuoteForm içinde gösteriliyor (navigateToDetailToast)
-        }}
-        customerId={id}
-      />
-
-      <MeetingForm
-        open={meetingFormOpen}
-        onClose={() => setMeetingFormOpen(false)}
-        onSuccess={async (savedMeeting) => {
-          // Cache'i güncelle - optimistic update
-          await mutateCustomer(undefined, { revalidate: true })
-          // Toast zaten MeetingForm içinde gösteriliyor (navigateToDetailToast)
-        }}
-        customerId={id}
-        customerCompanyId={customer.companyId}
-        customerCompanyName={customer.name}
-      />
-
-      <TaskForm
-        task={undefined}
-        open={taskFormOpen}
-        onClose={() => setTaskFormOpen(false)}
-        customerName={customer.name}
-        onSuccess={async (savedTask) => {
-          await mutateCustomer(undefined, { revalidate: true })
-          setTaskFormOpen(false)
-        }}
-      />
-
-      <TicketForm
-        ticket={undefined}
-        open={ticketFormOpen}
-        onClose={() => setTicketFormOpen(false)}
-        customerId={id}
-        onSuccess={async (savedTicket) => {
-          await mutateCustomer(undefined, { revalidate: true })
-          setTicketFormOpen(false)
-        }}
-      />
-    </div>
-  )
-}
-
-
-
-
-

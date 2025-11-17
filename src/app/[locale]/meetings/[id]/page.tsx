@@ -195,16 +195,16 @@ export default function MeetingDetailPage() {
         </div>
         
         <div className="relative flex items-center justify-between">
-          <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4">
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
-              <Button
-                variant="ghost"
+          <Button
+            variant="ghost"
                 size="icon"
-                onClick={() => router.push(`/${locale}/meetings`)}
+            onClick={() => router.push(`/${locale}/meetings`)}
                 className="bg-white/80 hover:bg-white shadow-sm"
-              >
+          >
                 <ArrowLeft className="h-4 w-4" />
-              </Button>
+          </Button>
             </motion.div>
             <motion.div
               whileHover={{ scale: 1.05 }}
@@ -212,7 +212,7 @@ export default function MeetingDetailPage() {
             >
               <Calendar className="h-10 w-10 text-white" />
             </motion.div>
-            <div>
+          <div>
               <h1 className="text-3xl font-bold bg-gradient-to-r from-violet-600 via-purple-600 to-fuchsia-600 bg-clip-text text-transparent">
                 {meeting.title}
               </h1>
@@ -221,17 +221,17 @@ export default function MeetingDetailPage() {
                   {statusLabels[meeting.status] || meeting.status}
                 </Badge>
                 <p className="text-gray-600 font-medium">
-                  {new Date(meeting.meetingDate).toLocaleDateString('tr-TR', {
-                    year: 'numeric',
-                    month: 'long',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </p>
-              </div>
-            </div>
+              {new Date(meeting.meetingDate).toLocaleDateString('tr-TR', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </p>
           </div>
+        </div>
+                    </div>
         </div>
       </motion.div>
 
@@ -251,7 +251,7 @@ export default function MeetingDetailPage() {
                 Hızlı İşlemler
               </h2>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {meeting.Customer.email && (
               <SendEmailButton
                 to={meeting.Customer.email}
@@ -354,8 +354,8 @@ export default function MeetingDetailPage() {
               </div>
               <div className="bg-white/10 p-4 rounded-lg backdrop-blur-sm">
                 <p className="text-white/90 whitespace-pre-wrap">
-                  {meeting.description || 'Not eklenmemiş'}
-                </p>
+                {meeting.description || 'Not eklenmemiş'}
+              </p>
               </div>
             </GradientCard>
           </motion.div>
@@ -378,58 +378,58 @@ export default function MeetingDetailPage() {
                 <h2 className="text-xl font-bold text-white">İlgili Bilgiler</h2>
               </div>
               <div className="space-y-4">
-                {meeting.Company && (
+              {meeting.Company && (
                   <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
                     <Building2 className="h-5 w-5 text-white" />
-                    <div>
+                  <div>
                       <p className="text-sm text-white/80">Firma</p>
-                      <Link
-                        href={`/${locale}/companies/${meeting.companyId}`}
+                    <Link
+                      href={`/${locale}/companies/${meeting.companyId}`}
                         className="text-white font-semibold hover:underline"
-                      >
-                        {meeting.Company.name}
-                      </Link>
-                    </div>
+                    >
+                      {meeting.Company.name}
+                    </Link>
                   </div>
-                )}
-                {meeting.Customer && (
+                </div>
+              )}
+              {meeting.Customer && (
                   <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
                     <User className="h-5 w-5 text-white" />
-                    <div>
+                  <div>
                       <p className="text-sm text-white/80">Müşteri</p>
-                      <Link
-                        href={`/${locale}/customers/${meeting.customerId}`}
+                    <Link
+                      href={`/${locale}/customers/${meeting.customerId}`}
                         className="text-white font-semibold hover:underline"
-                      >
-                        {meeting.Customer.name}
-                      </Link>
+                    >
+                      {meeting.Customer.name}
+                    </Link>
                       {meeting.Customer.email && (
                         <p className="text-sm text-white/70">{meeting.Customer.email}</p>
                       )}
-                    </div>
                   </div>
-                )}
-                {meeting.Deal && (
+                </div>
+              )}
+              {meeting.Deal && (
                   <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
                     <FileText className="h-5 w-5 text-white" />
-                    <div>
+                  <div>
                       <p className="text-sm text-white/80">Fırsat</p>
-                      <Link
-                        href={`/${locale}/deals/${meeting.dealId}`}
+                    <Link
+                      href={`/${locale}/deals/${meeting.dealId}`}
                         className="text-white font-semibold hover:underline"
-                      >
-                        {meeting.Deal.title}
-                      </Link>
+                    >
+                      {meeting.Deal.title}
+                    </Link>
                       {meeting.Deal.value && (
                         <p className="text-sm text-white/70">{formatCurrency(meeting.Deal.value)}</p>
                       )}
-                    </div>
                   </div>
-                )}
-                {meeting.location && (
+                </div>
+              )}
+              {meeting.location && (
                   <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
                     <MapPin className="h-5 w-5 text-white" />
-                    <div>
+                  <div>
                       <p className="text-sm text-white/80">Konum</p>
                       <p className="text-white font-semibold">{meeting.location}</p>
                     </div>
@@ -441,7 +441,7 @@ export default function MeetingDetailPage() {
                     <div>
                       <p className="text-sm text-white/80">Süre</p>
                       <p className="text-white font-semibold">{meeting.meetingDuration} dakika</p>
-                    </div>
+                </div>
                   </div>
                 )}
                 {meeting.meetingUrl && (
@@ -499,9 +499,9 @@ export default function MeetingDetailPage() {
                     <div className="flex justify-between p-2 bg-white/10 rounded-lg backdrop-blur-sm">
                       <span className="text-white/90">Yemek:</span>
                       <span className="font-semibold text-white">{formatCurrency(meeting.expenseBreakdown.food)}</span>
-                    </div>
-                  )}
-                  {meeting.expenseBreakdown.other > 0 && (
+                  </div>
+                )}
+                {meeting.expenseBreakdown.other > 0 && (
                     <div className="flex justify-between p-2 bg-white/10 rounded-lg backdrop-blur-sm">
                       <span className="text-white/90">Diğer:</span>
                       <span className="font-semibold text-white">{formatCurrency(meeting.expenseBreakdown.other)}</span>
@@ -524,25 +524,25 @@ export default function MeetingDetailPage() {
               transition={{ delay: 0.5 }}
             >
               <Card className="border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 shadow-lg">
-                <CardHeader>
+              <CardHeader>
                   <CardTitle className="text-amber-800 flex items-center gap-2">
                     <AlertCircle className="h-5 w-5" />
                     Gider Uyarısı
                   </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-amber-700 mb-4">
-                    Bu görüşme için operasyon gideri girilmemiş görünüyor.
-                  </p>
-                  <Button
-                    onClick={() => router.push(`/${locale}/finance?relatedTo=Meeting&relatedId=${meeting.id}`)}
-                    className="bg-amber-600 hover:bg-amber-700"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Gider Ekle
-                  </Button>
-                </CardContent>
-              </Card>
+              </CardHeader>
+              <CardContent>
+                <p className="text-amber-700 mb-4">
+                  Bu görüşme için operasyon gideri girilmemiş görünüyor.
+                </p>
+                <Button
+                  onClick={() => router.push(`/${locale}/finance?relatedTo=Meeting&relatedId=${meeting.id}`)}
+                  className="bg-amber-600 hover:bg-amber-700"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Gider Ekle
+                </Button>
+              </CardContent>
+            </Card>
             </motion.div>
           )}
         </div>
@@ -567,24 +567,24 @@ export default function MeetingDetailPage() {
                 <h2 className="text-xl font-bold text-white">Hızlı Eylemler</h2>
               </div>
               <div className="space-y-2">
+              <Button
+                variant="outline"
+                  className="w-full justify-start bg-white/20 hover:bg-white/30 text-white border-white/30"
+                onClick={() => router.push(`/${locale}/finance?relatedTo=Meeting&relatedId=${meeting.id}`)}
+              >
+                <DollarSign className="mr-2 h-4 w-4" />
+                Gider Ekle
+              </Button>
+              {meeting.customerId && (
                 <Button
                   variant="outline"
-                  className="w-full justify-start bg-white/20 hover:bg-white/30 text-white border-white/30"
-                  onClick={() => router.push(`/${locale}/finance?relatedTo=Meeting&relatedId=${meeting.id}`)}
-                >
-                  <DollarSign className="mr-2 h-4 w-4" />
-                  Gider Ekle
-                </Button>
-                {meeting.customerId && (
-                  <Button
-                    variant="outline"
                     className="w-full justify-start bg-white/20 hover:bg-white/30 text-white border-white/30"
-                    onClick={() => setQuoteFormOpen(true)}
-                  >
-                    <FileText className="mr-2 h-4 w-4" />
-                    Teklif Oluştur
-                  </Button>
-                )}
+                  onClick={() => setQuoteFormOpen(true)}
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Teklif Oluştur
+                </Button>
+              )}
               </div>
             </GradientCard>
           </motion.div>
@@ -609,65 +609,9 @@ export default function MeetingDetailPage() {
                 </div>
                 <div className="p-3 bg-white/10 rounded-lg backdrop-blur-sm">
                   <p className="text-white font-semibold">{meeting.CreatedBy.name}</p>
-                  {meeting.CreatedBy.email && (
+                {meeting.CreatedBy.email && (
                     <p className="text-sm text-white/70 mt-1">{meeting.CreatedBy.email}</p>
-                  )}
-                </div>
-              </GradientCard>
-            </motion.div>
-          )}
-        </div>
-      </div>
-
-      {/* Activity Timeline */}
-      {meeting.activities && meeting.activities.length > 0 && (
-        <ActivityTimeline activities={meeting.activities} />
-      )}
-
-      {/* Edit Form Modal */}
-      {formOpen && (
-        <MeetingForm
-          meeting={meeting}
-          open={formOpen}
-          onClose={() => {
-            setFormOpen(false)
-            setEditMode(false)
-          }}
-          onSuccess={async (savedMeeting) => {
-            await mutate()
-            setFormOpen(false)
-            setEditMode(false)
-          }}
-        />
-      )}
-
-      {/* Quote Form Modal */}
-      <QuoteForm
-        quote={undefined}
-        open={quoteFormOpen}
-        onClose={() => setQuoteFormOpen(false)}
-        onSuccess={async (savedQuote: any) => {
-          // Cache'i güncelle - optimistic update
-          await mutate(undefined, { revalidate: true })
-          setQuoteFormOpen(false)
-          // Başarılı kayıt sonrası teklif detay sayfasına yönlendir
-          router.push(`/${locale}/quotes/${savedQuote.id}`)
-        }}
-        dealId={meeting.dealId}
-        customerId={meeting.customerId}
-        customerCompanyId={meeting.companyId}
-      />
-    </div>
-  )
-}
-
-
-                </div>
-                <div className="p-3 bg-white/10 rounded-lg backdrop-blur-sm">
-                  <p className="text-white font-semibold">{meeting.CreatedBy.name}</p>
-                  {meeting.CreatedBy.email && (
-                    <p className="text-sm text-white/70 mt-1">{meeting.CreatedBy.email}</p>
-                  )}
+                )}
                 </div>
               </GradientCard>
             </motion.div>

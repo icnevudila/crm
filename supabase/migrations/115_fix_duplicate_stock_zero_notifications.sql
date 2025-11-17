@@ -57,3 +57,4 @@ CREATE TRIGGER trg_product_stock_zero
   EXECUTE FUNCTION auto_notify_product_stock_zero();
 
 
+

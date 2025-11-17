@@ -522,3 +522,7 @@ INSERT INTO "Deal" (
 
 
 
+
+
+
+

@@ -3,7 +3,7 @@
 import { useParams, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, FileText, Copy, AlertTriangle, RefreshCw, Plus, Info, Edit, Trash2, Calendar, Zap, DollarSign, Receipt } from 'lucide-react'
+import { ArrowLeft, FileText, Copy, AlertTriangle, RefreshCw, Plus, Info, Edit, Trash2, Calendar, Zap, DollarSign, Receipt, User, Briefcase } from 'lucide-react'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
 import { Button } from '@/components/ui/button'
@@ -892,268 +892,71 @@ export default function QuoteDetailPage() {
         )
       })()}
 
-        {quote.revisionNotes && (
-          <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-            <p className="text-sm font-semibold text-blue-900 mb-1">Revizyon Notları:</p>
-            <p className="text-sm text-blue-800">{quote.revisionNotes}</p>
-          </div>
-        )}
-
-        {/* REJECTED durumunda reddetme notu - kırmızı renkle */}
-        {quote.status === 'REJECTED' && quote.notes && (
-          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex items-center gap-2 mb-2">
-              <Info className="h-5 w-5 text-red-600 flex-shrink-0" />
-              <p className="text-sm font-bold text-red-900">REDDEDİLDİ</p>
-            </div>
-            <p className="text-sm font-semibold text-red-800 mb-2">Reddetme Sebebi:</p>
-            <p className="text-sm text-red-700 whitespace-pre-wrap">
-              {quote.notes.includes('Sebep:') 
-                ? quote.notes.split('Sebep:')[1]?.trim() || quote.notes
-                : quote.notes
-              }
-            </p>
-          </div>
-        )}
-
-        {/* Genel Notlar (REJECTED dışında) */}
-        {quote.status !== 'REJECTED' && quote.notes && (
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-            <p className="text-sm font-semibold text-gray-900 mb-2">Notlar:</p>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">{quote.notes}</p>
-          </div>
-        )}
-
-        {/* Ek Bilgiler */}
-        <div className="mt-4 pt-4 border-t grid grid-cols-1 md:grid-cols-3 gap-4">
-          {quote.validUntil && (
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Geçerlilik Tarihi</p>
-              <p className="text-lg font-semibold">
-                {new Date(quote.validUntil).toLocaleDateString('tr-TR')}
-              </p>
-            </div>
-          )}
-          {quote.discount && quote.discount > 0 && (
-            <div>
-              <p className="text-sm text-gray-600 mb-1">İndirim</p>
-              <p className="text-lg font-semibold text-red-600">
-                -{formatCurrency(quote.discount)}
-              </p>
-            </div>
-          )}
-          {quote.taxRate && (
-            <div>
-              <p className="text-sm text-gray-600 mb-1">KDV Oranı</p>
-              <p className="text-lg font-semibold">%{quote.taxRate}</p>
-            </div>
-          )}
-          {quote.updatedAt && (
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Son Güncelleme</p>
-              <p className="text-lg font-semibold">
-                {new Date(quote.updatedAt).toLocaleDateString('tr-TR')}
-              </p>
-            </div>
-          )}
+      {quote.revisionNotes && (
+        <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+          <p className="text-sm font-semibold text-blue-900 mb-1">Revizyon Notları:</p>
+          <p className="text-sm text-blue-800">{quote.revisionNotes}</p>
         </div>
-      </Card>
-
-      {/* Actions */}
-      {quote.status !== 'ACCEPTED' && quote.status !== 'REJECTED' && (
-        <Card className="p-6">
-          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            İşlemler
-          </h2>
-          <div className="flex gap-2">
-            <Button
-              onClick={handleCreateRevision}
-              disabled={creatingRevision}
-              className="gap-2"
-            >
-              <Copy className="h-4 w-4" />
-              {creatingRevision ? 'Oluşturuluyor...' : 'Revizyon Oluştur'}
-            </Button>
-          </div>
-          <p className="text-sm text-gray-600 mt-2">
-            Revizyon oluşturduğunuzda, bu teklifin kopyası versiyon numarası artırılarak oluşturulur.
-          </p>
-        </Card>
       )}
 
-      {/* Quote Form Modal */}
-      <QuoteForm
-        quote={quote}
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
-        onSuccess={async (savedQuote: Quote) => {
-          // Form başarılı olduğunda cache'i güncelle (sayfa reload yok)
-          // Optimistic update - güncellenmiş quote'u cache'e ekle
-          await mutateQuote(savedQuote, { revalidate: false })
-          
-          // Tüm ilgili cache'leri güncelle
-          await Promise.all([
-            mutate('/api/quotes', undefined, { revalidate: true }),
-            mutate('/api/quotes?', undefined, { revalidate: true }),
-            mutate((key: string) => typeof key === 'string' && key.startsWith('/api/quotes'), undefined, { revalidate: true }),
-          ])
-        }}
-      />
+      {/* REJECTED durumunda reddetme notu - kırmızı renkle */}
+      {quote.status === 'REJECTED' && quote.notes && (
+        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            <Info className="h-5 w-5 text-red-600 flex-shrink-0" />
+            <p className="text-sm font-bold text-red-900">REDDEDİLDİ</p>
+          </div>
+          <p className="text-sm font-semibold text-red-800 mb-2">Reddetme Sebebi:</p>
+          <p className="text-sm text-red-700 whitespace-pre-wrap">
+            {quote.notes.includes('Sebep:') 
+              ? quote.notes.split('Sebep:')[1]?.trim() || quote.notes
+              : quote.notes
+            }
+          </p>
+        </div>
+      )}
 
-      {/* Invoice Form Modal - İlişkili kayıt oluşturma */}
-      <InvoiceForm
-        open={invoiceFormOpen}
-        onClose={() => setInvoiceFormOpen(false)}
-        quoteId={quoteId}
-        customerCompanyId={quote.customerCompanyId}
-        customerId={quote.customerId || quote.Deal?.Customer?.id}
-        onSuccess={async (savedInvoice: any) => {
-          // Cache'i güncelle - optimistic update
-          await Promise.all([
-            mutate('/api/invoices', undefined, { revalidate: true }),
-            mutate('/api/invoices?', undefined, { revalidate: true }),
-            mutate(`/api/quotes/${quoteId}`, undefined, { revalidate: true }),
-          ])
-          await mutateQuote(undefined, { revalidate: true })
-          // Toast zaten InvoiceForm içinde gösteriliyor (navigateToDetailToast)
-        }}
-      />
+      {/* Genel Notlar (REJECTED dışında) */}
+      {quote.status !== 'REJECTED' && quote.notes && (
+        <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+          <p className="text-sm font-semibold text-gray-900 mb-2">Notlar:</p>
+          <p className="text-sm text-gray-700 whitespace-pre-wrap">{quote.notes}</p>
+        </div>
+      )}
 
-      {/* Yeni Teklif Form Modal */}
-      <QuoteForm
-        quote={undefined}
-        open={newQuoteFormOpen}
-        onClose={() => setNewQuoteFormOpen(false)}
-        onSuccess={async (savedQuote: any) => {
-          // Cache'i güncelle - optimistic update
-          await Promise.all([
-            mutate('/api/quotes', undefined, { revalidate: true }),
-            mutate('/api/quotes?', undefined, { revalidate: true }),
-            mutate(`/api/quotes/${quoteId}`, undefined, { revalidate: true }),
-          ])
-          await mutateQuote(undefined, { revalidate: true })
-          setNewQuoteFormOpen(false)
-          // Başarılı kayıt sonrası yeni teklif detay sayfasına yönlendir
-          router.push(`/${locale}/quotes/${savedQuote.id}`)
-        }}
-        dealId={quote.dealId || quote.deal?.id}
-        customerId={quote.customerId}
-        customerCompanyId={quote.customerCompanyId}
-      />
-
-      {/* Document List */}
-      <DocumentList relatedTo="Quote" relatedId={quoteId} />
-
-      {/* Activity Timeline */}
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold mb-4">İşlem Geçmişi</h2>
-        <ActivityTimeline entityType="Quote" entityId={quoteId} />
-      </Card>
-
-      {/* Contract Form Modal - İlişkili kayıt oluşturma */}
-      <ContractForm
-        contract={undefined}
-        open={contractFormOpen}
-        onClose={() => setContractFormOpen(false)}
-        onSuccess={async (savedContract: any) => {
-          // Cache'i güncelle - optimistic update
-          await Promise.all([
-            mutate('/api/contracts', undefined, { revalidate: true }),
-            mutate('/api/contracts?', undefined, { revalidate: true }),
-            mutate(`/api/quotes/${quoteId}`, undefined, { revalidate: true }),
-          ])
-          await mutateQuote(undefined, { revalidate: true })
-          setContractFormOpen(false)
-        }}
-        quoteId={quoteId}
-        dealId={quote.dealId || quote.deal?.id}
-        customerId={quote.customerId}
-        customerCompanyId={quote.customerCompanyId}
-      />
-
-      {/* Meeting Form Modal - İlişkili kayıt oluşturma */}
-      <MeetingForm
-        meeting={undefined}
-        open={meetingFormOpen}
-        onClose={() => setMeetingFormOpen(false)}
-        quoteId={quoteId}
-        customerCompanyId={quote.customerCompanyId}
-        onSuccess={async (savedMeeting: any) => {
-          // Cache'i güncelle - optimistic update
-          await Promise.all([
-            mutate('/api/meetings', undefined, { revalidate: true }),
-            mutate('/api/meetings?', undefined, { revalidate: true }),
-            mutate(`/api/quotes/${quoteId}`, undefined, { revalidate: true }),
-          ])
-          await mutateQuote(undefined, { revalidate: true })
-          setMeetingFormOpen(false)
-          // Başarılı kayıt sonrası görüşme detay sayfasına yönlendir
-          router.push(`/${locale}/meetings/${savedMeeting.id}`)
-        }}
-      />
-    </div>
-  )
-}
-
-        {quote.status === 'REJECTED' && quote.notes && (
-          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex items-center gap-2 mb-2">
-              <Info className="h-5 w-5 text-red-600 flex-shrink-0" />
-              <p className="text-sm font-bold text-red-900">REDDEDİLDİ</p>
-            </div>
-            <p className="text-sm font-semibold text-red-800 mb-2">Reddetme Sebebi:</p>
-            <p className="text-sm text-red-700 whitespace-pre-wrap">
-              {quote.notes.includes('Sebep:') 
-                ? quote.notes.split('Sebep:')[1]?.trim() || quote.notes
-                : quote.notes
-              }
+      {/* Ek Bilgiler */}
+      <div className="mt-4 pt-4 border-t grid grid-cols-1 md:grid-cols-3 gap-4">
+        {quote.validUntil && (
+          <div>
+            <p className="text-sm text-gray-600 mb-1">Geçerlilik Tarihi</p>
+            <p className="text-lg font-semibold">
+              {new Date(quote.validUntil).toLocaleDateString('tr-TR')}
             </p>
           </div>
         )}
-
-        {/* Genel Notlar (REJECTED dışında) */}
-        {quote.status !== 'REJECTED' && quote.notes && (
-          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-            <p className="text-sm font-semibold text-gray-900 mb-2">Notlar:</p>
-            <p className="text-sm text-gray-700 whitespace-pre-wrap">{quote.notes}</p>
+        {quote.discount && quote.discount > 0 && (
+          <div>
+            <p className="text-sm text-gray-600 mb-1">İndirim</p>
+            <p className="text-lg font-semibold text-red-600">
+              -{formatCurrency(quote.discount)}
+            </p>
           </div>
         )}
-
-        {/* Ek Bilgiler */}
-        <div className="mt-4 pt-4 border-t grid grid-cols-1 md:grid-cols-3 gap-4">
-          {quote.validUntil && (
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Geçerlilik Tarihi</p>
-              <p className="text-lg font-semibold">
-                {new Date(quote.validUntil).toLocaleDateString('tr-TR')}
-              </p>
-            </div>
-          )}
-          {quote.discount && quote.discount > 0 && (
-            <div>
-              <p className="text-sm text-gray-600 mb-1">İndirim</p>
-              <p className="text-lg font-semibold text-red-600">
-                -{formatCurrency(quote.discount)}
-              </p>
-            </div>
-          )}
-          {quote.taxRate && (
-            <div>
-              <p className="text-sm text-gray-600 mb-1">KDV Oranı</p>
-              <p className="text-lg font-semibold">%{quote.taxRate}</p>
-            </div>
-          )}
-          {quote.updatedAt && (
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Son Güncelleme</p>
-              <p className="text-lg font-semibold">
-                {new Date(quote.updatedAt).toLocaleDateString('tr-TR')}
-              </p>
-            </div>
-          )}
-        </div>
-      </Card>
+        {quote.taxRate && (
+          <div>
+            <p className="text-sm text-gray-600 mb-1">KDV Oranı</p>
+            <p className="text-lg font-semibold">%{quote.taxRate}</p>
+          </div>
+        )}
+        {quote.updatedAt && (
+          <div>
+            <p className="text-sm text-gray-600 mb-1">Son Güncelleme</p>
+            <p className="text-lg font-semibold">
+              {new Date(quote.updatedAt).toLocaleDateString('tr-TR')}
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Actions */}
       {quote.status !== 'ACCEPTED' && quote.status !== 'REJECTED' && (

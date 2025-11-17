@@ -184,9 +184,6 @@ export async function PUT(
       totalValue = value + (value * taxRate / 100)
     }
 
-    // SuperAdmin kontrolü
-    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
-
     // Update işlemi - SuperAdmin için companyId filtresi yok
     let updateQuery = supabase
       .from('Contract')

@@ -290,7 +290,7 @@ export default function InvoiceDetailPage() {
                 Hızlı İşlemler
               </h2>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {invoice.Customer.email && (
               <SendEmailButton
                 to={invoice.Customer.email}
@@ -361,128 +361,8 @@ export default function InvoiceDetailPage() {
             )}
           </div>
         </Card>
+      </motion.div>
       )}
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            onClick={() => router.push(`/${locale}/invoices`)}
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Geri Dön
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">{invoice.title}</h1>
-            <p className="mt-1 text-gray-600">
-              Oluşturulma: {new Date(invoice.createdAt).toLocaleDateString('tr-TR')}
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          {/* Quote'tan oluşturulan, SHIPPED ve RECEIVED durumundaki faturalar düzenlenemez ve silinemez */}
-          {!invoice.quoteId && invoice.status !== 'SHIPPED' && invoice.status !== 'RECEIVED' && (
-            <Button variant="outline" onClick={() => setFormOpen(true)}>
-              <Edit className="mr-2 h-4 w-4" />
-              Düzenle
-            </Button>
-          )}
-          {invoice.Customer?.email && (
-            <SendEmailButton
-              to={invoice.Customer.email}
-              subject={`Fatura: ${invoice.title}`}
-              html={`
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                  <h2 style="color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px;">
-                    Fatura Bilgileri
-                  </h2>
-                  <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px;">
-                    <p><strong>Fatura:</strong> ${invoice.title}</p>
-                    ${invoice.invoiceNumber ? `<p><strong>Fatura No:</strong> ${invoice.invoiceNumber}</p>` : ''}
-                    <p><strong>Durum:</strong> ${statusLabels[invoice.status] || invoice.status}</p>
-                    ${invoice.total ? `<p><strong>Toplam:</strong> ${formatCurrency(invoice.total)}</p>` : ''}
-                    ${invoice.Quote?.title ? `<p><strong>İlgili Teklif:</strong> ${invoice.Quote.title}</p>` : ''}
-                    ${invoice.notes ? `<p><strong>Notlar:</strong><br>${invoice.notes.replace(/\n/g, '<br>')}</p>` : ''}
-                  </div>
-                  <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">
-                    Bu e-posta CRM Enterprise V3 sisteminden gönderilmiştir.
-                  </p>
-                </div>
-              `}
-            />
-          )}
-          {invoice.Customer?.phone && (
-            <>
-              <SendSmsButton
-                to={invoice.Customer.phone.startsWith('+') 
-                  ? invoice.Customer.phone 
-                  : `+${invoice.Customer.phone.replace(/\D/g, '')}`}
-                message={`Merhaba, ${invoice.title} faturası hazır. Detaylar için lütfen iletişime geçin.`}
-              />
-              <SendWhatsAppButton
-                to={invoice.Customer.phone.startsWith('+') 
-                  ? invoice.Customer.phone 
-                  : `+${invoice.Customer.phone.replace(/\D/g, '')}`}
-                message={`Merhaba, ${invoice.title} faturası hazır. Detaylar için lütfen iletişime geçin.`}
-              />
-            </>
-          )}
-          <AddToCalendarButton
-            recordType="invoice"
-            record={invoice}
-            startTime={invoice.createdAt}
-            endTime={invoice.createdAt}
-            location={invoice.Customer?.address}
-          />
-          <Button
-            className="bg-gradient-primary text-white"
-            onClick={() => {
-              window.open(`/api/pdf/invoice/${id}`, '_blank')
-            }}
-          >
-            <FileText className="mr-2 h-4 w-4" />
-            PDF İndir
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              window.open(`/api/invoices/${id}/export`, '_blank')
-            }}
-          >
-            <FileText className="mr-2 h-4 w-4" />
-            XML Export (E-Fatura)
-          </Button>
-          {/* Quote'tan oluşturulan, SHIPPED ve RECEIVED durumundaki faturalar silinemez */}
-          {!invoice.quoteId && invoice.status !== 'ACCEPTED' && invoice.status !== 'SHIPPED' && invoice.status !== 'RECEIVED' && (
-            <Button
-              variant="outline"
-              className="text-red-600 hover:text-red-700 hover:bg-red-50"
-              onClick={async () => {
-                if (!confirm(`${invoice.title} faturasını silmek istediğinize emin misiniz?`)) {
-                  return
-                }
-                setDeleteLoading(true)
-                try {
-                  const res = await fetch(`/api/invoices/${id}`, {
-                    method: 'DELETE',
-                  })
-                  if (!res.ok) throw new Error('Silme işlemi başarısız')
-                  router.push(`/${locale}/invoices`)
-                } catch (error: any) {
-                  toastError('Silme işlemi başarısız oldu', error?.message)
-                } finally {
-                  setDeleteLoading(false)
-                }
-              }}
-              disabled={deleteLoading}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Sil
-            </Button>
-          )}
-        </div>
-      </div>
 
       {/* Uyarı Mesajları */}
       {invoice.status === 'SHIPPED' && (
@@ -1338,84 +1218,6 @@ export default function InvoiceDetailPage() {
                       ? 'Beklemede'
                       : shipment.status === 'IN_TRANSIT'
                       ? 'Yolda'
-                      : shipment.status === 'CANCELLED'
-                      ? 'İptal'
-                      : shipment.status}
-                  </Badge>
-                </Link>
-              ))}
-            </div>
-          </Card>
-        )}
-      </div>
-
-      {/* Document List */}
-      <DocumentList relatedTo="Invoice" relatedId={id} />
-
-      {/* Activity Timeline */}
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold mb-4">İşlem Geçmişi</h2>
-        <ActivityTimeline entityType="Invoice" entityId={id} />
-      </Card>
-
-      {/* Form Modal */}
-      <InvoiceForm
-        invoice={invoice}
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
-        onSuccess={async (savedInvoice: any) => {
-          // Form başarılı olduğunda cache'i güncelle (sayfa reload yok)
-          // Optimistic update - güncellenmiş invoice'u cache'e ekle
-          await mutateInvoice(savedInvoice, { revalidate: false })
-          
-          // Tüm ilgili cache'leri güncelle
-          await Promise.all([
-            mutate('/api/invoices', undefined, { revalidate: true }),
-            mutate('/api/invoices?', undefined, { revalidate: true }),
-            mutate((key: string) => typeof key === 'string' && key.startsWith('/api/invoices'), undefined, { revalidate: true }),
-          ])
-          setFormOpen(false)
-        }}
-      />
-
-      {/* InvoiceItem Form Modal */}
-      <InvoiceItemForm
-        invoiceId={id}
-        open={itemFormOpen}
-        onClose={() => setItemFormOpen(false)}
-        onSuccess={async () => {
-          setItemFormOpen(false)
-          // Cache'i güncelle - optimistic update
-          await mutateInvoice(undefined, { revalidate: true })
-          
-          // Tüm ilgili cache'leri güncelle
-          await Promise.all([
-            mutate('/api/invoices', undefined, { revalidate: true }),
-            mutate('/api/invoices?', undefined, { revalidate: true }),
-            mutate(`/api/invoices/${id}`, undefined, { revalidate: true }),
-          ])
-        }}
-      />
-
-      {/* Shipment Form Modal */}
-      <ShipmentForm
-        shipment={undefined}
-        open={shipmentFormOpen}
-        onClose={() => setShipmentFormOpen(false)}
-        invoiceId={id}
-        onSuccess={async (savedShipment: any) => {
-          // Cache'i güncelle - optimistic update
-          await mutateInvoice(undefined, { revalidate: true })
-          setShipmentFormOpen(false)
-          // Başarılı kayıt sonrası sevkiyat detay sayfasına yönlendir
-          router.push(`/${locale}/shipments/${savedShipment.id}`)
-        }}
-      />
-    </div>
-  )
-}
-
-
                       : shipment.status === 'CANCELLED'
                       ? 'İptal'
                       : shipment.status}

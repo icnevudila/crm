@@ -522,3 +522,4 @@ Teklif ACCEPTED → Achievement Check
 **Not**: Bu özellikler kademeli olarak eklenebilir. Önce temel quest sistemi ile başlayıp, kullanıcı geri bildirimlerine göre genişletilebilir.
 
 
+

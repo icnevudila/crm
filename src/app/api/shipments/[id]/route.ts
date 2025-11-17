@@ -336,9 +336,6 @@ export async function PUT(
     if (body.estimatedDelivery !== undefined) updateData.estimatedDelivery = body.estimatedDelivery || null
     if (body.deliveryAddress !== undefined) updateData.deliveryAddress = body.deliveryAddress || null
 
-    // SuperAdmin kontrolü
-    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
-
     // Update işlemi - SuperAdmin için companyId filtresi yok
     let updateQuery = supabase
       .from('Shipment')
