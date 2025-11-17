@@ -34,8 +34,15 @@ function LoginPage() {
   const [mounted, setMounted] = useState(false)
 
   // Zaten login olmuş kullanıcıları dashboard'a yönlendir
+  // ÖNEMLİ: Sadece loading tamamlandıktan SONRA ve gerçekten authenticated ise yönlendir
   useEffect(() => {
-    if (status === 'authenticated' && session?.user) {
+    // Loading durumunda yönlendirme yapma (cache'den eski session okunabilir)
+    if (status === 'loading') {
+      return
+    }
+    
+    // Sadece gerçekten authenticated ve user varsa yönlendir
+    if (status === 'authenticated' && session?.user?.id) {
       router.replace('/tr/dashboard')
     }
   }, [status, session, router])

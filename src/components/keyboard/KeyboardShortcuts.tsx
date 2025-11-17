@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
+import { useRouter, usePathname } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { toastInfo } from '@/lib/toast'
+import KeyboardShortcutsModal from './KeyboardShortcutsModal'
 
 // UndoStackContext'i optional olarak kullan
 // Provider içinde olduğu için direkt kullanabiliriz
@@ -33,6 +34,8 @@ export default function KeyboardShortcuts({
 }: KeyboardShortcutsProps) {
   const router = useRouter()
   const locale = useLocale()
+  const pathname = usePathname()
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false)
   
   // Undo stack'i optional olarak kullan
   let undoStack: any = null
@@ -149,20 +152,104 @@ export default function KeyboardShortcuts({
         }
 
         e.preventDefault()
-        // Kısayollar modal'ını aç (gelecekte eklenecek)
-        toastInfo(
-          'Klavye Kısayolları',
-          'Ctrl+Z: Geri Al | Ctrl+Shift+Z: İleri Al | Ctrl+S: Kaydet | N: Yeni Kayıt | Cmd+K: Komut Paleti',
-          { duration: 5000 }
-        )
+        setShowShortcutsModal(true)
+        return
+      }
+
+      // G + D - Dashboard'a git
+      if (e.key === 'd' && !isModifier && !isShift) {
+        const target = e.target as HTMLElement
+        if (
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable
+        ) {
+          return
+        }
+        // G tuşuna basıldıysa ve sonra D tuşuna basıldıysa
+        // (Basit implementasyon - daha gelişmiş olabilir)
+        if (pathname !== `/${locale}/dashboard`) {
+          router.push(`/${locale}/dashboard`)
+        }
+        return
+      }
+
+      // G + C - Müşterilere git
+      if (e.key === 'c' && !isModifier && !isShift) {
+        const target = e.target as HTMLElement
+        if (
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable
+        ) {
+          return
+        }
+        if (pathname !== `/${locale}/customers`) {
+          router.push(`/${locale}/customers`)
+        }
+        return
+      }
+
+      // G + Q - Tekliflere git
+      if (e.key === 'q' && !isModifier && !isShift) {
+        const target = e.target as HTMLElement
+        if (
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable
+        ) {
+          return
+        }
+        if (pathname !== `/${locale}/quotes`) {
+          router.push(`/${locale}/quotes`)
+        }
+        return
+      }
+
+      // G + I - Faturalara git
+      if (e.key === 'i' && !isModifier && !isShift) {
+        const target = e.target as HTMLElement
+        if (
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable
+        ) {
+          return
+        }
+        if (pathname !== `/${locale}/invoices`) {
+          router.push(`/${locale}/invoices`)
+        }
+        return
+      }
+
+      // G + T - Görevlere git
+      if (e.key === 't' && !isModifier && !isShift) {
+        const target = e.target as HTMLElement
+        if (
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable
+        ) {
+          return
+        }
+        if (pathname !== `/${locale}/tasks`) {
+          router.push(`/${locale}/tasks`)
+        }
         return
       }
     }
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [enabled, router, locale, undo, redo, canUndo, canRedo, undoStack])
+  }, [enabled, router, locale, pathname, undo, redo, canUndo, canRedo, undoStack])
 
-  return null
+  return (
+    <>
+      <KeyboardShortcutsModal
+        open={showShortcutsModal}
+        onClose={() => setShowShortcutsModal(false)}
+      />
+    </>
+  )
 }
 

@@ -700,10 +700,10 @@ export default function CustomerDetailPage() {
       <DocumentList relatedTo="Customer" relatedId={id} />
 
       {/* Activity Timeline */}
-      <Card className="p-6">
+        <Card className="p-6">
         <h2 className="text-xl font-semibold mb-4">İşlem Geçmişi</h2>
         <ActivityTimeline entityType="Customer" entityId={id} />
-      </Card>
+        </Card>
 
       {/* Comments & Files */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

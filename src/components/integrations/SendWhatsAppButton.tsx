@@ -1,114 +1,59 @@
-/**
- * Send WhatsApp Button Component
- * Ortak WhatsApp gönderme butonu - tüm sayfalarda kullanılabilir
- */
-
 'use client'
 
-import { useState, useEffect } from 'react'
-import { MessageCircle, AlertCircle } from 'lucide-react'
+import { useState } from 'react'
+import { MessageCircle, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { toast } from '@/lib/toast'
-import { useSession } from '@/hooks/useSession'
 
 interface SendWhatsAppButtonProps {
-  to: string // Telefon numarası (E.164 formatında: +905551234567)
-  message: string // WhatsApp mesajı
-  from?: string // Gönderen WhatsApp numarası (opsiyonel)
-  disabled?: boolean
+  phoneNumber?: string
+  entityType?: string
+  entityId?: string
+  customerName?: string
   variant?: 'default' | 'outline' | 'ghost'
   size?: 'default' | 'sm' | 'lg' | 'icon'
-  className?: string
-  onSuccess?: () => void
 }
 
 export default function SendWhatsAppButton({
-  to,
-  message,
-  from,
-  disabled = false,
+  phoneNumber: initialPhoneNumber,
+  entityType,
+  entityId,
+  customerName,
   variant = 'outline',
   size = 'default',
-  className = '',
-  onSuccess,
 }: SendWhatsAppButtonProps) {
-  const { session } = useSession()
-  const [sendingWhatsApp, setSendingWhatsApp] = useState(false)
-  const [hasIntegration, setHasIntegration] = useState<boolean | null>(null)
-  const [checkingIntegration, setCheckingIntegration] = useState(true)
-  const [lastError, setLastError] = useState<string | null>(null)
-  const [retryCount, setRetryCount] = useState(0)
+  const [open, setOpen] = useState(false)
+  const [phoneNumber, setPhoneNumber] = useState(initialPhoneNumber || '')
+  const [message, setMessage] = useState('')
+  const [sending, setSending] = useState(false)
 
-  // WhatsApp entegrasyonu kontrolü
-  useEffect(() => {
-    const checkIntegration = async () => {
-      if (!session?.user?.companyId) {
-        setHasIntegration(false)
-        setCheckingIntegration(false)
-        return
-      }
-
-      try {
-        const res = await fetch('/api/integrations/whatsapp/check')
-        if (!res.ok) {
-          setHasIntegration(false)
-          return
-        }
-        const data = await res.json()
-        setHasIntegration(data.hasIntegration && data.isActive)
-      } catch (error) {
-        console.error('WhatsApp integration check error:', error)
-        setHasIntegration(false)
-      } finally {
-        setCheckingIntegration(false)
-      }
-    }
-
-    checkIntegration()
-  }, [session])
-
-  const handleSendWhatsApp = async () => {
-    // Entegrasyon kontrolü
-    if (hasIntegration === false) {
-      toast.error(
-        'WhatsApp Entegrasyonu Yok',
-        'WhatsApp mesajı göndermek için önce Kullanıcı Entegrasyonları sayfasından WhatsApp entegrasyonunu yapılandırın.\n\nKurulum:\n1. Twilio hesabı oluşturun: https://www.twilio.com/try-twilio\n2. WhatsApp API\'yi aktifleştirin ve WhatsApp numarası alın\n3. Kullanıcı Entegrasyonları > WhatsApp (Twilio) bölümüne gidin\n4. Account SID, Auth Token ve WhatsApp numarasını girin\n5. "Kaydet" butonuna tıklayın ve entegrasyonu aktifleştirin'
-      )
+  const handleSend = async () => {
+    if (!phoneNumber.trim() || !message.trim()) {
+      toast.error('Telefon numarası ve mesaj gereklidir')
       return
     }
 
-    if (hasIntegration === null || checkingIntegration) {
-      toast.error('Kontrol Ediliyor', 'WhatsApp entegrasyonu kontrol ediliyor, lütfen bekleyin...')
-      return
-    }
-
-    // Telefon numarası kontrolü
-    if (!to || to.trim() === '') {
-      toast.error('Hata', 'Alıcı telefon numarası bulunamadı')
-      return
-    }
-
-    // Telefon numarası formatı kontrolü
-    if (!to.startsWith('+')) {
-      toast.error('Hata', 'Telefon numarası E.164 formatında olmalıdır (örn: +905551234567)')
-      return
-    }
-
-    // Mesaj kontrolü
-    if (!message || message.trim() === '') {
-      toast.error('Hata', 'WhatsApp mesajı boş olamaz')
-      return
-    }
-
-    setSendingWhatsApp(true)
+    setSending(true)
     try {
       const res = await fetch('/api/integrations/whatsapp/send', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          to,
+          phoneNumber,
           message,
-          from,
+          entityType,
+          entityId,
         }),
       })
 
@@ -117,88 +62,100 @@ export default function SendWhatsAppButton({
         throw new Error(error.error || 'WhatsApp mesajı gönderilemedi')
       }
 
-      const result = await res.json()
-      toast.success('Başarılı', 'WhatsApp mesajı başarıyla gönderildi')
-      onSuccess?.()
-      setLastError(null)
-      setRetryCount(0)
+      const data = await res.json()
+      toast.success('WhatsApp mesajı gönderildi')
+      setOpen(false)
+      setMessage('')
     } catch (error: any) {
-      console.error('WhatsApp send error:', error)
-      const errorMessage = error?.message || 'Bilinmeyen bir hata oluştu'
-      setLastError(errorMessage)
-      
-      // Hata mesajına göre daha açıklayıcı toast - retry butonu ile
-      if (error.message?.includes('entegrasyon') || error.message?.includes('integration')) {
-        toast.error(
-          'WhatsApp Entegrasyonu Hatası',
-          'WhatsApp mesajı gönderilemedi. Lütfen Ayarlar > Entegrasyonlar bölümünden entegrasyonunuzu kontrol edin.',
-          retryCount < 3 ? {
-            action: {
-              label: 'Tekrar Dene',
-              onClick: () => {
-                setRetryCount(prev => prev + 1)
-                handleSendWhatsApp()
-              },
-            },
-          } : undefined
-        )
-      } else {
-        toast.error(
-          'WhatsApp Mesajı Gönderilemedi',
-          errorMessage,
-          retryCount < 3 ? {
-            action: {
-              label: 'Tekrar Dene',
-              onClick: () => {
-                setRetryCount(prev => prev + 1)
-                handleSendWhatsApp()
-              },
-            },
-          } : undefined
-        )
-      }
+      console.error('Send WhatsApp error:', error)
+      toast.error('WhatsApp mesajı gönderilemedi', error?.message)
     } finally {
-      setSendingWhatsApp(false)
+      setSending(false)
     }
   }
 
-  // Entegrasyon kontrolü yapılırken buton gösterilmez veya disabled olur
-  if (checkingIntegration) {
-    return null // veya loading spinner gösterilebilir
-  }
-
-  // Telefon numarası yoksa buton gösterilmez
-  if (!to || to.trim() === '') {
-    return null
-  }
+  const defaultMessage = customerName
+    ? `Merhaba ${customerName},\n\n`
+    : 'Merhaba,\n\n'
 
   return (
-    <Button
-      variant={variant}
-      size={size}
-      onClick={handleSendWhatsApp}
-      disabled={disabled || sendingWhatsApp || hasIntegration === false}
-      className={className}
-      title={
-        hasIntegration === false
-          ? 'WhatsApp entegrasyonu yapılandırılmamış'
-          : sendingWhatsApp
-          ? 'WhatsApp mesajı gönderiliyor...'
-          : 'WhatsApp mesajı gönder'
-      }
-    >
-      {hasIntegration === false ? (
-        <>
-          <AlertCircle className="mr-2 h-4 w-4" />
-          Entegrasyon Yok
-        </>
-      ) : (
-        <>
-          <MessageCircle className="mr-2 h-4 w-4" />
-          {sendingWhatsApp ? 'Gönderiliyor...' : 'WhatsApp Gönder'}
-        </>
-      )}
-    </Button>
+    <>
+      <Button
+        variant={variant}
+        size={size}
+        onClick={() => {
+          setPhoneNumber(initialPhoneNumber || '')
+          setMessage(defaultMessage)
+          setOpen(true)
+        }}
+        className="gap-2"
+      >
+        <MessageCircle className="h-4 w-4" />
+        {size !== 'icon' && 'WhatsApp'}
+      </Button>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>WhatsApp Mesajı Gönder</DialogTitle>
+            <DialogDescription>
+              {customerName
+                ? `${customerName} müşterisine WhatsApp mesajı gönderin`
+                : 'WhatsApp mesajı gönderin'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="phone">Telefon Numarası</Label>
+              <Input
+                id="phone"
+                placeholder="905551234567"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                disabled={sending}
+              />
+              <p className="text-xs text-gray-500">
+                Ülke kodu ile birlikte girin (örn: 905551234567)
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="message">Mesaj</Label>
+              <Textarea
+                id="message"
+                placeholder="Mesajınızı yazın..."
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={6}
+                disabled={sending}
+              />
+              <p className="text-xs text-gray-500">
+                {message.length} karakter
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={sending}>
+              İptal
+            </Button>
+            <Button onClick={handleSend} disabled={sending || !phoneNumber.trim() || !message.trim()}>
+              {sending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Gönderiliyor...
+                </>
+              ) : (
+                <>
+                  <MessageCircle className="mr-2 h-4 w-4" />
+                  Gönder
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
-

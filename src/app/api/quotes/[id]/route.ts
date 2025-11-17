@@ -51,16 +51,12 @@ export async function GET(
     const companyId = session.user.companyId || null
 
     // Quote'u sadece gerekli kolonlarla çek (performans için)
-    // createdBy ve updatedBy bilgilerini User join ile çekiyoruz (audit trail için)
-    // NOT: Foreign key yoksa (migration çalıştırılmamışsa) join'leri kaldırıp tekrar deniyoruz
+    // NOT: createdBy/updatedBy kolonları migration'da yoksa hata verir, bu yüzden kaldırıldı
     let query = supabase
       .from('Quote')
       .select(
         `
         id, title, status, totalAmount, dealId, customerCompanyId, companyId, notes, validUntil, discount, taxRate, createdAt, updatedAt,
-        createdBy, updatedBy,
-        CreatedByUser:User!Quote_createdBy_fkey(id, name, email),
-        UpdatedByUser:User!Quote_updatedBy_fkey(id, name, email),
         Deal (
           id,
           title,
@@ -90,15 +86,14 @@ export async function GET(
     
     let { data, error } = await query.maybeSingle()
     
-    // Foreign key hatası varsa (PGRST200), join'leri kaldırıp tekrar dene
-    if (error && (error.code === 'PGRST200' || error.message?.includes('Could not find a relationship'))) {
-      console.warn('Quote GET API: Foreign key bulunamadı, join olmadan tekrar deneniyor...')
+    // Hata varsa (kolon bulunamadı veya foreign key hatası), tekrar dene
+    if (error && (error.code === 'PGRST200' || error.message?.includes('Could not find a relationship') || error.message?.includes('does not exist'))) {
+      console.warn('Quote GET API: Hata oluştu, tekrar deneniyor...', error.message)
       let queryWithoutJoin = supabase
         .from('Quote')
         .select(
           `
           id, title, status, totalAmount, dealId, customerCompanyId, companyId, notes, validUntil, discount, taxRate, createdAt, updatedAt,
-          createdBy, updatedBy,
           Deal (
             id,
             title,
@@ -129,26 +124,7 @@ export async function GET(
       const retryData: any = retryResult.data
       error = retryResult.error
       
-      // createdBy/updatedBy varsa User bilgilerini ayrı query ile çek
-      if (retryData && (retryData.createdBy || retryData.updatedBy)) {
-        const userIds = [retryData.createdBy, retryData.updatedBy].filter(Boolean) as string[]
-        if (userIds.length > 0) {
-          const { data: users } = await supabase
-            .from('User')
-            .select('id, name, email')
-            .in('id', userIds)
-          
-          if (users) {
-            const userMap = new Map(users.map((u: any) => [u.id, u]))
-            if (retryData.createdBy && userMap.has(retryData.createdBy)) {
-              retryData.CreatedByUser = userMap.get(retryData.createdBy)
-            }
-            if (retryData.updatedBy && userMap.has(retryData.updatedBy)) {
-              retryData.UpdatedByUser = userMap.get(retryData.updatedBy)
-            }
-          }
-        }
-      }
+      // createdBy/updatedBy kolonları kaldırıldı, User bilgileri çekilmiyor
       data = retryData
     }
 

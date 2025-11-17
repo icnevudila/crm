@@ -435,14 +435,11 @@ export async function GET(
     }
 
     // Invoice'u sadece gerekli kolonlarla çek (performans için)
-    // NOT: Foreign key yoksa (migration çalıştırılmamışsa) join'leri kaldırıp tekrar deniyoruz
+    // NOT: createdBy/updatedBy kolonları migration'da yoksa hata verir, bu yüzden kaldırıldı
     let query = supabase
       .from('Invoice')
       .select(`
-        id, title, status, totalAmount, quoteId, shipmentId, invoiceType, companyId, createdAt, updatedAt, invoiceNumber, dueDate, paidAmount, paymentDate, taxRate, notes,
-        createdBy, updatedBy,
-        CreatedByUser:User!Invoice_createdBy_fkey(id, name, email),
-        UpdatedByUser:User!Invoice_updatedBy_fkey(id, name, email)
+        id, title, status, totalAmount, quoteId, shipmentId, invoiceType, companyId, createdAt, updatedAt, invoiceNumber, dueDate, paidAmount, paymentDate, taxRate, notes
       `)
       .eq('id', id)
 
@@ -453,14 +450,13 @@ export async function GET(
 
     let { data: invoiceResult, error: invoiceError } = await query
     
-    // Foreign key hatası varsa (PGRST200), join'leri kaldırıp tekrar dene
-    if (invoiceError && (invoiceError.code === 'PGRST200' || invoiceError.message?.includes('Could not find a relationship'))) {
-      console.warn('Invoice GET API: Foreign key bulunamadı, join olmadan tekrar deneniyor...')
+    // Hata varsa (kolon bulunamadı veya foreign key hatası), tekrar dene
+    if (invoiceError && (invoiceError.code === 'PGRST200' || invoiceError.message?.includes('Could not find a relationship') || invoiceError.message?.includes('does not exist'))) {
+      console.warn('Invoice GET API: Hata oluştu, tekrar deneniyor...', invoiceError.message)
       let queryWithoutJoin = supabase
         .from('Invoice')
         .select(`
-          id, title, status, totalAmount, quoteId, shipmentId, invoiceType, companyId, createdAt, updatedAt, invoiceNumber, dueDate, paidAmount, paymentDate, taxRate, notes,
-          createdBy, updatedBy
+          id, title, status, totalAmount, quoteId, shipmentId, invoiceType, companyId, createdAt, updatedAt, invoiceNumber, dueDate, paidAmount, paymentDate, taxRate, notes
         `)
         .eq('id', id)
       
@@ -471,31 +467,6 @@ export async function GET(
       const retryResult = await queryWithoutJoin
       invoiceResult = retryResult.data as any
       invoiceError = retryResult.error
-      
-      // createdBy/updatedBy varsa User bilgilerini ayrı query ile çek
-      const invoiceDataTemp: any = Array.isArray(invoiceResult) && invoiceResult.length > 0 
-        ? invoiceResult[0] 
-        : invoiceResult
-      
-      if (invoiceDataTemp && (invoiceDataTemp.createdBy || invoiceDataTemp.updatedBy)) {
-        const userIds = [invoiceDataTemp.createdBy, invoiceDataTemp.updatedBy].filter(Boolean) as string[]
-        if (userIds.length > 0) {
-          const { data: users } = await supabase
-            .from('User')
-            .select('id, name, email')
-            .in('id', userIds)
-          
-          if (users) {
-            const userMap = new Map(users.map((u: any) => [u.id, u]))
-            if (invoiceDataTemp.createdBy && userMap.has(invoiceDataTemp.createdBy)) {
-              invoiceDataTemp.CreatedByUser = userMap.get(invoiceDataTemp.createdBy)
-            }
-            if (invoiceDataTemp.updatedBy && userMap.has(invoiceDataTemp.updatedBy)) {
-              invoiceDataTemp.UpdatedByUser = userMap.get(invoiceDataTemp.updatedBy)
-            }
-          }
-        }
-      }
     }
 
     if (process.env.NODE_ENV === 'development') {
@@ -781,6 +752,9 @@ export async function PUT(
     const { id: bodyId, companyId: bodyCompanyId, createdAt, updatedAt, createdBy, updatedBy, ...body } = bodyRaw
     const supabase = getSupabaseWithServiceRole()
 
+    // SuperAdmin kontrolü
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    
     // Quote'tan oluşturulan faturalar ve kesinleşmiş faturalar korumalı - hiçbir şekilde değiştirilemez
     // Retry mekanizması - yeni oluşturulan invoice için (commit gecikmesi olabilir)
     let currentInvoice = null
@@ -793,12 +767,17 @@ export async function PUT(
       // customerId trigger'lar için gerekli, eklemeye çalışalım
       // invoiceType sevkiyat/mal kabul oluşturmak için gerekli
       // Diğer kolonlar migration'larla eklenmiş olabilir, eksikse hata vermez
-      let { data, error } = await supabase
+      let invoiceQuery = supabase
         .from('Invoice')
         .select('id, quoteId, status, title, companyId')
         .eq('id', id)
-        .eq('companyId', session.user.companyId)
-        .maybeSingle()
+      
+      // SuperAdmin değilse companyId filtresi ekle
+      if (!isSuperAdmin) {
+        invoiceQuery = invoiceQuery.eq('companyId', session.user.companyId)
+      }
+      
+      let { data, error } = await invoiceQuery.maybeSingle()
       
       // customerId kolonunu da çekmeyi dene (trigger'lar için gerekli)
       if (!error && data) {

@@ -115,3 +115,4 @@ LIMIT 10;
 3. Supabase Dashboard → Table Editor → Kolonları kontrol edin
 
 
+

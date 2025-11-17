@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { logAction } from '@/lib/logger'
 
 // Build-time'da çalışmasın - sadece runtime'da çalışsın
 export const dynamic = 'force-dynamic'
@@ -273,6 +274,49 @@ export async function GET(request: Request) {
   } catch (error) {
     return NextResponse.json(
       { error: 'Failed to fetch activities' },
+      { status: 500 }
+    )
+  }
+}
+
+// POST: Yeni ActivityLog kaydı oluştur (not ekleme gibi işlemler için)
+export async function POST(request: Request) {
+  try {
+    // Session kontrolü
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
+    }
+
+    if (!session?.user?.companyId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const { entity, action, description, meta } = body
+
+    if (!entity || !action || !description) {
+      return NextResponse.json(
+        { error: 'entity, action ve description gereklidir' },
+        { status: 400 }
+      )
+    }
+
+    // logAction fonksiyonunu kullan (server-side)
+    await logAction({
+      entity,
+      action,
+      description,
+      meta: meta || {},
+      userId: session.user.id,
+      companyId: session.user.companyId,
+    })
+
+    return NextResponse.json({ success: true }, { status: 201 })
+  } catch (error: any) {
+    console.error('ActivityLog POST error:', error)
+    return NextResponse.json(
+      { error: 'Failed to create activity log', message: error?.message },
       { status: 500 }
     )
   }

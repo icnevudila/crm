@@ -13,3 +13,4 @@ ADD COLUMN IF NOT EXISTS "resendApiKey" TEXT;
 COMMIT;
 
 
+

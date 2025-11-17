@@ -120,6 +120,7 @@ export async function GET(request: Request) {
     }
 
     // Query builder
+    // NOT: createdBy kolonu migration'da yoksa hata verir, bu yüzden kaldırıldı
     let query = supabase
       .from('Meeting')
       .select(`
@@ -136,12 +137,10 @@ export async function GET(request: Request) {
         companyId,
         customerId,
         dealId,
-        createdBy,
         createdAt,
         updatedAt,
         Customer:Customer(id, name, email, phone),
-        Deal:Deal(id, title, stage),
-        CreatedBy:User!Meeting_createdBy_fkey(id, name, email)
+        Deal:Deal(id, title, stage)
       `, { count: 'exact' })
       .order('meetingDate', { ascending: false })
 

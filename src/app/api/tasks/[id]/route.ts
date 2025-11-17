@@ -38,9 +38,13 @@ export async function GET(
     const supabase = getSupabaseWithServiceRole()
 
     // Task'ı ilişkili verilerle çek - OPTİMİZE: User bilgisini çekerken SuperAdmin filtrele
+    // NOT: createdBy/updatedBy kolonları migration'da yoksa hata verir, bu yüzden kaldırıldı
     let taskQuery = supabase
       .from('Task')
-      .select('*, User:assignedTo(id, name, email, role, companyId)')
+      .select(`
+        id, title, description, status, priority, dueDate, assignedTo, relatedTo, relatedId, companyId, createdAt, updatedAt,
+        User:assignedTo(id, name, email, role, companyId)
+      `)
       .eq('id', id)
     
     // SuperAdmin değilse companyId filtresi ekle
@@ -110,13 +114,29 @@ export async function PUT(
 
     // Mevcut task'ı çek - assignedTo değişikliğini ve status değişikliğini kontrol etmek için
     const supabase = getSupabaseWithServiceRole()
+    
+    // SuperAdmin kontrolü
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    
     // Supabase database type tanımları eksik, Task tablosu için type tanımı yok
-    const { data: currentTask } = await (supabase
+    let taskQuery = (supabase
       .from('Task') as any)
-      .select('assignedTo, title, status')
+      .select('assignedTo, title, status, companyId')
       .eq('id', id)
-      .eq('companyId', session.user.companyId)
-      .single()
+    
+    // SuperAdmin değilse companyId filtresi ekle
+    if (!isSuperAdmin) {
+      taskQuery = taskQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { data: currentTask, error: taskError } = await taskQuery.single()
+    
+    if (taskError || !currentTask) {
+      return NextResponse.json(
+        { error: 'Görev bulunamadı' },
+        { status: 404 }
+      )
+    }
 
     // Task verilerini güncelle - SADECE schema.sql'de olan kolonları gönder
     // schema.sql: title, status, assignedTo, companyId, updatedAt

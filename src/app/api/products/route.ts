@@ -19,30 +19,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // DEBUG: Session ve permission bilgisini logla
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Products API] 🔍 Session Check:', {
-        userId: session.user.id,
-        email: session.user.email,
-        role: session.user.role,
-        companyId: session.user.companyId,
-        companyName: session.user.companyName,
-      })
-    }
-
-    // Permission check - canRead kontrolü
+    // Permission check - canRead kontrolü (cache ile optimize edilmiş)
+    // ÖNEMLİ: Dev modda log'ları kaldırdık - performans için
     const { hasPermission, PERMISSION_DENIED_MESSAGE } = await import('@/lib/permissions')
     const canRead = await hasPermission('product', 'read', session.user.id)
     if (!canRead) {
-      // DEBUG: Permission denied logla
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[Products API] ❌ Permission Denied:', {
-          module: 'product',
-          action: 'read',
-          userId: session.user.id,
-          role: session.user.role,
-        })
-      }
       return NextResponse.json(
         { error: 'Forbidden', message: PERMISSION_DENIED_MESSAGE },
         { status: 403 }
@@ -65,14 +46,11 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1', 10)
     const pageSize = parseInt(searchParams.get('pageSize') || '20', 10) // Default 20 kayıt/sayfa
 
-    // OPTİMİZE: Sadece gerekli kolonları seç - performans için
-    // SuperAdmin için Company bilgisi ekle
-    // ÖNEMLİ: Migration kolonları yoksa hata vermeden atla
-    // EN GÜVENLİ YAKLAŞIM: Sadece kesinlikle var olan temel kolonları kullan
-    // Migration kolonları yoksa hata vermeden atlanır
-    // NOT: Migration kolonları (category, sku, barcode, status, minStock, maxStock, unit, reservedQuantity, incomingQuantity)
-    // migration dosyaları çalıştırılmadıysa olmayabilir, bu yüzden sadece temel kolonları kullanıyoruz
-    const selectColumns = 'id, name, price, stock, companyId, createdAt, updatedAt, Company:companyId(id, name)'
+    // ÖNEMLİ: Önce temel kolonları çek, sonra retry ile migration kolonlarını ekle
+    // Bu şekilde migration kolonları yoksa hata vermez
+    let selectColumns = isSuperAdmin 
+      ? 'id, name, price, stock, companyId, createdAt, updatedAt, Company:companyId(id, name)'
+      : 'id, name, price, stock, companyId, createdAt, updatedAt'
     
     let query = supabase
       .from('Product')
@@ -111,30 +89,51 @@ export async function GET(request: Request) {
     // NOT: Migration çalıştırılmadıysa bu filtreler çalışmayacak
     // NOT: statusFilter kullanılmıyor çünkü Product tablosunda status kolonu yok!
 
-    const { data, error } = await query
+    let { data, error } = await query
+
+    // Eğer hata varsa ve kolon hatası ise (42703 = column does not exist), temel kolonlarla retry yap
+    if (error && (error.code === '42703' || error.message?.includes('does not exist') || error.message?.includes('column'))) {
+      // Retry: Sadece temel kolonları çek (migration kolonları yok)
+      const basicColumns = isSuperAdmin 
+        ? 'id, name, price, stock, companyId, createdAt, updatedAt, Company:companyId(id, name)'
+        : 'id, name, price, stock, companyId, createdAt, updatedAt'
+      
+      let retryQuery = supabase
+        .from('Product')
+        .select(basicColumns, { count: 'exact' })
+        .order('createdAt', { ascending: false })
+      
+      if (!isSuperAdmin) {
+        retryQuery = retryQuery.eq('companyId', companyId)
+      } else if (filterCompanyId) {
+        retryQuery = retryQuery.eq('companyId', filterCompanyId)
+      }
+      
+      if (search) {
+        retryQuery = retryQuery.ilike('name', `%${search}%`)
+      }
+      
+      if (vendorId) {
+        retryQuery = retryQuery.eq('vendorId', vendorId)
+      }
+      
+      if (stockFilter === 'inStock') {
+        retryQuery = retryQuery.gt('stock', 10)
+      } else if (stockFilter === 'lowStock') {
+        retryQuery = retryQuery.gte('stock', 1).lte('stock', 10)
+      } else if (stockFilter === 'outOfStock') {
+        retryQuery = retryQuery.eq('stock', 0)
+      }
+      
+      const retryResult = await retryQuery
+      data = retryResult.data
+      error = retryResult.error
+    }
 
     if (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Products API error:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code,
-          companyId,
-          isSuperAdmin,
-          search,
-          stockFilter,
-        })
-      }
+      // ÖNEMLİ: Dev modda detaylı log'ları kaldırdık - performans için
       return NextResponse.json(
-        { 
-          error: error.message || 'Failed to fetch products',
-          ...(process.env.NODE_ENV === 'development' && {
-            details: error.details,
-            hint: error.hint,
-            code: error.code,
-          }),
-        },
+        { error: error.message || 'Failed to fetch products' },
         { status: 500 }
       )
     }
@@ -149,19 +148,9 @@ export async function GET(request: Request) {
       },
     })
   } catch (error: any) {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Products GET API catch error:', {
-        message: error?.message,
-        stack: error?.stack,
-      })
-    }
+    // ÖNEMLİ: Dev modda log'ları kaldırdık - performans için
     return NextResponse.json(
-      { 
-        error: 'Failed to fetch products',
-        ...(process.env.NODE_ENV === 'development' && {
-          message: error?.message || 'Unknown error',
-        }),
-      },
+      { error: 'Failed to fetch products' },
       { status: 500 }
     )
   }
@@ -236,8 +225,9 @@ export async function POST(request: Request) {
     if (body.status !== undefined && body.status !== null) {
       productData.status = body.status
     }
+    // minStock → minimumStock (migration 049)
     if (body.minStock !== undefined && body.minStock !== null) {
-      productData.minStock = parseFloat(body.minStock)
+      productData.minimumStock = parseFloat(body.minStock)
     }
     if (body.maxStock !== undefined && body.maxStock !== null) {
       productData.maxStock = parseFloat(body.maxStock)

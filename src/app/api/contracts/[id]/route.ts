@@ -24,18 +24,39 @@ export async function GET(
 
     const supabase = getSupabaseWithServiceRole()
 
-    const { data, error } = await supabase
+    // NOT: createdBy/updatedBy kolonları migration'da yoksa hata verir, bu yüzden kaldırıldı
+    // approvedBy kolonu da kontrol edilmeli (varsa kullanılır)
+    let contractQuery = supabase
       .from('Contract')
       .select(`
-        *,
+        id, title, description, customerId, customerCompanyId, dealId, type, category, startDate, endDate, signedDate, renewalType, renewalNoticeDays, nextRenewalDate, autoRenewEnabled, billingCycle, billingDay, paymentTerms, value, currency, taxRate, totalValue, status, contractNumber, attachmentUrl, terms, notes, tags, metadata, companyId, createdAt, updatedAt,
         customer:Customer(id, name, email, phone),
         customerCompany:CustomerCompany(id, name),
-        deal:Deal(id, title, value, stage),
-        approvedBy:User!Contract_approvedBy_fkey(id, name, email)
+        deal:Deal(id, title, value, stage)
       `)
       .eq('id', params.id)
       .eq('companyId', session.user.companyId)
-      .single()
+    
+    let { data, error } = await contractQuery.single()
+
+    // Hata varsa (kolon bulunamadı), tekrar dene
+    if (error && (error.code === 'PGRST200' || error.message?.includes('Could not find a relationship') || error.message?.includes('does not exist'))) {
+      console.warn('Contract GET API: Hata oluştu, tekrar deneniyor...', error.message)
+      let contractQueryWithoutJoin = supabase
+        .from('Contract')
+        .select(`
+          id, title, description, customerId, customerCompanyId, dealId, type, category, startDate, endDate, signedDate, renewalType, renewalNoticeDays, nextRenewalDate, autoRenewEnabled, billingCycle, billingDay, paymentTerms, value, currency, taxRate, totalValue, status, contractNumber, attachmentUrl, terms, notes, tags, metadata, companyId, createdAt, updatedAt
+        `)
+        .eq('id', params.id)
+        .eq('companyId', session.user.companyId)
+      
+      const retryResult = await contractQueryWithoutJoin.single()
+      const retryData: any = retryResult.data
+      error = retryResult.error
+      
+      // createdBy/updatedBy kolonları kaldırıldı
+      data = retryData
+    }
 
     if (error) {
       console.error('Contract detail error:', error)
@@ -100,16 +121,23 @@ export async function PUT(
 
     const supabase = getSupabaseWithServiceRole()
     const body = await request.json()
+    
+    // SuperAdmin kontrolü
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
 
-    // Mevcut kaydı kontrol et
-    const { data: existing } = await supabase
+    // Mevcut kaydı kontrol et (SuperAdmin için companyId kontrolü yapma)
+    let existingQuery = supabase
       .from('Contract')
       .select('*')
       .eq('id', params.id)
-      .eq('companyId', session.user.companyId)
-      .single()
+    
+    if (!isSuperAdmin) {
+      existingQuery = existingQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { data: existing, error: existingError } = await existingQuery.single()
 
-    if (!existing) {
+    if (existingError || !existing) {
       return NextResponse.json({ error: 'Contract not found' }, { status: 404 })
     }
 
@@ -156,8 +184,11 @@ export async function PUT(
       totalValue = value + (value * taxRate / 100)
     }
 
-    // Update
-    const { data, error } = await supabase
+    // SuperAdmin kontrolü
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+
+    // Update işlemi - SuperAdmin için companyId filtresi yok
+    let updateQuery = supabase
       .from('Contract')
       .update({
         title: body.title !== undefined ? body.title : existing.title,
@@ -190,13 +221,53 @@ export async function PUT(
         updatedAt: new Date().toISOString(),
       })
       .eq('id', params.id)
-      .eq('companyId', session.user.companyId)
-      .select()
-      .single()
+    
+    if (!isSuperAdmin) {
+      updateQuery = updateQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { error: updateError } = await updateQuery
+
+    if (updateError) {
+      console.error('Contract update error:', updateError)
+      const { createErrorResponse } = await import('@/lib/error-handling')
+      
+      if (updateError.code && ['23505', '23503', '23502', '23514', '42P01', '42703'].includes(updateError.code)) {
+        return createErrorResponse(updateError)
+      }
+      
+      return NextResponse.json(
+        { 
+          error: updateError.message || 'Sözleşme güncellenemedi',
+          code: updateError.code || 'UPDATE_ERROR',
+        },
+        { status: 500 }
+      )
+    }
+    
+    // Update başarılı - güncellenmiş veriyi çek (SuperAdmin için companyId filtresi yok)
+    let selectQuery = supabase
+      .from('Contract')
+      .select(`
+        id, title, description, customerId, customerCompanyId, dealId, type, category, startDate, endDate, signedDate, renewalType, renewalNoticeDays, nextRenewalDate, autoRenewEnabled, billingCycle, billingDay, paymentTerms, value, currency, taxRate, totalValue, status, contractNumber, attachmentUrl, terms, notes, tags, metadata, companyId, createdAt, updatedAt
+      `)
+      .eq('id', params.id)
+    
+    if (!isSuperAdmin) {
+      selectQuery = selectQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { data, error } = await selectQuery.single()
 
     if (error) {
-      console.error('Contract update error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      console.error('Contract select after update error:', error)
+      return NextResponse.json(
+        { 
+          error: error.message || 'Güncellenmiş sözleşme bulunamadı',
+          code: error.code || 'SELECT_ERROR',
+        },
+        { status: 500 }
+      )
     }
 
     // ActivityLog

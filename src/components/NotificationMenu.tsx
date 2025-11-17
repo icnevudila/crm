@@ -103,8 +103,21 @@ export default function NotificationMenu({ userId }: NotificationMenuProps) {
 
   // Bildirim tıklandığında
   const handleNotificationClick = (notification: Notification) => {
+    // ÖNEMLİ: Yönlendirmeyi bekletme - markAsRead'i arka planda çalıştır
     if (!notification.isRead) {
-      markAsRead(notification.id)
+      // Optimistic update - hemen UI'da güncelle
+      mutate(
+        notifications.map((n) =>
+          n.id === notification.id ? { ...n, isRead: true } : n
+        ),
+        { revalidate: false }
+      )
+      // API çağrısını arka planda yap (yönlendirmeyi bekletme)
+      markAsRead(notification.id).catch((error) => {
+        console.error('Error marking notification as read:', error)
+        // Hata olursa geri al (revalidate)
+        mutate()
+      })
     }
     setOpen(false)
   }

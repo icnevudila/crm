@@ -1023,3 +1023,4 @@ npm install string-similarity  # String benzerlik hesaplama
 **Toplam Tahmini Süre:** 60-70 saat  
 **Toplam Tahmini Maliyet:** ~$120/ay
 
+

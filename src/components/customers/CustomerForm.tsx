@@ -192,23 +192,38 @@ export default function CustomerForm({
 
       // Response body'yi güvenli bir şekilde parse et
       let result: any = {}
+      let responseText = ''
       try {
-        const text = await res.text()
-        if (text) {
-          result = JSON.parse(text)
+        responseText = await res.text()
+        if (responseText) {
+          result = JSON.parse(responseText)
         }
       } catch (parseError) {
         // JSON parse edilemezse boş obje kullan
-        console.warn('Response JSON parse edilemedi:', parseError)
+        console.warn('Response JSON parse edilemedi:', parseError, 'Response text:', responseText)
+        // Parse edilemezse bile response text'i kullan
+        if (responseText) {
+          result = { error: responseText, message: responseText }
+        }
       }
       
       if (!res.ok) {
+        // Daha detaylı hata mesajı oluştur
+        const errorMessage = result?.error || result?.message || responseText || `Müşteri kaydedilemedi (${res.status})`
         const apiError: any = {
           status: res.status,
-          message: result?.error || result?.message || `Müşteri kaydedilemedi (${res.status})`,
-          error: result?.error || `HTTP ${res.status}`,
+          message: errorMessage,
+          error: result?.error || errorMessage,
+          code: result?.code || `HTTP_${res.status}`,
           details: result,
+          responseText, // Debug için response text'i de ekle
         }
+        console.error('CustomerForm API Error:', {
+          status: res.status,
+          error: apiError,
+          result,
+          responseText,
+        })
         throw apiError
       }
       

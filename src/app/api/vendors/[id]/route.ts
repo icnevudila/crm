@@ -21,11 +21,12 @@ export async function GET(
     const supabase = getSupabaseWithServiceRole()
 
     // Vendor'ı ilişkili verilerle çek (RLS bypass ile)
+    // NOT: createdBy/updatedBy kolonları migration'da yoksa hata verir, bu yüzden kaldırıldı
     const { data, error } = await supabase
       .from('Vendor')
       .select(
         `
-        *,
+        id, name, email, phone, address, status, companyId, createdAt, updatedAt,
         Quote (
           id,
           title,
@@ -90,8 +91,12 @@ export async function PUT(
     const { id } = await params
     const body = await request.json()
     const supabase = getSupabaseWithServiceRole()
+    
+    // SuperAdmin kontrolü
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
 
-    const { data, error } = await supabase
+    // Update işlemi - SuperAdmin için companyId filtresi yok
+    let updateQuery = supabase
       .from('Vendor')
       // @ts-ignore - Supabase database type tanımları eksik, update metodu dinamik tip bekliyor
       .update({
@@ -106,14 +111,54 @@ export async function PUT(
         taxOffice: body.taxOffice || null,
         description: body.description || null,
         status: body.status || 'ACTIVE',
+        updatedAt: new Date().toISOString(),
       })
       .eq('id', id)
-      .eq('companyId', session.user.companyId)
-      .select()
-      .single()
+    
+    if (!isSuperAdmin) {
+      updateQuery = updateQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { error: updateError } = await updateQuery
+
+    if (updateError) {
+      const { createErrorResponse } = await import('@/lib/error-handling')
+      
+      if (updateError.code && ['23505', '23503', '23502', '23514', '42P01', '42703'].includes(updateError.code)) {
+        return createErrorResponse(updateError)
+      }
+      
+      return NextResponse.json(
+        { 
+          error: updateError.message || 'Tedarikçi güncellenemedi',
+          code: updateError.code || 'UPDATE_ERROR',
+        },
+        { status: 500 }
+      )
+    }
+    
+    // Update başarılı - güncellenmiş veriyi çek (SuperAdmin için companyId filtresi yok)
+    let selectQuery = supabase
+      .from('Vendor')
+      .select(`
+        id, name, email, phone, address, status, companyId, createdAt, updatedAt
+      `)
+      .eq('id', id)
+    
+    if (!isSuperAdmin) {
+      selectQuery = selectQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { data, error } = await selectQuery.single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json(
+        { 
+          error: error.message || 'Güncellenmiş tedarikçi bulunamadı',
+          code: error.code || 'SELECT_ERROR',
+        },
+        { status: 500 }
+      )
     }
 
     // ActivityLog kaydı

@@ -469,35 +469,35 @@ export default function InvoiceDetailPage() {
             </div>
           )}
           <div>
-            <p className="text-sm text-gray-600 mb-1">Durum</p>
-            <Badge className={getStatusBadgeClass(invoice.status)}>
-              {statusLabels[invoice.status] || invoice.status}
-            </Badge>
-          </div>
+          <p className="text-sm text-gray-600 mb-1">Durum</p>
+          <Badge className={getStatusBadgeClass(invoice.status)}>
+            {statusLabels[invoice.status] || invoice.status}
+          </Badge>
+        </div>
           <div>
             <p className="text-sm text-gray-600 mb-1">İşlem Tipi</p>
-            <Badge className={
-              invoice.invoiceType === 'SALES' 
-                ? 'bg-blue-100 text-blue-800'
-                : invoice.invoiceType === 'PURCHASE'
-                ? 'bg-purple-100 text-purple-800'
-                : invoice.invoiceType === 'SERVICE_SALES'
-                ? 'bg-green-100 text-green-800'
-                : invoice.invoiceType === 'SERVICE_PURCHASE'
-                ? 'bg-orange-100 text-orange-800'
-                : 'bg-gray-100 text-gray-800'
-            }>
-              {invoice.invoiceType === 'SALES' 
+          <Badge className={
+            invoice.invoiceType === 'SALES' 
+              ? 'bg-blue-100 text-blue-800'
+              : invoice.invoiceType === 'PURCHASE'
+              ? 'bg-purple-100 text-purple-800'
+              : invoice.invoiceType === 'SERVICE_SALES'
+              ? 'bg-green-100 text-green-800'
+              : invoice.invoiceType === 'SERVICE_PURCHASE'
+              ? 'bg-orange-100 text-orange-800'
+              : 'bg-gray-100 text-gray-800'
+          }>
+            {invoice.invoiceType === 'SALES' 
                 ? 'Satış'
-                : invoice.invoiceType === 'PURCHASE'
+              : invoice.invoiceType === 'PURCHASE'
                 ? 'Alış'
-                : invoice.invoiceType === 'SERVICE_SALES'
+              : invoice.invoiceType === 'SERVICE_SALES'
                 ? 'Hizmet Satış'
-                : invoice.invoiceType === 'SERVICE_PURCHASE'
+              : invoice.invoiceType === 'SERVICE_PURCHASE'
                 ? 'Hizmet Alım'
-                : 'Bilinmeyen'}
-            </Badge>
-          </div>
+              : 'Bilinmeyen'}
+          </Badge>
+        </div>
           {invoice.dueDate && (
             <div>
               <p className="text-sm text-gray-600 mb-1">Vade Tarihi</p>

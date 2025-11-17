@@ -42,13 +42,9 @@ export async function GET(
     // NOT: Migration kolonları (category, sku, barcode, status, minStock, maxStock, unit, weight, dimensions, description, reservedQuantity, incomingQuantity)
     // migration dosyaları çalıştırılmadıysa olmayabilir, bu yüzden sadece temel kolonları kullanıyoruz
     // Vendor bilgisini de çek (eğer vendorId varsa)
-    // createdBy ve updatedBy bilgilerini User join ile çekiyoruz (audit trail için)
-    // NOT: Foreign key yoksa (migration çalıştırılmamışsa) join'leri kaldırıp tekrar deniyoruz
+    // NOT: createdBy/updatedBy kolonları migration'da yoksa hata verir, bu yüzden kaldırıldı
     const selectColumns = `
       id, name, price, stock, companyId, createdAt, updatedAt,
-      createdBy, updatedBy,
-      CreatedByUser:User!Product_createdBy_fkey(id, name, email),
-      UpdatedByUser:User!Product_updatedBy_fkey(id, name, email),
       vendorId,
       Vendor:Vendor!Product_vendorId_fkey (
         id,
@@ -69,12 +65,11 @@ export async function GET(
     
     let { data: productData, error } = await productQuery
     
-    // Foreign key hatası varsa (PGRST200), join'leri kaldırıp tekrar dene
-    if (error && (error.code === 'PGRST200' || error.message?.includes('Could not find a relationship'))) {
-      console.warn('Product GET API: Foreign key bulunamadı, join olmadan tekrar deneniyor...')
+    // Hata varsa (kolon bulunamadı veya foreign key hatası), tekrar dene
+    if (error && (error.code === 'PGRST200' || error.message?.includes('Could not find a relationship') || error.message?.includes('does not exist'))) {
+      console.warn('Product GET API: Hata oluştu, tekrar deneniyor...', error.message)
       const selectColumnsWithoutJoin = `
         id, name, price, stock, companyId, createdAt, updatedAt,
-        createdBy, updatedBy,
         vendorId,
         Vendor:Vendor!Product_vendorId_fkey (
           id,
@@ -96,29 +91,8 @@ export async function GET(
       const retryProductData: any = Array.isArray(retryResult.data) && retryResult.data.length > 0 ? retryResult.data[0] : retryResult.data
       error = retryResult.error
       
-      // createdBy/updatedBy varsa User bilgilerini ayrı query ile çek
-      const productDataTemp: any = retryProductData
-      if (productDataTemp && (productDataTemp.createdBy || productDataTemp.updatedBy)) {
-        const userIds = [productDataTemp.createdBy, productDataTemp.updatedBy].filter(Boolean) as string[]
-        if (userIds.length > 0) {
-          const { data: users } = await supabase
-            .from('User')
-            .select('id, name, email')
-            .in('id', userIds)
-          
-          if (users) {
-            const userMap = new Map(users.map((u: any) => [u.id, u]))
-            if (productDataTemp.createdBy && userMap.has(productDataTemp.createdBy)) {
-              productDataTemp.CreatedByUser = userMap.get(productDataTemp.createdBy)
-            }
-            if (productDataTemp.updatedBy && userMap.has(productDataTemp.updatedBy)) {
-              productDataTemp.UpdatedByUser = userMap.get(productDataTemp.updatedBy)
-            }
-          }
-        }
-        // productData'yı güncelle
-        productData = [productDataTemp] // Array olarak sakla
-      }
+      // createdBy/updatedBy kolonları kaldırıldı, User bilgileri çekilmiyor
+      productData = retryProductData
     }
     
     if (error) {
@@ -348,6 +322,29 @@ export async function PUT(
     }
 
     const supabase = getSupabaseWithServiceRole()
+    
+    // SuperAdmin kontrolü
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    
+    // ÖNCE: Mevcut kaydı kontrol et (SuperAdmin için companyId kontrolü yapma)
+    let existingQuery = supabase
+      .from('Product')
+      .select('id, companyId')
+      .eq('id', id)
+    
+    if (!isSuperAdmin) {
+      existingQuery = existingQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { data: existing, error: existingError } = await existingQuery.single()
+    
+    if (existingError || !existing) {
+      const { getErrorMessage } = await import('@/lib/api-locale')
+      return NextResponse.json(
+        { error: getErrorMessage('errors.api.productNotFound', request) || 'Ürün bulunamadı' },
+        { status: 404 }
+      )
+    }
 
     // Product verilerini güncelle - SADECE veritabanında olan kolonları gönder
     // NOT: imageUrl ve description kolonları veritabanında olmayabilir (migration çalıştırılmamış olabilir)
@@ -371,8 +368,9 @@ export async function PUT(
     if (body.status !== undefined && body.status !== null) {
       productData.status = body.status
     }
+    // minStock → minimumStock (migration 049)
     if (body.minStock !== undefined && body.minStock !== null) {
-      productData.minStock = parseFloat(body.minStock)
+      productData.minimumStock = parseFloat(body.minStock)
     }
     if (body.maxStock !== undefined && body.maxStock !== null) {
       productData.maxStock = parseFloat(body.maxStock)

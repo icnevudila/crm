@@ -115,6 +115,30 @@ export async function PUT(
 
     const { id } = await params
     const body = await request.json()
+    
+    const supabase = getSupabaseWithServiceRole()
+    
+    // SuperAdmin kontrolü
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    
+    // ÖNCE: Mevcut kaydı kontrol et (SuperAdmin için companyId kontrolü yapma)
+    let existingQuery = supabase
+      .from('Finance')
+      .select('id, companyId')
+      .eq('id', id)
+    
+    if (!isSuperAdmin) {
+      existingQuery = existingQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { data: existing, error: existingError } = await existingQuery.single()
+    
+    if (existingError || !existing) {
+      return NextResponse.json(
+        { error: 'Finans kaydı bulunamadı' },
+        { status: 404 }
+      )
+    }
 
     const description = `Finans kaydı güncellendi: ${body.type === 'INCOME' ? 'Gelir' : 'Gider'} - ${body.amount} ₺`
     const data = await updateRecord('Finance', id, body, description)

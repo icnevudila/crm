@@ -20,9 +20,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { User, LogOut, Settings, HelpCircle, BookOpen, MessageCircle, Command, Menu, Plus } from 'lucide-react'
+import { User, LogOut, Settings, HelpCircle, BookOpen, MessageCircle, Command, Menu, Plus, StickyNote, Eye, EyeOff } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import RecentItems from '@/components/layout/RecentItems'
+
+const StickyNotesContainer = dynamic(() => import('@/components/sticky-notes/StickyNotesContainer'), {
+  ssr: false,
+  loading: () => null,
+})
 
 const CustomerForm = dynamic(() => import('@/components/customers/CustomerForm'), {
   ssr: false,
@@ -49,6 +54,11 @@ const TaskForm = dynamic(() => import('@/components/tasks/TaskForm'), {
   loading: () => null,
 })
 
+const ProductForm = dynamic(() => import('@/components/products/ProductForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
 interface HeaderProps {
   onMenuClick?: () => void
 }
@@ -58,10 +68,10 @@ export default function Header({ onMenuClick }: HeaderProps) {
   const locale = useLocale()
   const router = useRouter()
 
-  const [quickCreate, setQuickCreate] = useState<'customer' | 'deal' | 'quote' | 'invoice' | 'task' | null>(null)
+  const [quickCreate, setQuickCreate] = useState<'customer' | 'deal' | 'quote' | 'invoice' | 'task' | 'product' | null>(null)
 
   const quickActions: {
-    key: 'customer' | 'deal' | 'quote' | 'invoice' | 'task'
+    key: 'customer' | 'deal' | 'quote' | 'invoice' | 'task' | 'product'
     label: string
     description: string
   }[] = [
@@ -84,6 +94,11 @@ export default function Header({ onMenuClick }: HeaderProps) {
       key: 'invoice',
       label: 'Yeni Fatura',
       description: 'Satış ya da alış faturası kes',
+    },
+    {
+      key: 'product',
+      label: 'Yeni Ürün',
+      description: 'Ürün ve stok bilgisi ekle',
     },
     {
       key: 'task',
@@ -180,12 +195,25 @@ export default function Header({ onMenuClick }: HeaderProps) {
           </kbd>
         </Button>
 
-        {/* Global Search - Mobilde küçült */}
-        {FEATURE_FLAGS.GLOBAL_SEARCH && (
-          <div className="hidden sm:block">
-            <GlobalSearchBar />
-          </div>
-        )}
+        {/* Sticky Notes Butonu - Header'da */}
+        <div className="hidden sm:flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-9 border-gray-200 hover:bg-gray-50"
+            onClick={() => {
+              // Custom event gönder - StickyNotesContainer dinliyor
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('openStickyNote', {
+                  detail: {}
+                }))
+              }
+            }}
+            title="Not Ekle"
+          >
+            <StickyNote className="h-4 w-4" />
+          </Button>
+        </div>
         
         {/* Bildirimler */}
         {session?.user?.id && (
@@ -283,6 +311,13 @@ export default function Header({ onMenuClick }: HeaderProps) {
         open={quickCreate === 'task'}
         onClose={() => setQuickCreate(null)}
       />
+      <ProductForm
+        open={quickCreate === 'product'}
+        onClose={() => setQuickCreate(null)}
+      />
+      
+      {/* Sticky Notes Container - Header'dan kontrol ediliyor */}
+      <StickyNotesContainer visible={true} />
     </header>
   )
 }

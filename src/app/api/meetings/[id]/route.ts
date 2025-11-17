@@ -37,14 +37,14 @@ export async function GET(
     const companyId = session.user.companyId
 
     // Meeting'i ilişkili verilerle çek
+    // NOT: createdBy kolonu migration'da yoksa hata verir, bu yüzden kaldırıldı
     let query = supabase
       .from('Meeting')
       .select(
         `
-        *,
+        id, title, description, meetingDate, meetingDuration, location, meetingType, meetingUrl, meetingPassword, status, companyId, customerId, dealId, createdAt, updatedAt,
         Customer:Customer(id, name, email, phone),
-        Deal:Deal(id, title, stage, value),
-        CreatedBy:User!Meeting_createdBy_fkey(id, name, email)
+        Deal:Deal(id, title, stage, value)
       `
       )
       .eq('id', id)
@@ -213,18 +213,56 @@ export async function PUT(
       updatedAt: new Date().toISOString(),
     }
 
-    // @ts-ignore - Supabase type inference issue
-    const { data: meeting, error } = await (supabase
+    // Update işlemi - SuperAdmin için companyId filtresi yok
+    let updateQuery = (supabase
       .from('Meeting') as any)
       .update(updateData)
       .eq('id', id)
-      .select()
-      .single()
+    
+    if (!isSuperAdmin) {
+      updateQuery = updateQuery.eq('companyId', companyId)
+    }
+    
+    const { error: updateError } = await updateQuery
+
+    if (updateError) {
+      console.error('Meetings [id] PUT API update error:', updateError)
+      const { createErrorResponse } = await import('@/lib/error-handling')
+      
+      if (updateError.code && ['23505', '23503', '23502', '23514', '42P01', '42703'].includes(updateError.code)) {
+        return createErrorResponse(updateError)
+      }
+      
+      return NextResponse.json(
+        { 
+          error: updateError.message || 'Toplantı güncellenemedi',
+          code: updateError.code || 'UPDATE_ERROR',
+        },
+        { status: 500 }
+      )
+    }
+    
+    // Update başarılı - güncellenmiş veriyi çek (SuperAdmin için companyId filtresi yok)
+    let selectQuery = supabase
+      .from('Meeting')
+      .select(`
+        id, title, description, meetingDate, meetingDuration, location, meetingType, meetingUrl, meetingPassword, status, companyId, customerId, dealId, createdAt, updatedAt
+      `)
+      .eq('id', id)
+    
+    if (!isSuperAdmin) {
+      selectQuery = selectQuery.eq('companyId', companyId)
+    }
+    
+    const { data: meeting, error } = await selectQuery.single()
 
     if (error) {
-      console.error('Meetings [id] PUT API error:', error)
+      console.error('Meetings [id] PUT API select error:', error)
       return NextResponse.json(
-        { error: error.message || 'Toplantı güncellenemedi' },
+        { 
+          error: error.message || 'Güncellenmiş toplantı bulunamadı',
+          code: error.code || 'SELECT_ERROR',
+        },
         { status: 500 }
       )
     }

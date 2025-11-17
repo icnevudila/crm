@@ -13,6 +13,8 @@ import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import CommentsSection from '@/components/ui/CommentsSection'
 import FileUpload from '@/components/ui/FileUpload'
 import DetailModal from '@/components/ui/DetailModal'
+import TeamChat from '@/components/chat/TeamChat'
+import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import dynamic from 'next/dynamic'
@@ -220,6 +222,14 @@ export default function CustomerDetailModal({
                   <div className="flex items-center gap-2">
                     <Phone className="h-4 w-4 text-gray-400" />
                     <span className="text-gray-700">{displayCustomer.phone}</span>
+                    <SendWhatsAppButton
+                      phoneNumber={displayCustomer.phone}
+                      entityType="Customer"
+                      entityId={customerId || undefined}
+                      customerName={displayCustomer.name}
+                      variant="ghost"
+                      size="sm"
+                    />
                   </div>
                 )}
                 {displayCustomer?.fax && (
@@ -434,6 +444,13 @@ export default function CustomerDetailModal({
             <CommentsSection entityType="Customer" entityId={customerId} />
             <FileUpload entityType="Customer" entityId={customerId} />
           </div>
+
+          {/* Team Chat */}
+          <TeamChat
+            entityType="Customer"
+            entityId={customerId || undefined}
+            title={`${displayCustomer?.name || 'Müşteri'} - Takım Sohbeti`}
+          />
         </div>
       </DetailModal>
 

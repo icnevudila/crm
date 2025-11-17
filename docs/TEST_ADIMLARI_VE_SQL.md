@@ -518,3 +518,7 @@ INSERT INTO "Deal" (
 
 
 
+
+
+
+

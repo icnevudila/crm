@@ -117,3 +117,7 @@ description: `${pendingDeals.count} fırsat pazarlık aşamasında`
 
 
 
+
+
+
+

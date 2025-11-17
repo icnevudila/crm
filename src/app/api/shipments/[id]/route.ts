@@ -38,9 +38,12 @@ export async function GET(
 
     // Shipment'ı çek (Invoice'ı ayrı query ile çekeceğiz - ilişki hatası nedeniyle)
     // ÖNEMLİ: SuperAdmin için companyId kontrolü yapma
+    // NOT: createdBy/updatedBy kolonları migration'da yoksa hata verir, bu yüzden kaldırıldı
     let shipmentQuery = supabase
       .from('Shipment')
-      .select('*')
+      .select(`
+        id, tracking, status, invoiceId, companyId, createdAt, updatedAt, estimatedDelivery
+      `)
       .eq('id', id)
     
     // SuperAdmin değilse companyId kontrolü yap
@@ -257,15 +260,30 @@ export async function PUT(
     const { id } = await params
     const body = await request.json()
     const supabase = getSupabaseWithServiceRole()
+    
+    // SuperAdmin kontrolü
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
 
     // ÖNEMLİ: Onaylı sevkiyatlar güncellenemez (status değişikliği hariç - status endpoint'i kullanılmalı)
     // Mevcut sevkiyat durumunu kontrol et
-    const { data: currentShipment } = await supabase
+    let shipmentQuery = supabase
       .from('Shipment')
-      .select('status, tracking')
+      .select('status, tracking, companyId')
       .eq('id', id)
-      .eq('companyId', session.user.companyId)
-      .maybeSingle()
+    
+    // SuperAdmin değilse companyId filtresi ekle
+    if (!isSuperAdmin) {
+      shipmentQuery = shipmentQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { data: currentShipment, error: shipmentError } = await shipmentQuery.maybeSingle()
+    
+    if (shipmentError || !currentShipment) {
+      return NextResponse.json(
+        { error: 'Sevkiyat bulunamadı' },
+        { status: 404 }
+      )
+    }
 
     // ÖNEMLİ: Shipment DELIVERED olduğunda değiştirilemez (Teslim edildiği için)
     if (currentShipment?.status?.toUpperCase() === 'DELIVERED') {
@@ -318,23 +336,60 @@ export async function PUT(
     if (body.estimatedDelivery !== undefined) updateData.estimatedDelivery = body.estimatedDelivery || null
     if (body.deliveryAddress !== undefined) updateData.deliveryAddress = body.deliveryAddress || null
 
-    const { data: updateResult, error } = await supabase
+    // SuperAdmin kontrolü
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+
+    // Update işlemi - SuperAdmin için companyId filtresi yok
+    let updateQuery = supabase
       .from('Shipment')
       // @ts-expect-error - Supabase database type tanımları eksik
       .update(updateData)
       .eq('id', id)
-      .eq('companyId', session.user.companyId)
-      .select()
+    
+    if (!isSuperAdmin) {
+      updateQuery = updateQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { error: updateError } = await updateQuery
+
+    if (updateError) {
+      const { createErrorResponse } = await import('@/lib/error-handling')
+      
+      if (updateError.code && ['23505', '23503', '23502', '23514', '42P01', '42703'].includes(updateError.code)) {
+        return createErrorResponse(updateError)
+      }
+      
+      return NextResponse.json(
+        { 
+          error: updateError.message || 'Sevkiyat güncellenemedi',
+          code: updateError.code || 'UPDATE_ERROR',
+        },
+        { status: 500 }
+      )
+    }
+    
+    // Update başarılı - güncellenmiş veriyi çek (SuperAdmin için companyId filtresi yok)
+    let selectQuery = supabase
+      .from('Shipment')
+      .select(`
+        id, tracking, status, invoiceId, companyId, createdAt, updatedAt, estimatedDelivery
+      `)
+      .eq('id', id)
+    
+    if (!isSuperAdmin) {
+      selectQuery = selectQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { data, error } = await selectQuery.single()
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    // Array ise ilk elemanı al, değilse direkt kullan
-    const data = Array.isArray(updateResult) && updateResult.length > 0 ? updateResult[0] : updateResult
-
-    if (!data) {
-      return NextResponse.json({ error: 'Sevkiyat bulunamadı veya güncellenemedi' }, { status: 404 })
+      return NextResponse.json(
+        { 
+          error: error.message || 'Güncellenmiş sevkiyat bulunamadı',
+          code: error.code || 'SELECT_ERROR',
+        },
+        { status: 500 }
+      )
     }
 
     // Shipment DELIVERED olduğunda ActivityLog kaydı (hata olsa bile devam et)

@@ -61,7 +61,9 @@ interface Product {
   barcode?: string
   status?: string
   minStock?: number
+  minimumStock?: number // API'den minimumStock olarak geliyor
   maxStock?: number
+  maximumStock?: number // API'den maximumStock olarak geliyor
   unit?: string
   description?: string
   imageUrl?: string
@@ -279,10 +281,13 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     }
   )
 
-  const getStockBadge = (stock: number, minStock?: number) => {
+  const getStockBadge = (stock: number, minStock?: number, product?: Product) => {
+    // minimumStock kolonu API'den minimumStock olarak geliyor
+    const actualMinStock = product ? ((product as any).minimumStock || product.minStock) : minStock
+    
     if (stock === 0) {
       return <Badge className="bg-red-100 text-red-800">{t('stockStatus.outOfStock')}</Badge>
-    } else if (minStock && stock <= minStock) {
+    } else if (actualMinStock && stock <= actualMinStock) {
       return <Badge className="bg-red-100 text-red-800">{t('stockStatus.critical')}</Badge>
     } else if (stock <= 10) {
       return <Badge className="bg-yellow-100 text-yellow-800">{t('stockStatus.low')}</Badge>
@@ -293,10 +298,22 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
 
   // Stok istatistiklerini hesapla
   const stockStats = useMemo(() => {
-    const critical = products.filter(p => p.minStock && p.stock <= p.minStock).length
-    const lowStock = products.filter(p => !p.minStock && p.stock > 0 && p.stock <= 10).length
+    // ÖNEMLİ: Kritik stok = minimumStock varsa ve stock <= minimumStock ise kritik
+    // minimumStock yoksa ve stock <= 10 ise düşük stok
+    const critical = products.filter(p => {
+      // minimumStock kolonu API'den minimumStock olarak geliyor, ama interface'de minStock olarak tanımlı
+      const minStock = (p as any).minimumStock || p.minStock
+      return minStock && p.stock !== null && p.stock <= minStock
+    }).length
+    const lowStock = products.filter(p => {
+      const minStock = (p as any).minimumStock || p.minStock
+      return !minStock && p.stock > 0 && p.stock <= 10
+    }).length
     const outOfStock = products.filter(p => p.stock === 0).length
-    const inStock = products.filter(p => p.stock > (p.minStock || 10)).length
+    const inStock = products.filter(p => {
+      const minStock = (p as any).minimumStock || p.minStock
+      return p.stock > (minStock || 10)
+    }).length
     
     // Son giriş ve çıkış tarihlerini bul
     const lastEntry = products
@@ -593,13 +610,26 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
                   className={`border-b hover:bg-gray-50 transition-colors ${(product as any).reservedQuantity > 0 ? 'bg-orange-50/30 border-l-4 border-orange-400' : ''}`}
                 >
                   <TableCell className="font-medium">
-                    <div>
-                      <div>{product.name}</div>
-                      {product.status && product.status !== 'ACTIVE' && (
-                        <Badge variant="outline" className="mt-1 text-xs">
-                          {product.status === 'INACTIVE' ? tCommon('inactive') : t('discontinued')}
-                        </Badge>
+                    <div className="flex items-center gap-3">
+                      {product.imageUrl && (
+                        <img 
+                          src={product.imageUrl} 
+                          alt={product.name}
+                          className="w-10 h-10 object-cover rounded border border-gray-200 flex-shrink-0"
+                          onError={(e) => {
+                            // Fotoğraf yüklenemezse gizle
+                            (e.target as HTMLImageElement).style.display = 'none'
+                          }}
+                        />
                       )}
+                      <div>
+                        <div>{product.name}</div>
+                        {product.status && product.status !== 'ACTIVE' && (
+                          <Badge variant="outline" className="mt-1 text-xs">
+                            {product.status === 'INACTIVE' ? tCommon('inactive') : t('discontinued')}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </TableCell>
                   {isSuperAdmin && (
@@ -636,11 +666,15 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
                     <div className="flex items-center gap-2">
                       <div>
                         <div className="font-medium">{product.stock || 0} {product.unit || 'ADET'}</div>
-                        {product.minStock && (
-                          <div className="text-xs text-gray-500 mt-0.5">
-                            {t('min')}: {product.minStock} {product.maxStock ? `| ${t('max')}: ${product.maxStock}` : ''}
-                          </div>
-                        )}
+                        {(() => {
+                          const minStock = (product as any).minimumStock || product.minStock
+                          const maxStock = (product as any).maximumStock || product.maxStock
+                          return minStock && (
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              {t('min')}: {minStock} {maxStock ? `| ${t('max')}: ${maxStock}` : ''}
+                            </div>
+                          )
+                        })()}
                         {product.updatedAt && (
                           <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
                             <Clock className="h-3 w-3" />
@@ -648,19 +682,22 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
                           </div>
                         )}
                       </div>
-                      {product.minStock && product.stock <= product.minStock && (
-                        <div className="relative group">
-                          <AlertTriangle className="h-5 w-5 text-red-500" />
-                          <div className="absolute left-0 top-6 hidden group-hover:block z-10 bg-red-600 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
-                            {t('stockStatus.critical')}
+                      {(() => {
+                        const minStock = (product as any).minimumStock || product.minStock
+                        return minStock && product.stock !== null && product.stock <= minStock && (
+                          <div className="relative group">
+                            <AlertTriangle className="h-5 w-5 text-red-500" />
+                            <div className="absolute left-0 top-6 hidden group-hover:block z-10 bg-red-600 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
+                              {t('stockStatus.critical')}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )
+                      })()}
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      {getStockBadge(product.stock || 0, product.minStock)}
+                      {getStockBadge(product.stock || 0, product.minStock, product)}
                       {(product as any).reservedQuantity > 0 && (
                         <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">
                           {t('reserved')}: {(product as any).reservedQuantity}
@@ -751,7 +788,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
                     {product.category && (
                       <Badge variant="outline" className="text-xs">{product.category}</Badge>
                     )}
-                    {getStockBadge(product.stock || 0, product.minStock)}
+                    {getStockBadge(product.stock || 0, product.minStock, product)}
                     <Badge className={`text-xs ${
                       product.status === 'ACTIVE' ? 'bg-green-600 text-white' :
                       product.status === 'INACTIVE' ? 'bg-gray-600 text-white' :
@@ -768,11 +805,24 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
                     )}
                   </div>
                   <div className="mt-2 space-y-1">
+                    {product.imageUrl && (
+                      <div className="mb-2">
+                        <img 
+                          src={product.imageUrl} 
+                          alt={product.name}
+                          className="w-16 h-16 object-cover rounded-md border border-gray-200"
+                          onError={(e) => {
+                            // Fotoğraf yüklenemezse gizle
+                            (e.target as HTMLImageElement).style.display = 'none'
+                          }}
+                        />
+                      </div>
+                    )}
                     <p className="text-sm font-semibold text-gray-900">
                       {formatCurrency(product.price || 0)}
                     </p>
                     <p className="text-xs text-gray-600">
-                      {t('stock')}: {product.stock || 0} {product.unit || 'ADET'}
+                      {t('tableHeaders.stock')}: {product.stock || 0} {product.unit || 'ADET'}
                     </p>
                     {product.sku && (
                       <p className="text-xs font-mono text-gray-500">SKU: {product.sku}</p>

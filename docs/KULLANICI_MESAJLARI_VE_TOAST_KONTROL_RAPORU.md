@@ -180,3 +180,7 @@ Bazı component'lerde hala `confirm()` kullanılıyor (bu normal, silme işlemle
 
 
 
+
+
+
+

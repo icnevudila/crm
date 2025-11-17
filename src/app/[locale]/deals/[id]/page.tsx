@@ -662,7 +662,7 @@ export default function DealDetailPage() {
               </div>
             )}
           </div>
-          {deal.updatedAt && (
+      {deal.updatedAt && (
             <div>
               <p className="text-sm text-gray-600">Son Güncelleme</p>
               <p className="font-medium mt-1">

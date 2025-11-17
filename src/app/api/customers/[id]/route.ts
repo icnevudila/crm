@@ -37,15 +37,11 @@ export async function GET(
     const supabase = getSupabaseWithServiceRole()
 
     // Customer'ı sadece gerekli kolonlarla çek (performans için)
-    // createdBy ve updatedBy bilgilerini User join ile çekiyoruz (audit trail için)
-    // NOT: Foreign key yoksa (migration çalıştırılmamışsa) join'leri kaldırıp tekrar deniyoruz
+    // NOT: createdBy/updatedBy kolonları migration'da yoksa hata verir, bu yüzden kaldırıldı
     let customerQuery = supabase
       .from('Customer')
       .select(`
-        id, name, email, phone, city, status, customerCompanyId, companyId, logoUrl, notes, createdAt, updatedAt,
-        createdBy, updatedBy,
-        CreatedByUser:User!Customer_createdBy_fkey(id, name, email),
-        UpdatedByUser:User!Customer_updatedBy_fkey(id, name, email)
+        id, name, email, phone, city, status, customerCompanyId, companyId, logoUrl, notes, createdAt, updatedAt
       `)
       .eq('id', id)
     
@@ -56,14 +52,13 @@ export async function GET(
     
     let { data, error } = await customerQuery.single()
 
-    // Foreign key hatası varsa (PGRST200), join'leri kaldırıp tekrar dene
-    if (error && (error.code === 'PGRST200' || error.message?.includes('Could not find a relationship'))) {
-      console.warn('Customer GET API: Foreign key bulunamadı, join olmadan tekrar deneniyor...')
+    // Hata varsa (kolon bulunamadı veya foreign key hatası), tekrar dene
+    if (error && (error.code === 'PGRST200' || error.message?.includes('Could not find a relationship') || error.message?.includes('does not exist'))) {
+      console.warn('Customer GET API: Hata oluştu, tekrar deneniyor...', error.message)
       let customerQueryWithoutJoin = supabase
         .from('Customer')
         .select(`
-          id, name, email, phone, city, status, customerCompanyId, companyId, logoUrl, notes, createdAt, updatedAt,
-          createdBy, updatedBy
+          id, name, email, phone, city, status, customerCompanyId, companyId, logoUrl, notes, createdAt, updatedAt
         `)
         .eq('id', id)
       
@@ -75,26 +70,7 @@ export async function GET(
       const retryData: any = retryResult.data
       error = retryResult.error
       
-      // createdBy/updatedBy varsa User bilgilerini ayrı query ile çek
-      if (retryData && (retryData.createdBy || retryData.updatedBy)) {
-        const userIds = [retryData.createdBy, retryData.updatedBy].filter(Boolean) as string[]
-        if (userIds.length > 0) {
-          const { data: users } = await supabase
-            .from('User')
-            .select('id, name, email')
-            .in('id', userIds)
-          
-          if (users) {
-            const userMap = new Map(users.map((u: any) => [u.id, u]))
-            if (retryData.createdBy && userMap.has(retryData.createdBy)) {
-              retryData.CreatedByUser = userMap.get(retryData.createdBy)
-            }
-            if (retryData.updatedBy && userMap.has(retryData.updatedBy)) {
-              retryData.UpdatedByUser = userMap.get(retryData.updatedBy)
-            }
-          }
-        }
-      }
+      // createdBy/updatedBy kolonları kaldırıldı, User bilgileri çekilmiyor
       data = retryData
     }
 
@@ -190,6 +166,29 @@ export async function PUT(
     
     // Service role key ile RLS bypass - singleton pattern kullan
     const supabase = getSupabaseWithServiceRole()
+    
+    // SuperAdmin kontrolü
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+
+    // ÖNCE: Mevcut kaydı kontrol et (SuperAdmin için companyId kontrolü yapma)
+    let existingQuery = supabase
+      .from('Customer')
+      .select('id, companyId')
+      .eq('id', id)
+    
+    if (!isSuperAdmin) {
+      existingQuery = existingQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { data: existing, error: existingError } = await existingQuery.single()
+    
+    if (existingError || !existing) {
+      const { getErrorMessage } = await import('@/lib/api-locale')
+      return NextResponse.json(
+        { error: getErrorMessage('errors.api.customerNotFound', request) },
+        { status: 404 }
+      )
+    }
 
     // Sadece schema.sql'de olan kolonları gönder
     // schema.sql: name, email, phone, city, status, companyId, updatedAt
@@ -204,7 +203,8 @@ export async function PUT(
       phone: cleanBody.phone || null,
       city: cleanBody.city || null,
       status: cleanBody.status || 'ACTIVE',
-      // updatedAt ve updatedBy CRUD fonksiyonunda otomatik ekleniyor
+      updatedAt: new Date().toISOString(),
+      // NOT: updatedBy kolonu migration'da yok, bu yüzden eklenmiyor
     }
     // customerCompanyId - müşteri hangi firmada çalışıyor (migration 004'te eklendi)
     if (body.customerCompanyId !== undefined && body.customerCompanyId !== null && body.customerCompanyId !== '') {
@@ -222,19 +222,96 @@ export async function PUT(
     }
     // NOT: address, sector, website, taxNumber, fax, notes schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
-    // @ts-ignore - Supabase database type tanımları eksik, update metodu dinamik tip bekliyor
-    // @ts-ignore - Supabase type inference issue with dynamic table names
-    const { data, error } = await (supabase
+    // Update işlemi - SuperAdmin için companyId filtresi yok
+    let updateQuery = (supabase
       .from('Customer') as any)
       .update(customerData)
       .eq('id', id)
-      .eq('companyId', session.user.companyId)
-      .select()
-      .single()
+    
+    if (!isSuperAdmin) {
+      updateQuery = updateQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { error: updateError } = await updateQuery
+    
+    if (updateError) {
+      // Update hatası
+      const { getErrorMessage } = await import('@/lib/api-locale')
+      const { createErrorResponse } = await import('@/lib/error-handling')
+      
+      if (updateError.code && ['23505', '23503', '23502', '23514', '42P01', '42703'].includes(updateError.code)) {
+        return createErrorResponse(updateError)
+      }
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Customer PUT API update error:', {
+          error: updateError.message,
+          code: updateError.code,
+          details: updateError.details,
+          hint: updateError.hint,
+          customerId: id,
+          customerData,
+        })
+      }
+      
+      return NextResponse.json(
+        { 
+          error: updateError.message || getErrorMessage('errors.api.customerCannotBeUpdated', request),
+          code: updateError.code || 'UPDATE_ERROR',
+          ...(process.env.NODE_ENV === 'development' && {
+            details: updateError,
+          }),
+        },
+        { status: 500 }
+      )
+    }
+    
+    // Update başarılı - güncellenmiş veriyi çek (SuperAdmin için companyId filtresi yok)
+    let selectQuery = supabase
+      .from('Customer')
+      .select(`
+        id, name, email, phone, city, status, customerCompanyId, companyId, logoUrl, notes, createdAt, updatedAt
+      `)
+      .eq('id', id)
+    
+    if (!isSuperAdmin) {
+      selectQuery = selectQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { data, error } = await selectQuery.single()
 
     if (error) {
+      // Daha detaylı hata mesajı
       const { getErrorMessage } = await import('@/lib/api-locale')
-      return NextResponse.json({ error: error.message || getErrorMessage('errors.api.customerCannotBeUpdated', request) }, { status: 500 })
+      const { createErrorResponse } = await import('@/lib/error-handling')
+      
+      // Database constraint hatası ise createErrorResponse kullan
+      if (error.code && ['23505', '23503', '23502', '23514', '42P01', '42703'].includes(error.code)) {
+        return createErrorResponse(error)
+      }
+      
+      // Diğer hatalar için detaylı mesaj
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Customer PUT API error:', {
+          error: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+          customerId: id,
+          customerData,
+        })
+      }
+      
+      return NextResponse.json(
+        { 
+          error: error.message || getErrorMessage('errors.api.customerCannotBeUpdated', request),
+          code: error.code || 'UPDATE_ERROR',
+          ...(process.env.NODE_ENV === 'development' && {
+            details: error,
+          }),
+        },
+        { status: 500 }
+      )
     }
 
     // ActivityLog KALDIRILDI - Sadece kritik işlemler için ActivityLog tutulacak
@@ -246,10 +323,32 @@ export async function PUT(
         'Cache-Control': 'no-store, must-revalidate',
       },
     })
-  } catch (error) {
+  } catch (error: any) {
+    // Daha detaylı hata yakalama
     const { getErrorMessage } = await import('@/lib/api-locale')
+    const { createErrorResponse } = await import('@/lib/error-handling')
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Customer PUT API exception:', {
+        error: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+      })
+    }
+    
+    // Database constraint hatası ise createErrorResponse kullan
+    if (error?.code && ['23505', '23503', '23502', '23514', '42P01', '42703'].includes(error.code)) {
+      return createErrorResponse(error)
+    }
+    
     return NextResponse.json(
-      { error: getErrorMessage('errors.api.customerCannotBeUpdated', request) },
+      { 
+        error: error?.message || getErrorMessage('errors.api.customerCannotBeUpdated', request),
+        code: error?.code || 'UNKNOWN_ERROR',
+        ...(process.env.NODE_ENV === 'development' && {
+          details: error,
+        }),
+      },
       { status: 500 }
     )
   }

@@ -17,7 +17,6 @@ import {
   XCircle,
   ChevronLeft,
   ChevronRight,
-  StickyNote,
   Sparkles,
   Receipt,
 } from 'lucide-react'
@@ -763,26 +762,6 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange, onVie
                                   Sevkiyat Oluştur
                                 </DropdownMenuItem>
                               )}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-xs"
-                                onClick={(e) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  if (typeof window !== 'undefined') {
-                                    window.dispatchEvent(new CustomEvent('openStickyNote', {
-                                      detail: {
-                                        relatedTo: 'Invoice',
-                                        relatedId: invoice.id,
-                                        defaultTitle: `Fatura: ${invoice.title}`,
-                                      }
-                                    }))
-                                  }
-                                }}
-                              >
-                                <StickyNote className="h-3 w-3 mr-2" />
-                                Not Ekle
-                              </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
                           
