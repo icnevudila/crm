@@ -239,12 +239,21 @@ export default function CustomerForm({
           description: 'Müşteri bilgileri başarıyla güncellendi.',
         })
       } else {
-        // Yeni müşteri oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
-        // Güvenlik: result.id ve result.name kontrolü
-        if (result?.id) {
-          navigateToDetailToast('customer', result.id, result.name || result.title || 'Müşteri')
+        // Yeni müşteri oluşturuldu
+        // skipDialog true ise (wizard içinde) navigateToDetailToast çağırma, sadece onSuccess callback'i yeterli
+        if (!skipDialog) {
+          // Normal form kullanımı - "Detay sayfasına gitmek ister misiniz?" toast'u göster
+          // Güvenlik: result.id ve result.name kontrolü
+          if (result?.id) {
+            const customerName = result.name || result.title || 'Müşteri'
+            navigateToDetailToast('customer', result.id, customerName)
+          } else {
+            toast.success('Müşteri oluşturuldu', 'Müşteri başarıyla oluşturuldu.')
+          }
         } else {
-          toast.success('Müşteri oluşturuldu', 'Müşteri başarıyla oluşturuldu.')
+          // Wizard içinde - sadece basit toast göster
+          const customerName = result?.name || result?.title || 'Müşteri'
+          toast.success('Müşteri oluşturuldu', `${customerName} başarıyla oluşturuldu.`)
         }
       }
       
