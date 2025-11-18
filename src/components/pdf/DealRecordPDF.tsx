@@ -385,3 +385,11 @@ export default function DealRecordPDF({ deal }: DealRecordPDFProps) {
 
 
 
+
+
+
+
+
+
+
+

@@ -59,7 +59,7 @@ export default function QuoteToInvoiceWizard({ open, onClose, quoteId }: QuoteTo
     newCompleted.add(1)
     setCompletedSteps(newCompleted)
     setCurrentStep(2)
-    toast.success('Teklif oluşturuldu', 'Fatura oluşturma adımına geçiliyor...')
+    toast.success('Teklif oluşturuldu', { description: 'Fatura oluşturma adımına geçiliyor...' })
     mutate('/api/quotes')
   }
 
@@ -69,7 +69,7 @@ export default function QuoteToInvoiceWizard({ open, onClose, quoteId }: QuoteTo
     newCompleted.add(2)
     setCompletedSteps(newCompleted)
     setCurrentStep(3)
-    toast.success('Fatura oluşturuldu', 'Sevkiyat hazırlama adımına geçiliyor...')
+    toast.success('Fatura oluşturuldu', { description: 'Sevkiyat hazırlama adımına geçiliyor...' })
     mutate('/api/invoices')
   }
 
@@ -109,7 +109,7 @@ export default function QuoteToInvoiceWizard({ open, onClose, quoteId }: QuoteTo
   const handleSkip = () => {
     if (currentStep < STEPS.length) {
       setCurrentStep(currentStep + 1)
-      toast.info('Adım atlandı', 'Bu adımı daha sonra tamamlayabilirsiniz.')
+      toast.info('Adım atlandı', { description: 'Bu adımı daha sonra tamamlayabilirsiniz.' })
     }
   }
 
@@ -246,6 +246,7 @@ export default function QuoteToInvoiceWizard({ open, onClose, quoteId }: QuoteTo
     </Dialog>
   )
 }
+
 
 
 

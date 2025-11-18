@@ -158,7 +158,7 @@ export default function DocumentForm({
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error('Kaydetme başarısız', error?.message)
+      toast.error('Kaydetme başarısız', { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }

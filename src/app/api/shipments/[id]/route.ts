@@ -88,6 +88,7 @@ export async function GET(
             invoiceNumber,
             status,
             totalAmount,
+            total,
             taxRate,
             discount,
             createdAt,
@@ -107,7 +108,11 @@ export async function GET(
             console.error('Invoice query error:', invoiceError, 'invoiceId:', (shipmentData as any).invoiceId)
           }
         } else if (invoice) {
-          invoiceData = invoice // Invoice bulundu, önce atayalım
+          // totalAmount'u total olarak da ekle (frontend uyumluluğu için)
+          invoiceData = {
+            ...invoice,
+            total: (invoice as any).totalAmount || (invoice as any).total || 0,
+          }
           // Quote ve Deal bilgilerini ayrı çek (eğer varsa)
           if ((invoice as any).quoteId) {
             try {
@@ -339,8 +344,7 @@ export async function PUT(
     // Update işlemi - SuperAdmin için companyId filtresi yok
     let updateQuery = supabase
       .from('Shipment')
-      // @ts-expect-error - Supabase database type tanımları eksik
-      .update(updateData)
+      .update(updateData as any)
       .eq('id', id)
     
     if (!isSuperAdmin) {
@@ -392,7 +396,6 @@ export async function PUT(
     // Shipment DELIVERED olduğunda ActivityLog kaydı (hata olsa bile devam et)
     try {
       if (body.status === 'DELIVERED' && data) {
-        // @ts-expect-error - Supabase database type tanımları eksik
         await supabase.from('ActivityLog').insert([
           {
             entity: 'Shipment',

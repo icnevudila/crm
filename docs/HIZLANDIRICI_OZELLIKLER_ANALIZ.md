@@ -356,3 +356,11 @@ Bu 5 özellik eklendiğinde:
 
 
 
+
+
+
+
+
+
+
+

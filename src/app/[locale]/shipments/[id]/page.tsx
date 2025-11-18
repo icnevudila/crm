@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { useData } from '@/hooks/useData'
@@ -335,7 +336,7 @@ export default function ShipmentDetailPage() {
             <DollarSign className="h-5 w-5 text-gray-400" />
           </div>
           <p className="text-2xl font-bold text-gray-900">
-            {shipment.Invoice ? formatCurrency(shipment.Invoice.total || 0) : '-'}
+            {shipment.Invoice ? formatCurrency(shipment.Invoice.total || shipment.Invoice.totalAmount || 0) : '-'}
           </p>
         </motion.div>
 
@@ -389,8 +390,6 @@ export default function ShipmentDetailPage() {
                   entityType: 'shipment',
                   entityName: shipment.tracking || shipment.id.substring(0, 8),
                   entityId: shipment.id,
-                  actionType: 'updated',
-                  onClose: () => {},
                 })}
               />
             )}
@@ -399,24 +398,12 @@ export default function ShipmentDetailPage() {
                 <SendSmsButton
                   to={customer.phone}
                   message={`Merhaba ${customer.name}, sevkiyatınız hakkında bilgi vermek istiyoruz. Takip No: ${shipment.tracking || shipment.id.substring(0, 8)}`}
-                  onSuccess={() => handleQuickActionSuccess({
-                    entityType: 'shipment',
-                    entityName: shipment.tracking || shipment.id.substring(0, 8),
-                    entityId: shipment.id,
-                    actionType: 'updated',
-                    onClose: () => {},
-                  })}
                 />
                 <SendWhatsAppButton
-                  to={customer.phone}
-                  message={`Merhaba ${customer.name}, sevkiyatınız hakkında bilgi vermek istiyoruz. Takip No: ${shipment.tracking || shipment.id.substring(0, 8)}`}
-                  onSuccess={() => handleQuickActionSuccess({
-                    entityType: 'shipment',
-                    entityName: shipment.tracking || shipment.id.substring(0, 8),
-                    entityId: shipment.id,
-                    actionType: 'updated',
-                    onClose: () => {},
-                  })}
+                  phoneNumber={customer.phone}
+                  entityType="shipment"
+                  entityId={shipment.id}
+                  customerName={customer.name}
                 />
               </>
             )}
@@ -548,7 +535,7 @@ export default function ShipmentDetailPage() {
                 <div className="md:col-span-2">
                   <p className="text-sm text-gray-600 mb-1">Toplam Tutar</p>
                   <p className="text-xl font-bold text-gray-900">
-                    {formatCurrency(shipment.Invoice.total || 0)}
+                    {formatCurrency(shipment.Invoice.total || shipment.Invoice.totalAmount || 0)}
                   </p>
                   {/* KDV ve İndirim Detayları */}
                   {(() => {

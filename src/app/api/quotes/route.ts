@@ -247,10 +247,12 @@ export async function POST(request: Request) {
     // NOT: companyId ve createdBy createRecord fonksiyonunda otomatik ekleniyor
 
     // createRecord kullanarak audit trail desteği (createdBy otomatik eklenir)
+    const { getActivityMessage, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const locale = getLocaleFromRequest(request)
     const data = await createRecord(
       'Quote',
       quoteData,
-      (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.quoteCreated.replace('{title}', quoteTitle)
+      getActivityMessage(locale, 'quoteCreated', { title: quoteTitle })
     )
 
     // ActivityLog - Kritik modül için CREATE log'u (async, hata olsa bile devam et)
@@ -261,7 +263,7 @@ export async function POST(request: Request) {
         logAction({
           entity: 'Quote',
           action: 'CREATE',
-          description: (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.quoteCreated.replace('{title}', (data as any)?.title || (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.defaultQuoteTitle),
+          description: getActivityMessage(locale, 'quoteCreated', { title: (data as any)?.title || getActivityMessage(locale, 'defaultQuoteTitle') }),
           meta: { 
             entity: 'Quote', 
             action: 'create', 
@@ -347,7 +349,7 @@ export async function POST(request: Request) {
                   {
                     entity: 'Deal',
                     action: 'UPDATE',
-                    description: (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.dealStageUpdatedToProposal.replace('{currentStage}', currentStage),
+                    description: getActivityMessage(locale, 'dealStageUpdatedToProposal', { currentStage }),
                     meta: { 
                       entity: 'Deal', 
                       action: 'stage_change', 
@@ -380,7 +382,7 @@ export async function POST(request: Request) {
                     companyId: session.user.companyId,
                     role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
                     title: msgs.activity.dealStageUpdatedTitle,
-                    message: msgs.activity.dealStageUpdatedMessage.replace('{dealTitle}', dealTitle),
+                    message: getActivityMessage(locale, 'dealStageUpdatedMessage', { dealTitle }),
                     type: 'success',
                     relatedTo: 'Deal',
                     relatedId: body.dealId,
@@ -439,15 +441,15 @@ export async function POST(request: Request) {
     // AutoTaskFromQuote: Teklif oluşturulduğunda otomatik görev aç
     // Görev: "Bu teklif için 3 gün içinde müşteriyi ara"
     try {
-      const { getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
+      const { getMessages, getLocaleFromRequest, getActivityMessage } = await import('@/lib/api-locale')
       const taskLocale = getLocaleFromRequest(request)
       const taskMsgs = getMessages(taskLocale)
       const taskData = {
-        title: taskMsgs.activity.autoTaskCreated.replace('{quoteTitle}', body.title),
+        title: getActivityMessage(taskLocale, 'autoTaskCreated', { quoteTitle: body.title }),
         status: 'TODO',
         assignedTo: session.user.id, // Teklif sahibine atanır
         companyId: session.user.companyId,
-        description: taskMsgs.activity.autoTaskDescription.replace('{quoteTitle}', body.title),
+        description: getActivityMessage(taskLocale, 'autoTaskDescription', { quoteTitle: body.title }),
         dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 3 gün sonra
         priority: 'MEDIUM',
       }

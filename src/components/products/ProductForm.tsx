@@ -200,14 +200,14 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
 
     // Dosya tipi kontrolü (sadece resim)
     if (!file.type.startsWith('image/')) {
-      toast.error('Hata', 'Lütfen geçerli bir resim dosyası seçin')
+      toast.error('Hata', { description: 'Lütfen geçerli bir resim dosyası seçin' })
       return
     }
 
     // Dosya boyutu kontrolü (5MB max)
     const maxSize = 5 * 1024 * 1024 // 5MB
     if (file.size > maxSize) {
-      toast.error('Hata', 'Resim boyutu 5MB\'dan büyük olamaz')
+      toast.error('Hata', { description: 'Resim boyutu 5MB\'dan büyük olamaz' })
       return
     }
 
@@ -243,7 +243,7 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
       // Form'a imageUrl'i set et
       setValue('imageUrl', uploadedFile.url)
       
-      toast.success('Başarılı', 'Fotoğraf başarıyla yüklendi')
+      toast.success('Başarılı', { description: 'Fotoğraf başarıyla yüklendi' })
     } catch (error: any) {
       console.error('Image upload error:', error)
       toast.error('Hata', error?.message || 'Fotoğraf yüklenemedi')
@@ -318,7 +318,7 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
     onSuccess: (result) => {
       // Success toast göster
       if (product) {
-        toast.success('Ürün güncellendi', `${result.name} başarıyla güncellendi.`)
+        toast.success('Ürün güncellendi', { description: `${result.name} başarıyla güncellendi.` })
       } else {
         // Yeni ürün oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
         navigateToDetailToast('product', result.id, result.name)

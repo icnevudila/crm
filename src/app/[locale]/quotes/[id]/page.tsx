@@ -154,7 +154,7 @@ export default function QuoteDetailPage() {
       // Yeni quote'a yönlendir - router.push kullan (sayfa reload yok)
       router.push(`/${locale}/quotes/${newQuote.id}`)
     } catch (error: any) {
-      toastError('Revizyon oluşturulamadı', error.message)
+      toastError('Revizyon oluşturulamadı', error.message || 'Teklif revizyonu oluşturulurken bir hata oluştu')
     } finally {
       setCreatingRevision(false)
     }
@@ -248,7 +248,7 @@ export default function QuoteDetailPage() {
             }
             router.push(`/${locale}/quotes`)
           } catch (error: any) {
-            toastError('Silme işlemi başarısız oldu', error?.message)
+            toastError('Silme işlemi başarısız oldu', error?.message || 'Teklif silinirken bir hata oluştu')
             throw error
           } finally {
             setDeleteLoading(false)
@@ -264,11 +264,11 @@ export default function QuoteDetailPage() {
               throw new Error(errorData.error || 'Kopyalama işlemi başarısız')
             }
             const duplicatedQuote = await res.json()
-            toast.success('Teklif kopyalandı')
+            toast.success('Teklif kopyalandı', { description: 'Teklif başarıyla kopyalandı' })
             // Yeni kopyalanan quote'un detay sayfasına yönlendir
             router.push(`/${locale}/quotes/${duplicatedQuote.id}`)
           } catch (error: any) {
-            toastError('Kopyalama işlemi başarısız oldu', error?.message)
+            toastError('Kopyalama işlemi başarısız oldu', error?.message || 'Teklif kopyalanırken bir hata oluştu')
           }
         }}
         onCreateRelated={(type) => {
@@ -529,9 +529,9 @@ export default function QuoteDetailPage() {
               mutate((key: string) => typeof key === 'string' && key.startsWith('/api/quotes'), undefined, { revalidate: true }),
             ])
             
-            toast.success('Durum değiştirildi')
+            toast.success('Durum değiştirildi', { description: 'Teklif durumu başarıyla güncellendi' })
           } catch (error: any) {
-            toast.error('Durum değiştirilemedi', error.message || 'Bir hata oluştu.')
+            toast.error('Durum değiştirilemedi', { description: error.message || 'Bir hata oluştu.' })
           }
         }}
         onCreateRelated={(type) => {

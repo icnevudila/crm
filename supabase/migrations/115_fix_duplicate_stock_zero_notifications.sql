@@ -59,3 +59,5 @@ CREATE TRIGGER trg_product_stock_zero
 
 
 
+
+

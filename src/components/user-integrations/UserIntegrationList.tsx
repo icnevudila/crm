@@ -172,7 +172,7 @@ export default function UserIntegrationList() {
       ])
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error('Hata', error?.message || 'Silme işlemi başarısız oldu')
+      toast.error('Hata', { description: error?.message || 'Silme işlemi başarısız oldu' })
     }
   }
 
@@ -204,7 +204,7 @@ export default function UserIntegrationList() {
       window.location.href = authEndpoint
     } catch (error: any) {
       console.error('OAuth connect error:', error)
-      toast.error('Bağlantı Hatası', error?.message || 'OAuth bağlantısı başlatılamadı')
+      toast.error('Bağlantı Hatası', { description: error?.message || 'OAuth bağlantısı başlatılamadı' })
     }
   }
 
@@ -248,14 +248,14 @@ export default function UserIntegrationList() {
           helpMessage = 'Azure Portal\'dan (https://portal.azure.com/) Client ID ve Secret alın. "Kaydet" butonuna tıklayın, ardından "OAuth Bağla" ile Microsoft hesabınızı bağlayın.'
         }
         
-        toast.error('Test Başarısız', `${errorMessage}\n\n${helpMessage}`)
+        toast.error('Test Başarısız', { description: `${errorMessage}\n\n${helpMessage}` })
         return
       }
 
-      toast.success('Test Başarılı', data.message || 'Entegrasyon başarıyla çalışıyor!')
+      toast.success('Test Başarılı', { description: data.message || 'Entegrasyon başarıyla çalışıyor!' })
     } catch (error: any) {
       console.error('Test error:', error)
-      toast.error('Test Başarısız', error?.message || 'Bilinmeyen hata oluştu')
+      toast.error('Test Başarısız', { description: error?.message || 'Bilinmeyen hata oluştu' })
     }
   }
 
@@ -377,7 +377,7 @@ export default function UserIntegrationList() {
                   variant="default"
                   onClick={async () => {
                     if (!companyIntegration?.googleCalendarClientId) {
-                      toast.error('Eksik Bilgi', 'Lütfen önce Google Client ID girin.\n\nGoogle Cloud Console\'dan (https://console.cloud.google.com/) Client ID ve Secret alabilirsiniz.')
+                      toast.error('Eksik Bilgi', { description: 'Lütfen önce Google Client ID girin.\n\nGoogle Cloud Console\'dan (https://console.cloud.google.com/) Client ID ve Secret alabilirsiniz.' })
                       return
                     }
                     try {
@@ -385,9 +385,9 @@ export default function UserIntegrationList() {
                         googleCalendarClientId: companyIntegration.googleCalendarClientId,
                         googleCalendarClientSecret: companyIntegration.googleCalendarClientSecret,
                       })
-                      toast.success('Başarılı', 'Google Calendar bilgileri kaydedildi! Şimdi "Google Calendar Bağla" butonuna tıklayarak OAuth bağlantısı yapabilirsiniz.')
+                      toast.success('Başarılı', { description: 'Google Calendar bilgileri kaydedildi! Şimdi "Google Calendar Bağla" butonuna tıklayarak OAuth bağlantısı yapabilirsiniz.' })
                     } catch (error: any) {
-                      toast.error('Hata', error?.message || 'Kaydetme başarısız oldu')
+                      toast.error('Hata', { description: error?.message || 'Kaydetme başarısız oldu' })
                     }
                   }}
                 >
@@ -406,7 +406,7 @@ export default function UserIntegrationList() {
                   variant="outline" 
                   onClick={async () => {
                     if (!companyIntegration?.googleCalendarClientId) {
-                      toast.error('Eksik Bilgi', 'Lütfen önce Google Client ID girin ve "Bilgileri Kaydet" butonuna tıklayın.\n\nGoogle Cloud Console\'dan (https://console.cloud.google.com/) Client ID ve Secret alabilirsiniz.')
+                      toast.error('Eksik Bilgi', { description: 'Lütfen önce Google Client ID girin ve "Bilgileri Kaydet" butonuna tıklayın.\n\nGoogle Cloud Console\'dan (https://console.cloud.google.com/) Client ID ve Secret alabilirsiniz.' })
                       return
                     }
                     try {
@@ -490,7 +490,7 @@ export default function UserIntegrationList() {
                   variant="default"
                   onClick={async () => {
                     if (!companyIntegration?.microsoftClientId) {
-                      toast.error('Eksik Bilgi', 'Lütfen önce Microsoft Client ID girin.\n\nAzure Portal\'dan (https://portal.azure.com/) Client ID ve Secret alabilirsiniz.')
+                      toast.error('Eksik Bilgi', { description: 'Lütfen önce Microsoft Client ID girin.\n\nAzure Portal\'dan (https://portal.azure.com/) Client ID ve Secret alabilirsiniz.' })
                       return
                     }
                     try {
@@ -498,7 +498,7 @@ export default function UserIntegrationList() {
                         microsoftClientId: companyIntegration.microsoftClientId,
                         microsoftClientSecret: companyIntegration.microsoftClientSecret,
                       })
-                      toast.success('Başarılı', 'Microsoft bilgileri kaydedildi! Şimdi "Microsoft Bağla" butonuna tıklayarak OAuth bağlantısı yapabilirsiniz.')
+                      toast.success('Başarılı', { description: 'Microsoft bilgileri kaydedildi! Şimdi "Microsoft Bağla" butonuna tıklayarak OAuth bağlantısı yapabilirsiniz.' })
                     } catch (error: any) {
                       toast.error('Hata', error?.message || 'Kaydetme başarısız oldu')
                     }
@@ -669,7 +669,7 @@ export default function UserIntegrationList() {
                           zoomClientSecret: companyIntegration?.zoomClientSecret,
                           zoomEnabled: true,
                         })
-                        toast.success('Başarılı', 'Zoom bilgileri kaydedildi! Artık "Test Et" butonuna tıklayarak entegrasyonu test edebilirsiniz.')
+                        toast.success('Başarılı', { description: 'Zoom bilgileri kaydedildi! Artık "Test Et" butonuna tıklayarak entegrasyonu test edebilirsiniz.' })
                       } catch (error: any) {
                         toast.error('Hata', error?.message || 'Kaydetme başarısız oldu')
                       }
@@ -757,7 +757,7 @@ export default function UserIntegrationList() {
                           googleCalendarClientId: companyIntegration?.googleCalendarClientId,
                           googleCalendarClientSecret: companyIntegration?.googleCalendarClientSecret,
                         })
-                        toast.success('Başarılı', 'Google Meet bilgileri kaydedildi! Şimdi "OAuth Bağla" butonuna tıklayarak Google hesabınızı bağlayın.')
+                        toast.success('Başarılı', { description: 'Google Meet bilgileri kaydedildi! Şimdi "OAuth Bağla" butonuna tıklayarak Google hesabınızı bağlayın.' })
                       } catch (error: any) {
                         toast.error('Hata', error?.message || 'Kaydetme başarısız oldu')
                       }
@@ -854,7 +854,7 @@ export default function UserIntegrationList() {
                           microsoftClientId: companyIntegration?.microsoftClientId,
                           microsoftClientSecret: companyIntegration?.microsoftClientSecret,
                         })
-                        toast.success('Başarılı', 'Microsoft Teams bilgileri kaydedildi! Şimdi "OAuth Bağla" butonuna tıklayarak Microsoft hesabınızı bağlayın.')
+                        toast.success('Başarılı', { description: 'Microsoft Teams bilgileri kaydedildi! Şimdi "OAuth Bağla" butonuna tıklayarak Microsoft hesabınızı bağlayın.' })
                       } catch (error: any) {
                         toast.error('Hata', error?.message || 'Kaydetme başarısız oldu')
                       }

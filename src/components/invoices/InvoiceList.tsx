@@ -272,7 +272,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
   const handleEdit = useCallback((invoice: Invoice) => {
     // ÖNEMLİ: SHIPPED (Sevkiyatı Yapıldı) durumundaki faturalar düzenlenemez
     if (invoice.status === 'SHIPPED') {
-      toast.warning(t('cannotEditShipped'), t('cannotEditShippedMessage'))
+      toast.warning(t('cannotEditShipped'), { description: t('cannotEditShippedMessage') })
       return
     }
     
@@ -343,10 +343,9 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
       }
       
       // Başarı bildirimi
-      toast.success(
-        t('invoiceDeleted'),
-        t('invoiceDeletedMessage', { title })
-      )
+      toast.success(t('invoiceDeleted'), {
+        description: t('invoiceDeletedMessage', { title })
+      })
       
       // Başarılı silme sonrası - SADECE invalidate yap, refetch YAPMA (optimistic update zaten yapıldı)
       // ÖNEMLİ: Dashboard'daki tüm ilgili query'leri invalidate et (ana sayfada güncellensin)
@@ -371,7 +370,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error(tCommon('error'), error?.message)
+      toast.error(tCommon('error'), { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setDeletingId(null)
     }
@@ -676,7 +675,37 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                 queryClient.refetchQueries({ queryKey: ['kanban-invoices'] })
                 
                 const errorData = await res.json().catch(() => ({}))
-                const errorMessage = errorData.message || errorData.error || 'Fatura durumu güncellenemedi'
+                
+                // Detaylı hata mesajı oluştur - güvenli kontrol - HER ZAMAN STRING OLMALI
+                let errorMessage: string = 'Fatura durumu güncellenemedi'
+                
+                if (errorData?.message && typeof errorData.message === 'string') {
+                  errorMessage = String(errorData.message)
+                } else if (errorData?.error && typeof errorData.error === 'string') {
+                  errorMessage = String(errorData.error)
+                }
+                
+                // Status validation hatası ise daha açıklayıcı mesaj göster
+                if (errorData?.reason === 'INVALID_STATUS_TRANSITION') {
+                  const currentStatus = String(errorData?.currentStatus || 'Bilinmiyor')
+                  const attemptedStatus = String(errorData?.attemptedStatus || 'Bilinmiyor')
+                  errorMessage = errorData?.message && typeof errorData.message === 'string' 
+                    ? String(errorData.message)
+                    : `Geçersiz durum geçişi: "${currentStatus}" → "${attemptedStatus}"`
+                  
+                  if (Array.isArray(errorData?.allowedTransitions) && errorData.allowedTransitions.length > 0) {
+                    errorMessage += `\n\nİzin verilen geçişler: ${errorData.allowedTransitions.join(', ')}`
+                  }
+                }
+                
+                // ✅ GÜVENLİK: errorMessage'ın her zaman string olduğundan emin ol
+                errorMessage = String(errorMessage || 'Fatura durumu güncellenemedi')
+                
+                // Toast ile hata göster - doğru format
+                toast.error('Fatura Güncellenemedi', {
+                  description: errorMessage,
+                })
+                
                 throw new Error(errorMessage)
               }
 
@@ -774,17 +803,17 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
               }
 
               if (toastType === 'success') {
-                toast.success(toastTitle, toastDescription)
+                toast.success(toastTitle, { description: toastDescription })
               } else if (toastType === 'warning') {
-                toast.warning(toastTitle, toastDescription)
+                toast.warning(toastTitle, { description: toastDescription })
               } else if (toastType === 'info') {
                 if (typeof toast.info === 'function') {
-                  toast.info(toastTitle, toastDescription)
+                  toast.info(toastTitle, { description: toastDescription })
                 } else {
-                  toast.success(toastTitle, toastDescription)
+                  toast.success(toastTitle, { description: toastDescription })
                 }
               } else {
-                toast.success(toastTitle, toastDescription)
+                toast.success(toastTitle, { description: toastDescription })
               }
 
               // Cache'i invalidate et - fresh data çek (hem table hem kanban hem stats)
@@ -807,10 +836,9 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
               ])
             } catch (error: any) {
               console.error('Status update error:', error)
-              toast.error(
-                'Fatura durumu güncellenemedi',
-                error?.message || 'Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.'
-              )
+              toast.error('Fatura durumu güncellenemedi', {
+                description: String(error?.message || 'Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.')
+              })
               throw error
             }
           }}
@@ -912,9 +940,9 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                                 mutate((key: string) => typeof key === 'string' && key.startsWith('/api/invoices'), undefined, { revalidate: true }),
                               ])
                               
-                              toast.success('Durum güncellendi', `Fatura "${statusLabels[newStatus] || newStatus}" durumuna taşındı.`)
+                              toast.success('Durum güncellendi', { description: `Fatura "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
                             } catch (error: any) {
-                              toast.error('Durum güncellenemedi', error?.message || 'Bir hata oluştu.')
+                              toast.error('Durum güncellenemedi', { description: error?.message || 'Bir hata oluştu.' })
                               throw error
                             }
                           }}
@@ -997,7 +1025,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                                                 setSelectedCustomer(customer)
                                                 setEmailDialogOpen(true)
                                               } else {
-                                                toast.error('E-posta adresi yok', 'Müşterinin e-posta adresi bulunamadı')
+                                                toast.error('E-posta adresi yok', { description: 'Müşterinin e-posta adresi bulunamadı' })
                                               }
                                             }
                                           }
@@ -1008,7 +1036,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                                     console.error('Customer fetch error:', error)
                                   }
                                 } else {
-                                  toast.error('Teklif yok', 'Bu fatura için teklif bilgisi bulunamadı')
+                                  toast.error('Teklif yok', { description: 'Bu fatura için teklif bilgisi bulunamadı' })
                                 }
                               }}
                               disabled={!invoice.quoteId}
@@ -1036,7 +1064,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                                                 setSelectedCustomer(customer)
                                                 setSmsDialogOpen(true)
                                               } else {
-                                                toast.error('Telefon numarası yok', 'Müşterinin telefon numarası bulunamadı')
+                                                toast.error('Telefon numarası yok', { description: 'Müşterinin telefon numarası bulunamadı' })
                                               }
                                             }
                                           }
@@ -1047,7 +1075,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                                     console.error('Customer fetch error:', error)
                                   }
                                 } else {
-                                  toast.error('Teklif yok', 'Bu fatura için teklif bilgisi bulunamadı')
+                                  toast.error('Teklif yok', { description: 'Bu fatura için teklif bilgisi bulunamadı' })
                                 }
                               }}
                               disabled={!invoice.quoteId}
@@ -1075,7 +1103,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                                                 setSelectedCustomer(customer)
                                                 setWhatsAppDialogOpen(true)
                                               } else {
-                                                toast.error('Telefon numarası yok', 'Müşterinin telefon numarası bulunamadı')
+                                                toast.error('Telefon numarası yok', { description: 'Müşterinin telefon numarası bulunamadı' })
                                               }
                                             }
                                           }
@@ -1086,7 +1114,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                                     console.error('Customer fetch error:', error)
                                   }
                                 } else {
-                                  toast.error('Teklif yok', 'Bu fatura için teklif bilgisi bulunamadı')
+                                  toast.error('Teklif yok', { description: 'Bu fatura için teklif bilgisi bulunamadı' })
                                 }
                               }}
                               disabled={!invoice.quoteId}
@@ -1116,7 +1144,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                             size="icon"
                             onClick={() => {
                               if (invoice.status === 'PAID') {
-                                toast.warning(t('cannotEditPaid'), t('cannotDeletePaidMessage'))
+                                toast.warning(t('cannotEditPaid'), { description: t('cannotDeletePaidMessage') })
                                 return
                               }
                               handleEdit(invoice)
@@ -1135,15 +1163,15 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                             size="icon"
                             onClick={() => {
                               if (invoice.status === 'PAID') {
-                                toast.warning(t('cannotDeletePaid'), t('cannotDeletePaidMessage'))
+                                toast.warning(t('cannotDeletePaid'), { description: t('cannotDeletePaidMessage') })
                                 return
                               }
                               if (invoice.status === 'SHIPPED') {
-                                toast.warning(t('cannotDeleteShipped'), t('cannotDeleteShippedMessage'))
+                                toast.warning(t('cannotDeleteShipped'), { description: t('cannotDeleteShippedMessage') })
                                 return
                               }
                               if (invoice.status === 'RECEIVED') {
-                                toast.warning(t('cannotDeleteReceived'), t('cannotDeleteReceivedMessage'))
+                                toast.warning(t('cannotDeleteReceived'), { description: t('cannotDeleteReceivedMessage') })
                                 return
                               }
                               handleDelete(invoice.id, invoice.title)
@@ -1239,9 +1267,9 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                                   mutate('/api/invoices', undefined, { revalidate: true }),
                                   mutate('/api/invoices?', undefined, { revalidate: true }),
                                 ])
-                                toast.success('Durum güncellendi', `Fatura "${statusLabels[newStatus] || newStatus}" durumuna taşındı.`)
+                                toast.success('Durum güncellendi', { description: `Fatura "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
                               } catch (error: any) {
-                                toast.error('Durum güncellenemedi', error?.message || 'Bir hata oluştu.')
+                                toast.error('Durum güncellenemedi', { description: error?.message || 'Bir hata oluştu.' })
                                 throw error
                               }
                             }}
@@ -1340,9 +1368,11 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
           // Başarı bildirimi
           toast.success(
             selectedInvoice ? t('statusUpdated') : t('invoiceCreated'),
-            selectedInvoice 
-              ? t('invoiceUpdatedMessage', { title: savedInvoice.title })
-              : t('invoiceCreatedMessage', { title: savedInvoice.title })
+            {
+              description: selectedInvoice 
+                ? t('invoiceUpdatedMessage', { title: savedInvoice.title })
+                : t('invoiceCreatedMessage', { title: savedInvoice.title })
+            }
           )
           
           // Optimistic update - yeni/güncellenmiş kaydı hemen cache'e ekle
@@ -1486,10 +1516,10 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
             customerPhone: selectedCustomer.phone,
             customerName: selectedCustomer.name,
             defaultSubject: `Fatura: ${selectedInvoiceForCommunication.title}`,
-            defaultMessage: `Merhaba ${selectedCustomer.name},\n\nFatura bilgisi: ${selectedInvoiceForCommunication.title}\n\nTutar: ${selectedInvoiceForCommunication.total ? `₺${selectedInvoiceForCommunication.total.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}\nDurum: ${selectedInvoiceForCommunication.status || 'DRAFT'}`,
-            defaultHtml: `<p>Merhaba ${selectedCustomer.name},</p><p>Fatura bilgisi: <strong>${selectedInvoiceForCommunication.title}</strong></p><p>Tutar: ${selectedInvoiceForCommunication.total ? `₺${selectedInvoiceForCommunication.total.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}</p><p>Durum: ${selectedInvoiceForCommunication.status || 'DRAFT'}</p>`,
+            defaultMessage: `Merhaba ${selectedCustomer.name},\n\nFatura bilgisi: ${selectedInvoiceForCommunication.title}\n\nTutar: ${selectedInvoiceForCommunication.totalAmount ? `₺${selectedInvoiceForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}\nDurum: ${selectedInvoiceForCommunication.status || 'DRAFT'}`,
+            defaultHtml: `<p>Merhaba ${selectedCustomer.name},</p><p>Fatura bilgisi: <strong>${selectedInvoiceForCommunication.title}</strong></p><p>Tutar: ${selectedInvoiceForCommunication.totalAmount ? `₺${selectedInvoiceForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}</p><p>Durum: ${selectedInvoiceForCommunication.status || 'DRAFT'}</p>`,
             onSent: () => {
-              toast.success('E-posta gönderildi', 'Müşteriye invoice bilgisi gönderildi')
+              toast.success('E-posta gönderildi', { description: 'Müşteriye invoice bilgisi gönderildi' })
             },
           }}
           open={emailDialogOpen}
@@ -1510,9 +1540,9 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
             entityTitle: selectedInvoiceForCommunication.title,
             customerPhone: selectedCustomer.phone,
             customerName: selectedCustomer.name,
-            defaultMessage: `Merhaba ${selectedCustomer.name}, Fatura: ${selectedInvoiceForCommunication.title}. Tutar: ${selectedInvoiceForCommunication.total ? `₺${selectedInvoiceForCommunication.total.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
+            defaultMessage: `Merhaba ${selectedCustomer.name}, Fatura: ${selectedInvoiceForCommunication.title}. Tutar: ${selectedInvoiceForCommunication.totalAmount ? `₺${selectedInvoiceForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
             onSent: () => {
-              toast.success('SMS gönderildi', 'Müşteriye invoice bilgisi gönderildi')
+              toast.success('SMS gönderildi', { description: 'Müşteriye invoice bilgisi gönderildi' })
             },
           }}
           open={smsDialogOpen}
@@ -1533,9 +1563,9 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
             entityTitle: selectedInvoiceForCommunication.title,
             customerPhone: selectedCustomer.phone,
             customerName: selectedCustomer.name,
-            defaultMessage: `Merhaba ${selectedCustomer.name}, Fatura: ${selectedInvoiceForCommunication.title}. Tutar: ${selectedInvoiceForCommunication.total ? `₺${selectedInvoiceForCommunication.total.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
+            defaultMessage: `Merhaba ${selectedCustomer.name}, Fatura: ${selectedInvoiceForCommunication.title}. Tutar: ${selectedInvoiceForCommunication.totalAmount ? `₺${selectedInvoiceForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
             onSent: () => {
-              toast.success('WhatsApp mesajı gönderildi', 'Müşteriye invoice bilgisi gönderildi')
+              toast.success('WhatsApp mesajı gönderildi', { description: 'Müşteriye invoice bilgisi gönderildi' })
             },
           }}
           open={whatsAppDialogOpen}

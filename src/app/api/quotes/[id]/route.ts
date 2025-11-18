@@ -390,11 +390,11 @@ export async function PUT(
     }
 
     // updateRecord kullanarak audit trail desteği (updatedBy otomatik eklenir)
-    const { getErrorMessage, getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const { getErrorMessage, getMessages, getLocaleFromRequest, getActivityMessage } = await import('@/lib/api-locale')
     const locale = getLocaleFromRequest(request)
     const msgs = getMessages(locale)
     const quoteTitle = body.title || currentQuote?.title || id
-    const updateDescription = msgs.activity.quoteUpdated.replace('{title}', quoteTitle)
+    const updateDescription = getActivityMessage(locale, 'quoteUpdated', { title: quoteTitle })
     
     const updateResult = await updateRecord(
       'Quote',
@@ -567,7 +567,8 @@ export async function PUT(
       const { getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
       const localeForInvoice = getLocaleFromRequest(request)
       const msgsForInvoice = getMessages(localeForInvoice)
-      const invoiceTitle = msgsForInvoice.activity.invoiceTitlePrefix.replace('{title}', (data as any).title || msgsForInvoice.activity.defaultQuoteTitle)
+      const { getActivityMessage: getActivityMessageForInvoice } = await import('@/lib/api-locale')
+      const invoiceTitle = getActivityMessageForInvoice(localeForInvoice, 'invoiceTitlePrefix', { title: (data as any).title || getActivityMessageForInvoice(localeForInvoice, 'defaultQuoteTitle') })
       
       const invoiceData = {
         title: invoiceTitle,
@@ -662,35 +663,36 @@ export async function PUT(
     
     let changeDescription = ''
     if (body.status) {
-      changeDescription = msgs.activity.quoteStatusUpdated.replace('{status}', body.status)
+      changeDescription = getActivityMessage(locale, 'quoteStatusUpdated', { status: body.status })
     } else if (body.totalAmount !== undefined && (data as any)?.totalAmount !== undefined) {
       const oldTotal = parseFloat((data as any).totalAmount) || 0
       const newTotal = parseFloat(body.totalAmount) || 0
       if (oldTotal !== newTotal) {
         const localeStr = locale === 'en' ? 'en-US' : 'tr-TR'
         const currency = locale === 'en' ? 'USD' : 'TRY'
-        changeDescription = msgs.activity.quotePriceUpdated
-          .replace('{oldTotal}', oldTotal.toLocaleString(localeStr, { style: 'currency', currency }))
-          .replace('{newTotal}', newTotal.toLocaleString(localeStr, { style: 'currency', currency }))
+        changeDescription = getActivityMessage(locale, 'quotePriceUpdated', { 
+          oldTotal: oldTotal.toLocaleString(localeStr, { style: 'currency', currency }),
+          newTotal: newTotal.toLocaleString(localeStr, { style: 'currency', currency })
+        })
       } else {
-        const quoteTitle = body.title || (data as any)?.title || msgs.activity.defaultQuoteTitle
-        changeDescription = msgs.activity.quoteUpdated.replace('{title}', quoteTitle)
+        const quoteTitle = body.title || (data as any)?.title || getActivityMessage(locale, 'defaultQuoteTitle')
+        changeDescription = getActivityMessage(locale, 'quoteUpdated', { title: quoteTitle })
       }
     } else {
-      const quoteTitle = body.title || (data as any)?.title || msgs.activity.defaultQuoteTitle
-      changeDescription = msgs.activity.quoteUpdated.replace('{title}', quoteTitle)
+      const quoteTitle = body.title || (data as any)?.title || getActivityMessage(locale, 'defaultQuoteTitle')
+      changeDescription = getActivityMessage(locale, 'quoteUpdated', { title: quoteTitle })
     }
 
     // ÖNEMLİ: Quote DECLINED olduğunda özel ActivityLog ve bildirim
     if (body.status === 'DECLINED' && (data as any)?.status !== 'DECLINED') {
       try {
-        const quoteTitle = body.title || (data as any)?.title || msgs.activity.defaultQuoteTitle
+        const quoteTitle = body.title || (data as any)?.title || getActivityMessage(locale, 'defaultQuoteTitle')
         
         // Özel ActivityLog kaydı
         const declinedActivityData = {
           entity: 'Quote',
           action: 'UPDATE',
-          description: msgs.activity.quoteRejected.replace('{title}', quoteTitle),
+          description: getActivityMessage(locale, 'quoteRejected', { title: quoteTitle }),
           meta: { 
             entity: 'Quote', 
             action: 'declined', 
@@ -711,7 +713,7 @@ export async function PUT(
           companyId: session.user.companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
           title: msgs.activity.quoteRejectedTitle,
-          message: msgs.activity.quoteRejectedMessage.replace('{title}', quoteTitle),
+          message: getActivityMessage(locale, 'quoteRejectedMessage', { title: quoteTitle }),
           type: 'warning',
           relatedTo: 'Quote',
           relatedId: id,
@@ -767,12 +769,12 @@ export async function PUT(
       try {
         // REJECTED notification gönder
         const { createNotificationForRole } = await import('@/lib/notification-helper')
-        const rejectedQuoteTitle = (data as any)?.title || msgs.activity.defaultQuoteTitle
+        const rejectedQuoteTitle = (data as any)?.title || getActivityMessage(locale, 'defaultQuoteTitle')
         await createNotificationForRole({
           companyId: session.user.companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
           title: msgs.activity.quoteRejectedWarningTitle,
-          message: msgs.activity.quoteRejectedWarningMessage.replace('{title}', rejectedQuoteTitle),
+          message: getActivityMessage(locale, 'quoteRejectedWarningMessage', { title: rejectedQuoteTitle }),
           type: 'warning',
           priority: 'high',
           relatedTo: 'Quote',
@@ -967,14 +969,14 @@ export async function DELETE(
     // ActivityLog kaydı - hata olsa bile ana işlem başarılı
     // quote null olabilir (maybeSingle() kullandık), o yüzden deletedData'dan title al
     try {
-      const { getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
+      const { getMessages, getLocaleFromRequest, getActivityMessage } = await import('@/lib/api-locale')
       const deleteLocale = getLocaleFromRequest(request)
       const deleteMsgs = getMessages(deleteLocale)
-      const quoteTitle = quote?.title || deletedData[0]?.title || deleteMsgs.activity.defaultQuoteTitle
+      const quoteTitle = quote?.title || deletedData[0]?.title || getActivityMessage(deleteLocale, 'defaultQuoteTitle')
       const activityData = {
         entity: 'Quote',
         action: 'DELETE',
-        description: deleteMsgs.activity.quoteDeleted.replace('{title}', quoteTitle),
+        description: getActivityMessage(deleteLocale, 'quoteDeleted', { title: quoteTitle }),
         meta: { entity: 'Quote', action: 'delete', id },
         userId: session.user.id,
         companyId: session.user.companyId,
@@ -1010,6 +1012,8 @@ export async function DELETE(
     )
   }
 }
+
+
 
 
 

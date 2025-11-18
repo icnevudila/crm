@@ -279,11 +279,11 @@ export default function MeetingList() {
       ])
 
       toast.dismiss(toastId)
-      toast.success(tCommon('meetingDeletedSuccess'), tCommon('meetingDeletedSuccessMessage'))
+      toast.success(tCommon('meetingDeletedSuccess'), { description: tCommon('meetingDeletedSuccessMessage') })
     } catch (error: any) {
       console.error('Delete error:', error)
       toast.dismiss(toastId)
-      toast.error('Silme başarısız', error?.message || 'Silme işlemi sırasında bir hata oluştu.')
+      toast.error('Silme başarısız', { description: error?.message || 'Silme işlemi sırasında bir hata oluştu.' })
     }
   }
 
@@ -322,12 +322,21 @@ export default function MeetingList() {
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
     } catch (error) {
-      toast.warning(t('exportFailed'))
+      toast.warning(t('exportFailed'), { description: t('exportFailedMessage') || 'Dışa aktarma işlemi başarısız oldu' })
     }
   }
 
   if (isLoading) {
     return <SkeletonList />
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-red-600 mb-4">Görüşmeler yüklenirken bir hata oluştu.</p>
+        <Button onClick={() => mutateMeetings()}>Yeniden Dene</Button>
+      </div>
+    )
   }
 
   return (
@@ -676,14 +685,14 @@ export default function MeetingList() {
                                       setSelectedCustomer(customer)
                                       setEmailDialogOpen(true)
                                     } else {
-                                      toast.error('E-posta adresi yok', 'Müşterinin e-posta adresi bulunamadı')
+                                      toast.error('E-posta adresi yok', { description: 'Müşterinin e-posta adresi bulunamadı' })
                                     }
                                   }
                                 } catch (error) {
                                   console.error('Customer fetch error:', error)
                                 }
                               } else {
-                                toast.error('Müşteri yok', 'Bu toplantı için müşteri bilgisi bulunamadı')
+                                toast.error('Müşteri yok', { description: 'Bu toplantı için müşteri bilgisi bulunamadı' })
                               }
                             }}
                             disabled={!meeting.customerId}
@@ -703,14 +712,14 @@ export default function MeetingList() {
                                       setSelectedCustomer(customer)
                                       setSmsDialogOpen(true)
                                     } else {
-                                      toast.error('Telefon numarası yok', 'Müşterinin telefon numarası bulunamadı')
+                                      toast.error('Telefon numarası yok', { description: 'Müşterinin telefon numarası bulunamadı' })
                                     }
                                   }
                                 } catch (error) {
                                   console.error('Customer fetch error:', error)
                                 }
                               } else {
-                                toast.error('Müşteri yok', 'Bu toplantı için müşteri bilgisi bulunamadı')
+                                toast.error('Müşteri yok', { description: 'Bu toplantı için müşteri bilgisi bulunamadı' })
                               }
                             }}
                             disabled={!meeting.customerId}
@@ -730,14 +739,14 @@ export default function MeetingList() {
                                       setSelectedCustomer(customer)
                                       setWhatsAppDialogOpen(true)
                                     } else {
-                                      toast.error('Telefon numarası yok', 'Müşterinin telefon numarası bulunamadı')
+                                      toast.error('Telefon numarası yok', { description: 'Müşterinin telefon numarası bulunamadı' })
                                     }
                                   }
                                 } catch (error) {
                                   console.error('Customer fetch error:', error)
                                 }
                               } else {
-                                toast.error('Müşteri yok', 'Bu toplantı için müşteri bilgisi bulunamadı')
+                                toast.error('Müşteri yok', { description: 'Bu toplantı için müşteri bilgisi bulunamadı' })
                               }
                             }}
                             disabled={!meeting.customerId}
@@ -890,7 +899,7 @@ export default function MeetingList() {
             setFinanceFormMeetingId(null)
             
             // Başarı mesajı göster
-            toast.success('Başarılı', 'Operasyon gideri başarıyla eklendi!')
+            toast.success('Başarılı', { description: 'Operasyon gideri başarıyla eklendi!' })
             
             // Finans sayfasına yönlendir (yeni sekmede açılması için)
             setTimeout(() => {
@@ -917,7 +926,7 @@ export default function MeetingList() {
             defaultMessage: `Merhaba ${selectedCustomer.name},\n\nToplantı bilgisi: ${selectedMeetingForCommunication.title}\n\nTarih: ${selectedMeetingForCommunication.meetingDate ? new Date(selectedMeetingForCommunication.meetingDate).toLocaleString('tr-TR') : 'Belirtilmemiş'}\nLokasyon: ${selectedMeetingForCommunication.location || 'Belirtilmemiş'}`,
             defaultHtml: `<p>Merhaba ${selectedCustomer.name},</p><p>Toplantı bilgisi: <strong>${selectedMeetingForCommunication.title}</strong></p><p>Tarih: ${selectedMeetingForCommunication.meetingDate ? new Date(selectedMeetingForCommunication.meetingDate).toLocaleString('tr-TR') : 'Belirtilmemiş'}</p><p>Lokasyon: ${selectedMeetingForCommunication.location || 'Belirtilmemiş'}</p>`,
             onSent: () => {
-              toast.success('E-posta gönderildi', 'Müşteriye meeting bilgisi gönderildi')
+              toast.success('E-posta gönderildi', { description: 'Müşteriye meeting bilgisi gönderildi' })
             },
           }}
           open={emailDialogOpen}
@@ -940,7 +949,7 @@ export default function MeetingList() {
             customerName: selectedCustomer.name,
             defaultMessage: `Merhaba ${selectedCustomer.name}, Toplantı: ${selectedMeetingForCommunication.title}. Tarih: ${selectedMeetingForCommunication.meetingDate ? new Date(selectedMeetingForCommunication.meetingDate).toLocaleString('tr-TR') : 'Belirtilmemiş'}`,
             onSent: () => {
-              toast.success('SMS gönderildi', 'Müşteriye meeting bilgisi gönderildi')
+              toast.success('SMS gönderildi', { description: 'Müşteriye meeting bilgisi gönderildi' })
             },
           }}
           open={smsDialogOpen}
@@ -963,7 +972,7 @@ export default function MeetingList() {
             customerName: selectedCustomer.name,
             defaultMessage: `Merhaba ${selectedCustomer.name}, Toplantı: ${selectedMeetingForCommunication.title}. Tarih: ${selectedMeetingForCommunication.meetingDate ? new Date(selectedMeetingForCommunication.meetingDate).toLocaleString('tr-TR') : 'Belirtilmemiş'}`,
             onSent: () => {
-              toast.success('WhatsApp mesajı gönderildi', 'Müşteriye meeting bilgisi gönderildi')
+              toast.success('WhatsApp mesajı gönderildi', { description: 'Müşteriye meeting bilgisi gönderildi' })
             },
           }}
           open={whatsAppDialogOpen}

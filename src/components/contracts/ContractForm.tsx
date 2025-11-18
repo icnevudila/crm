@@ -256,7 +256,7 @@ export default function ContractForm({
       
       // Toast mesajı göster
       if (contract) {
-        toast.success(t('contractUpdated'), t('contractUpdatedMessage', { title: savedContract.title }))
+        toast.success(t('contractUpdated'), { description: t('contractUpdatedMessage', { title: savedContract.title }) })
       } else {
         // Yeni contract oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
         navigateToDetailToast('contract', savedContract.id, savedContract.title)
@@ -270,7 +270,7 @@ export default function ContractForm({
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error(t('saveFailed'), error?.message)
+      toast.error(t('saveFailed'), { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }

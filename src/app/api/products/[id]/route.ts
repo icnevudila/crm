@@ -393,11 +393,13 @@ export async function PUT(
     // NOT: updatedAt ve updatedBy updateRecord fonksiyonunda otomatik ekleniyor
 
     // updateRecord kullanarak audit trail desteği (updatedBy otomatik eklenir)
+    const { getActivityMessage, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const locale = getLocaleFromRequest(request)
     const data = await updateRecord(
       'Product',
       id,
       productData,
-      (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.productUpdated.replace('{name}', body.name)
+      getActivityMessage(locale, 'productUpdated', { name: body.name })
     )
 
     return NextResponse.json(data)
@@ -519,7 +521,7 @@ export async function DELETE(
           {
             entity: 'Product',
             action: 'DELETE',
-            description: (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.productDeleted.replace('{name}', (product as any)?.name || (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.defaultProductName),
+            description: getActivityMessage(locale, 'productDeleted', { name: (product as any)?.name || getActivityMessage(locale, 'defaultProductName') }),
             meta: { entity: 'Product', action: 'delete', id },
             userId: session.user.id,
             companyId: session.user.companyId,

@@ -164,7 +164,7 @@ export default function InvoiceDetailPage() {
             }
             router.push(`/${locale}/invoices`)
           } catch (error: any) {
-            toastError('Silme işlemi başarısız oldu', error?.message)
+            toastError('Silme işlemi başarısız oldu', error?.message || 'Fatura silinirken bir hata oluştu')
             throw error
           } finally {
             setDeleteLoading(false)
@@ -180,10 +180,10 @@ export default function InvoiceDetailPage() {
               throw new Error(errorData.error || 'Kopyalama işlemi başarısız')
             }
             const duplicatedInvoice = await res.json()
-            toast.success('Fatura kopyalandı')
+            toast.success('Fatura kopyalandı', { description: 'Fatura başarıyla kopyalandı' })
             router.push(`/${locale}/invoices/${duplicatedInvoice.id}`)
           } catch (error: any) {
-            toastError('Kopyalama işlemi başarısız oldu', error?.message)
+            toastError('Kopyalama işlemi başarısız oldu', error?.message || 'Fatura kopyalanırken bir hata oluştu')
           }
         }}
         onCreateRelated={(type) => {
@@ -795,7 +795,7 @@ export default function InvoiceDetailPage() {
                 toast.success(feedback.title, { description: feedback.description } as any)
               }
             } else {
-              toast.success('Durum değiştirildi')
+              toast.success('Durum değiştirildi', { description: 'Fatura durumu başarıyla güncellendi' })
             }
             
             // Optimistic update - cache'i güncelle (sayfa reload yok)
@@ -808,7 +808,7 @@ export default function InvoiceDetailPage() {
               mutate((key: string) => typeof key === 'string' && key.startsWith('/api/invoices'), undefined, { revalidate: true }),
             ])
           } catch (error: any) {
-            toast.error('Durum değiştirilemedi', error.message || 'Bir hata oluştu.')
+            toast.error('Durum değiştirilemedi', { description: error.message || 'Bir hata oluştu.' })
           }
         }}
         onCreateRelated={(type) => {

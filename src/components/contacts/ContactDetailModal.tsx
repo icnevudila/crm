@@ -94,7 +94,7 @@ export default function ContactDetailModal({
 
       await mutate('/api/contacts')
       toast.dismiss(toastId)
-      toast.success('Silindi', 'Kişi başarıyla silindi.')
+      toast.success('Silindi', { description: 'Kişi başarıyla silindi.' })
       onClose()
     } catch (error: any) {
       console.error('Delete error:', error)

@@ -252,13 +252,13 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
       ])
       
       // Success toast göster
-      toast.success(tCommon('productDeletedSuccess'), tCommon('deleteSuccessMessage', { name }))
+      toast.success(tCommon('productDeletedSuccess'), { description: tCommon('deleteSuccessMessage', { name }) })
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error(tCommon('error'), error?.message)
+      toast.error(tCommon('error'), { description: error?.message || 'Bir hata oluştu' })
     }
   }, [products, mutateProducts, apiUrl, t, tCommon])
 

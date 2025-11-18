@@ -149,14 +149,14 @@ export default function ContactForm({
 
     // Dosya tipi kontrolü (sadece resim)
     if (!file.type.startsWith('image/')) {
-      toast.error('Hata', 'Lütfen geçerli bir resim dosyası seçin')
+      toast.error('Hata', { description: 'Lütfen geçerli bir resim dosyası seçin' })
       return
     }
 
     // Dosya boyutu kontrolü (5MB max)
     const maxSize = 5 * 1024 * 1024 // 5MB
     if (file.size > maxSize) {
-      toast.error('Hata', 'Resim boyutu 5MB\'dan büyük olamaz')
+      toast.error('Hata', { description: 'Resim boyutu 5MB\'dan büyük olamaz' })
       return
     }
 
@@ -192,7 +192,7 @@ export default function ContactForm({
       // Form'a imageUrl'i set et
       setValue('imageUrl', uploadedFile.url)
       
-      toast.success('Başarılı', 'Fotoğraf başarıyla yüklendi')
+      toast.success('Başarılı', { description: 'Fotoğraf başarıyla yüklendi' })
     } catch (error: any) {
       console.error('Image upload error:', error)
       toast.error('Hata', error?.message || 'Fotoğraf yüklenemedi')

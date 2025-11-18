@@ -250,10 +250,12 @@ export async function POST(request: Request) {
     // NOT: companyId ve createdBy createRecord fonksiyonunda otomatik ekleniyor
 
     // createRecord kullanarak audit trail desteği (createdBy otomatik eklenir)
+    const { getActivityMessage, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const locale = getLocaleFromRequest(request)
     const data = await createRecord(
       'Product',
       productData,
-      (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.productCreated.replace('{name}', body.name)
+      getActivityMessage(locale, 'productCreated', { name: body.name })
     )
 
     return NextResponse.json(data, { status: 201 })

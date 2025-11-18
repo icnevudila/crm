@@ -76,25 +76,25 @@ export default function SendSmsButton({
     }
 
     if (hasIntegration === null || checkingIntegration) {
-      toast.error('Kontrol Ediliyor', 'SMS entegrasyonu kontrol ediliyor, lütfen bekleyin...')
+      toast.error('Kontrol Ediliyor', { description: 'SMS entegrasyonu kontrol ediliyor, lütfen bekleyin...' })
       return
     }
 
     // Telefon numarası kontrolü
     if (!to || to.trim() === '') {
-      toast.error('Hata', 'Alıcı telefon numarası bulunamadı')
+      toast.error('Hata', { description: 'Alıcı telefon numarası bulunamadı' })
       return
     }
 
     // Telefon numarası formatı kontrolü
     if (!to.startsWith('+')) {
-      toast.error('Hata', 'Telefon numarası E.164 formatında olmalıdır (örn: +905551234567)')
+      toast.error('Hata', { description: 'Telefon numarası E.164 formatında olmalıdır (örn: +905551234567)' })
       return
     }
 
     // Mesaj kontrolü
     if (!message || message.trim() === '') {
-      toast.error('Hata', 'SMS mesajı boş olamaz')
+      toast.error('Hata', { description: 'SMS mesajı boş olamaz' })
       return
     }
 
@@ -116,7 +116,7 @@ export default function SendSmsButton({
       }
 
       const result = await res.json()
-      toast.success('Başarılı', 'SMS başarıyla gönderildi')
+      toast.success('Başarılı', { description: 'SMS başarıyla gönderildi' })
       setLastError(null)
       setRetryCount(0)
     } catch (error: any) {

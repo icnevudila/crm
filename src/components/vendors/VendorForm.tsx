@@ -158,7 +158,7 @@ export default function VendorForm({
       // onSuccess callback'i çağır - optimistic update için
       // Success toast göster
       if (vendor) {
-        toast.success('Tedarikçi güncellendi', `${data.name} başarıyla güncellendi.`)
+        toast.success('Tedarikçi güncellendi', { description: `${data.name} başarıyla güncellendi.` })
       } else {
         // Yeni vendor oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
         navigateToDetailToast('vendor', savedVendor.id, savedVendor.name)
@@ -172,7 +172,7 @@ export default function VendorForm({
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error('Kaydedilemedi', error?.message)
+      toast.error('Kaydedilemedi', { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }

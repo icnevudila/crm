@@ -240,10 +240,12 @@ export async function POST(request: Request) {
     // NOT: invoiceNumber, dueDate, paymentDate, taxRate, vendorId schema-extension/schema-vendor'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
     // createRecord kullanarak tip sorununu bypass ediyoruz
+    const { getActivityMessage, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const locale = getLocaleFromRequest(request)
     const data = await createRecord(
       'Invoice',
       invoiceData,
-      (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.invoiceCreated.replace('{title}', body.title)
+      getActivityMessage(locale, 'invoiceCreated', { title: body.title })
     )
 
     // Oluşturulan invoice'ı tam bilgileriyle çek (commit edildiğinden emin olmak için)
@@ -418,7 +420,7 @@ export async function POST(request: Request) {
           // Invoice sonucuna purchaseShipmentId ekle
           invoiceResult.purchaseShipmentId = (purchaseData as any).id
           invoiceResult.purchaseShipmentCreated = true
-          invoiceResult.purchaseShipmentMessage = (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.draftPurchaseCreatedMessage.replace('{id}', (purchaseData as any).id)
+          invoiceResult.purchaseShipmentMessage = getActivityMessage(locale, 'draftPurchaseCreatedMessage', { id: (purchaseData as any).id })
         }
       } catch (error) {
         // Hata olsa bile invoice oluşturuldu, sadece logla
@@ -558,7 +560,7 @@ export async function POST(request: Request) {
           // Invoice sonucuna shipmentId ekle
           invoiceResult.shipmentId = (shipmentData as any).id
           invoiceResult.shipmentCreated = true
-          invoiceResult.shipmentMessage = (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.draftShipmentCreatedMessage.replace('{id}', (shipmentData as any).id)
+          invoiceResult.shipmentMessage = getActivityMessage(locale, 'draftShipmentCreatedMessage', { id: (shipmentData as any).id })
         }
       } catch (error) {
         // Hata olsa bile invoice oluşturuldu, sadece logla

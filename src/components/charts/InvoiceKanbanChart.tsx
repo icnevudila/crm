@@ -324,7 +324,6 @@ const STATUS_ALIAS_MAP: Record<string, keyof typeof QUICK_ACTIONS> = {
   'SEVKİYAT YAPILDI*': 'SHIPPED',
   'SATIN ALMA': 'RECEIVED',
   'SATIN ALMA ONAYLANDI': 'RECEIVED',
-  'SATIN ALMA ONAYLANDI': 'RECEIVED',
   ÖDENDİ: 'PAID',
   ODENDI: 'PAID',
   'VADESİ GEÇMİŞ': 'OVERDUE',
@@ -641,12 +640,21 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange, onVie
                                 const handleClick = async (e: React.MouseEvent) => {
                                   e.preventDefault()
                                   e.stopPropagation()
+                                  e.nativeEvent.stopImmediatePropagation()
                                   if (action.targetStatus === 'CANCELLED') {
                                     if (!(await confirm(`"${invoice.title}" faturasını iptal etmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz ve ilgili sevkiyat/stok işlemleri geri alınacaktır.`))) {
                                       return
                                     }
                                   }
-                                  onStatusChange(invoice.id, action.targetStatus)
+                                  try {
+                                    await onStatusChange(invoice.id, action.targetStatus)
+                                  } catch (error: any) {
+                                    // Hata parent component'te handle ediliyor, burada sadece log
+                                    if (process.env.NODE_ENV === 'development') {
+                                      console.error('Status change error:', error)
+                                    }
+                                    toast.error('Durum değiştirilemedi', { description: String(error?.message || 'Bir hata oluştu') })
+                                  }
                                 }
                                 return (
                                   <TooltipProvider delayDuration={0}>
@@ -683,12 +691,21 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange, onVie
                                       const handleClick = async (e: React.MouseEvent) => {
                                         e.preventDefault()
                                         e.stopPropagation()
+                                        e.nativeEvent.stopImmediatePropagation()
                                         if (action.targetStatus === 'CANCELLED') {
                                           if (!(await confirm(`"${invoice.title}" faturasını iptal etmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz ve ilgili sevkiyat/stok işlemleri geri alınacaktır.`))) {
                                             return
                                           }
                                         }
-                                        onStatusChange(invoice.id, action.targetStatus)
+                                        try {
+                                          await onStatusChange(invoice.id, action.targetStatus)
+                                        } catch (error: any) {
+                                          // Hata parent component'te handle ediliyor, burada sadece log
+                                          if (process.env.NODE_ENV === 'development') {
+                                            console.error('Status change error:', error)
+                                          }
+                                          toast.error('Durum değiştirilemedi', { description: String(error?.message || 'Bir hata oluştu') })
+                                        }
                                       }
                                       return (
                                         <TooltipProvider key={action.id} delayDuration={0}>
@@ -755,7 +772,8 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange, onVie
                                   onClick={(e) => {
                                     e.preventDefault()
                                     e.stopPropagation()
-                                    toast.info('Sevkiyat oluştur', 'Bu özellik yakında eklenecek.')
+                                    e.nativeEvent.stopImmediatePropagation()
+                                    toast.info('Sevkiyat oluştur', { description: 'Bu özellik yakında eklenecek.' })
                                   }}
                                 >
                                   <Package className="h-3 w-3 mr-2" />
@@ -773,6 +791,7 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange, onVie
                             onClick={(e) => {
                               e.preventDefault()
                               e.stopPropagation()
+                              e.nativeEvent.stopImmediatePropagation()
                               if (onView) {
                                 onView(invoice.id)
                               } else {
@@ -790,6 +809,7 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange, onVie
                               onClick={(e) => {
                                 e.preventDefault()
                                 e.stopPropagation()
+                                e.nativeEvent.stopImmediatePropagation()
                                 onEdit(invoice)
                               }}
                               aria-label="Faturayı düzenle"
@@ -805,6 +825,7 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange, onVie
                               onClick={(e) => {
                                 e.preventDefault()
                                 e.stopPropagation()
+                                e.nativeEvent.stopImmediatePropagation()
                                 onDelete(invoice.id, invoice.title)
                               }}
                               aria-label="Faturayı sil"

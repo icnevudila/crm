@@ -73,7 +73,7 @@ export default function DocumentDetailModal({
       onClose()
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error('Silme işlemi başarısız', error?.message)
+      toast.error('Silme işlemi başarısız', { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setDeleteLoading(false)
     }

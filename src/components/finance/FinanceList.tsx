@@ -434,7 +434,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
     } catch (error: any) {
-      toast.error(t('exportFailed'), error?.message || tCommon('unknownError'))
+      toast.error(t('exportFailed'), { description: error?.message || tCommon('unknownError') })
     }
   }, [type, category, customerCompanyId, startDate, endDate, debouncedSearch])
 
@@ -475,7 +475,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
         console.error('Delete error:', error)
       }
       toast.dismiss(toastId)
-      toast.error('Silme başarısız', error?.message || 'Silme işlemi sırasında bir hata oluştu.')
+      toast.error('Silme başarısız', { description: error?.message || 'Silme işlemi sırasında bir hata oluştu.' })
     }
   }, [financeRecords, mutateFinance, apiUrl])
 
@@ -529,7 +529,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
         console.warn('Invalid response format:', data)
         setMissingCount(0)
         toast.dismiss(loadingToast)
-        toast.warning(t('invalidResponse'), t('invalidResponseMessage'))
+        toast.warning(t('invalidResponse'), { description: t('invalidResponseMessage') || 'Geçersiz yanıt alındı' })
         return
       }
       
@@ -597,7 +597,7 @@ export default function FinanceList({ isOpen = true }: FinanceListProps) {
       
       // Başarı toast'ı göster
       toast.dismiss(loadingToast)
-      toast.success(t('syncSuccess', { count: data.created || 0 }))
+      toast.success(t('syncSuccess', { count: data.created || 0 }), { description: `${data.created || 0} kayıt senkronize edildi` })
     } catch (error: any) {
       console.error('Sync missing error:', error)
       toast.dismiss(loadingToast)

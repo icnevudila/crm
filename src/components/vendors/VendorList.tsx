@@ -128,13 +128,13 @@ export default function VendorList() {
       ])
       
       // Success toast göster
-      toast.success('Tedarikçi silindi', `${name} başarıyla silindi.`)
+      toast.success('Tedarikçi silindi', { description: `${name} başarıyla silindi.` })
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error(t('deleteFailed'), error?.message)
+      toast.error(t('deleteFailed'), { description: error?.message || 'Bir hata oluştu' })
     }
   }, [vendors, mutateVendors, apiUrl])
 

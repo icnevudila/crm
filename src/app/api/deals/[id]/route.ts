@@ -296,7 +296,7 @@ export async function PUT(
     }
 
     // ÖNEMLİ: Stage validation - Immutable kontrol
-    const { getErrorMessage, getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const { getErrorMessage, getMessages, getLocaleFromRequest, getActivityMessage } = await import('@/lib/api-locale')
     const locale = getLocaleFromRequest(request)
     const msgs = getMessages(locale)
     const currentStage = (existingDeal as any)?.stage
@@ -398,7 +398,7 @@ export async function PUT(
         'Deal',
         id,
         updateDataFinal,
-        msgs.activity.dealUpdated.replace('{title}', dealTitle)
+        getActivityMessage(locale, 'dealUpdated', { title: dealTitle })
       )
       
       if (!updatedDealData) {
@@ -432,7 +432,7 @@ export async function PUT(
             'Deal',
             id,
             updateDataWithoutLostReason,
-            msgs.activity.dealUpdated.replace('{title}', cleanBody.title || existingDeal?.title || msgs.activity.defaultDealTitle)
+            getActivityMessage(locale, 'dealUpdated', { title: cleanBody.title || existingDeal?.title || getActivityMessage(locale, 'defaultDealTitle') })
           )
           
           if (!updatedDealData) {
@@ -493,7 +493,7 @@ export async function PUT(
     // ÖNEMLİ: Deal CLOSED olduğunda özel ActivityLog ve bildirim
     if (cleanBody.status === 'CLOSED' && (existingDeal as any)?.status !== 'CLOSED') {
       try {
-        const dealTitle = cleanBody.title || (existingDeal as any)?.title || msgs.activity.defaultDealTitle
+        const dealTitle = cleanBody.title || (existingDeal as any)?.title || getActivityMessage(locale, 'defaultDealTitle')
         
         // Özel ActivityLog kaydı
         // @ts-ignore - Supabase type inference issue with dynamic table names
@@ -501,7 +501,7 @@ export async function PUT(
           {
             entity: 'Deal',
             action: 'UPDATE',
-            description: msgs.activity.dealClosed.replace('{title}', dealTitle),
+            description: getActivityMessage(locale, 'dealClosed', { title: dealTitle }),
             meta: { 
               entity: 'Deal', 
               action: 'closed', 
@@ -520,7 +520,7 @@ export async function PUT(
           companyId: session.user.companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
           title: msgs.activity.dealClosedTitle,
-          message: msgs.activity.dealClosedMessage.replace('{title}', dealTitle),
+          message: getActivityMessage(locale, 'dealClosedMessage', { title: dealTitle }),
           type: 'info',
           relatedTo: 'Deal',
           relatedId: id,
@@ -542,7 +542,7 @@ export async function PUT(
       let newContract: any = null
       
       try {
-        const dealTitle = cleanBody.title || (existingDeal as any)?.title || msgs.activity.defaultDealTitle
+        const dealTitle = cleanBody.title || (existingDeal as any)?.title || getActivityMessage(locale, 'defaultDealTitle')
         const dealValue = cleanBody.value !== undefined ? cleanBody.value : ((existingDeal as any)?.value || 0)
         const dealCustomerId = cleanBody.customerId || (existingDeal as any)?.customerId || null
         
@@ -596,7 +596,7 @@ export async function PUT(
             {
               entity: 'Quote',
               action: 'CREATE',
-              description: msgs.activity.autoQuoteCreatedMessage.replace('{dealTitle}', dealTitle).replace('{quoteTitle}', quoteTitle),
+              description: getActivityMessage(locale, 'autoQuoteCreatedMessage', { dealTitle, quoteTitle }),
               meta: { 
                 entity: 'Quote', 
                 action: 'auto_created_from_deal', 
@@ -615,7 +615,7 @@ export async function PUT(
             companyId: session.user.companyId,
             role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
             title: msgs.activity.autoQuoteCreated,
-            message: msgs.activity.autoQuoteCreatedMessage.replace('{dealTitle}', dealTitle).replace('{quoteTitle}', quoteTitle),
+            message: getActivityMessage(locale, 'autoQuoteCreatedMessage', { dealTitle, quoteTitle }),
             type: 'success',
             relatedTo: 'Quote',
             relatedId: (newQuote as any).id,
@@ -699,7 +699,7 @@ export async function PUT(
               {
                 entity: 'Contract',
                 action: 'CREATE',
-                description: msgs.activity.autoContractCreatedMessage.replace('{dealTitle}', dealTitle).replace('{contractNumber}', contractNumber),
+                description: getActivityMessage(locale, 'autoContractCreatedMessage', { dealTitle, contractNumber }),
                 meta: { 
                   entity: 'Contract', 
                   action: 'auto_created_from_deal', 
@@ -719,7 +719,7 @@ export async function PUT(
               companyId: session.user.companyId,
               role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
               title: msgs.activity.autoContractCreated,
-              message: msgs.activity.autoContractCreatedMessage.replace('{dealTitle}', dealTitle).replace('{contractNumber}', contractNumber),
+              message: getActivityMessage(locale, 'autoContractCreatedMessage', { dealTitle, contractNumber }),
               type: 'success',
               relatedTo: 'Contract',
               relatedId: (newContract as any).id,
@@ -789,7 +789,7 @@ export async function PUT(
     // ÖNEMLİ: Deal LOST olduğunda özel ActivityLog ve bildirim
     if (cleanBody.stage === 'LOST' && (existingDeal as any)?.stage !== 'LOST') {
       try {
-        const dealTitle = cleanBody.title || (existingDeal as any)?.title || msgs.activity.defaultDealTitle
+        const dealTitle = cleanBody.title || (existingDeal as any)?.title || getActivityMessage(locale, 'defaultDealTitle')
         
         // Özel ActivityLog kaydı
         // @ts-ignore - Supabase type inference issue with dynamic table names
@@ -797,7 +797,7 @@ export async function PUT(
           {
             entity: 'Deal',
             action: 'UPDATE',
-            description: msgs.activity.dealLost.replace('{title}', dealTitle),
+            description: getActivityMessage(locale, 'dealLost', { title: dealTitle }),
             meta: { 
               entity: 'Deal', 
               action: 'lost', 
@@ -816,7 +816,7 @@ export async function PUT(
           companyId: session.user.companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
           title: msgs.activity.dealLostTitle,
-          message: msgs.activity.dealLostMessage.replace('{title}', dealTitle),
+          message: getActivityMessage(locale, 'dealLostMessage', { title: dealTitle }),
           type: 'warning',
           relatedTo: 'Deal',
           relatedId: id,
@@ -923,7 +923,7 @@ export async function DELETE(
     
     const { data: deal } = await dealQuery.maybeSingle()
 
-    const { getErrorMessage, getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const { getErrorMessage, getMessages, getLocaleFromRequest, getActivityMessage } = await import('@/lib/api-locale')
     const deleteLocale = getLocaleFromRequest(request)
     const deleteMsgs = getMessages(deleteLocale)
     
@@ -982,7 +982,7 @@ export async function DELETE(
           {
             entity: 'Deal',
             action: 'DELETE',
-            description: deleteMsgs.activity.dealDeleted.replace('{title}', (deal as any).title || deleteMsgs.activity.defaultDealTitle),
+            description: getActivityMessage(deleteLocale, 'dealDeleted', { title: (deal as any).title || getActivityMessage(deleteLocale, 'defaultDealTitle') }),
             meta: { entity: 'Deal', action: 'delete', id },
             userId: session.user.id,
             companyId: session.user.companyId,
@@ -1002,6 +1002,7 @@ export async function DELETE(
     )
   }
 }
+
 
 
 

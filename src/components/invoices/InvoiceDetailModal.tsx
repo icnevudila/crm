@@ -105,9 +105,6 @@ export default function InvoiceDetailModal({
       dedupingInterval: 0, // Cache'i kapat - her zaman fresh data
       revalidateOnFocus: false, // Focus'ta revalidate yapma
       revalidateOnReconnect: true, // Bağlantı yenilendiğinde revalidate yap
-      shouldRetryOnError: true, // Hata durumunda tekrar dene
-      errorRetryCount: 2, // Maksimum 2 deneme
-      errorRetryInterval: 1000, // 1 saniye bekle
     }
   )
 
@@ -151,7 +148,7 @@ export default function InvoiceDetailModal({
   // Client-side PDF generation - jsPDF ile (Türkiye Fatura Mevzuatına Uygun)
   const handleDownloadPDF = () => {
     if (!displayInvoice) {
-      toast.error('PDF oluşturulamadı', 'Fatura verisi bulunamadı')
+      toast.error('PDF oluşturulamadı', { description: 'Fatura verisi bulunamadı' })
       return
     }
 
@@ -455,7 +452,7 @@ export default function InvoiceDetailModal({
       toast.success('PDF başarıyla indirildi')
     } catch (error: any) {
       console.error('PDF generation error:', error)
-      toast.error('PDF oluşturulamadı', error?.message || 'Beklenmeyen bir hata oluştu')
+      toast.error('PDF oluşturulamadı', { description: error?.message || 'Beklenmeyen bir hata oluştu' })
     }
   }
 
@@ -483,7 +480,7 @@ export default function InvoiceDetailModal({
       onClose()
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error('Silme işlemi başarısız', error?.message)
+      toast.error('Silme işlemi başarısız', { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setDeleteLoading(false)
     }
@@ -756,13 +753,13 @@ export default function InvoiceDetailModal({
                 })
                 if (!res.ok) {
                   const error = await res.json().catch(() => ({}))
-                  toast.error('Durum değiştirilemedi', error.message || 'Bir hata oluştu.')
+                  toast.error('Durum değiştirilemedi', { description: error.message || 'Bir hata oluştu.' })
                   return
                 }
-                toast.success('Durum değiştirildi')
+                toast.success('Durum değiştirildi', { description: 'Fatura durumu başarıyla güncellendi' })
                 await mutateInvoice()
               } catch (error: any) {
-                toast.error('Durum değiştirilemedi', error.message || 'Bir hata oluştu.')
+                toast.error('Durum değiştirilemedi', { description: error.message || 'Bir hata oluştu.' })
               }
             }}
             onCreateRelated={(type) => {

@@ -279,7 +279,7 @@ export default function DealForm({
             }
           )
         } else {
-          toast.success(t('dealUpdated'), t('dealUpdatedMessage', { title: savedDeal.title }))
+          toast.success(t('dealUpdated'), { description: t('dealUpdatedMessage', { title: savedDeal.title }) })
         }
       } else {
         // Yeni deal oluşturuldu
@@ -327,7 +327,7 @@ export default function DealForm({
                         defaultMessage: `Merhaba ${customer.name},\n\nYeni fırsat oluşturuldu: ${savedDeal.title}\n\nDeğer: ${savedDeal.value ? `₺${savedDeal.value.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}\nAşama: ${savedDeal.stage || 'LEAD'}\n\nDetayları görüntülemek için lütfen bizimle iletişime geçin.`,
                         defaultHtml: `<p>Merhaba ${customer.name},</p><p>Yeni fırsat oluşturuldu: <strong>${savedDeal.title}</strong></p><p>Değer: ${savedDeal.value ? `₺${savedDeal.value.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}</p><p>Aşama: ${savedDeal.stage || 'LEAD'}</p>`,
                         onSent: () => {
-                          toast.success('E-posta gönderildi', 'Müşteriye deal bilgisi gönderildi')
+                          toast.success('E-posta gönderildi', { description: 'Müşteriye deal bilgisi gönderildi' })
                         },
                         onAlwaysSend: async () => {
                           // Tercihi ALWAYS olarak kaydet
@@ -446,7 +446,7 @@ export default function DealForm({
         error.message === 'Yetkiniz yoktur.'
           ? t('unauthorized')
           : error.message
-      toast.error(t('saveFailed'), message)
+      toast.error(t('saveFailed'), { description: message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }
@@ -767,12 +767,12 @@ export default function DealForm({
               variant="destructive"
               onClick={async () => {
                 if (!lostReason.trim()) {
-                  toast.error('Sebep gerekli', 'Lütfen kayıp sebebini belirtin.')
+                  toast.error('Sebep gerekli', { description: 'Lütfen kayıp sebebini belirtin.' })
                   return
                 }
 
                 if (!pendingFormData) {
-                  toast.error('Hata', 'Form verisi bulunamadı.')
+                  toast.error('Hata', { description: 'Form verisi bulunamadı.' })
                   setLostReasonDialogOpen(false)
                   return
                 }

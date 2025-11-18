@@ -190,13 +190,13 @@ export default function TaskList({ isOpen = true }: TaskListProps) {
       
       // Success toast göster
       const tCommon = useTranslations('common')
-      toast.success(tCommon('taskDeletedSuccess'), tCommon('deleteSuccessMessage', { name: title }))
+      toast.success(tCommon('taskDeletedSuccess'), { description: tCommon('deleteSuccessMessage', { name: title }) })
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error(tCommon('error'), error?.message)
+      toast.error(tCommon('error'), { description: error?.message || 'Bir hata oluştu' })
     }
   }, [tasks, mutateTasks, apiUrl, t, tCommon])
 
@@ -372,7 +372,7 @@ export default function TaskList({ isOpen = true }: TaskListProps) {
                             mutate((key: string) => typeof key === 'string' && key.startsWith('/api/tasks'), undefined, { revalidate: true }),
                           ])
                           
-                          toast.success('Durum güncellendi', `Görev "${statusLabels[newStatus] || newStatus}" durumuna taşındı.`)
+                          toast.success('Durum güncellendi', { description: `Görev "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
                         } catch (error: any) {
                           toast.error('Durum güncellenemedi', error?.message || 'Bir hata oluştu.')
                           throw error
@@ -483,7 +483,7 @@ export default function TaskList({ isOpen = true }: TaskListProps) {
                             mutate('/api/tasks', undefined, { revalidate: true }),
                             mutate('/api/tasks?', undefined, { revalidate: true }),
                           ])
-                          toast.success('Durum güncellendi', `Görev "${statusLabels[newStatus] || newStatus}" durumuna taşındı.`)
+                          toast.success('Durum güncellendi', { description: `Görev "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
                         } catch (error: any) {
                           toast.error('Durum güncellenemedi', error?.message || 'Bir hata oluştu.')
                           throw error

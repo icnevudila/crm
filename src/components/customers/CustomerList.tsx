@@ -56,6 +56,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import QuickFilters from '@/components/filters/QuickFilters'
 import FilterChips from '@/components/filters/FilterChips'
+import CompactListView, { CompactListItem } from '@/components/layout/CompactListView'
 
 // Lazy load CustomerForm - performans için
 const CustomerForm = dynamic(() => import('./CustomerForm'), {
@@ -404,7 +405,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error(tCommon('error'), error?.message)
+      toast.error(tCommon('error'), { description: error?.message || 'Bir hata oluştu' })
     }
   }, [customers, pagination, mutateCustomers, apiUrl, queryClient, t, tCommon])
 
@@ -532,7 +533,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
   // Import handlers
   const handleImport = useCallback(async () => {
     if (!importFile) {
-      toast.warning(t('noFileSelected'))
+      toast.warning(t('noFileSelected'), { description: t('noFileSelectedMessage') || 'Lütfen bir dosya seçin' })
       return
     }
 
@@ -552,7 +553,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       }
 
       const result = await res.json()
-      toast.success(t('fileUploaded'), t('customersImported', { count: result.importedCount }))
+      toast.success(t('fileUploaded'), { description: t('customersImported', { count: result.importedCount }) })
 
       // Cache'i invalidate et - yeni verileri çek
       await Promise.all([
@@ -569,7 +570,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       setImportFile(null)
     } catch (error: any) {
       console.error('Import error:', error)
-      toast.error(t('importFailed'), error?.message)
+      toast.error(t('importFailed'), { description: error?.message || 'Bir hata oluştu' })
     } finally{
       setImporting(false)
     }
@@ -598,7 +599,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       document.body.removeChild(a)
     } catch (error: any) {
       console.error('Export error:', error)
-      toast.error(t('exportFailed'))
+      toast.error(t('exportFailed'), { description: t('exportFailedMessage') || 'Dışa aktarma işlemi başarısız oldu' })
     }
   }, [debouncedSearch, status, sector])
 
@@ -804,195 +805,113 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         </div>
       )}
 
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow-card overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-12">
-                <Checkbox
-                  checked={selectAll}
-                  onCheckedChange={handleSelectAll}
-                  aria-label={t('selectAll')}
-                />
-              </TableHead>
-              <TableHead>{t('tableHeaders.name')}</TableHead>
-              {isSuperAdmin && <TableHead>{t('company')}</TableHead>}
-              <TableHead>{t('tableHeaders.email')}</TableHead>
-              <TableHead>{t('tableHeaders.phone')}</TableHead>
-              <TableHead>{t('tableHeaders.city')}</TableHead>
-              <TableHead>{t('tableHeaders.sector')}</TableHead>
-              <TableHead>{t('tableHeaders.status')}</TableHead>
-              <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {customers.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={isSuperAdmin ? 9 : 8} className="p-0">
-                  <EmptyState
-                    icon={Users}
-                    title={t('emptyStateTitle')}
-                    description={t('emptyStateDescription')}
-                    action={{
-                      label: t('emptyStateButton'),
-                      onClick: handleAdd,
-                    }}
-                    className="border-0 shadow-none"
-                  />
-                </TableCell>
-              </TableRow>
-            ) : (
-              customers.map((customer) => (
-                <TableRow key={customer.id}>
-                  <TableCell>
-                    <Checkbox
-                      checked={selectedIds.includes(customer.id)}
-                      onCheckedChange={(checked) => handleSelectItem(customer.id, checked as boolean)}
-                      aria-label={t('selectCustomer', { name: customer.name })}
-                    />
-                  </TableCell>
-                  <TableCell className="font-medium">
-                    <div className="flex items-center gap-3">
-                      {customer.logoUrl && (
-                        <div className="w-10 h-10 rounded-lg overflow-hidden border border-gray-200 flex-shrink-0">
-                          <Image
-                            src={customer.logoUrl}
-                            alt={customer.name}
-                            width={40}
-                            height={40}
-                            className="w-full h-full object-cover"
-                            unoptimized={customer.logoUrl.startsWith('blob:') || customer.logoUrl.startsWith('data:')}
-                          />
-                        </div>
-                      )}
-                      <span>{customer.name}</span>
-                    </div>
-                  </TableCell>
-                  {isSuperAdmin && (
-                    <TableCell>
-                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-                        {customer.Company?.name || '-'}
-                      </Badge>
-                    </TableCell>
-                  )}
-                  <TableCell>{customer.email || '-'}</TableCell>
-                  <TableCell>{customer.phone || '-'}</TableCell>
-                  <TableCell>{customer.city || '-'}</TableCell>
-                  <TableCell>
-                    {customer.sector ? (
-                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                        {customer.sector}
-                      </Badge>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      className={
-                        customer.status === 'ACTIVE'
-                          ? 'bg-green-600 text-white border-green-700'
-                          : 'bg-red-600 text-white border-red-700'
-                      }
-                    >
-                      {customer.status === 'ACTIVE' ? t('active') : t('inactive')}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={t('quickActions.open', { name: customer.name })}
-                          >
-                            <Sparkles className="h-4 w-4 text-indigo-500" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56">
-                          <DropdownMenuLabel>{t('quickActions.title')}</DropdownMenuLabel>
-                          <DropdownMenuItem
-                            onSelect={() => setQuickAction({ type: 'deal', customer })}
-                          >
-                            <Briefcase className="h-4 w-4" />
-                            {t('quickActions.createDeal')}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={() => setQuickAction({ type: 'quote', customer })}
-                          >
-                            <FileText className="h-4 w-4" />
-                            {t('quickActions.createQuote')}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={() => setQuickAction({ type: 'invoice', customer })}
-                          >
-                            <Receipt className="h-4 w-4" />
-                            {t('quickActions.createInvoice')}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onSelect={() => setQuickAction({ type: 'task', customer })}
-                          >
-                            <CheckSquare className="h-4 w-4" />
-                            {t('quickActions.createTask')}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={() => setQuickAction({ type: 'meeting', customer })}
-                          >
-                            <Calendar className="h-4 w-4" />
-                            {t('quickActions.scheduleMeeting')}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setSelectedCustomerId(customer.id)
-                          setSelectedCustomerData(customer) // Liste sayfasındaki veriyi hemen göster (hızlı açılış)
-                          setDetailModalOpen(true)
-                        }}
-                        aria-label={t('viewCustomer', { name: customer.name })}
-                      >
-                        <Eye className="h-4 w-4 text-gray-600" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(customer)}
-                        aria-label={t('editCustomer', { name: customer.name })}
-                      >
-                        <Edit className="h-4 w-4 text-gray-600" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(customer.id, customer.name)}
-                        className="text-red-600 hover:text-red-700"
-                        aria-label={t('deleteCustomer', { name: customer.name })}
-                      >
-                        <Trash2 className="h-4 w-4 text-red-600" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-        
+      {/* Kompakt Liste Görünümü - Monday.com tarzı */}
+      <div className="space-y-2">
+        {/* Select All Checkbox */}
+        {handleSelectAll && (
+          <div className="flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded-md border border-gray-200">
+            <Checkbox
+              checked={selectAll}
+              onCheckedChange={handleSelectAll}
+              aria-label={t('selectAll')}
+            />
+            <span className="text-xs text-gray-600 font-medium">
+              {selectedIds.length > 0 ? `${selectedIds.length} seçili` : 'Tümünü seç'}
+            </span>
+          </div>
+        )}
+
+        <CompactListView
+          items={customers.map((customer): CompactListItem => ({
+            id: customer.id,
+            title: customer.name,
+            subtitle: customer.sector || customer.city || undefined,
+            imageUrl: customer.logoUrl,
+            badges: [
+              ...(customer.sector
+                ? [
+                    {
+                      label: customer.sector,
+                      variant: 'outline' as const,
+                      className: 'bg-blue-50 text-blue-700 border-blue-200',
+                    },
+                  ]
+                : []),
+              {
+                label: customer.status === 'ACTIVE' ? t('active') : t('inactive'),
+                variant: 'outline' as const,
+                className:
+                  customer.status === 'ACTIVE'
+                    ? 'bg-green-100 text-green-800 border-green-200'
+                    : 'bg-red-100 text-red-800 border-red-200',
+              },
+              ...(isSuperAdmin && customer.Company?.name
+                ? [
+                    {
+                      label: customer.Company.name,
+                      variant: 'outline' as const,
+                      className: 'bg-purple-50 text-purple-700 border-purple-200',
+                    },
+                  ]
+                : []),
+            ],
+            metadata: [
+              ...(customer.email ? [{ label: 'E-posta', value: customer.email }] : []),
+              ...(customer.phone ? [{ label: 'Telefon', value: customer.phone }] : []),
+              ...(customer.city ? [{ label: 'Şehir', value: customer.city }] : []),
+            ],
+            actions: [
+              {
+                label: t('quickActions.createDeal'),
+                icon: <Briefcase className="h-4 w-4" />,
+                onClick: () => setQuickAction({ type: 'deal', customer }),
+              },
+              {
+                label: t('quickActions.createQuote'),
+                icon: <FileText className="h-4 w-4" />,
+                onClick: () => setQuickAction({ type: 'quote', customer }),
+              },
+              {
+                label: t('quickActions.createInvoice'),
+                icon: <Receipt className="h-4 w-4" />,
+                onClick: () => setQuickAction({ type: 'invoice', customer }),
+              },
+            ],
+            onView: () => {
+              setSelectedCustomerId(customer.id)
+              setSelectedCustomerData(customer)
+              setDetailModalOpen(true)
+            },
+            onEdit: () => handleEdit(customer),
+            onDelete: () => handleDelete(customer.id, customer.name),
+          }))}
+          selectedIds={selectedIds}
+          onSelectItem={handleSelectItem}
+          onSelectAll={handleSelectAll}
+          selectAll={selectAll}
+          emptyState={{
+            icon: <Users className="h-12 w-12" />,
+            title: t('emptyStateTitle'),
+            description: t('emptyStateDescription'),
+            action: {
+              label: t('emptyStateButton'),
+              onClick: handleAdd,
+            },
+          }}
+        />
+
         {/* Pagination */}
         {pagination.totalPages > 1 && (
-          <Pagination
-            currentPage={pagination.page}
-            totalPages={pagination.totalPages}
-            pageSize={pagination.pageSize}
-            totalItems={pagination.totalItems}
-            onPageChange={handlePageChange}
-            onPageSizeChange={handlePageSizeChange}
-          />
+          <div className="pt-2">
+            <Pagination
+              currentPage={pagination.page}
+              totalPages={pagination.totalPages}
+              pageSize={pagination.pageSize}
+              totalItems={pagination.totalItems}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+            />
+          </div>
         )}
       </div>
 

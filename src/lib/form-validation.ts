@@ -110,7 +110,7 @@ function getErrorMessage(error: any, fieldName: string): string {
     // Eğer mesaj zaten alan adını içeriyorsa olduğu gibi döndür
     if (error.message.toLowerCase().includes(fieldLabel.toLowerCase()) || 
         error.message.toLowerCase().includes(fieldName.toLowerCase())) {
-      return error.message
+    return error.message
     }
     // Mesaj alan adını içermiyorsa ekle
     return `${fieldLabel}: ${error.message}`
@@ -132,7 +132,7 @@ function getErrorMessage(error: any, fieldName: string): string {
     const max = error.maximum || error.max
     if (typeof max === 'number') {
       return `${fieldLabel} alanı en fazla ${max} karakter olabilir.`
-    }
+  }
     return `${fieldLabel} alanı maksimum değer gereksinimini aşıyor.`
   }
   

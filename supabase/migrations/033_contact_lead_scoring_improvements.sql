@@ -468,27 +468,27 @@ BEGIN
     )
   LOOP
     BEGIN
-      INSERT INTO "Contact" (
-        "firstName",
-        "lastName",
-        email,
-        phone,
-        "isPrimary",
-        "customerCompanyId",
-        "companyId",
-        status
-      )
-      VALUES (
+    INSERT INTO "Contact" (
+      "firstName",
+      "lastName",
+      email,
+      phone,
+      "isPrimary",
+      "customerCompanyId",
+      "companyId",
+      status
+    )
+    VALUES (
         COALESCE(customer_rec.name, ''),
-        '',
-        customer_rec.email,
-        customer_rec.phone,
-        true,
-        customer_rec."customerCompanyId",
-        customer_rec."companyId",
-        'ACTIVE'
-      )
-      ON CONFLICT DO NOTHING;
+      '',
+      customer_rec.email,
+      customer_rec.phone,
+      true,
+      customer_rec."customerCompanyId",
+      customer_rec."companyId",
+      'ACTIVE'
+    )
+    ON CONFLICT DO NOTHING;
     EXCEPTION WHEN OTHERS THEN
       -- Hata olursa devam et
       CONTINUE;

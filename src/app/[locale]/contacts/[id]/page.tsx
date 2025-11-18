@@ -127,7 +127,7 @@ export default function ContactDetailPage() {
       router.push(`/${locale}/contacts`)
     } catch (error: any) {
       console.error('Delete error:', error)
-      toastError(error?.message || 'Silme işlemi başarısız oldu')
+      toastError('Silme işlemi başarısız oldu', error?.message || 'Kişi silinirken bir hata oluştu')
     } finally {
       setDeleteLoading(false)
     }
@@ -433,6 +433,14 @@ export default function ContactDetailPage() {
     </div>
   )
 }
+
+
+
+
+
+
+
+
 
 
 

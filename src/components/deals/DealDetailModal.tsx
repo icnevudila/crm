@@ -110,7 +110,7 @@ export default function DealDetailModal({
   // Client-side PDF generation - jsPDF ile (Premium Tasarım + Türkçe Desteği)
   const handleDownloadPDF = () => {
     if (!displayDeal) {
-      toast.error('PDF oluşturulamadı', 'Fırsat verisi bulunamadı')
+      toast.error('PDF oluşturulamadı', { description: 'Fırsat verisi bulunamadı' })
       return
     }
 
@@ -221,7 +221,7 @@ export default function DealDetailModal({
       toast.success('PDF başarıyla indirildi')
     } catch (error: any) {
       console.error('PDF generation error:', error)
-      toast.error('PDF oluşturulamadı', error?.message || 'Beklenmeyen bir hata oluştu')
+      toast.error('PDF oluşturulamadı', { description: error?.message || 'Beklenmeyen bir hata oluştu' })
     }
   }
 
@@ -249,7 +249,7 @@ export default function DealDetailModal({
       onClose()
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error('Silme işlemi başarısız', error?.message)
+      toast.error('Silme işlemi başarısız', { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setDeleteLoading(false)
     }
@@ -403,7 +403,7 @@ export default function DealDetailModal({
                   toast.error('Aşama değiştirilemedi', error.message || 'Bir hata oluştu.')
                   return
                 }
-                toast.success('Aşama değiştirildi')
+                toast.success('Aşama değiştirildi', { description: 'Fırsat aşaması başarıyla güncellendi' })
                 await mutateDeal()
               } catch (error: any) {
                 toast.error('Aşama değiştirilemedi', error.message || 'Bir hata oluştu.')

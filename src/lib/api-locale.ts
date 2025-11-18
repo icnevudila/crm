@@ -88,6 +88,75 @@ export function getErrorMessage(
   return value || key
 }
 
+/**
+ * Activity mesajını güvenli bir şekilde alır ve parametreleri değiştirir
+ * @param locale - Locale (tr/en)
+ * @param key - Activity key (örn: 'customerCreated')
+ * @param params - Değiştirilecek parametreler (örn: {name: 'Test'})
+ * @returns Güvenli mesaj string'i
+ */
+export function getActivityMessage(
+  locale: Locale,
+  key: string,
+  params?: Record<string, string | number>
+): string {
+  const msgs = getMessages(locale)
+  const activity = msgs?.activity
+  
+  if (!activity || typeof activity !== 'object') {
+    // Fallback: default locale'den dene
+    const defaultMsgs = getMessages(defaultLocale)
+    const defaultActivity = defaultMsgs?.activity
+    if (!defaultActivity || typeof defaultActivity !== 'object') {
+      return key // Son çare: key'i döndür
+    }
+    const value = defaultActivity[key]
+    if (typeof value !== 'string') {
+      return key
+    }
+    // Parametreleri değiştir
+    if (params) {
+      return Object.entries(params).reduce(
+        (msg, [paramKey, paramValue]) => msg.replace(`{${paramKey}}`, String(paramValue)),
+        value
+      )
+    }
+    return value
+  }
+  
+  const value = activity[key]
+  if (typeof value !== 'string') {
+    // Fallback: default locale'den dene
+    const defaultMsgs = getMessages(defaultLocale)
+    const defaultActivity = defaultMsgs?.activity
+    if (defaultActivity && typeof defaultActivity === 'object') {
+      const defaultValue = defaultActivity[key]
+      if (typeof defaultValue === 'string') {
+        if (params) {
+          return Object.entries(params).reduce(
+            (msg, [paramKey, paramValue]) => msg.replace(`{${paramKey}}`, String(paramValue)),
+            defaultValue
+          )
+        }
+        return defaultValue
+      }
+    }
+    return key // Son çare: key'i döndür
+  }
+  
+  // Parametreleri değiştir
+  if (params) {
+    return Object.entries(params).reduce(
+      (msg, [paramKey, paramValue]) => msg.replace(`{${paramKey}}`, String(paramValue)),
+      value
+    )
+  }
+  
+  return value
+}
+
+
+
 
 
 

@@ -114,7 +114,7 @@ export default function QuoteDetailModal({
   // Client-side PDF generation - jsPDF ile (Mevzuata Uygun Teklif Formatı)
   const handleDownloadPDF = () => {
     if (!displayQuote) {
-      toast.error('PDF oluşturulamadı', 'Teklif verisi bulunamadı')
+      toast.error('PDF oluşturulamadı', { description: 'Teklif verisi bulunamadı' })
       return
     }
 
@@ -318,7 +318,7 @@ export default function QuoteDetailModal({
       toast.success('PDF başarıyla indirildi')
     } catch (error: any) {
       console.error('PDF generation error:', error)
-      toast.error('PDF oluşturulamadı', error?.message || 'Beklenmeyen bir hata oluştu')
+      toast.error('PDF oluşturulamadı', { description: error?.message || 'Beklenmeyen bir hata oluştu' })
     }
   }
 
@@ -346,7 +346,7 @@ export default function QuoteDetailModal({
       onClose()
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error('Silme işlemi başarısız', error?.message)
+      toast.error('Silme işlemi başarısız', { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setDeleteLoading(false)
     }
@@ -376,7 +376,7 @@ export default function QuoteDetailModal({
       onClose()
       router.push(`/${locale}/quotes/${newQuote.id}`)
     } catch (error: any) {
-      toast.error('Revizyon oluşturulamadı', error.message)
+      toast.error('Revizyon oluşturulamadı', { description: error.message || 'Bir hata oluştu' })
     } finally {
       setCreatingRevision(false)
     }
@@ -587,7 +587,7 @@ export default function QuoteDetailModal({
                   toast.error('Durum değiştirilemedi', error.message || 'Bir hata oluştu.')
                   return
                 }
-                toast.success('Durum değiştirildi')
+                toast.success('Durum değiştirildi', { description: 'Teklif durumu başarıyla güncellendi' })
                 await mutateQuote()
               } catch (error: any) {
                 toast.error('Durum değiştirilemedi', error.message || 'Bir hata oluştu.')

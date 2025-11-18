@@ -398,7 +398,7 @@ export default function CompanyList() {
 
       toast.dismiss(toastId)
 
-      toast.error('Silme başarısız', error?.message || 'Silme işlemi sırasında bir hata oluştu.')
+      toast.error('Silme başarısız', { description: error?.message || 'Silme işlemi sırasında bir hata oluştu.' })
 
     }
 
@@ -476,7 +476,7 @@ export default function CompanyList() {
 
     } catch (error) {
 
-      toast.warning(t('exportFailed'))
+      toast.warning(t('exportFailed'), { description: t('exportFailedMessage') || 'Dışa aktarma işlemi başarısız oldu' })
 
     }
 

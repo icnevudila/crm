@@ -98,7 +98,7 @@ export default function SuperAdminIntegrationsPage() {
   useEffect(() => {
     if (session && session.user?.role !== 'SUPER_ADMIN') {
       router.push(`/${locale}/dashboard`)
-      toast.error('Bu sayfaya erişim yetkiniz yok.')
+      toast.error('Bu sayfaya erişim yetkiniz yok.', { description: 'Yeterli yetkiniz bulunmamaktadır' })
     }
   }, [session, router, locale])
 
@@ -175,7 +175,7 @@ export default function SuperAdminIntegrationsPage() {
 
   const handleSave = async () => {
     if (!selectedCompanyId) {
-      toast.error('Hata', 'Lütfen bir şirket seçin')
+      toast.error('Hata', { description: 'Lütfen bir şirket seçin' })
       return
     }
 
@@ -197,10 +197,10 @@ export default function SuperAdminIntegrationsPage() {
 
       const saved = await res.json()
       await mutateIntegration(saved, { revalidate: false })
-      toast.success('Başarılı', 'Entegrasyonlar başarıyla kaydedildi')
+      toast.success('Başarılı', { description: 'Entegrasyonlar başarıyla kaydedildi' })
     } catch (error: any) {
       console.error('Save error:', error)
-      toast.error('Hata', error?.message || 'Entegrasyonlar kaydedilemedi')
+      toast.error('Hata', { description: error?.message || 'Entegrasyonlar kaydedilemedi' })
     } finally {
       setSaving(false)
     }

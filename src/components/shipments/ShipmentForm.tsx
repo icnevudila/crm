@@ -50,6 +50,7 @@ const shipmentSchema = z.object({
 type ShipmentFormData = z.infer<typeof shipmentSchema>
 
 interface ShipmentFormProps {
+  customerCompanyId?: string
   shipment?: any
   open: boolean
   onClose: () => void
@@ -170,7 +171,7 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess, invoi
     onSuccess: (savedShipment) => {
       // Toast mesajı göster
       if (shipment) {
-        toast.success('Sevkiyat güncellendi', `"${savedShipment.tracking || 'Sevkiyat'}" başarıyla güncellendi.`)
+        toast.success('Sevkiyat güncellendi', { description: `"${savedShipment.tracking || 'Sevkiyat'}" başarıyla güncellendi.` })
       } else {
         // Yeni shipment oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
         navigateToDetailToast('shipment', savedShipment.id, savedShipment.tracking || 'Sevkiyat')
@@ -191,7 +192,7 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess, invoi
       await mutation.mutateAsync(data)
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error('Kaydedilemedi', error?.message)
+      toast.error('Kaydedilemedi', { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }

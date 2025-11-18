@@ -112,7 +112,7 @@ export default function UserList() {
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error(tCommon('error'), error?.message)
+      toast.error(tCommon('error'), { description: error?.message || 'Bir hata oluştu' })
     }
   }, [users, mutateUsers, apiUrl, t, tCommon])
 

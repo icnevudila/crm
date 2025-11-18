@@ -50,6 +50,82 @@ export async function GET(
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    if (!finance) {
+      return NextResponse.json({ error: 'Finans kaydı bulunamadı' }, { status: 404 })
+    }
+
+    // Invoice ilişkisini çek (eğer varsa)
+    let invoiceData = null
+    if ((finance as any).invoiceId) {
+      try {
+        const { data: invoice } = await supabase
+          .from('Invoice')
+          .select(`
+            id,
+            title,
+            invoiceNumber,
+            status,
+            totalAmount,
+            total,
+            createdAt,
+            Customer (
+              id,
+              name,
+              email
+            )
+          `)
+          .eq('id', (finance as any).invoiceId)
+          .eq('companyId', companyId)
+          .maybeSingle()
+        
+        if (invoice) {
+          invoiceData = {
+            ...invoice,
+            total: (invoice as any).totalAmount || (invoice as any).total || 0,
+          }
+        }
+      } catch (invoiceErr) {
+        // Hata olsa bile devam et
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Invoice fetch error:', invoiceErr)
+        }
+      }
+    }
+
+    // Contract ilişkisini çek (eğer varsa)
+    let contractData = null
+    if ((finance as any).contractId) {
+      try {
+        const { data: contract } = await supabase
+          .from('Contract')
+          .select(`
+            id,
+            title,
+            contractNumber,
+            status,
+            totalAmount,
+            createdAt,
+            CustomerCompany (
+              id,
+              name,
+              email
+            )
+          `)
+          .eq('id', (finance as any).contractId)
+          .eq('companyId', companyId)
+          .maybeSingle()
+        
+        if (contract) {
+          contractData = contract
+        }
+      } catch (contractErr) {
+        // Hata olsa bile devam et
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Contract fetch error:', contractErr)
+        }
+      }
+    }
+
     // ActivityLog'ları çek
     let activityQuery = supabase
       .from('ActivityLog')

@@ -292,8 +292,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
     }
 
     const confirmed = await confirm(
-      t('deleteConfirm', { title }),
-      t('deleteConfirmMessage')
+      `${t('deleteConfirm', { title })} ${t('deleteConfirmMessage')}`
     )
     if (!confirmed) {
       return
@@ -352,10 +351,9 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
       }
       
       // Başarı bildirimi
-      toast.success(
-        t('quoteDeleted'),
-        t('quoteDeletedMessage', { title })
-      )
+      toast.success(t('quoteDeleted'), {
+        description: t('quoteDeletedMessage', { title })
+      })
       
       // ✅ ÇÖZÜM: Sadece dashboard'daki diğer query'leri invalidate et (background'da, refetch olmadan)
       // ÖNEMLİ: kanban-quotes query'sini invalidate ETME - optimistic update'i koru
@@ -375,7 +373,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error(tCommon('error'), error?.message)
+      toast.error(tCommon('error'), { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setDeletingId(null)
     }
@@ -571,8 +569,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
             const quoteTitle = quote?.title || t('defaultQuoteTitle')
             
             const confirmed = await confirm(
-              t('rejectDialog.statusChangeConfirm', { quoteTitle, statusLabel }),
-              t('rejectDialog.statusChangeMessage')
+              `${t('rejectDialog.statusChangeConfirm', { quoteTitle, statusLabel })} ${t('rejectDialog.statusChangeMessage')}`
             )
             if (!confirmed) {
               return // Kullanıcı iptal etti, işlemi durdur
@@ -654,8 +651,23 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
               if (!res.ok) {
                 // Hata durumunda optimistic update'i geri al
                 setKanbanData(previousKanbanData)
-                const error = await res.json().catch(() => ({}))
-                throw new Error(error.error || 'Failed to update quote status')
+                const errorData = await res.json().catch(() => ({}))
+                
+                // Güvenli hata mesajı oluştur
+                let errorMessage: string = 'Teklif durumu güncellenemedi'
+                
+                if (errorData?.message && typeof errorData.message === 'string') {
+                  errorMessage = errorData.message
+                } else if (errorData?.error && typeof errorData.error === 'string') {
+                  errorMessage = errorData.error
+                }
+                
+                // Toast ile hata göster - doğru format
+                toast.error('Teklif Güncellenemedi', {
+                  description: errorMessage,
+                })
+                
+                throw new Error(errorMessage)
               }
 
               // %100 KESİN ÇÖZÜM: API'den dönen güncellenmiş quote'u al
@@ -707,11 +719,11 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
               }
 
               if (toastType === 'success') {
-                toast.success(toastTitle, toastDescription)
+                toast.success(toastTitle, { description: toastDescription })
               } else if (toastType === 'warning') {
-                toast.warning(toastTitle, toastDescription)
+                toast.warning(toastTitle, { description: toastDescription })
               } else {
-                toast.success(toastTitle, toastDescription)
+                toast.success(toastTitle, { description: toastDescription })
               }
               
               // %100 KESİN ÇÖZÜM: Backend'den dönen güncellenmiş quote ile kanban data'yı güncelle
@@ -812,7 +824,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
               // Optimistic update zaten yapıldı, invalidate yeterli - query'ler kendi staleTime'larına göre refetch olur
             } catch (error: any) {
               console.error('Status update error:', error)
-              toast.error(t('rejectDialog.statusUpdateError'), error?.message)
+              toast.error(t('rejectDialog.statusUpdateError'), { description: error?.message || 'Bir hata oluştu' })
               throw error
             }
           }}
@@ -887,9 +899,9 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                               mutate((key: string) => typeof key === 'string' && key.startsWith('/api/quotes'), undefined, { revalidate: true }),
                             ])
                             
-                            toast.success('Durum güncellendi', `Teklif "${statusLabels[newStatus] || newStatus}" durumuna taşındı.`)
+                            toast.success('Durum güncellendi', { description: `Teklif "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
                           } catch (error: any) {
-                            toast.error('Durum güncellenemedi', error?.message || 'Bir hata oluştu.')
+                            toast.error('Durum güncellenemedi', { description: error?.message || 'Bir hata oluştu.' })
                             throw error
                           }
                         }}
@@ -968,7 +980,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                                             setSelectedCustomer(customer)
                                             setEmailDialogOpen(true)
                                           } else {
-                                            toast.error('E-posta adresi yok', 'Müşterinin e-posta adresi bulunamadı')
+                                            toast.error('E-posta adresi yok', { description: 'Müşterinin e-posta adresi bulunamadı' })
                                           }
                                         }
                                       }
@@ -977,7 +989,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                                     console.error('Customer fetch error:', error)
                                   }
                                 } else {
-                                  toast.error('Fırsat yok', 'Bu teklif için fırsat bilgisi bulunamadı')
+                                  toast.error('Fırsat yok', { description: 'Bu teklif için fırsat bilgisi bulunamadı' })
                                 }
                               }}
                               disabled={!quote.dealId}
@@ -1001,7 +1013,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                                             setSelectedCustomer(customer)
                                             setSmsDialogOpen(true)
                                           } else {
-                                            toast.error('Telefon numarası yok', 'Müşterinin telefon numarası bulunamadı')
+                                            toast.error('Telefon numarası yok', { description: 'Müşterinin telefon numarası bulunamadı' })
                                           }
                                         }
                                       }
@@ -1010,7 +1022,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                                     console.error('Customer fetch error:', error)
                                   }
                                 } else {
-                                  toast.error('Fırsat yok', 'Bu teklif için fırsat bilgisi bulunamadı')
+                                  toast.error('Fırsat yok', { description: 'Bu teklif için fırsat bilgisi bulunamadı' })
                                 }
                               }}
                               disabled={!quote.dealId}
@@ -1034,7 +1046,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                                             setSelectedCustomer(customer)
                                             setWhatsAppDialogOpen(true)
                                           } else {
-                                            toast.error('Telefon numarası yok', 'Müşterinin telefon numarası bulunamadı')
+                                            toast.error('Telefon numarası yok', { description: 'Müşterinin telefon numarası bulunamadı' })
                                           }
                                         }
                                       }
@@ -1043,7 +1055,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                                     console.error('Customer fetch error:', error)
                                   }
                                 } else {
-                                  toast.error('Fırsat yok', 'Bu teklif için fırsat bilgisi bulunamadı')
+                                  toast.error('Fırsat yok', { description: 'Bu teklif için fırsat bilgisi bulunamadı' })
                                 }
                               }}
                               disabled={!quote.dealId}
@@ -1071,7 +1083,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                           size="icon"
                           onClick={() => {
                             if (quote.status === 'ACCEPTED') {
-                              toast.warning(t('cannotEditAccepted'), t('cannotEditAcceptedMessage'))
+                              toast.warning(t('cannotEditAccepted'), { description: t('cannotEditAcceptedMessage') })
                               return
                             }
                             handleEdit(quote)
@@ -1087,7 +1099,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                           size="icon"
                           onClick={() => {
                             if (quote.status === 'ACCEPTED') {
-                              toast.warning(t('cannotDeleteAccepted'), t('cannotDeleteAcceptedMessage'))
+                              toast.warning(t('cannotDeleteAccepted'), { description: t('cannotDeleteAcceptedMessage') })
                               return
                             }
                             handleDelete(quote.id, quote.title)
@@ -1151,9 +1163,9 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                                 mutate('/api/quotes', undefined, { revalidate: true }),
                                 mutate('/api/quotes?', undefined, { revalidate: true }),
                               ])
-                              toast.success('Durum güncellendi', `Teklif "${statusLabels[newStatus] || newStatus}" durumuna taşındı.`)
+                              toast.success('Durum güncellendi', { description: `Teklif "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
                             } catch (error: any) {
-                              toast.error('Durum güncellenemedi', error?.message || 'Bir hata oluştu.')
+                              toast.error('Durum güncellenemedi', { description: error?.message || 'Bir hata oluştu.' })
                               throw error
                             }
                           }}
@@ -1209,7 +1221,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                         <DropdownMenuItem
                           onSelect={() => {
                             if (quote.status === 'ACCEPTED') {
-                              toast.warning(t('cannotEditAccepted'), t('cannotEditAcceptedMessage'))
+                              toast.warning(t('cannotEditAccepted'), { description: t('cannotEditAcceptedMessage') })
                               return
                             }
                             handleEdit(quote)
@@ -1222,7 +1234,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                         <DropdownMenuItem
                           onSelect={() => {
                             if (quote.status === 'ACCEPTED') {
-                              toast.warning(t('cannotDeleteAccepted'), t('cannotDeleteAcceptedMessage'))
+                              toast.warning(t('cannotDeleteAccepted'), { description: t('cannotDeleteAcceptedMessage') })
                               return
                             }
                             handleDelete(quote.id, quote.title)
@@ -1264,9 +1276,11 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
           // Başarı bildirimi
           toast.success(
             selectedQuote ? t('rejectDialog.quoteUpdatedToast') : t('rejectDialog.quoteCreatedToast'),
-            selectedQuote
-              ? t('rejectDialog.quoteUpdatedMessage', { title: savedQuote.title })
-              : t('rejectDialog.quoteCreatedMessage', { title: savedQuote.title })
+            {
+              description: selectedQuote
+                ? t('rejectDialog.quoteUpdatedMessage', { title: savedQuote.title })
+                : t('rejectDialog.quoteCreatedMessage', { title: savedQuote.title })
+            }
           )
           
           // Optimistic update - yeni/güncellenmiş kaydı hemen cache'e ekle
@@ -1397,12 +1411,12 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
               variant="destructive"
               onClick={async () => {
                 if (!rejectReason.trim()) {
-                  toast.error(t('rejectDialog.reasonRequired'), t('rejectDialog.reasonRequiredMessage'))
+                  toast.error(t('rejectDialog.reasonRequired'), { description: t('rejectDialog.reasonRequiredMessage') })
                   return
                 }
 
                 if (!rejectingQuoteId) {
-                  toast.error(t('rejectDialog.error'), t('rejectDialog.quoteIdNotFound'))
+                  toast.error(t('rejectDialog.error'), { description: t('rejectDialog.quoteIdNotFound') })
                   setRejectDialogOpen(false)
                   return
                 }
@@ -1547,10 +1561,10 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                     queryClient.invalidateQueries({ queryKey: ['kpis'] }),
                   ])
                   
-                  toast.success(t('quoteRejected'), t('quoteRejectedMessage'))
+                  toast.success(t('quoteRejected'), { description: t('quoteRejectedMessage') })
                 } catch (error: any) {
                   console.error('Reject error:', error)
-                  toast.error(t('rejectDialog.rejectFailed'), error?.message || t('quoteRejected'))
+                  toast.error(t('rejectDialog.rejectFailed'), { description: error?.message || t('quoteRejected') })
                 }
               }}
               disabled={!rejectReason.trim()}
@@ -1606,7 +1620,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
           defaultMessage: `Merhaba ${selectedCustomer.name},\n\nTeklif bilgisi: ${selectedQuoteForCommunication.title}\n\nTutar: ${selectedQuoteForCommunication.totalAmount ? `₺${selectedQuoteForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}\nDurum: ${selectedQuoteForCommunication.status || 'DRAFT'}`,
           defaultHtml: `<p>Merhaba ${selectedCustomer.name},</p><p>Teklif bilgisi: <strong>${selectedQuoteForCommunication.title}</strong></p><p>Tutar: ${selectedQuoteForCommunication.totalAmount ? `₺${selectedQuoteForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}</p><p>Durum: ${selectedQuoteForCommunication.status || 'DRAFT'}</p>`,
           onSent: () => {
-            toast.success('E-posta gönderildi', 'Müşteriye quote bilgisi gönderildi')
+            toast.success('E-posta gönderildi', { description: 'Müşteriye quote bilgisi gönderildi' })
           },
         }}
         open={emailDialogOpen}
@@ -1630,7 +1644,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
           customerName: selectedCustomer.name,
           defaultMessage: `Merhaba ${selectedCustomer.name}, Teklif bilgisi: ${selectedQuoteForCommunication.title}. Tutar: ${selectedQuoteForCommunication.totalAmount ? `₺${selectedQuoteForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
           onSent: () => {
-            toast.success('SMS gönderildi', 'Müşteriye quote bilgisi gönderildi')
+            toast.success('SMS gönderildi', { description: 'Müşteriye quote bilgisi gönderildi' })
           },
         }}
         open={smsDialogOpen}
@@ -1654,7 +1668,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
           customerName: selectedCustomer.name,
           defaultMessage: `Merhaba ${selectedCustomer.name}, Teklif bilgisi: ${selectedQuoteForCommunication.title}. Tutar: ${selectedQuoteForCommunication.totalAmount ? `₺${selectedQuoteForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
           onSent: () => {
-            toast.success('WhatsApp mesajı gönderildi', 'Müşteriye quote bilgisi gönderildi')
+            toast.success('WhatsApp mesajı gönderildi', { description: 'Müşteriye quote bilgisi gönderildi' })
           },
         }}
         open={whatsAppDialogOpen}

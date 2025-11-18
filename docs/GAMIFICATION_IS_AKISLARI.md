@@ -524,3 +524,5 @@ Teklif ACCEPTED → Achievement Check
 
 
 
+
+

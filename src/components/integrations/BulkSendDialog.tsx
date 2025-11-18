@@ -107,15 +107,15 @@ export default function BulkSendDialog({
 
   const handleSend = async () => {
     if (validCustomers.length === 0) {
-      toast.error('Hata', 'Gönderilecek geçerli müşteri bulunamadı')
+      toast.error('Hata', { description: 'Gönderilecek geçerli müşteri bulunamadı' })
       return
     }
     if (!message.trim()) {
-      toast.error('Hata', 'Mesaj içeriği boş')
+      toast.error('Hata', { description: 'Mesaj içeriği boş' })
       return
     }
     if (sendType === 'email' && !subject.trim()) {
-      toast.error('Hata', 'E-posta konusu boş')
+      toast.error('Hata', { description: 'E-posta konusu boş' })
       return
     }
 

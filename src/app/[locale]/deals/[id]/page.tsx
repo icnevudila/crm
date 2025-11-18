@@ -213,7 +213,7 @@ export default function DealDetailPage() {
             }
             router.push(`/${locale}/deals`)
           } catch (error: any) {
-            toastError('Silme işlemi başarısız oldu', error?.message)
+            toastError('Silme işlemi başarısız oldu', error?.message || 'Fırsat silinirken bir hata oluştu')
             throw error
           } finally {
             setDeleteLoading(false)
@@ -229,10 +229,10 @@ export default function DealDetailPage() {
               throw new Error(errorData.error || 'Kopyalama işlemi başarısız')
             }
             const duplicatedDeal = await res.json()
-            toast.success('Fırsat kopyalandı')
+            toast.success('Fırsat kopyalandı', { description: 'Fırsat başarıyla kopyalandı' })
             router.push(`/${locale}/deals/${duplicatedDeal.id}`)
           } catch (error: any) {
-            toastError('Kopyalama işlemi başarısız oldu', error?.message)
+            toastError('Kopyalama işlemi başarısız oldu', error?.message || 'Fırsat kopyalanırken bir hata oluştu')
           }
         }}
         onCreateRelated={(type) => {
@@ -463,9 +463,9 @@ export default function DealDetailPage() {
               mutate((key: string) => typeof key === 'string' && key.startsWith('/api/deals'), undefined, { revalidate: true }),
             ])
             
-            toast.success('Aşama değiştirildi')
+            toast.success('Aşama değiştirildi', { description: 'Fırsat aşaması başarıyla güncellendi' })
           } catch (error: any) {
-            toast.error('Aşama değiştirilemedi', error.message || 'Bir hata oluştu.')
+            toast.error('Aşama değiştirilemedi', { description: error.message || 'Bir hata oluştu.' })
           }
         }}
         onCreateRelated={(type) => {

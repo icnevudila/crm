@@ -140,7 +140,7 @@ export default function ApprovalForm({
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error('Onay talebi oluşturulamadı', error?.message)
+      toast.error('Onay talebi oluşturulamadı', { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }

@@ -163,10 +163,10 @@ export default function ContactList() {
       ])
       
       // Başarı toast'ı göster
-      toast.success('Firma yetkilisi silindi', `${name} başarıyla silindi.`)
+      toast.success('Firma yetkilisi silindi', { description: `${name} başarıyla silindi.` })
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error(t('deleteFailed'), error?.message)
+      toast.error(t('deleteFailed'), { description: error?.message || 'Bir hata oluştu' })
     }
   }, [contacts, mutateContacts, apiUrl])
 

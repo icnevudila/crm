@@ -198,7 +198,7 @@ Toplantıda görüşmek üzere!`
                 showTemplateSelector={false} // Meeting link gönderiminde template seçici gerekli değil
                 onSuccess={() => {
                   setOpen(false)
-                  toast.success('Başarılı', 'Toplantı linki e-posta ile gönderildi')
+                  toast.success('Başarılı', { description: 'Toplantı linki e-posta ile gönderildi' })
                 }}
               />
             ) : sendMethod === 'whatsapp' && customerPhone ? (
@@ -209,7 +209,7 @@ Toplantıda görüşmek üzere!`
                 message={message}
                 onSuccess={() => {
                   setOpen(false)
-                  toast.success('Başarılı', 'Toplantı linki WhatsApp ile gönderildi')
+                  toast.success('Başarılı', { description: 'Toplantı linki WhatsApp ile gönderildi' })
                 }}
               />
             ) : (

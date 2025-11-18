@@ -40,6 +40,7 @@ interface MeetingFormProps {
   customerId?: string // Prop olarak customerId geçilebilir (modal içinde kullanım için)
   customerCompanyId?: string
   customerCompanyName?: string
+  invoiceId?: string
   initialDate?: Date // Takvimden seçilen tarih
 }
 
@@ -408,7 +409,7 @@ export default function MeetingForm({
       // Toast mesajı göster
       if (meeting) {
         // Güncelleme durumu
-        toast.success(t('meetingUpdated'), t('meetingUpdatedMessage', { title: savedMeeting.title }))
+        toast.success(t('meetingUpdated'), { description: t('meetingUpdatedMessage', { title: savedMeeting.title }) })
       } else {
         // Yeni oluşturma durumu
         const stageUpdated = savedMeeting.dealStageUpdated === true
@@ -476,7 +477,7 @@ export default function MeetingForm({
                     defaultMessage: `Merhaba ${customer.name},\n\nYeni toplantı planlandı: ${savedMeeting.title}\n\nTarih: ${savedMeeting.meetingDate ? new Date(savedMeeting.meetingDate).toLocaleString('tr-TR') : 'Belirtilmemiş'}\nLokasyon: ${savedMeeting.location || 'Belirtilmemiş'}\n\nDetayları görüntülemek için lütfen bizimle iletişime geçin.`,
                     defaultHtml: `<p>Merhaba ${customer.name},</p><p>Yeni toplantı planlandı: <strong>${savedMeeting.title}</strong></p><p>Tarih: ${savedMeeting.meetingDate ? new Date(savedMeeting.meetingDate).toLocaleString('tr-TR') : 'Belirtilmemiş'}</p><p>Lokasyon: ${savedMeeting.location || 'Belirtilmemiş'}</p>`,
                     onSent: () => {
-                      toast.success('E-posta gönderildi', 'Müşteriye meeting bilgisi gönderildi')
+                      toast.success('E-posta gönderildi', { description: 'Müşteriye meeting bilgisi gönderildi' })
                     },
                     onAlwaysSend: async () => {
                       await fetch('/api/automations/preferences', {
@@ -515,7 +516,7 @@ export default function MeetingForm({
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error(t('saveFailed'), error?.message)
+      toast.error(t('saveFailed'), { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }

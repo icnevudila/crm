@@ -40,7 +40,7 @@ import { toast } from '@/lib/toast'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
 
 interface ContextualActionsBarProps {
-  entityType: 'quote' | 'deal' | 'invoice' | 'customer' | 'product' | 'task' | 'shipment' | 'meeting' | 'contract'
+  entityType: 'quote' | 'deal' | 'invoice' | 'customer' | 'product' | 'task' | 'shipment' | 'meeting' | 'contract' | 'ticket'
   entityId: string
   currentStatus?: string
   availableStatuses?: Array<{ value: string; label: string }>

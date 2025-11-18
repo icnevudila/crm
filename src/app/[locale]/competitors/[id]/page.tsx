@@ -98,7 +98,7 @@ export default function CompetitorDetailPage() {
       router.push(`/${locale}/competitors`)
     } catch (error: any) {
       console.error('Delete error:', error)
-      toastError(error?.message || 'Silme işlemi başarısız oldu')
+      toastError('Silme işlemi başarısız oldu', error?.message || 'Rakip silinirken bir hata oluştu')
     } finally {
       setDeleteLoading(false)
     }
@@ -382,4 +382,6 @@ export default function CompetitorDetailPage() {
     </div>
   )
 }
+
+
 

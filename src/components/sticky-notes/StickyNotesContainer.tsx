@@ -200,7 +200,7 @@ export default function StickyNotesContainer({
       setEventRelatedTo(undefined)
       setEventRelatedId(undefined)
     }
-    toastSuccess('Not eklendi' + (finalRelatedTo && finalRelatedId ? ' ve kayda bağlandı' : ''))
+    toastSuccess('Not eklendi' + (finalRelatedTo && finalRelatedId ? ' ve kayda bağlandı' : ''), 'Not başarıyla kaydedildi')
   }, [newNoteContent, newNoteColor, addNote, relatedTo, relatedId, eventRelatedTo, eventRelatedId])
 
   if (!visible || isLoading) {

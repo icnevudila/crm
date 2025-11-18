@@ -166,7 +166,7 @@ export default function CompetitorForm({
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error('Kaydedilemedi', error?.message)
+      toast.error('Kaydedilemedi', { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }

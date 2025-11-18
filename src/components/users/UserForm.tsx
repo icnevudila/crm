@@ -1483,7 +1483,7 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
 
 
 
-        toast.success(t('form.userCreated'), t('form.tempPassword', { password: generatedPassword }))
+        toast.success(t('form.userCreated'), { description: t('form.tempPassword', { password: generatedPassword }) })
 
 
 
@@ -1510,7 +1510,7 @@ export default function UserForm({ user, open, onClose, onSuccess }: UserFormPro
 
 
 
-        toast.success(user ? t('form.userUpdated') : t('form.userCreated'))
+        toast.success(user ? t('form.userUpdated') : t('form.userCreated'), { description: user ? 'Kullanıcı başarıyla güncellendi' : 'Kullanıcı başarıyla oluşturuldu' })
 
 
 

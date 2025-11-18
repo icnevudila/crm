@@ -47,7 +47,7 @@ export default function EmailCampaignsPage() {
   const [selectedCampaignData, setSelectedCampaignData] = useState<Campaign | null>(null)
 
   const apiUrl = `/api/email-campaigns${search ? `?search=${search}` : ''}`
-  const { data: campaignsData, isLoading, mutate: mutateCampaigns } = useData<Campaign[] | { data: Campaign[] }>(apiUrl)
+  const { data: campaignsData, isLoading, error, mutate: mutateCampaigns } = useData<Campaign[] | { data: Campaign[] }>(apiUrl)
   
   // API response'u array'e çevir (güvenli)
   const campaigns = Array.isArray(campaignsData) 
@@ -76,11 +76,11 @@ export default function EmailCampaignsPage() {
       await mutateCampaigns()
       await mutate(apiUrl)
       toast.dismiss(toastId)
-      toast.success('Silindi', 'Kampanya başarıyla silindi.')
+      toast.success('Silindi', { description: 'Kampanya başarıyla silindi.' })
     } catch (error: any) {
       console.error('Delete error:', error)
       toast.dismiss(toastId)
-      toast.error('Silme başarısız', error?.message || 'Silme işlemi sırasında bir hata oluştu.')
+      toast.error('Silme başarısız', { description: error?.message || 'Silme işlemi sırasında bir hata oluştu.' })
     }
   }
 
@@ -107,6 +107,31 @@ export default function EmailCampaignsPage() {
   }
 
   if (isLoading) return <SkeletonList />
+
+  // Error handling - campaignsData undefined veya hata durumu
+  if (error || (!campaignsData && !isLoading)) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Email Kampanyaları</h1>
+            <p className="text-gray-500 mt-1">Toplu email gönderimi ve kampanya yönetimi</p>
+          </div>
+          <Button onClick={() => {
+            setSelectedCampaign(null)
+            setFormOpen(true)
+          }} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+            <Plus className="h-4 w-4 mr-2" />
+            Yeni Kampanya
+          </Button>
+        </div>
+        <div className="text-center py-8">
+          <p className="text-red-600 mb-4">Kampanyalar yüklenirken bir hata oluştu.</p>
+          <Button onClick={() => mutateCampaigns()}>Yeniden Dene</Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

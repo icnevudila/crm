@@ -1327,7 +1327,7 @@ export default function ShipmentList() {
 
 
 
-        toast.success('Sevkiyat onaylandı!', message)
+        toast.success('Sevkiyat onaylandı!', { description: message || 'Sevkiyat başarıyla onaylandı' })
 
 
 
@@ -1339,7 +1339,7 @@ export default function ShipmentList() {
 
 
 
-        toast.success('Durum güncellendi!', message)
+        toast.success('Durum güncellendi!', { description: message || 'Sevkiyat durumu başarıyla güncellendi' })
 
 
 
@@ -1796,7 +1796,7 @@ export default function ShipmentList() {
 
 
       const tCommon = useTranslations('common')
-      toast.success(tCommon('shipmentDeletedSuccess'), tCommon('deleteSuccessMessage', { name: tracking || 'Sevkiyat' }))
+      toast.success(tCommon('shipmentDeletedSuccess'), { description: tCommon('deleteSuccessMessage', { name: tracking || 'Sevkiyat' }) })
 
 
 

@@ -248,12 +248,12 @@ export default function CustomerForm({
             const customerName = result.name || result.title || 'Müşteri'
             navigateToDetailToast('customer', result.id, customerName)
           } else {
-            toast.success('Müşteri oluşturuldu', 'Müşteri başarıyla oluşturuldu.')
+            toast.success('Müşteri oluşturuldu', { description: 'Müşteri başarıyla oluşturuldu.' })
           }
         } else {
           // Wizard içinde - sadece basit toast göster
           const customerName = result?.name || result?.title || 'Müşteri'
-          toast.success('Müşteri oluşturuldu', `${customerName} başarıyla oluşturuldu.`)
+          toast.success('Müşteri oluşturuldu', { description: `${customerName} başarıyla oluşturuldu.` })
         }
       }
       

@@ -135,7 +135,7 @@ export default function StockMovementForm({
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error('Stok hareketi kaydedilemedi', error?.message)
+      toast.error('Stok hareketi kaydedilemedi', { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }

@@ -88,7 +88,7 @@ export default function MeetingDetailModal({
 
       await mutate('/api/meetings')
       toast.dismiss(toastId)
-      toast.success('Silindi', 'Görüşme başarıyla silindi.')
+      toast.success('Silindi', { description: 'Görüşme başarıyla silindi.' })
       onClose()
     } catch (error: any) {
       console.error('Delete error:', error)

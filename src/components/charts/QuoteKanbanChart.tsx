@@ -325,7 +325,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                         e.preventDefault()
                         e.stopPropagation()
                         e.nativeEvent.stopImmediatePropagation()
-                        if (dragMode || isDragging) return
+                        if (isDragging) return
                         
                         if (onStatusChange) {
                           try {
@@ -335,10 +335,10 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                             if (process.env.NODE_ENV === 'development') {
                               console.error('Status change error:', error)
                             }
-                            toast.error('Durum değiştirilemedi', error?.message || 'Bir hata oluştu')
+                            toast.error('Durum değiştirilemedi', { description: error?.message || 'Bir hata oluştu' })
                           }
                         } else {
-                          toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                          toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                         }
                       }}
                     >
@@ -361,19 +361,19 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                       onClick={async (e) => {
                         e.preventDefault()
                         e.stopPropagation()
-                        if (dragMode || isDragging) return
+                        if (isDragging) return
                         
                         if (onStatusChange) {
                           try {
                             await onStatusChange(quote.id, 'REJECTED')
-                            toast.success('Teklif reddedildi')
+                            toast.success('Teklif reddedildi', { description: 'Teklif reddedildi' })
                           } catch (error: any) {
                             if (process.env.NODE_ENV === 'development') {
                               console.error('Status change error:', error)
                             }
                           }
                         } else {
-                          toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                          toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                         }
                       }}
                     >
@@ -403,7 +403,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                   e.preventDefault()
                   e.stopPropagation()
                   e.nativeEvent.stopImmediatePropagation()
-                  if (dragMode || isDragging) return
+                  if (isDragging) return
                   
                   // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak ve cache'i güncelleyecek
                   if (onStatusChange) {
@@ -415,10 +415,10 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                       if (process.env.NODE_ENV === 'development') {
                         console.error('Status change error:', error)
                       }
-                      toast.error('Durum değiştirilemedi', error?.message || 'Bir hata oluştu')
+                      toast.error('Durum değiştirilemedi', { description: String(error?.message || 'Bir hata oluştu') })
                     }
                   } else {
-                    toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                    toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                   }
                 }}
                     >
@@ -443,21 +443,22 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                         onClick={async (e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    if (dragMode || isDragging) return
+                    if (isDragging) return
                     
                     // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                     if (onStatusChange) {
                       try {
                         await onStatusChange(quote.id, 'ACCEPTED')
-                        toast.success('Teklif kabul edildi! Fatura ve sözleşme oluşturuldu.')
+                        toast.success('Teklif kabul edildi!', { description: 'Fatura ve sözleşme oluşturuldu.' })
                       } catch (error: any) {
-                        // Hata zaten onStatusChange içinde handle ediliyor
+                        // Hata zaten onStatusChange içinde handle ediliyor, burada sadece log
                         if (process.env.NODE_ENV === 'development') {
                           console.error('Status change error:', error)
                         }
+                        toast.error('Durum değiştirilemedi', { description: String(error?.message || 'Bir hata oluştu') })
                       }
                     } else {
-                      toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                      toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                     }
                   }}
                       >
@@ -479,21 +480,22 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                         onClick={async (e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    if (dragMode || isDragging) return
+                    if (isDragging) return
                     
                     // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                     if (onStatusChange) {
                       try {
                         await onStatusChange(quote.id, 'REJECTED')
-                        toast.success('Teklif reddedildi')
+                        toast.success('Teklif reddedildi', { description: 'Teklif reddedildi' })
                       } catch (error: any) {
-                        // Hata zaten onStatusChange içinde handle ediliyor
+                        // Hata zaten onStatusChange içinde handle ediliyor, burada sadece log
                         if (process.env.NODE_ENV === 'development') {
                           console.error('Status change error:', error)
                         }
+                        toast.error('Durum değiştirilemedi', { description: String(error?.message || 'Bir hata oluştu') })
                       }
                     } else {
-                      toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                      toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                     }
                   }}
                       >
@@ -525,13 +527,13 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                         onClick={async (e) => {
                           e.preventDefault()
                           e.stopPropagation()
-                          if (dragMode) return
+                          if (isDragging) return
                           
                           // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                           if (onStatusChange) {
                             try {
                               await onStatusChange(quote.id, 'SENT')
-                              toast.success('Teklif gönderildi', 'Teklif başarıyla gönderildi ve durumu güncellendi.')
+                              toast.success('Teklif gönderildi', { description: 'Teklif başarıyla gönderildi ve durumu güncellendi.' })
                             } catch (error: any) {
                               // Hata zaten onStatusChange içinde handle ediliyor
                               if (process.env.NODE_ENV === 'development') {
@@ -539,7 +541,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                               }
                             }
                           } else {
-                            toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                            toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                           }
                         }}
                       >
@@ -569,13 +571,13 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                             e.preventDefault()
                             e.stopPropagation()
                             e.nativeEvent.stopImmediatePropagation()
-                            if (dragMode || isDragging) return
+                            if (isDragging) return
                             
                             // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                             if (onStatusChange) {
                               try {
                                 await onStatusChange(quote.id, 'ACCEPTED')
-                                toast.success('Teklif kabul edildi', 'Teklif kabul edildi, otomatik olarak fatura ve sözleşme oluşturuldu.')
+                                toast.success('Teklif kabul edildi', { description: 'Teklif kabul edildi, otomatik olarak fatura ve sözleşme oluşturuldu.' })
                               } catch (error: any) {
                                 // Hata zaten onStatusChange içinde handle ediliyor
                                 if (process.env.NODE_ENV === 'development') {
@@ -583,7 +585,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                                 }
                               }
                             } else {
-                              toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                              toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                             }
                           }}
                         >
@@ -609,13 +611,13 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                             e.preventDefault()
                             e.stopPropagation()
                             e.nativeEvent.stopImmediatePropagation()
-                            if (dragMode || isDragging) return
+                            if (isDragging) return
                             
                             // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                             if (onStatusChange) {
                               try {
                                 await onStatusChange(quote.id, 'REJECTED')
-                                toast.success('Teklif reddedildi', 'Teklif reddedildi, otomatik olarak revizyon görevi oluşturuldu.')
+                                toast.success('Teklif reddedildi', { description: 'Teklif reddedildi, otomatik olarak revizyon görevi oluşturuldu.' })
                               } catch (error: any) {
                                 // Hata zaten onStatusChange içinde handle ediliyor
                                 if (process.env.NODE_ENV === 'development') {
@@ -623,7 +625,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                                 }
                               }
                             } else {
-                              toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                              toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                             }
                           }}
                         >
@@ -654,13 +656,13 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                             e.preventDefault()
                             e.stopPropagation()
                             e.nativeEvent.stopImmediatePropagation()
-                            if (dragMode || isDragging) return
+                            if (isDragging) return
                             
                             // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                             if (onStatusChange) {
                               try {
                                 await onStatusChange(quote.id, 'ACCEPTED')
-                                toast.success('Teklif kabul edildi', 'Teklif kabul edildi, otomatik olarak fatura ve sözleşme oluşturuldu.')
+                                toast.success('Teklif kabul edildi', { description: 'Teklif kabul edildi, otomatik olarak fatura ve sözleşme oluşturuldu.' })
                               } catch (error: any) {
                                 // Hata zaten onStatusChange içinde handle ediliyor
                                 if (process.env.NODE_ENV === 'development') {
@@ -668,7 +670,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                                 }
                               }
                             } else {
-                              toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                              toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                             }
                           }}
                         >
@@ -694,13 +696,13 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                             e.preventDefault()
                             e.stopPropagation()
                             e.nativeEvent.stopImmediatePropagation()
-                            if (dragMode || isDragging) return
+                            if (isDragging) return
                             
                             // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                             if (onStatusChange) {
                               try {
                                 await onStatusChange(quote.id, 'REJECTED')
-                                toast.success('Teklif reddedildi', 'Teklif reddedildi, otomatik olarak revizyon görevi oluşturuldu.')
+                                toast.success('Teklif reddedildi', { description: 'Teklif reddedildi, otomatik olarak revizyon görevi oluşturuldu.' })
                               } catch (error: any) {
                                 // Hata zaten onStatusChange içinde handle ediliyor
                                 if (process.env.NODE_ENV === 'development') {
@@ -708,7 +710,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                                 }
                               }
                             } else {
-                              toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                              toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                             }
                           }}
                         >
@@ -734,20 +736,20 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                             e.preventDefault()
                             e.stopPropagation()
                             e.nativeEvent.stopImmediatePropagation()
-                            if (dragMode || isDragging) return
+                            if (isDragging) return
                             
                             // Tekrar gönder - SENT durumuna taşı
                             if (onStatusChange) {
                               try {
                                 await onStatusChange(quote.id, 'SENT')
-                                toast.success('Teklif tekrar gönderildi', 'Teklif başarıyla tekrar gönderildi.')
+                                toast.success('Teklif tekrar gönderildi', { description: 'Teklif başarıyla tekrar gönderildi.' })
                               } catch (error: any) {
                                 if (process.env.NODE_ENV === 'development') {
                                   console.error('Status change error:', error)
                                 }
                               }
                             } else {
-                              toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                              toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                             }
                           }}
                         >
@@ -773,10 +775,10 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                             e.preventDefault()
                             e.stopPropagation()
                             e.nativeEvent.stopImmediatePropagation()
-                            if (dragMode || isDragging) return
+                            if (isDragging) return
                             
                             // Hatırlatma gönder - şimdilik sadece toast göster, gelecekte e-posta gönderilebilir
-                            toast.info('Hatırlatma gönderildi', 'Müşteriye hatırlatma bildirimi gönderildi.')
+                            toast.info('Hatırlatma gönderildi', { description: 'Müşteriye hatırlatma bildirimi gönderildi.' })
                           }}
                         >
                           <Mail className="h-3 w-3 mr-1" />
@@ -830,7 +832,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                         // Invoice oluştur - parent component'e bildir
                         if (onStatusChange) {
                           // Bu durumda invoice zaten oluşturulmuş olmalı
-                          toast.info('Fatura zaten oluşturulmuş', 'Bu teklif için fatura mevcut.')
+                          toast.info('Fatura zaten oluşturulmuş', { description: 'Bu teklif için fatura mevcut.' })
                         }
                       }}
                     >
@@ -1151,7 +1153,7 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
       // Immutable kontrol
       if (isQuoteImmutable(currentStatus)) {
         const message = getStageMessage(currentStatus, 'quote', 'immutable')
-        toast.error(message.title, message.description) // ✅ Toast zaten 4 saniye gösteriyor
+        toast.error(message.title, { description: message.description }) // ✅ Toast zaten 4 saniye gösteriyor
         // ✅ Kartı taşıma - sadece hata göster
         return
       }
@@ -1166,9 +1168,10 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
         
         toast.error(
           `${currentName} → ${targetName} geçişi yapılamıyor`,
-          allowed.length > 0 
+          { description: allowed.length > 0 
             ? `Bu teklifi şu durumlara taşıyabilirsiniz: ${allowedNames}` 
             : getStageMessage(currentStatus, 'quote', 'transition').description
+          }
         ) // ✅ Toast zaten 4 saniye gösteriyor
         // ✅ Kartı taşıma - sadece hata göster
         return
@@ -1224,26 +1227,30 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
           if (overStatus.status === 'ACCEPTED') {
             toast.success(
               'Teklif kabul edildi',
-              'Teklif kabul edildi. Fatura ve sözleşme otomatik olarak oluşturuldu. Faturalar sayfasından kontrol edebilirsiniz.',
-              {
-                label: 'Faturalar Sayfasına Git',
-                onClick: () => window.location.href = `/${locale}/invoices`,
+              { 
+                description: 'Teklif kabul edildi. Fatura ve sözleşme otomatik olarak oluşturuldu. Faturalar sayfasından kontrol edebilirsiniz.',
+                action: {
+                  label: 'Faturalar Sayfasına Git',
+                  onClick: () => window.location.href = `/${locale}/invoices`,
+                }
               }
             )
           } else if (overStatus.status === 'REJECTED') {
             toast.success(
               'Teklif reddedildi',
-              'Teklif reddedildi. Revizyon görevi otomatik olarak oluşturuldu. Görevler sayfasından kontrol edebilirsiniz.',
-              {
-                label: 'Görevler Sayfasına Git',
-                onClick: () => window.location.href = `/${locale}/tasks`,
+              { 
+                description: 'Teklif reddedildi. Revizyon görevi otomatik olarak oluşturuldu. Görevler sayfasından kontrol edebilirsiniz.',
+                action: {
+                  label: 'Görevler Sayfasına Git',
+                  onClick: () => window.location.href = `/${locale}/tasks`,
+                }
               }
             )
           }
         } catch (error: any) {
           // Hata durumunda eski haline geri dön
           setDragLocalData(null) // Drag local state'i temizle - computed data kullanılacak
-          toast.error('Teklif durumu değiştirilemedi', error?.message)
+          toast.error('Teklif durumu değiştirilemedi', { description: error?.message || 'Bir hata oluştu' })
         }
       }
     } else {
@@ -1277,7 +1284,7 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
             console.error('Batch order update error:', errorData)
             // Hata durumunda eski haline geri dön
             setDragLocalData(null) // Drag local state'i temizle - computed data kullanılacak
-            toast.error('Sıralama kaydedilemedi', errorData.error || 'Bir hata oluştu.')
+            toast.error('Sıralama kaydedilemedi', { description: errorData.error || 'Bir hata oluştu.' })
           } else {
             // Başarılı olduğunda drag local state'i temizle - computed data kullanılacak
             setDragLocalData(null)
@@ -1286,7 +1293,7 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
           console.error('Batch order update error:', error)
           // Hata durumunda eski haline geri dön
           setDragLocalData(null) // Drag local state'i temizle - computed data kullanılacak
-          toast.error('Sıralama kaydedilemedi', error?.message || 'Bir hata oluştu.')
+          toast.error('Sıralama kaydedilemedi', { description: error?.message || 'Bir hata oluştu.' })
         }
       }
     }

@@ -35,6 +35,7 @@ interface Ticket {
     id: string
     name: string
     email?: string
+    phone?: string
   }
   User?: {
     id: string
@@ -252,8 +253,6 @@ export default function TicketDetailPage() {
                   entityType: 'ticket',
                   entityName: ticket.subject,
                   entityId: ticket.id,
-                  actionType: 'updated',
-                  onClose: () => {},
                 })}
               />
             )}
@@ -262,24 +261,12 @@ export default function TicketDetailPage() {
                 <SendSmsButton
                   to={ticket.Customer.phone}
                   message={`Merhaba ${ticket.Customer.name}, destek talebiniz hakkında size ulaşmak istiyoruz. Konu: ${ticket.subject}`}
-                  onSuccess={() => handleQuickActionSuccess({
-                    entityType: 'ticket',
-                    entityName: ticket.subject,
-                    entityId: ticket.id,
-                    actionType: 'updated',
-                    onClose: () => {},
-                  })}
                 />
                 <SendWhatsAppButton
-                  to={ticket.Customer.phone}
-                  message={`Merhaba ${ticket.Customer.name}, destek talebiniz hakkında size ulaşmak istiyoruz. Konu: ${ticket.subject}`}
-                  onSuccess={() => handleQuickActionSuccess({
-                    entityType: 'ticket',
-                    entityName: ticket.subject,
-                    entityId: ticket.id,
-                    actionType: 'updated',
-                    onClose: () => {},
-                  })}
+                  phoneNumber={ticket.Customer.phone}
+                  entityType="ticket"
+                  entityId={ticket.id}
+                  customerName={ticket.Customer.name}
                 />
               </>
             )}
@@ -297,8 +284,7 @@ export default function TicketDetailPage() {
           transition={{ delay: 0.2 }}
         >
           <GradientCard
-            gradientFrom="from-orange-500"
-            gradientTo="to-amber-500"
+            gradient="warning"
             className="p-6"
           >
             <div className="flex items-center gap-2 mb-6">
@@ -368,8 +354,7 @@ export default function TicketDetailPage() {
           transition={{ delay: 0.3 }}
         >
           <GradientCard
-            gradientFrom="from-red-500"
-            gradientTo="to-rose-500"
+            gradient="accent"
             className="p-6"
           >
             <div className="flex items-center gap-2 mb-6">
@@ -455,3 +440,9 @@ export default function TicketDetailPage() {
     </div>
   )
 }
+
+
+
+
+
+

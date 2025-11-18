@@ -57,6 +57,12 @@ export async function GET(request: Request) {
     const userId = searchParams.get('userId') || '' // Admin filtreleme için
     const customerId = searchParams.get('customerId') || ''
     const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
+    
+    // ✅ FIX: Pagination parametreleri
+    const page = parseInt(searchParams.get('page') || '1')
+    const pageSize = parseInt(searchParams.get('pageSize') || searchParams.get('limit') || '20')
+    const limit = pageSize
+    const offset = (page - 1) * limit
     // NOT: customerCompanyId kolonu Meeting tablosunda yok, bu yüzden kaldırıldı
     // const customerCompanyId = searchParams.get('customerCompanyId') || '' // Firma bazlı filtreleme
 
@@ -143,6 +149,7 @@ export async function GET(request: Request) {
         Deal:Deal(id, title, stage)
       `, { count: 'exact' })
       .order('meetingDate', { ascending: false })
+      .range(offset, offset + limit - 1) // ✅ FIX: Pagination ekle
 
     // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
@@ -197,7 +204,7 @@ export async function GET(request: Request) {
     // Şimdilik bu filtreleme kaldırıldı
 
     // Participant'ları da çek (çoklu kullanıcı atama)
-    const { data: meetings, error } = await query
+    const { data: meetings, error, count } = await query
 
     // DEBUG: Query sonuçlarını logla
     if (process.env.NODE_ENV === 'development') {
@@ -323,11 +330,14 @@ export async function GET(request: Request) {
       })
     )
 
+    // ✅ FIX: totalPages hesapla
+    const totalPages = Math.ceil((count || 0) / limit)
+    
     return NextResponse.json({
       data: meetingsWithExpenses || [],
       pagination: {
         page,
-        pageSize,
+        pageSize: limit,
         totalItems: count || 0,
         totalPages,
       },
@@ -540,6 +550,7 @@ export async function POST(request: Request) {
       customerId: body.customerId || null,
       dealId: body.dealId || null,
       customerCompanyId: body.customerCompanyId || null,
+      contactId: null, // ✅ FIX: Migration 035'te eklenmiş olabilir ama yoksa null gönder
       notes: body.notes || null,
       outcomes: body.outcomes || null,
       actionItems: body.actionItems || null,

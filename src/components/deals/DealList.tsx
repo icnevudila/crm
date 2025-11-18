@@ -1110,20 +1110,13 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
     onError: (error: any) => {
-
-
       // Production'da console.error kaldırıldı
-
-
       if (process.env.NODE_ENV === 'development') {
-
-
         console.error('Delete error:', error)
-
-
       }
-
-
+      
+      // Hata toast mesajı göster
+      toastError('Fırsat silinemedi', error?.message || 'Silme işlemi başarısız oldu')
     },
 
 
@@ -1177,12 +1170,9 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
       // Başarı bildirimi
-
-
-      toastSuccess(
-        t('dealDeleted'),
-        t('dealDeletedMessage', { title })
-      )
+      toast.success(t('dealDeleted'), {
+        description: t('dealDeletedMessage', { title })
+      })
 
 
       
@@ -1230,7 +1220,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
     } catch (error: any) {
 
 
-      toastError(tCommon('error'), error?.message)
+      toast.error(tCommon('error'), { description: String(error?.message || 'Bir hata oluştu') })
 
 
     }
@@ -2290,14 +2280,23 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
               
               if (!res.ok) {
-
-
-                const error = await res.json().catch(() => ({}))
-
-
-                throw new Error(error.error || 'Failed to update deal stage')
-
-
+                const errorData = await res.json().catch(() => ({}))
+                
+                // Güvenli hata mesajı oluştur
+                let errorMessage: string = 'Fırsat aşaması güncellenemedi'
+                
+                if (errorData?.message && typeof errorData.message === 'string') {
+                  errorMessage = errorData.message
+                } else if (errorData?.error && typeof errorData.error === 'string') {
+                  errorMessage = errorData.error
+                }
+                
+                // Toast ile hata göster - doğru format
+                toast.error('Fırsat Güncellenemedi', {
+                  description: errorMessage,
+                })
+                
+                throw new Error(errorMessage)
               }
 
 
@@ -2425,23 +2424,11 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
               if (toastType === 'success') {
-
-
-                toastSuccess(toastTitle, toastDescription)
-
-
+                toast.success(toastTitle, { description: toastDescription })
               } else if (toastType === 'warning') {
-
-
-                toastWarning(toastTitle, toastDescription)
-
-
+                toast.warning(toastTitle, { description: toastDescription })
               } else {
-
-
-                toastSuccess(toastTitle, toastDescription)
-
-
+                toast.success(toastTitle, { description: toastDescription })
               }
 
 
@@ -2503,14 +2490,25 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
             } catch (error: any) {
-
-
               console.error('Stage update error:', error)
-
-
+              
+              // Güvenli hata mesajı oluştur
+              let errorMessage: string = 'Fırsat aşaması güncellenemedi'
+              
+              if (error?.message && typeof error.message === 'string') {
+                errorMessage = error.message
+              } else if (error?.error && typeof error.error === 'string') {
+                errorMessage = error.error
+              } else if (typeof error === 'string') {
+                errorMessage = error
+              }
+              
+              // Toast ile hata göster - doğru format
+              toast.error('Fırsat Güncellenemedi', {
+                description: errorMessage,
+              })
+              
               throw error // DealKanbanChart'a hata fırlat (optimistic update geri alınır)
-
-
             }
 
 
@@ -2597,12 +2595,9 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
             ) : (
-
-
-              tableDeals.map((deal) => (
-
-
-                <TableRow key={deal.id}>
+              Array.isArray(tableDeals) && tableDeals.length > 0 ? (
+                tableDeals.map((deal) => (
+                  <TableRow key={deal.id}>
 
 
                   <TableCell className="font-medium">{deal.title}</TableCell>
@@ -2660,9 +2655,9 @@ export default function DealList({ isOpen = true }: DealListProps) {
                             mutate((key: string) => typeof key === 'string' && key.startsWith('/api/deals'), undefined, { revalidate: true }),
                           ])
                           
-                          toastSuccess('Aşama güncellendi', `Fırsat "${stageLabels[newStage] || newStage}" aşamasına taşındı.`)
+                          toast.success('Aşama güncellendi', { description: `Fırsat "${stageLabels[newStage] || newStage}" aşamasına taşındı.` })
                         } catch (error: any) {
-                          toastError('Aşama güncellenemedi', error?.message || 'Bir hata oluştu.')
+                          toast.error('Aşama güncellenemedi', { description: String(error?.message || 'Bir hata oluştu.') })
                           throw error
                         }
                       }}
@@ -2750,9 +2745,9 @@ export default function DealList({ isOpen = true }: DealListProps) {
                             mutate((key: string) => typeof key === 'string' && key.startsWith('/api/deals'), undefined, { revalidate: true }),
                           ])
                           
-                          toastSuccess('Aşama güncellendi', `Fırsat "${newStage}" aşamasına taşındı.`)
+                          toast.success('Aşama güncellendi', { description: `Fırsat "${newStage}" aşamasına taşındı.` })
                         } catch (error: any) {
-                          toastError('Aşama güncellenemedi', error?.message || 'Bir hata oluştu.')
+                          toast.error('Aşama güncellenemedi', { description: String(error?.message || 'Bir hata oluştu.') })
                           throw error
                         }
                       }}
@@ -2967,14 +2962,14 @@ export default function DealList({ isOpen = true }: DealListProps) {
                                       setSelectedCustomer(customer)
                                       setEmailDialogOpen(true)
                                     } else {
-                                      toastError('E-posta adresi yok', 'Müşterinin e-posta adresi bulunamadı')
+                                      toast.error('E-posta adresi yok', { description: 'Müşterinin e-posta adresi bulunamadı' })
                                     }
                                   }
                                 } catch (error) {
                                   console.error('Customer fetch error:', error)
                                 }
                               } else {
-                                toastError('Müşteri yok', 'Bu fırsat için müşteri bilgisi bulunamadı')
+                                toast.error('Müşteri yok', { description: 'Bu fırsat için müşteri bilgisi bulunamadı' })
                               }
                             }}
                             disabled={!deal.customerId}
@@ -2994,14 +2989,14 @@ export default function DealList({ isOpen = true }: DealListProps) {
                                       setSelectedCustomer(customer)
                                       setSmsDialogOpen(true)
                                     } else {
-                                      toastError('Telefon numarası yok', 'Müşterinin telefon numarası bulunamadı')
+                                      toast.error('Telefon numarası yok', { description: 'Müşterinin telefon numarası bulunamadı' })
                                     }
                                   }
                                 } catch (error) {
                                   console.error('Customer fetch error:', error)
                                 }
                               } else {
-                                toastError('Müşteri yok', 'Bu fırsat için müşteri bilgisi bulunamadı')
+                                toast.error('Müşteri yok', { description: 'Bu fırsat için müşteri bilgisi bulunamadı' })
                               }
                             }}
                             disabled={!deal.customerId}
@@ -3021,14 +3016,14 @@ export default function DealList({ isOpen = true }: DealListProps) {
                                       setSelectedCustomer(customer)
                                       setWhatsAppDialogOpen(true)
                                     } else {
-                                      toastError('Telefon numarası yok', 'Müşterinin telefon numarası bulunamadı')
+                                      toast.error('Telefon numarası yok', { description: 'Müşterinin telefon numarası bulunamadı' })
                                     }
                                   }
                                 } catch (error) {
                                   console.error('Customer fetch error:', error)
                                 }
                               } else {
-                                toastError('Müşteri yok', 'Bu fırsat için müşteri bilgisi bulunamadı')
+                                toast.error('Müşteri yok', { description: 'Bu fırsat için müşteri bilgisi bulunamadı' })
                               }
                             }}
                             disabled={!deal.customerId}
@@ -3114,7 +3109,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                           if (deal.stage === 'WON') {
 
 
-                            toastWarning(t('cannotDeleteWon'), t('cannotDeleteWonMessage'))
+                            toast.warning(t('cannotDeleteWon'), { description: t('cannotDeleteWonMessage') })
 
 
                             return
@@ -3126,7 +3121,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                           if (deal.status === 'CLOSED') {
 
 
-                            toastWarning(t('cannotDeleteClosed'), t('cannotDeleteClosedMessage'))
+                            toast.warning(t('cannotDeleteClosed'), { description: t('cannotDeleteClosedMessage') })
 
 
                             return
@@ -3181,11 +3176,14 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
                 </TableRow>
-
-
-              ))
-
-
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={isSuperAdmin ? 11 : 10} className="text-center py-8 text-gray-500">
+                    {t('noDealsFound')}
+                  </TableCell>
+                </TableRow>
+              )
             )}
 
 
@@ -3195,7 +3193,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
           {/* Mobile Card View */}
           <div className="md:hidden space-y-3">
-            {tableDeals.length === 0 ? (
+            {!Array.isArray(tableDeals) || tableDeals.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 {t('noDealsFound')}
               </div>
@@ -3370,11 +3368,13 @@ export default function DealList({ isOpen = true }: DealListProps) {
           // Başarı bildirimi
 
 
-          toastSuccess(
+          toast.success(
             selectedDeal ? 'Fırsat güncellendi!' : 'Fırsat oluşturuldu!',
-            selectedDeal 
-              ? `${savedDeal.title} başarıyla güncellendi.`
-              : `${savedDeal.title} başarıyla oluşturuldu.`
+            {
+              description: selectedDeal 
+                ? `${savedDeal.title} başarıyla güncellendi.`
+                : `${savedDeal.title} başarıyla oluşturuldu.`
+            }
           )
 
 
@@ -3609,7 +3609,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                 if (!lostReason.trim()) {
 
 
-                  toastError(t('lostDialog.reasonRequired'), t('lostDialog.reasonRequiredMessage'))
+                  toast.error(t('lostDialog.reasonRequired'), { description: t('lostDialog.reasonRequiredMessage') })
 
 
                   return
@@ -3624,7 +3624,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                 if (!losingDealId) {
 
 
-                  toastError(tCommon('error'), t('lostDialog.error'))
+                  toast.error(tCommon('error'), { description: t('lostDialog.error') })
 
 
                   setLostDialogOpen(false)
@@ -3717,17 +3717,15 @@ export default function DealList({ isOpen = true }: DealListProps) {
                   // Toast mesajı - analiz görevi oluşturulduğunu bildir
 
 
-                  toastSuccess(
+                  toast.success(
                     t('lostDialog.dealMarkedAsLost'),
-                    t('lostDialog.dealMarkedAsLostMessage'),
                     {
+                      description: t('lostDialog.dealMarkedAsLostMessage'),
                       action: {
                         label: t('lostDialog.goToTasksPage'),
                         onClick: () => window.location.href = `/${locale}/tasks`,
                       }
                     }
-
-
                   )
 
 
@@ -3791,7 +3789,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                   console.error('Lost error:', error)
 
 
-                  toastError(t('lostDialog.markAsLostFailed'), error?.message || t('lostDialog.markAsLostFailedMessage'))
+                  toast.error(t('lostDialog.markAsLostFailed'), { description: String(error?.message || t('lostDialog.markAsLostFailedMessage')) })
 
 
                 }
@@ -3874,7 +3872,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
             defaultMessage: `Merhaba ${selectedCustomer.name},\n\nFırsat bilgisi: ${selectedDealForCommunication.title}\n\nDeğer: ${selectedDealForCommunication.value ? `₺${selectedDealForCommunication.value.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}\nAşama: ${selectedDealForCommunication.stage || 'LEAD'}`,
             defaultHtml: `<p>Merhaba ${selectedCustomer.name},</p><p>Fırsat bilgisi: <strong>${selectedDealForCommunication.title}</strong></p><p>Değer: ${selectedDealForCommunication.value ? `₺${selectedDealForCommunication.value.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}</p><p>Aşama: ${selectedDealForCommunication.stage || 'LEAD'}</p>`,
             onSent: () => {
-              toastSuccess('E-posta gönderildi', 'Müşteriye deal bilgisi gönderildi')
+              toast.success('E-posta gönderildi', { description: 'Müşteriye deal bilgisi gönderildi' })
             },
           }}
           open={emailDialogOpen}
@@ -3898,7 +3896,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
             customerName: selectedCustomer.name,
             defaultMessage: `Merhaba ${selectedCustomer.name}, Fırsat bilgisi: ${selectedDealForCommunication.title}. Değer: ${selectedDealForCommunication.value ? `₺${selectedDealForCommunication.value.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
             onSent: () => {
-              toastSuccess('SMS gönderildi', 'Müşteriye deal bilgisi gönderildi')
+              toast.success('SMS gönderildi', { description: 'Müşteriye deal bilgisi gönderildi' })
             },
           }}
           open={smsDialogOpen}
@@ -3922,7 +3920,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
             customerName: selectedCustomer.name,
             defaultMessage: `Merhaba ${selectedCustomer.name}, Fırsat bilgisi: ${selectedDealForCommunication.title}. Değer: ${selectedDealForCommunication.value ? `₺${selectedDealForCommunication.value.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
             onSent: () => {
-              toastSuccess('WhatsApp mesajı gönderildi', 'Müşteriye deal bilgisi gönderildi')
+              toast.success('WhatsApp mesajı gönderildi', { description: 'Müşteriye deal bilgisi gönderildi' })
             },
           }}
           open={whatsAppDialogOpen}

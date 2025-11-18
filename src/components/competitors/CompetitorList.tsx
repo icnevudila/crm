@@ -127,10 +127,10 @@ export default function CompetitorList() {
       ])
       
       // Success toast göster
-      toast.success('Rakip silindi', `${name} başarıyla silindi.`)
+      toast.success('Rakip silindi', { description: `${name} başarıyla silindi.` })
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error(t('deleteFailed'), error?.message)
+      toast.error(t('deleteFailed'), { description: error?.message || 'Bir hata oluştu' })
     }
   }
 

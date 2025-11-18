@@ -354,7 +354,7 @@ export default function CompetitorDetailModal({
           onSuccess={async (savedCompetitor: any) => {
             await mutateCompetitor(savedCompetitor, { revalidate: false })
             await mutate('/api/competitors', undefined, { revalidate: true })
-            toast.success('Rakip güncellendi', `${savedCompetitor.name} başarıyla güncellendi.`)
+            toast.success('Rakip güncellendi', { description: `${savedCompetitor.name} başarıyla güncellendi.` })
             setFormOpen(false)
           }}
         />
@@ -362,6 +362,7 @@ export default function CompetitorDetailModal({
     </>
   )
 }
+
 
 
 

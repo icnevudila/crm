@@ -290,7 +290,7 @@ export default function InvoiceForm({
       // ÖNEMLİ: PAID (Ödendi) durumundaki faturalar düzenlenemez
       if (invoice && invoice.status === 'PAID') {
         const message = getStageMessage(invoice.status, 'invoice', 'immutable')
-        toast.warning(message.title, message.description)
+        toast.warning(message.title, { description: message.description })
         onClose() // Modal'ı kapat
         return
       }
@@ -319,7 +319,7 @@ export default function InvoiceForm({
 
       // ÖNEMLİ: Quote'tan oluşturulan faturalar düzenlenemez
       if (invoice && invoice.quoteId) {
-        toast.warning(t('cannotEditFromQuote'), t('cannotEditFromQuoteMessage'))
+        toast.warning(t('cannotEditFromQuote'), { description: t('cannotEditFromQuoteMessage') })
         onClose() // Modal'ı kapat
         return
       }
@@ -629,7 +629,7 @@ export default function InvoiceForm({
     onSuccess: async (result) => {
       // Toast mesajı göster
       if (invoice) {
-        toast.success(t('invoiceUpdated'), t('invoiceUpdatedMessage', { title: result.title }))
+        toast.success(t('invoiceUpdated'), { description: t('invoiceUpdatedMessage', { title: result.title }) })
       } else {
         const message = customerCompanyName 
           ? t('invoiceCreatedMessageWithCompany', { company: customerCompanyName, title: result.title })
@@ -694,7 +694,7 @@ export default function InvoiceForm({
                     defaultMessage: `Merhaba ${customer.name},\n\nYeni fatura oluşturuldu: ${result.title}\n\nTutar: ${result.total ? `₺${result.total.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}\nDurum: ${result.status || 'DRAFT'}\n\nDetayları görüntülemek için lütfen bizimle iletişime geçin.`,
                     defaultHtml: `<p>Merhaba ${customer.name},</p><p>Yeni fatura oluşturuldu: <strong>${result.title}</strong></p><p>Tutar: ${result.total ? `₺${result.total.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}</p><p>Durum: ${result.status || 'DRAFT'}</p>`,
                     onSent: () => {
-                      toast.success('E-posta gönderildi', 'Müşteriye invoice bilgisi gönderildi')
+                      toast.success('E-posta gönderildi', { description: 'Müşteriye invoice bilgisi gönderildi' })
                     },
                     onAlwaysSend: async () => {
                       await fetch('/api/automations/preferences', {
@@ -743,7 +743,7 @@ export default function InvoiceForm({
   const onSubmit = async (data: InvoiceFormData) => {
     // ÖNEMLİ: SHIPPED durumundaki faturalar düzenlenemez
     if (invoice && invoice.status === 'SHIPPED') {
-      toast.warning('Bu fatura gönderildiği için düzenleyemezsiniz', 'Sevkiyat onaylandıktan sonra fatura değiştirilemez.')
+      toast.warning('Bu fatura gönderildiği için düzenleyemezsiniz', { description: 'Sevkiyat onaylandıktan sonra fatura değiştirilemez.' })
       return
     }
     

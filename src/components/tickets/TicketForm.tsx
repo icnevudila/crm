@@ -153,7 +153,7 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
     onSuccess: (savedTicket) => {
       // Toast mesajı göster
       if (ticket) {
-        toast.success(t('ticketUpdated'), t('ticketUpdatedMessage', { subject: savedTicket.subject }))
+        toast.success(t('ticketUpdated'), { description: t('ticketUpdatedMessage', { subject: savedTicket.subject }) })
       } else {
         // Yeni ticket oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
         navigateToDetailToast('ticket', savedTicket.id, savedTicket.subject)
@@ -174,7 +174,7 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
       await mutation.mutateAsync(data)
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error(t('saveFailed'), error?.message)
+      toast.error(t('saveFailed'), { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }

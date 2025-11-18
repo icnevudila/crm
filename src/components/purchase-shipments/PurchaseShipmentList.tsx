@@ -68,7 +68,8 @@ interface PurchaseShipment {
     id: string
     title: string
     invoiceNumber?: string
-    total: number
+    total?: number
+    totalAmount?: number
     createdAt: string
     Vendor?: {
       id: string
@@ -246,22 +247,37 @@ export default function PurchaseShipmentList() {
   // Detay modal aç
   const handleViewDetail = useCallback(async (purchaseShipment: PurchaseShipment) => {
     try {
-      const res = await fetch(`/api/purchase-shipments/${purchaseShipment.id}`)
+      setDetailModalOpen(true) // Modal'ı hemen aç (loading state için)
+      setDetailPurchaseShipment(null) // Önceki veriyi temizle
+      
+      const res = await fetch(`/api/purchase-shipments/${purchaseShipment.id}`, {
+        cache: 'no-store',
+        credentials: 'include',
+      })
+      
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
+        setDetailModalOpen(false) // Hata durumunda modal'ı kapat
         throw new Error(errorData.error || t('errorLoadingDetails') || 'Satın alma detayı yüklenemedi')
       }
+      
       const detail = await res.json()
+      
+      if (!detail || !detail.id) {
+        setDetailModalOpen(false)
+        throw new Error('Satın alma detayı geçersiz format')
+      }
+      
       setDetailPurchaseShipment(detail)
-      setDetailModalOpen(true)
     } catch (error: any) {
       console.error('Detail fetch error:', error)
+      setDetailModalOpen(false) // Hata durumunda modal'ı kapat
       toast.error(
-        t('errorLoadingDetails'),
-        error?.message || t('errorLoadingDetailsMessage')
+        t('errorLoadingDetails') || 'Detay Yüklenemedi',
+        error?.message || t('errorLoadingDetailsMessage') || 'Satın alma bilgileri yüklenirken bir hata oluştu. Lütfen tekrar deneyin.'
       )
     }
-  }, [])
+  }, [t])
 
   const handleDelete = useCallback(async (id: string) => {
     if (!(await confirm(t('deleteConfirm')))) {
@@ -485,7 +501,7 @@ export default function PurchaseShipmentList() {
                               <p><strong>{t('tooltip.invoiceNumber')}:</strong> {purchaseShipment.Invoice.invoiceNumber || purchaseShipment.invoiceId.substring(0, 8)}</p>
                               <p><strong>{t('tooltip.title')}:</strong> {purchaseShipment.Invoice.title || '-'}</p>
                               <p><strong>{t('tooltip.vendor')}:</strong> {getVendorName(purchaseShipment)}</p>
-                              <p><strong>{t('tooltip.total')}:</strong> {formatCurrency(purchaseShipment.Invoice.totalAmount || 0)}</p>
+                              <p><strong>{t('tooltip.total')}:</strong> {formatCurrency(purchaseShipment.Invoice.total || purchaseShipment.Invoice.totalAmount || 0)}</p>
                               <p><strong>{t('tooltip.date')}:</strong> {new Date(purchaseShipment.Invoice.createdAt).toLocaleDateString('tr-TR')}</p>
                             </div>
                           </TooltipContent>
@@ -612,7 +628,7 @@ export default function PurchaseShipmentList() {
                     href={`/${locale}/invoices/${detailPurchaseShipment.Invoice.id}`}
                     className="text-indigo-600 hover:underline"
                   >
-                    {detailPurchaseShipment.Invoice.title} - {formatCurrency(detailPurchaseShipment.Invoice.totalAmount || 0)}
+                    {detailPurchaseShipment.Invoice.title} - {formatCurrency(detailPurchaseShipment.Invoice.total || detailPurchaseShipment.Invoice.totalAmount || 0)}
                   </Link>
                 </Card>
               )}

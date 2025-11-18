@@ -94,8 +94,8 @@ export default function SegmentList({ isOpen = true }: SegmentListProps) {
       if (apiUrl) {
         await mutate(apiUrl, updated, { revalidate: false })
       }
-    } catch (error) {
-      toast.warning(t('deleteFailed'))
+    } catch (error: any) {
+      toast.error(t('deleteFailed'), { description: error?.message || 'Silme işlemi başarısız oldu' })
     }
   }
 

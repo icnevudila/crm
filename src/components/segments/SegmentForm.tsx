@@ -96,7 +96,7 @@ export default function SegmentForm({ segment, open, onClose, onSuccess }: Segme
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error('Kaydedilemedi', error?.message || 'Segment kaydetme işlemi başarısız oldu.')
+      toast.error('Kaydedilemedi', { description: error?.message || 'Segment kaydetme işlemi başarısız oldu.' })
     } finally {
       setLoading(false)
     }

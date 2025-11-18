@@ -106,7 +106,7 @@ export default function EmailTemplateList() {
       ])
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error(t('deleteFailed'), error?.message)
+      toast.error(t('deleteFailed'), { description: error?.message || 'Bir hata oluştu' })
     }
   }
 

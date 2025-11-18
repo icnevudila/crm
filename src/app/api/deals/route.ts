@@ -386,11 +386,13 @@ export async function POST(request: Request) {
     if (data?.id) {
       try {
         const { logAction } = await import('@/lib/logger')
+        const { getActivityMessage, getLocaleFromRequest } = await import('@/lib/api-locale')
+        const locale = getLocaleFromRequest(request)
         // Async olarak logla - ana işlemi engellemez
         logAction({
           entity: 'Deal',
           action: 'CREATE',
-          description: (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.dealCreated.replace('{title}', (data as any)?.title || (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.defaultDealTitle),
+          description: getActivityMessage(locale, 'dealCreated', { title: (data as any)?.title || getActivityMessage(locale, 'defaultDealTitle') }),
           meta: { 
             entity: 'Deal', 
             action: 'create', 

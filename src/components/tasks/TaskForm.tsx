@@ -150,7 +150,7 @@ export default function TaskForm({ task, open, onClose, onSuccess, defaultTitle,
     onSuccess: (savedTask) => {
       // Toast mesajı göster
       if (task) {
-        toast.success(t('taskUpdated'), t('taskUpdatedMessage', { title: savedTask.title }))
+        toast.success(t('taskUpdated'), { description: t('taskUpdatedMessage', { title: savedTask.title }) })
       } else {
         // Yeni task oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
         navigateToDetailToast('task', savedTask.id, savedTask.title)
@@ -171,7 +171,7 @@ export default function TaskForm({ task, open, onClose, onSuccess, defaultTitle,
       await mutation.mutateAsync(data)
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error(t('saveFailed'), error?.message)
+      toast.error(t('saveFailed'), { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }

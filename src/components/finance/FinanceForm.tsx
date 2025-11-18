@@ -254,7 +254,7 @@ export default function FinanceForm({
     onSuccess: async (savedFinance) => {
       // Toast mesajı göster
       if (finance) {
-        toast.success(t('financeUpdated'), t('financeUpdatedMessage', { title: savedFinance.title || savedFinance.description || t('financeCreatedMessage') }))
+        toast.success(t('financeUpdated'), { description: t('financeUpdatedMessage', { title: savedFinance.title || savedFinance.description || t('financeCreatedMessage') }) })
       } else {
         // Yeni finance kaydı oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
         const financeTitle = savedFinance.title || savedFinance.description || t('financeCreatedMessage')
@@ -302,7 +302,7 @@ export default function FinanceForm({
       await mutation.mutateAsync(cleanData)
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error(t('saveFailed'), error?.message)
+      toast.error(t('saveFailed'), { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }

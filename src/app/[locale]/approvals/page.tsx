@@ -65,7 +65,7 @@ export default function ApprovalsPage() {
       
       await mutateApprovals()
       toast.dismiss(toastId)
-      toast.success('Onaylandı', 'Onay talebi başarıyla onaylandı.')
+      toast.success('Onaylandı', { description: 'Onay talebi başarıyla onaylandı.' })
     } catch (error: any) {
       console.error('Approve error:', error)
       toast.dismiss(toastId)
@@ -111,7 +111,7 @@ export default function ApprovalsPage() {
       
       await mutateApprovals()
       toast.dismiss(toastId)
-      toast.success('Reddedildi', 'Onay talebi reddedildi.')
+      toast.success('Reddedildi', { description: 'Onay talebi reddedildi.' })
     } catch (error: any) {
       console.error('Reject error:', error)
       toast.dismiss(toastId)

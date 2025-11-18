@@ -32,6 +32,60 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status')
     const filterCompanyId = searchParams.get('filterCompanyId') || ''
 
+    // ✅ FIX: EmailCampaign tablosu yoksa boş array döndür (cache sorunu olabilir)
+    try {
+      const { error: tableCheckError } = await supabase
+        .from('EmailCampaign')
+        .select('id')
+        .limit(0)
+      
+      if (tableCheckError) {
+        const errorMessage = tableCheckError.message || ''
+        const errorCode = tableCheckError.code || ''
+        
+        if (errorMessage.includes('Could not find the table') || 
+            errorMessage.includes('relation') ||
+            errorMessage.includes('does not exist') ||
+            errorCode === 'PGRST204' ||
+            errorCode === '42P01') {
+          console.warn('EmailCampaign tablosu bulunamadı (cache sorunu olabilir). Boş array döndürülüyor.', {
+            message: errorMessage,
+            code: errorCode
+          })
+          return NextResponse.json([], {
+            headers: {
+              'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0',
+            }
+          })
+        }
+        throw tableCheckError
+      }
+    } catch (tableError: any) {
+      const errorMessage = tableError?.message || ''
+      const errorCode = tableError?.code || ''
+      
+      if (errorMessage.includes('Could not find the table') || 
+          errorMessage.includes('relation') ||
+          errorMessage.includes('does not exist') ||
+          errorCode === 'PGRST204' ||
+          errorCode === '42P01') {
+        console.warn('EmailCampaign tablosu bulunamadı. Boş array döndürülüyor.', {
+          message: errorMessage,
+          code: errorCode
+        })
+        return NextResponse.json([], {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          }
+        })
+      }
+      throw tableError
+    }
+
     let query = supabase
       .from('EmailCampaign')
       .select(`
@@ -55,9 +109,32 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await query
 
-    if (error) throw error
+    if (error) {
+      // Tablo bulunamadı hatası - cache sorunu olabilir, boş array döndür
+      const errorMessage = error.message || ''
+      const errorCode = error.code || ''
+      
+      if (errorMessage.includes('Could not find the table') || 
+          errorMessage.includes('relation') ||
+          errorMessage.includes('does not exist') ||
+          errorCode === 'PGRST204' ||
+          errorCode === '42P01') {
+        console.warn('EmailCampaign tablosu bulunamadı (query sırasında). Boş array döndürülüyor.', {
+          message: errorMessage,
+          code: errorCode
+        })
+        return NextResponse.json([], {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          }
+        })
+      }
+      throw error
+    }
 
-    return NextResponse.json(data)
+    return NextResponse.json(data || [])
   } catch (error: any) {
     console.error('Email campaigns fetch error:', error)
     return NextResponse.json(

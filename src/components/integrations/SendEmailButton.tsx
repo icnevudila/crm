@@ -180,7 +180,7 @@ export default function SendEmailButton({
     const validEmails = toArray.filter((email) => email && email.trim() !== '')
 
     if (validEmails.length === 0) {
-      toast.error('Hata', 'Alıcı e-posta adresi bulunamadı')
+      toast.error('Hata', { description: 'Alıcı e-posta adresi bulunamadı' })
       return
     }
 
@@ -194,7 +194,7 @@ export default function SendEmailButton({
     }
 
     if (hasEmailIntegration === null || checkingIntegration) {
-      toast.error('Kontrol Ediliyor', 'E-posta entegrasyonu kontrol ediliyor, lütfen bekleyin...')
+      toast.error('Kontrol Ediliyor', { description: 'E-posta entegrasyonu kontrol ediliyor, lütfen bekleyin...' })
       return
     }
 
@@ -217,7 +217,7 @@ export default function SendEmailButton({
       }
 
       const result = await res.json()
-      toast.success('Başarılı', `E-posta başarıyla gönderildi${validEmails.length > 1 ? ` (${validEmails.length} alıcı)` : ''}`)
+      toast.success('Başarılı', { description: `E-posta başarıyla gönderildi${validEmails.length > 1 ? ` (${validEmails.length} alıcı)` : ''}` })
       onSuccess?.()
       setLastError(null)
       setRetryCount(0)

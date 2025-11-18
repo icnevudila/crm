@@ -168,10 +168,10 @@ export default function ContractList() {
       ])
       
       // Success toast göster
-      toast.success('Sözleşme silindi', `${title} başarıyla silindi.`)
+      toast.success('Sözleşme silindi', { description: `${title} başarıyla silindi.` })
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error(t('deleteFailed'), error?.message)
+      toast.error(t('deleteFailed'), { description: error?.message || 'Bir hata oluştu' })
     }
   }
 

@@ -82,7 +82,7 @@ export default function AddToCalendarButton({
     }
 
     if (hasIntegration === null || checkingIntegration) {
-      toast.error('Kontrol Ediliyor', 'Google Calendar entegrasyonu kontrol ediliyor, lütfen bekleyin...')
+      toast.error('Kontrol Ediliyor', { description: 'Google Calendar entegrasyonu kontrol ediliyor, lütfen bekleyin...' })
       return
     }
     setAddingToCalendar(true)
@@ -119,7 +119,7 @@ export default function AddToCalendarButton({
           }
         )
       } else {
-        toast.success('Başarılı', 'Etkinlik Google Calendar\'a eklendi')
+        toast.success('Başarılı', { description: 'Etkinlik Google Calendar\'a eklendi' })
       }
       setLastError(null)
       setRetryCount(0)

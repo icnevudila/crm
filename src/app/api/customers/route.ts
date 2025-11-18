@@ -294,10 +294,12 @@ export async function POST(request: Request) {
     }
     // NOT: address, sector, website, taxNumber, fax, notes schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
+    const { getActivityMessage, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const locale = getLocaleFromRequest(request)
     const created = await createRecord(
       'Customer',
       customerData,
-      (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.customerCreated.replace('{name}', body.name)
+      getActivityMessage(locale, 'customerCreated', { name: body.name })
     )
 
     // Oluşturulan kaydı tam bilgileriyle çek (CustomerCompany ilişkisi dahil)
@@ -348,7 +350,7 @@ export async function POST(request: Request) {
         logAction({
           entity: 'Customer',
           action: 'CREATE',
-          description: (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.customerCreatedDescription.replace('{name}', (responseData as any)?.name || (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.defaultCustomerName),
+          description: getActivityMessage(locale, 'customerCreatedDescription', { name: (responseData as any)?.name || getActivityMessage(locale, 'defaultCustomerName') }),
           meta: { 
             entity: 'Customer', 
             action: 'create', 

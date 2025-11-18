@@ -215,7 +215,7 @@ export default function QuoteForm({
         // ÖNEMLİ: Quote ACCEPTED olduğunda düzenlenemez
         if (quote.status === 'ACCEPTED') {
           const message = getStageMessage(quote.status, 'quote', 'immutable')
-          toast.warning(message.title, message.description)
+          toast.warning(message.title, { description: message.description })
           onClose() // Modal'ı kapat
           return
         }
@@ -348,7 +348,7 @@ export default function QuoteForm({
     onSuccess: async (savedQuote) => {
       // Toast mesajı göster
       if (quote) {
-        toast.success('Teklif güncellendi', `"${savedQuote.title}" teklifi başarıyla güncellendi.`)
+        toast.success('Teklif güncellendi', { description: `"${savedQuote.title}" teklifi başarıyla güncellendi.` })
       } else {
         // Yeni quote oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
         navigateToDetailToast('quote', savedQuote.id, savedQuote.title)
@@ -414,7 +414,7 @@ export default function QuoteForm({
                         defaultMessage: `Merhaba ${customer.name},\n\nYeni teklif hazırlandı: ${savedQuote.title}\n\nTutar: ${savedQuote.total ? `₺${savedQuote.total.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}\nDurum: ${savedQuote.status || 'DRAFT'}\n\nDetayları görüntülemek için lütfen bizimle iletişime geçin.`,
                         defaultHtml: `<p>Merhaba ${customer.name},</p><p>Yeni teklif hazırlandı: <strong>${savedQuote.title}</strong></p><p>Tutar: ${savedQuote.total ? `₺${savedQuote.total.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}</p><p>Durum: ${savedQuote.status || 'DRAFT'}</p>`,
                         onSent: () => {
-                          toast.success('E-posta gönderildi', 'Müşteriye quote bilgisi gönderildi')
+                          toast.success('E-posta gönderildi', { description: 'Müşteriye quote bilgisi gönderildi' })
                         },
                         onAlwaysSend: async () => {
                           await fetch('/api/automations/preferences', {

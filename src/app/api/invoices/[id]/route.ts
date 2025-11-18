@@ -1047,7 +1047,7 @@ export async function PUT(
               companyId: session.user.companyId,
               role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
               title: msgs.activity.invoiceOverdue,
-              message: msgs.activity.invoiceOverdueMessage.replace('{invoiceNumber}', invoiceNumber),
+              message: getActivityMessage(locale, 'invoiceOverdueMessage', { invoiceNumber }),
               type: 'error',
               priority: 'high',
               relatedTo: 'Invoice',
@@ -1066,8 +1066,8 @@ export async function PUT(
             const invoiceNumber = (currentInvoice as any)?.invoiceNumber || currentInvoice?.title || msgs.activity.defaultInvoiceTitle
             const notificationTitle = daysUntilDue <= 1 ? msgs.activity.invoiceDueSoonCritical : msgs.activity.invoiceDueSoon
             const notificationMessage = daysUntilDue <= 1 
-              ? msgs.activity.invoiceDueSoonCriticalMessage.replace('{invoiceNumber}', invoiceNumber).replace('{days}', String(daysUntilDue))
-              : msgs.activity.invoiceDueSoonMessage.replace('{invoiceNumber}', invoiceNumber).replace('{days}', String(daysUntilDue))
+              ? getActivityMessage(locale, 'invoiceDueSoonCriticalMessage', { invoiceNumber, days: String(daysUntilDue) })
+              : getActivityMessage(locale, 'invoiceDueSoonMessage', { invoiceNumber, days: String(daysUntilDue) })
             await createNotificationForRole({
               companyId: session.user.companyId,
               role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
@@ -1314,7 +1314,7 @@ export async function PUT(
         {
           entity: 'Invoice',
           action: 'UPDATE',
-          description: msgs.activity.shipmentApprovedMessage.replace('{invoiceNumber}', (currentInvoice as any)?.invoiceNumber || currentInvoice?.title || msgs.activity.defaultInvoiceTitle),
+          description: getActivityMessage(locale, 'shipmentApprovedMessage', { invoiceNumber: (currentInvoice as any)?.invoiceNumber || currentInvoice?.title || getActivityMessage(locale, 'defaultInvoiceTitle') }),
           meta: {
             entity: 'Invoice',
             action: 'shipment_approved_from_invoice',
@@ -1402,7 +1402,7 @@ export async function PUT(
         {
           entity: 'Invoice',
           action: 'UPDATE',
-          description: msgs.activity.purchaseApprovedMessage.replace('{invoiceNumber}', (currentInvoice as any)?.invoiceNumber || currentInvoice?.title || msgs.activity.defaultInvoiceTitle),
+          description: getActivityMessage(locale, 'purchaseApprovedMessage', { invoiceNumber: (currentInvoice as any)?.invoiceNumber || currentInvoice?.title || getActivityMessage(locale, 'defaultInvoiceTitle') }),
           meta: {
             entity: 'Invoice',
             action: 'purchase_received_from_invoice',
@@ -1571,7 +1571,7 @@ export async function PUT(
       'Invoice',
       id,
       cleanUpdateData,
-      msgs.activity.invoiceUpdated.replace('{title}', body.title || currentInvoice?.title || msgs.activity.defaultInvoiceTitle)
+      getActivityMessage(locale, 'invoiceUpdated', { title: body.title || currentInvoice?.title || getActivityMessage(locale, 'defaultInvoiceTitle') })
     )
 
     if (!data) {
@@ -1591,7 +1591,7 @@ export async function PUT(
           companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
           title: msgs.activity.invoiceSent,
-          message: msgs.activity.invoiceSentMessage.replace('{invoiceNumber}', invoiceDisplayName),
+          message: getActivityMessage(locale, 'invoiceSentMessage', { invoiceNumber: invoiceDisplayName }),
           type: 'info',
           relatedTo: 'Invoice',
           relatedId: data.id,
@@ -1650,7 +1650,7 @@ export async function PUT(
           companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
           title: msgs.activity.shipmentApproved,
-          message: msgs.activity.shipmentApprovedMessage.replace('{invoiceNumber}', invoiceDisplayName),
+          message: getActivityMessage(locale, 'shipmentApprovedMessage', { invoiceNumber: invoiceDisplayName }),
           type: 'success',
           relatedTo: 'Invoice',
           relatedId: data.id,
@@ -1669,7 +1669,7 @@ export async function PUT(
           companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
           title: msgs.activity.purchaseApproved,
-          message: msgs.activity.purchaseApprovedMessage.replace('{invoiceNumber}', invoiceDisplayName),
+          message: getActivityMessage(locale, 'purchaseApprovedMessage', { invoiceNumber: invoiceDisplayName }),
           type: 'success',
           relatedTo: 'Invoice',
           relatedId: data.id,
@@ -1688,7 +1688,7 @@ export async function PUT(
           companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
           title: msgs.activity.invoiceCancelled,
-          message: msgs.activity.invoiceCancelledMessage.replace('{invoiceNumber}', invoiceDisplayName),
+          message: getActivityMessage(locale, 'invoiceCancelledMessage', { invoiceNumber: invoiceDisplayName }),
           type: 'warning',
           relatedTo: 'Invoice',
           relatedId: data.id,
@@ -1743,7 +1743,7 @@ export async function PUT(
             {
               entity: 'Finance',
               action: 'CREATE',
-              description: msgs.activity.invoicePaidFinanceCreated.replace('{financeType}', financeType === 'EXPENSE' ? msgs.activity.expense : msgs.activity.income),
+              description: getActivityMessage(locale, 'invoicePaidFinanceCreated', { financeType: financeType === 'EXPENSE' ? getActivityMessage(locale, 'expense') : getActivityMessage(locale, 'income') }),
               meta: { 
                 entity: 'Finance', 
                 action: 'create', 
@@ -1764,7 +1764,7 @@ export async function PUT(
               companyId: session.user.companyId,
               role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
               title: msgs.activity.invoicePaid,
-              message: msgs.activity.invoicePaidMessage.replace('{financeType}', financeType === 'EXPENSE' ? msgs.activity.expense : msgs.activity.income),
+              message: getActivityMessage(locale, 'invoicePaidMessage', { financeType: financeType === 'EXPENSE' ? getActivityMessage(locale, 'expense') : getActivityMessage(locale, 'income') }),
               type: 'success',
               relatedTo: 'Invoice',
               relatedId: data.id,
@@ -1811,24 +1811,24 @@ export async function PUT(
     const hasStatusChange =
       requestedStatus && requestedStatus !== previousStatus
 
-    let activityDescription = msgs.activity.invoiceInfoUpdated.replace('{title}', body.title || data.title || msgs.activity.defaultInvoiceTitle)
+    let activityDescription = getActivityMessage(locale, 'invoiceInfoUpdated', { title: body.title || data.title || getActivityMessage(locale, 'defaultInvoiceTitle') })
 
     if (hasStatusChange) {
       switch (requestedStatus) {
         case 'SENT':
-          activityDescription = msgs.activity.invoiceSentDescription.replace('{invoiceNumber}', invoiceDisplayName)
+          activityDescription = getActivityMessage(locale, 'invoiceSentDescription', { invoiceNumber: invoiceDisplayName })
           break
         case 'SHIPPED':
-          activityDescription = msgs.activity.invoiceShippedDescription.replace('{invoiceNumber}', invoiceDisplayName)
+          activityDescription = getActivityMessage(locale, 'invoiceShippedDescription', { invoiceNumber: invoiceDisplayName })
           break
         case 'RECEIVED':
-          activityDescription = msgs.activity.invoiceReceivedDescription.replace('{invoiceNumber}', invoiceDisplayName)
+          activityDescription = getActivityMessage(locale, 'invoiceReceivedDescription', { invoiceNumber: invoiceDisplayName })
           break
         case 'PAID':
-          activityDescription = msgs.activity.invoicePaidDescription.replace('{invoiceNumber}', invoiceDisplayName)
+          activityDescription = getActivityMessage(locale, 'invoicePaidDescription', { invoiceNumber: invoiceDisplayName })
           break
         case 'OVERDUE':
-          activityDescription = msgs.activity.invoiceOverdueMessage.replace('{invoiceNumber}', invoiceDisplayName)
+          activityDescription = getActivityMessage(locale, 'invoiceOverdueMessage', { invoiceNumber: invoiceDisplayName })
           // OVERDUE notification gönder
           try {
             const { createNotificationForRole } = await import('@/lib/notification-helper')
@@ -1847,13 +1847,13 @@ export async function PUT(
           }
           break
         case 'CANCELLED':
-          activityDescription = msgs.activity.invoiceCancelledDescription.replace('{invoiceNumber}', invoiceDisplayName)
+          activityDescription = getActivityMessage(locale, 'invoiceCancelledDescription', { invoiceNumber: invoiceDisplayName })
           break
         default:
-          activityDescription = msgs.activity.invoiceUpdatedStatus.replace('{invoiceNumber}', invoiceDisplayName).replace('{status}', requestedStatus)
+          activityDescription = getActivityMessage(locale, 'invoiceUpdatedStatus', { invoiceNumber: invoiceDisplayName, status: requestedStatus })
       }
     } else if (body.title && body.title !== currentInvoice?.title) {
-      activityDescription = msgs.activity.invoiceTitleUpdated.replace('{oldTitle}', currentInvoice?.title || '-').replace('{newTitle}', body.title)
+      activityDescription = getActivityMessage(locale, 'invoiceTitleUpdated', { oldTitle: currentInvoice?.title || '-', newTitle: body.title })
     }
 
     const activityMeta: Record<string, unknown> = {
@@ -1930,10 +1930,22 @@ export async function PUT(
       automation: automationInfo,
       invoiceType: invoiceType || data?.invoiceType || null, // invoiceType'ı response'a ekle
     })
-  } catch (error) {
+  } catch (error: any) {
+    // Gerçek hata mesajını döndür
+    const errorMessage = error?.message || error?.error || 'Fatura güncellenemedi'
+    const errorDetails = error?.details || error?.hint || null
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Invoice update error:', error)
+    }
+    
     return NextResponse.json(
-      { error: 'Failed to update invoice' },
-      { status: 500 }
+      { 
+        error: errorMessage,
+        message: errorDetails || errorMessage,
+        details: errorDetails
+      },
+      { status: error?.status || error?.statusCode || 500 }
     )
   }
 }
@@ -2086,14 +2098,14 @@ export async function DELETE(
     // ActivityLog kaydı - hata olsa bile ana işlem başarılı
     // invoice null olabilir (maybeSingle() kullandık), o yüzden deletedData'dan title al
     try {
-      const { getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
+      const { getMessages, getLocaleFromRequest, getActivityMessage } = await import('@/lib/api-locale')
       const deleteLocale = getLocaleFromRequest(request)
       const deleteMsgs = getMessages(deleteLocale)
-      const invoiceTitle = (invoice as any)?.title || (deletedData[0] as any)?.title || deleteMsgs.activity.defaultInvoiceTitle
+      const invoiceTitle = (invoice as any)?.title || (deletedData[0] as any)?.title || getActivityMessage(deleteLocale, 'defaultInvoiceTitle')
       const activityData = {
         entity: 'Invoice',
         action: 'DELETE',
-        description: deleteMsgs.activity.invoiceDeleted.replace('{title}', invoiceTitle),
+        description: getActivityMessage(deleteLocale, 'invoiceDeleted', { title: invoiceTitle }),
         meta: { entity: 'Invoice', action: 'delete', id },
         userId: session.user.id,
         companyId: session.user.companyId,

@@ -65,7 +65,6 @@ const WorkflowShortcuts = dynamic(
   }
 )
 
-
 const DashboardSpotlight = dynamic(
   () => import('@/components/dashboard/DashboardSpotlight'),
   {

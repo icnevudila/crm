@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { ArrowLeft, Edit, DollarSign, Trash2, Download } from 'lucide-react'
+import { ArrowLeft, Edit, DollarSign, Trash2, Download, Receipt, FileText, User, Building2, Mail, Phone, Calendar, Link as LinkIcon } from 'lucide-react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -17,6 +18,8 @@ interface Finance {
   id: string
   type: 'INCOME' | 'EXPENSE'
   amount: number
+  category?: string
+  description?: string
   relatedTo?: string
   relatedEntityType?: string
   relatedEntityId?: string
@@ -27,12 +30,27 @@ interface Finance {
     title: string
     status: string
     invoiceNumber?: string
+    total?: number
+    totalAmount?: number
+    createdAt: string
+    Customer?: {
+      id: string
+      name: string
+      email?: string
+    }
   }
   Contract?: {
     id: string
     title: string
     status: string
     contractNumber?: string
+    totalAmount?: number
+    createdAt: string
+    CustomerCompany?: {
+      id: string
+      name: string
+      email?: string
+    }
   }
   createdAt: string
   updatedAt?: string
@@ -178,26 +196,16 @@ export default function FinanceDetailPage() {
                 <p className="font-medium mt-1">{finance.relatedTo}</p>
               </div>
             )}
-            {finance.Invoice && (
+            {finance.category && (
               <div>
-                <p className="text-sm text-gray-600">İlgili Fatura</p>
-                <Link
-                  href={`/${locale}/invoices/${finance.Invoice.id}`}
-                  className="font-medium text-indigo-600 hover:underline mt-1 block"
-                >
-                  {finance.Invoice.invoiceNumber || finance.Invoice.title}
-                </Link>
+                <p className="text-sm text-gray-600">Kategori</p>
+                <p className="font-medium mt-1">{finance.category}</p>
               </div>
             )}
-            {finance.Contract && (
+            {finance.description && (
               <div>
-                <p className="text-sm text-gray-600">İlgili Sözleşme</p>
-                <Link
-                  href={`/${locale}/contracts/${finance.Contract.id}`}
-                  className="font-medium text-indigo-600 hover:underline mt-1 block"
-                >
-                  {finance.Contract.contractNumber || finance.Contract.title}
-                </Link>
+                <p className="text-sm text-gray-600">Açıklama</p>
+                <p className="font-medium mt-1">{finance.description}</p>
               </div>
             )}
             {finance.relatedEntityType && finance.relatedEntityId && !finance.Invoice && !finance.Contract && (
@@ -238,6 +246,146 @@ export default function FinanceDetailPage() {
           </div>
         </Card>
       </div>
+
+      {/* İlgili Fatura Detayları */}
+      {finance.Invoice && (
+        <Card className="p-6 border-l-4 border-indigo-500">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <Receipt className="h-5 w-5 text-indigo-600" />
+              İlgili Fatura
+            </h2>
+            <Link href={`/${locale}/invoices/${finance.Invoice.id}`}>
+              <Button variant="outline" size="sm">
+                <Receipt className="mr-2 h-4 w-4" />
+                Faturaya Git
+              </Button>
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Fatura No</p>
+              <p className="font-medium text-gray-900">
+                {finance.Invoice.invoiceNumber || finance.Invoice.id.substring(0, 8)}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Fatura Başlığı</p>
+              <p className="font-medium text-gray-900">{finance.Invoice.title || '-'}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Durum</p>
+              <Badge>{finance.Invoice.status || '-'}</Badge>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Toplam Tutar</p>
+              <p className="text-xl font-bold text-gray-900">
+                {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(
+                  finance.Invoice.total || finance.Invoice.totalAmount || 0
+                )}
+              </p>
+            </div>
+            {finance.Invoice.Customer && (
+              <>
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Müşteri</p>
+                  <p className="font-medium text-gray-900 flex items-center gap-2">
+                    <User className="h-4 w-4 text-gray-400" />
+                    {finance.Invoice.Customer.name}
+                  </p>
+                </div>
+                {finance.Invoice.Customer.email && (
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">E-posta</p>
+                    <p className="text-gray-900 flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-gray-400" />
+                      {finance.Invoice.Customer.email}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Oluşturulma Tarihi</p>
+              <p className="text-gray-900 flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-gray-400" />
+                {new Date(finance.Invoice.createdAt).toLocaleDateString('tr-TR')}
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* İlgili Sözleşme Detayları */}
+      {finance.Contract && (
+        <Card className="p-6 border-l-4 border-purple-500">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <FileText className="h-5 w-5 text-purple-600" />
+              İlgili Sözleşme
+            </h2>
+            <Link href={`/${locale}/contracts/${finance.Contract.id}`}>
+              <Button variant="outline" size="sm">
+                <FileText className="mr-2 h-4 w-4" />
+                Sözleşmeye Git
+              </Button>
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Sözleşme No</p>
+              <p className="font-medium text-gray-900">
+                {finance.Contract.contractNumber || finance.Contract.id.substring(0, 8)}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Sözleşme Başlığı</p>
+              <p className="font-medium text-gray-900">{finance.Contract.title || '-'}</p>
+            </div>
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Durum</p>
+              <Badge>{finance.Contract.status || '-'}</Badge>
+            </div>
+            {finance.Contract.totalAmount && (
+              <div>
+                <p className="text-sm text-gray-600 mb-1">Toplam Tutar</p>
+                <p className="text-xl font-bold text-gray-900">
+                  {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(
+                    finance.Contract.totalAmount
+                  )}
+                </p>
+              </div>
+            )}
+            {finance.Contract.CustomerCompany && (
+              <>
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Müşteri Firma</p>
+                  <p className="font-medium text-gray-900 flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-gray-400" />
+                    {finance.Contract.CustomerCompany.name}
+                  </p>
+                </div>
+                {finance.Contract.CustomerCompany.email && (
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">E-posta</p>
+                    <p className="text-gray-900 flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-gray-400" />
+                      {finance.Contract.CustomerCompany.email}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Oluşturulma Tarihi</p>
+              <p className="text-gray-900 flex items-center gap-2">
+                <Calendar className="h-4 w-4 text-gray-400" />
+                {new Date(finance.Contract.createdAt).toLocaleDateString('tr-TR')}
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Activity Timeline */}
       {finance.activities && finance.activities.length > 0 && (

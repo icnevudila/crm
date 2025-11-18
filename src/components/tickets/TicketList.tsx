@@ -195,13 +195,13 @@ export default function TicketList() {
       
       // Success toast göster
       const tCommon = useTranslations('common')
-      toast.success(tCommon('ticketDeletedSuccess'), tCommon('deleteSuccessMessage', { name: subject }))
+      toast.success(tCommon('ticketDeletedSuccess'), { description: tCommon('deleteSuccessMessage', { name: subject }) })
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error(tCommon('error'), error?.message)
+      toast.error(tCommon('error'), { description: error?.message || 'Bir hata oluştu' })
     }
   }, [tickets, mutateTickets, apiUrl, t, tCommon])
 

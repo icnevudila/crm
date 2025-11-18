@@ -55,7 +55,7 @@ export default function InvoiceToShipmentWizard({ open, onClose, invoiceId }: In
     newCompleted.add(1)
     setCompletedSteps(newCompleted)
     setCurrentStep(2)
-    toast.success('Fatura oluşturuldu', 'Sevkiyat hazırlama adımına geçiliyor...')
+    toast.success('Fatura oluşturuldu', { description: 'Sevkiyat hazırlama adımına geçiliyor...' })
     mutate('/api/invoices')
   }
 
@@ -95,7 +95,7 @@ export default function InvoiceToShipmentWizard({ open, onClose, invoiceId }: In
   const handleSkip = () => {
     if (currentStep < STEPS.length) {
       setCurrentStep(currentStep + 1)
-      toast.info('Adım atlandı', 'Bu adımı daha sonra tamamlayabilirsiniz.')
+      toast.info('Adım atlandı', { description: 'Bu adımı daha sonra tamamlayabilirsiniz.' })
     }
   }
 
@@ -220,6 +220,7 @@ export default function InvoiceToShipmentWizard({ open, onClose, invoiceId }: In
     </Dialog>
   )
 }
+
 
 
 
