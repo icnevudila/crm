@@ -458,8 +458,9 @@ BEGIN
     SELECT id, name, email, phone, "companyId", "customerCompanyId"
     FROM "Customer"
     WHERE (email IS NOT NULL OR phone IS NOT NULL)
+    AND "customerCompanyId" IS NOT NULL
     AND NOT EXISTS (
-      SELECT 1 FROM "Contact" WHERE "customerId" = "Customer".id AND "isPrimary" = true
+      SELECT 1 FROM "Contact" WHERE "customerCompanyId" = "Customer"."customerCompanyId" AND "isPrimary" = true
     )
   LOOP
     INSERT INTO "Contact" (
