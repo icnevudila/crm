@@ -48,6 +48,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS trigger_contact_updated ON "Contact";
 CREATE TRIGGER trigger_contact_updated
 BEFORE UPDATE ON "Contact"
 FOR EACH ROW
