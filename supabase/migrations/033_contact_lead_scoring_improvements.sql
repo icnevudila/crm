@@ -450,40 +450,49 @@ EXECUTE FUNCTION update_customer_ltv_on_invoice_paid();
 -- ============================================
 
 -- Mevcut Customer'lar için primary contact oluştur (eğer email veya phone varsa)
+-- NOT: Bu bölüm opsiyonel, hata verirse atlanabilir
 DO $$
 DECLARE
   customer_rec RECORD;
 BEGIN
+  -- Sadece customerCompanyId'si olan Customer'lar için contact oluştur
   FOR customer_rec IN 
     SELECT id, name, email, phone, "companyId", "customerCompanyId"
     FROM "Customer"
     WHERE (email IS NOT NULL OR phone IS NOT NULL)
     AND "customerCompanyId" IS NOT NULL
     AND NOT EXISTS (
-      SELECT 1 FROM "Contact" WHERE "customerCompanyId" = "Customer"."customerCompanyId" AND "isPrimary" = true
+      SELECT 1 FROM "Contact" 
+      WHERE "customerCompanyId" = "Customer"."customerCompanyId" 
+      AND "isPrimary" = true
     )
   LOOP
-    INSERT INTO "Contact" (
-      "firstName",
-      "lastName",
-      email,
-      phone,
-      "isPrimary",
-      "customerCompanyId",
-      "companyId",
-      status
-    )
-    VALUES (
-      customer_rec.name,
-      '',
-      customer_rec.email,
-      customer_rec.phone,
-      true,
-      customer_rec."customerCompanyId",
-      customer_rec."companyId",
-      'ACTIVE'
-    )
-    ON CONFLICT DO NOTHING;
+    BEGIN
+      INSERT INTO "Contact" (
+        "firstName",
+        "lastName",
+        email,
+        phone,
+        "isPrimary",
+        "customerCompanyId",
+        "companyId",
+        status
+      )
+      VALUES (
+        COALESCE(customer_rec.name, ''),
+        '',
+        customer_rec.email,
+        customer_rec.phone,
+        true,
+        customer_rec."customerCompanyId",
+        customer_rec."companyId",
+        'ACTIVE'
+      )
+      ON CONFLICT DO NOTHING;
+    EXCEPTION WHEN OTHERS THEN
+      -- Hata olursa devam et
+      CONTINUE;
+    END;
   END LOOP;
 END $$;
 
