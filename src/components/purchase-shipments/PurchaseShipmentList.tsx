@@ -247,7 +247,10 @@ export default function PurchaseShipmentList() {
   const handleViewDetail = useCallback(async (purchaseShipment: PurchaseShipment) => {
     try {
       const res = await fetch(`/api/purchase-shipments/${purchaseShipment.id}`)
-      if (!res.ok) throw new Error(t('errorLoadingDetails'))
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || t('errorLoadingDetails') || 'Satın alma detayı yüklenemedi')
+      }
       const detail = await res.json()
       setDetailPurchaseShipment(detail)
       setDetailModalOpen(true)
@@ -298,6 +301,15 @@ export default function PurchaseShipmentList() {
 
   if (isLoading) {
     return <SkeletonList />
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-red-600 mb-4">Satın alma sevkiyatları yüklenirken bir hata oluştu.</p>
+        <Button onClick={() => mutatePurchaseShipments()}>Yeniden Dene</Button>
+      </div>
+    )
   }
 
   return (

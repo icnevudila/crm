@@ -657,3 +657,4 @@ COMMENT ON COLUMN "ChatChannel"."entityId" IS 'Entity ID (müşteri, deal, vb.)'
 
 
 
+

@@ -324,16 +324,18 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                       onClick={async (e) => {
                         e.preventDefault()
                         e.stopPropagation()
+                        e.nativeEvent.stopImmediatePropagation()
                         if (dragMode || isDragging) return
                         
                         if (onStatusChange) {
                           try {
                             await onStatusChange(quote.id, 'ACCEPTED')
-                            toast.success('Teklif kabul edildi! Fatura ve sözleşme oluşturuldu.')
+                            // Toast mesajı onStatusChange içinde gösteriliyor
                           } catch (error: any) {
                             if (process.env.NODE_ENV === 'development') {
                               console.error('Status change error:', error)
                             }
+                            toast.error('Durum değiştirilemedi', error?.message || 'Bir hata oluştu')
                           }
                         } else {
                           toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
@@ -400,18 +402,20 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                       onClick={async (e) => {
                   e.preventDefault()
                   e.stopPropagation()
+                  e.nativeEvent.stopImmediatePropagation()
                   if (dragMode || isDragging) return
                   
                   // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak ve cache'i güncelleyecek
                   if (onStatusChange) {
                     try {
                       await onStatusChange(quote.id, 'SENT')
-                      toast.success('Teklif gönderildi')
+                      // Toast mesajı onStatusChange içinde gösteriliyor
                     } catch (error: any) {
                       // Hata zaten onStatusChange içinde handle ediliyor, burada sadece log
                       if (process.env.NODE_ENV === 'development') {
                         console.error('Status change error:', error)
                       }
+                      toast.error('Durum değiştirilemedi', error?.message || 'Bir hata oluştu')
                     }
                   } else {
                     toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
@@ -564,7 +568,8 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                           onClick={async (e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            if (dragMode) return
+                            e.nativeEvent.stopImmediatePropagation()
+                            if (dragMode || isDragging) return
                             
                             // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                             if (onStatusChange) {
@@ -603,7 +608,8 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                           onClick={async (e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            if (dragMode) return
+                            e.nativeEvent.stopImmediatePropagation()
+                            if (dragMode || isDragging) return
                             
                             // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                             if (onStatusChange) {
@@ -647,7 +653,8 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                           onClick={async (e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            if (dragMode) return
+                            e.nativeEvent.stopImmediatePropagation()
+                            if (dragMode || isDragging) return
                             
                             // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                             if (onStatusChange) {
@@ -686,7 +693,8 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                           onClick={async (e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            if (dragMode) return
+                            e.nativeEvent.stopImmediatePropagation()
+                            if (dragMode || isDragging) return
                             
                             // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                             if (onStatusChange) {
@@ -725,7 +733,8 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                           onClick={async (e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            if (dragMode) return
+                            e.nativeEvent.stopImmediatePropagation()
+                            if (dragMode || isDragging) return
                             
                             // Tekrar gönder - SENT durumuna taşı
                             if (onStatusChange) {
@@ -763,7 +772,8 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                           onClick={async (e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            if (dragMode) return
+                            e.nativeEvent.stopImmediatePropagation()
+                            if (dragMode || isDragging) return
                             
                             // Hatırlatma gönder - şimdilik sadece toast göster, gelecekte e-posta gönderilebilir
                             toast.info('Hatırlatma gönderildi', 'Müşteriye hatırlatma bildirimi gönderildi.')

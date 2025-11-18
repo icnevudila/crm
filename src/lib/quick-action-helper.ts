@@ -46,18 +46,24 @@ export function showNavigateToDetailToast(
   router: ReturnType<typeof useRouter>
 ) {
   const entityName = getEntityName(entityType)
+  
+  // Güvenlik: entityTitle undefined veya null ise varsayılan değer kullan
+  const safeEntityTitle = entityTitle || entityName || 'Kayıt'
 
   toast.success(
     `${entityName} oluşturuldu`,
-    `${entityTitle} başarıyla oluşturuldu. Detay sayfasına gitmek ister misiniz?`,
+    `${safeEntityTitle} başarıyla oluşturuldu. Detay sayfasına gitmek ister misiniz?`,
     {
       duration: 6000, // 6 saniye - kullanıcının karar vermesi için yeterli süre
       action: {
         label: 'Evet, Git',
         onClick: () => {
           // Entity tipine göre URL oluştur (çoğul form)
-          const entityTypePlural = entityType === 'finance' ? 'finance' : `${entityType}s`
-          router.push(`/${locale}/${entityTypePlural}/${entityId}`)
+          // Güvenlik: entityId ve locale kontrolü
+          if (entityId && locale) {
+            const entityTypePlural = entityType === 'finance' ? 'finance' : `${entityType}s`
+            router.push(`/${locale}/${entityTypePlural}/${entityId}`)
+          }
         },
       },
       cancel: {

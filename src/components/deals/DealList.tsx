@@ -2776,7 +2776,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                           <span className="font-semibold text-lg">
 
 
-                            {deal.leadScore[0].score}
+                            {deal.leadScore && Array.isArray(deal.leadScore) && deal.leadScore.length > 0 ? deal.leadScore[0].score : '-'}
 
 
                           </span>
@@ -2788,13 +2788,13 @@ export default function DealList({ isOpen = true }: DealListProps) {
                             className={
 
 
-                              deal.leadScore[0].temperature === 'HOT' 
+                              deal.leadScore && Array.isArray(deal.leadScore) && deal.leadScore.length > 0 && deal.leadScore[0]?.temperature === 'HOT' 
 
 
                                 ? 'bg-red-100 text-red-800' 
 
 
-                                : deal.leadScore[0].temperature === 'WARM'
+                                : deal.leadScore && Array.isArray(deal.leadScore) && deal.leadScore.length > 0 && deal.leadScore[0]?.temperature === 'WARM'
 
 
                                 ? 'bg-orange-100 text-orange-800'
@@ -2809,7 +2809,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                           >
 
 
-                            {deal.leadScore[0].temperature === 'HOT' ? '🔥 Sıcak' :
+                            {deal.leadScore && Array.isArray(deal.leadScore) && deal.leadScore.length > 0 && deal.leadScore[0]?.temperature === 'HOT' ? '🔥 Sıcak' :
 
 
                              deal.leadScore[0].temperature === 'WARM' ? '☀️ Ilık' :

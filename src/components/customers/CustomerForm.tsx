@@ -240,7 +240,12 @@ export default function CustomerForm({
         })
       } else {
         // Yeni müşteri oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
-        navigateToDetailToast('customer', result.id, result.name)
+        // Güvenlik: result.id ve result.name kontrolü
+        if (result?.id) {
+          navigateToDetailToast('customer', result.id, result.name || result.title || 'Müşteri')
+        } else {
+          toast.success('Müşteri oluşturuldu', 'Müşteri başarıyla oluşturuldu.')
+        }
       }
       
       reset()

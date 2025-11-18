@@ -582,9 +582,9 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
             // ÖNEMLİ: Optimistic update yap - kart anında taşınır
             const previousKanbanData = kanbanData
             
-            // ✅ ÇÖZÜM: Debug - REJECTED status'ü için özel log
-            if (newStatus === 'REJECTED' || newStatus === 'DECLINED') {
-              console.log('REJECTED/DECLINED Status Update:', {
+            // ✅ ÇÖZÜM: Debug - Status update başladı
+            if (process.env.NODE_ENV === 'development') {
+              console.log('Status Update Started:', {
                 quoteId,
                 newStatus,
                 kanbanDataStatuses: kanbanData.map((col: any) => col.status),

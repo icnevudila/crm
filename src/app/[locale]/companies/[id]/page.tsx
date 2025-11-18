@@ -445,8 +445,8 @@ export default function CompanyDetailPage() {
             </AccordionTrigger>
             <AccordionContent>
               <div className="space-y-4 pt-4">
-                {company.Customer && company.Customer.length > 0 ? (
-                  company.Customer.map((customer) => (
+                {company.Customer && Array.isArray(company.Customer) && company.Customer.length > 0 ? (
+                  company.Customer.map((customer: any) => (
                     <Card key={customer.id} className="border border-slate-200 p-4 shadow-sm">
                       <div className="flex items-center justify-between gap-4">
                         <div>

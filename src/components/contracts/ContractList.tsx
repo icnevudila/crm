@@ -239,8 +239,9 @@ export default function ContractList() {
 
   if (error) {
     return (
-      <div className="text-center py-8 text-red-600">
-        {t('errorLoading')}
+      <div className="text-center py-8">
+        <p className="text-red-600 mb-4">Sözleşmeler yüklenirken bir hata oluştu.</p>
+        <Button onClick={() => mutateContracts()}>Yeniden Dene</Button>
       </div>
     )
   }

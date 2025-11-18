@@ -42,11 +42,14 @@ interface QuoteFormProps {
   skipDialog?: boolean // Wizard içinde kullanım için Dialog wrapper'ı atla
 }
 
-async function fetchDeals(customerCompanyId?: string) {
+async function fetchDeals(customerCompanyId?: string, customerId?: string) {
   const params = new URLSearchParams()
   params.append('pageSize', '1000')
   if (customerCompanyId) {
     params.append('customerCompanyId', customerCompanyId)
+  }
+  if (customerId) {
+    params.append('customerId', customerId)
   }
   const res = await fetch(`/api/deals?${params.toString()}`)
   if (!res.ok) throw new Error('Failed to fetch deals')
@@ -122,8 +125,8 @@ export default function QuoteForm({
   type QuoteFormData = z.infer<typeof quoteSchema>
 
   const { data: dealsData } = useQuery({
-    queryKey: ['deals', customerCompanyId],
-    queryFn: () => fetchDeals(customerCompanyId || undefined),
+    queryKey: ['deals', customerCompanyId, customerId],
+    queryFn: () => fetchDeals(customerCompanyId || undefined, customerId || undefined),
     enabled: open,
   })
 
@@ -135,9 +138,16 @@ export default function QuoteForm({
 
   // Güvenlik kontrolü - her zaman array olmalı
   const deals = Array.isArray(dealsData) ? dealsData : []
-  const filteredDeals = customerCompanyId
-    ? deals.filter((deal: any) => deal.customerCompanyId === customerCompanyId)
-    : deals
+  // Filtreleme: customerCompanyId veya customerId ile eşleşen fırsatları göster
+  const filteredDeals = deals.filter((deal: any) => {
+    if (customerCompanyId && deal.customerCompanyId === customerCompanyId) return true
+    if (customerId && deal.customerId === customerId) return true
+    // Wizard'dan gelen dealId varsa onu da göster
+    if (dealId && deal.id === dealId) return true
+    // Filtre yoksa tüm fırsatları göster
+    if (!customerCompanyId && !customerId) return true
+    return false
+  })
   const vendors = Array.isArray(vendorsData) ? vendorsData : []
 
   const formRef = useRef<HTMLFormElement>(null)
@@ -286,15 +296,23 @@ export default function QuoteForm({
         if (customerData?.customerCompanyId && !customerCompanyId) {
           setValue('customerCompanyId', customerData.customerCompanyId)
         }
+        // Wizard'dan gelen dealId'yi direkt set et (dealData yüklenmesini beklemeden)
+        if (dealId && !quote) {
+          setValue('dealId', dealId)
+        }
       }
     }
   }, [quote, open, reset, dealId, dealData, customerCompanyId, customerIdProp, customerData, setValue]) // onClose dependency'den çıkarıldı - stable değil
 
   useEffect(() => {
-    if (open && !quote && filteredDeals.length === 1 && !selectedDealId) {
+    // Wizard'dan gelen dealId'yi direkt set et
+    if (open && !quote && dealId && !selectedDealId) {
+      setValue('dealId', dealId)
+    } else if (open && !quote && filteredDeals.length === 1 && !selectedDealId && !dealId) {
+      // Eğer dealId yoksa ve tek fırsat varsa otomatik seç
       setValue('dealId', filteredDeals[0].id)
     }
-  }, [open, quote, filteredDeals, selectedDealId, setValue])
+  }, [open, quote, filteredDeals, selectedDealId, setValue, dealId])
 
   // Toplam hesaplama (indirim ve KDV ile)
   const subtotal = total || 0
