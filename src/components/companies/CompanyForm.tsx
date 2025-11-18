@@ -401,47 +401,43 @@ export default function CompanyForm({
         console.log('CompanyForm onSuccess:', savedCompany)
       }
       
-      // Kontak kişi otomatik müşteri olarak kaydedilsin
+      // Kontak kişi otomatik Contact (kontakt kişi) olarak kaydedilsin
       if (savedCompany?.contactPerson && savedCompany?.id) {
         try {
-          const contactPersonData = {
-            name: savedCompany.contactPerson,
+          // Önce Contact oluştur (Contact tablosu - migration 033)
+          const contactData = {
+            firstName: savedCompany.contactPerson,
+            lastName: '',
             phone: savedCompany.phone || '',
             email: savedCompany.email || '',
-            city: savedCompany.city || '',
-            customerCompanyId: savedCompany.id, // Hangi firmada çalışıyor
+            customerCompanyId: savedCompany.id,
+            isPrimary: true,
             status: 'ACTIVE',
           }
 
-          const customerRes = await fetch('/api/customers', {
+          const contactRes = await fetch('/api/contacts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(contactPersonData),
+            body: JSON.stringify(contactData),
             credentials: 'include',
           })
 
-          if (customerRes.ok) {
-            const newCustomer = await customerRes.json()
-            // Kullanıcıya bilgi ver
-            toast.info(
-              'İlgili kişi otomatik oluşturuldu',
-              `${savedCompany.contactPerson} isimli yetkili kişi, bu firma için otomatik olarak müşteriler bölümüne eklendi.`
-            )
-            
-            // Debug: Development'ta log ekle
+          if (contactRes.ok) {
+            const newContact = await contactRes.json()
+            // Kullanıcıya bilgi ver (toast gösterme - sessizce kaydet)
             if (process.env.NODE_ENV === 'development') {
-              console.log('Auto-created customer:', newCustomer)
+              console.log('Auto-created contact:', newContact)
             }
           } else {
             // Hata durumunda sessizce devam et (kritik değil)
             if (process.env.NODE_ENV === 'development') {
-              console.warn('Failed to auto-create customer:', await customerRes.json())
+              console.warn('Failed to auto-create contact:', await contactRes.json())
             }
           }
         } catch (error) {
-          // Hata durumunda sessizce devam et (kritik deİŸil)
+          // Hata durumunda sessizce devam et (kritik değil)
           if (process.env.NODE_ENV === 'development') {
-            console.error('Error auto-creating customer:', error)
+            console.error('Error auto-creating contact:', error)
           }
         }
       }
