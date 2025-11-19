@@ -85,6 +85,10 @@ const MeetingForm = dynamic(() => import('../meetings/MeetingForm'), {
   ssr: false,
   loading: () => null,
 })
+const ContextualWizard = dynamic(() => import('../dashboard/ContextualWizard'), {
+  ssr: false,
+  loading: () => null,
+})
 
 interface CustomerListProps {
   isOpen?: boolean
@@ -208,6 +212,20 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       setSector(sectorFromUrl)
     }
   }, [cityFromUrl, sectorFromUrl, city, sector])
+
+  // İlk müşteri yoksa wizard'ı aç
+  useEffect(() => {
+    if (!isLoading && customers.length === 0 && !search && !status && !sector && !city) {
+      const wizardCompleted = localStorage.getItem('contextual-wizard-first-customer-completed')
+      if (!wizardCompleted) {
+        // 1 saniye sonra wizard'ı aç (sayfa yüklendikten sonra)
+        const timer = setTimeout(() => {
+          setWizardOpen(true)
+        }, 1000)
+        return () => clearTimeout(timer)
+      }
+    }
+  }, [isLoading, customers.length, search, status, sector, city])
   const [formOpen, setFormOpen] = useState(false)
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [quickAction, setQuickAction] = useState<{ type: 'deal' | 'quote' | 'invoice' | 'task' | 'meeting'; customer: Customer } | null>(null)
@@ -227,6 +245,9 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
   const [importOpen, setImportOpen] = useState(false)
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importing, setImporting] = useState(false)
+  
+  // Contextual wizard state
+  const [wizardOpen, setWizardOpen] = useState(false)
 
   // Debounced search - performans için (kullanıcı yazmayı bitirdikten 300ms sonra arama)
   const [debouncedSearch, setDebouncedSearch] = useState(search)
@@ -1147,6 +1168,13 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         customerCompanyId={quickAction?.customer.customerCompanyId}
         customerCompanyName={quickAction?.customer.CustomerCompany?.name}
         customerId={quickAction?.customer.id}
+      />
+
+      {/* Contextual Wizard - İlk müşteri yoksa */}
+      <ContextualWizard
+        trigger="first-customer"
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
       />
     </div>
   )

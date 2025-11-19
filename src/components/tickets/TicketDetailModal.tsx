@@ -13,7 +13,7 @@ import DetailModal from '@/components/ui/DetailModal'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import dynamic from 'next/dynamic'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 
 const TicketForm = dynamic(() => import('./TicketForm'), {
   ssr: false,

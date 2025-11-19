@@ -12,6 +12,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { formatCurrency } from '@/lib/utils'
+import { confirm } from '@/lib/toast'
 
 // Lazy load MeetingForm - performans için
 const MeetingForm = dynamic(() => import('@/components/meetings/MeetingForm'), {

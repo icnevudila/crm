@@ -11,7 +11,7 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { formatCurrency } from '@/lib/utils'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import WorkflowStepper from '@/components/ui/WorkflowStepper'
 import { getDealWorkflowSteps } from '@/lib/workflowSteps'
 import StatusInfoNote from '@/components/workflow/StatusInfoNote'
@@ -42,6 +42,9 @@ interface Deal {
   expectedCloseDate?: string
   winProbability?: number
   lostReason?: string
+  priorityScore?: number
+  isPriority?: boolean
+  leadSource?: string
   leadScore?: {
     score: number
     temperature: string
@@ -325,7 +328,7 @@ export default function DealDetailPage() {
       />
 
       {/* Info Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="p-4">
           <div className="flex items-center gap-2 text-gray-600 mb-2">
             <DollarSign className="h-4 w-4" />
@@ -358,6 +361,41 @@ export default function DealDetailPage() {
                   : '❄️ Soğuk'}
               </Badge>
             </div>
+          </Card>
+        )}
+
+        {deal.priorityScore !== undefined && deal.priorityScore !== null && (
+          <Card className="p-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-gray-600">
+                <TrendingUp className="h-4 w-4" />
+                <span className="text-sm">Öncelik Skoru</span>
+              </div>
+              {deal.isPriority && (
+                <Badge className="bg-red-100 text-red-800 border-red-300">
+                  🔥 Öncelikli
+                </Badge>
+              )}
+            </div>
+            <p className="text-2xl font-bold text-indigo-600">{Math.round(deal.priorityScore)}</p>
+          </Card>
+        )}
+
+        {deal.leadSource && (
+          <Card className="p-4">
+            <div className="flex items-center gap-2 text-gray-600 mb-2">
+              <FileText className="h-4 w-4" />
+              <span className="text-sm">Kaynak</span>
+            </div>
+            <Badge className="bg-blue-100 text-blue-800">
+              {deal.leadSource === 'WEB' ? '🌐 Web Sitesi' :
+               deal.leadSource === 'EMAIL' ? '📧 E-posta' :
+               deal.leadSource === 'PHONE' ? '📞 Telefon' :
+               deal.leadSource === 'REFERRAL' ? '👥 Referans' :
+               deal.leadSource === 'SOCIAL' ? '📱 Sosyal Medya' :
+               deal.leadSource === 'OTHER' ? '📋 Diğer' :
+               deal.leadSource}
+            </Badge>
           </Card>
         )}
 

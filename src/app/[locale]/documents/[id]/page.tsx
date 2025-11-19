@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
+import { confirm } from '@/lib/toast'
 
 interface Document {
   id: string

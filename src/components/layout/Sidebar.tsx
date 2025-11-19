@@ -34,6 +34,7 @@ import {
   Filter,
   Target,
   Send,
+  Plug,
 } from 'lucide-react'
 import { useSession } from '@/hooks/useSession'
 import { useData } from '@/hooks/useData'
@@ -190,6 +191,7 @@ function Sidebar() {
         { href: '/documents', label: t('items.documents'), icon: FolderOpen, module: 'document' },
         { href: '/vendors', label: t('items.vendors'), icon: Store, module: 'vendor' },
         { href: '/email-templates', label: t('items.emailTemplates'), icon: Mail, module: 'email-templates' },
+        ...(isAdmin ? [{ href: '/integrations', label: t('items.integrations'), icon: Plug }] : []),
         { href: '/settings', label: t('items.settings'), icon: Settings },
       ],
     },

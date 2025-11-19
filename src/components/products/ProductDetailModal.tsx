@@ -16,7 +16,7 @@ import DetailModal from '@/components/ui/DetailModal'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import dynamic from 'next/dynamic'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 import StockMovementForm from '@/components/stock/StockMovementForm'
 import Link from 'next/link'
 

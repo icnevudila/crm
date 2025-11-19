@@ -137,3 +137,29 @@ export function toastPromise<T>(
         : messages.error,
   })
 }
+
+/**
+ * Confirm dialog - window.confirm wrapper
+ * Gelecekte daha güzel bir modal dialog ile değiştirilebilir
+ */
+export function confirm(message: string): boolean {
+  return window.confirm(message)
+}
+
+/**
+ * API error handler - hata mesajlarını toast olarak gösterir
+ */
+export function handleApiError(error: any, defaultMessage?: string): void {
+  const message =
+    error?.message ||
+    error?.error ||
+    defaultMessage ||
+    'Bir hata oluştu. Lütfen tekrar deneyin.'
+  
+  toastError('Hata', message)
+  
+  // Development'ta console'a da yazdır
+  if (process.env.NODE_ENV === 'development') {
+    console.error('API Error:', error)
+  }
+}

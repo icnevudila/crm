@@ -20,6 +20,7 @@ import {
   Receipt,
   Users,
   Clock,
+  Sparkles,
 } from 'lucide-react'
 
 import {
@@ -48,6 +49,30 @@ const SmartReminder = dynamic(
 
 const NextBestAction = dynamic(
   () => import('@/components/suggestions/NextBestAction'),
+  {
+    ssr: false,
+    loading: () => null,
+  }
+)
+
+const SmartSuggestions = dynamic(
+  () => import('@/components/dashboard/SmartSuggestions'),
+  {
+    ssr: false,
+    loading: () => null,
+  }
+)
+
+const QuickStartWizard = dynamic(
+  () => import('@/components/dashboard/QuickStartWizard'),
+  {
+    ssr: false,
+    loading: () => null,
+  }
+)
+
+const OnboardingModal = dynamic(
+  () => import('@/components/onboarding/OnboardingModal').then(mod => ({ default: mod.OnboardingModal })),
   {
     ssr: false,
     loading: () => null,
@@ -173,6 +198,8 @@ const STORAGE_KEY = 'crm-dashboard-open-sections'
 export default function DashboardPage() {
   const { data: session } = useSession()
   const t = useTranslations('dashboard')
+  const [wizardOpen, setWizardOpen] = useState(false)
+  const [onboardingOpen, setOnboardingOpen] = useState(false)
 
   const defaultOpenSections = useMemo(
     () =>
@@ -182,6 +209,20 @@ export default function DashboardPage() {
   )
 
   const [openSections, setOpenSections] = useState<string[]>(defaultOpenSections)
+
+  // İlk kullanımda wizard'ı aç
+  useEffect(() => {
+    const wizardCompleted = localStorage.getItem('quick-start-wizard-completed')
+    const onboardingCompleted = localStorage.getItem('onboarding-modal-completed')
+    
+    if (!wizardCompleted && !onboardingCompleted) {
+      // İlk kullanımda 2 saniye sonra quick start wizard'ı aç
+      const timer = setTimeout(() => {
+        setWizardOpen(true)
+      }, 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -212,12 +253,26 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-[1920px] space-y-4 sm:space-y-6 p-3 sm:p-4">
         <SmartReminder />
 
-        <HeroBanner t={t} userName={session?.user?.name} />
+        <HeroBanner 
+          t={t} 
+          userName={session?.user?.name}
+          onWizardClick={() => setWizardOpen(true)}
+          onOnboardingClick={() => setOnboardingOpen(true)}
+        />
 
         <DashboardSpotlight />
 
         {/* Next Best Action - Akıllı Öneriler */}
         <NextBestAction />
+
+        {/* Smart Suggestions - Gelişmiş Akıllı Öneriler */}
+        <SmartSuggestions />
+
+        {/* Quick Start Wizard */}
+        <QuickStartWizard open={wizardOpen} onClose={() => setWizardOpen(false)} />
+
+        {/* Onboarding Modal - Detaylı Rehber */}
+        <OnboardingModal open={onboardingOpen} onClose={() => setOnboardingOpen(false)} />
 
         <Accordion
           type="multiple"
@@ -286,9 +341,13 @@ export default function DashboardPage() {
 function HeroBanner({
   t,
   userName,
+  onWizardClick,
+  onOnboardingClick,
 }: {
   t: ReturnType<typeof useTranslations>
   userName?: string | null
+  onWizardClick?: () => void
+  onOnboardingClick?: () => void
 }) {
   const locale = useLocale()
   const { data } = useData<DashboardSpotlightResponse>(
@@ -372,6 +431,26 @@ function HeroBanner({
               })}
             </span>
           ) : null}
+          <div className="flex items-center gap-2">
+            {onWizardClick && (
+              <button
+                onClick={onWizardClick}
+                className="inline-flex items-center gap-2 rounded-full border border-indigo-300/40 bg-gradient-to-r from-indigo-500 to-purple-500 px-4 py-1.5 font-semibold text-white shadow-lg shadow-indigo-500/50 hover:shadow-indigo-500/70 transition-all hover:scale-105"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Hızlı Başlangıç
+              </button>
+            )}
+            {onOnboardingClick && (
+              <button
+                onClick={onOnboardingClick}
+                className="inline-flex items-center gap-2 rounded-full border border-purple-300/40 bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-1.5 font-semibold text-white shadow-lg shadow-purple-500/50 hover:shadow-purple-500/70 transition-all hover:scale-105"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Detaylı Rehber
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </motion.div>

@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useData } from '@/hooks/useData'
 import SegmentForm from '@/components/segments/SegmentForm'
 import { mutate } from 'swr'
+import { confirm } from '@/lib/toast'
 
 interface SegmentMember {
   id: string

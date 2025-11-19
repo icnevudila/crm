@@ -11,6 +11,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useData } from '@/hooks/useData'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import ContractForm from '@/components/contracts/ContractForm'
+import { confirm } from '@/lib/toast'
 
 interface Contract {
   id: string

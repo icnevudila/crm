@@ -13,6 +13,7 @@ import CommentsSection from '@/components/ui/CommentsSection'
 import TicketForm from '@/components/tickets/TicketForm'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import Link from 'next/link'
+import { confirm } from '@/lib/toast'
 
 interface Ticket {
   id: string

@@ -18,6 +18,7 @@ import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import StockMovementForm from '@/components/stock/StockMovementForm'
 import Link from 'next/link'
 import { useData } from '@/hooks/useData'
+import { confirm } from '@/lib/toast'
 import ProductForm from '@/components/products/ProductForm'
 
 async function fetchProduct(id: string) {

@@ -28,8 +28,9 @@ import {
   ShoppingCart,
   DollarSign,
   Hash,
-  Activity
+  Activity,
 } from 'lucide-react'
+import { confirm } from '@/lib/toast'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'

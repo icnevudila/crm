@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { toast } from '@/lib/toast'
+import { toast, confirm } from '@/lib/toast'
 
 export default function SettingsPage() {
   const { data: session, status } = useSession()

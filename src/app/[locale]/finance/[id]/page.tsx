@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import FinanceForm from '@/components/finance/FinanceForm'
+import { confirm } from '@/lib/toast'
 
 interface Finance {
   id: string

@@ -14,6 +14,7 @@ import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import CommentsSection from '@/components/ui/CommentsSection'
 import FileUpload from '@/components/ui/FileUpload'
 import dynamic from 'next/dynamic'
+import { confirm } from '@/lib/toast'
 
 // Lazy load CustomerForm - performans için
 const CustomerForm = dynamic(() => import('@/components/customers/CustomerForm'), {

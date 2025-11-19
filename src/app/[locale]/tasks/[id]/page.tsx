@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/card'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import TaskForm from '@/components/tasks/TaskForm'
+import { confirm } from '@/lib/toast'
 
 interface Task {
   id: string

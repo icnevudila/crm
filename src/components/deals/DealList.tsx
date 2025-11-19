@@ -181,6 +181,11 @@ const DealDetailModal = dynamic(() => import('./DealDetailModal'), {
 
 })
 
+const ContextualWizard = dynamic(() => import('../dashboard/ContextualWizard'), {
+  ssr: false,
+  loading: () => null,
+})
+
 
 
 
@@ -675,6 +680,9 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
   const [selectedDealData, setSelectedDealData] = useState<Deal | null>(null)
+  
+  // Contextual wizard state
+  const [wizardOpen, setWizardOpen] = useState(false)
 
 
   const [lostDialogOpen, setLostDialogOpen] = useState(false)
@@ -914,6 +922,28 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
   // ÖNEMLİ: kanbanData her zaman array olmalı (undefined kontrolü)
   const hasKanbanData = Array.isArray(kanbanData) && kanbanData.length > 0
+
+  // İlk fırsat yoksa wizard'ı aç
+  useEffect(() => {
+    if (!isOpen) return
+    if (viewMode === 'kanban' && !hasKanbanData && !isInitialLoad) {
+      const wizardCompleted = localStorage.getItem('contextual-wizard-first-deal-completed')
+      if (!wizardCompleted) {
+        const timer = setTimeout(() => {
+          setWizardOpen(true)
+        }, 1000)
+        return () => clearTimeout(timer)
+      }
+    } else if (viewMode === 'table' && tableDeals.length === 0 && !search && !stage && !customerId) {
+      const wizardCompleted = localStorage.getItem('contextual-wizard-first-deal-completed')
+      if (!wizardCompleted) {
+        const timer = setTimeout(() => {
+          setWizardOpen(true)
+        }, 1000)
+        return () => clearTimeout(timer)
+      }
+    }
+  }, [isOpen, viewMode, hasKanbanData, isInitialLoad, tableDeals.length, search, stage, customerId])
 
 
 
@@ -3452,6 +3482,12 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
       </Dialog>
 
+      {/* Contextual Wizard - İlk fırsat yoksa */}
+      <ContextualWizard
+        trigger="first-deal"
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+      />
 
     </div>
 
