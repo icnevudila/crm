@@ -49,7 +49,24 @@ export function useSmartNotifications(rules: NotificationRule[]) {
 
     for (const rule of rules) {
       try {
-        const { data = [] } = await fetch(rule.apiUrl).then((r) => r.json())
+        const res = await fetch(rule.apiUrl, {
+          credentials: 'include',
+          cache: 'no-store',
+        })
+        
+        if (!res.ok) {
+          // Hata durumunda sessizce devam et
+          continue
+        }
+        
+        const contentType = res.headers.get('content-type')
+        if (!contentType || !contentType.includes('application/json')) {
+          // Invalid response type - sessizce devam et
+          continue
+        }
+        
+        const jsonData = await res.json()
+        const { data = [] } = jsonData
 
         const now = new Date()
         const daysBefore = rule.daysBefore || 1

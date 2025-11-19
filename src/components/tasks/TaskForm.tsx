@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { toast } from '@/lib/toast'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { useNavigateToDetailToast } from '@/lib/quick-action-helper'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -48,6 +49,7 @@ export default function TaskForm({ task, open, onClose, onSuccess, defaultTitle,
   const tCommon = useTranslations('common.form')
   const router = useRouter()
   const queryClient = useQueryClient()
+  const navigateToDetailToast = useNavigateToDetailToast()
   const [loading, setLoading] = useState(false)
 
   // Schema'yı component içinde oluştur - locale desteği için
@@ -148,15 +150,10 @@ export default function TaskForm({ task, open, onClose, onSuccess, defaultTitle,
     onSuccess: (savedTask) => {
       // Toast mesajı göster
       if (task) {
-        toast.success(t('taskUpdated'), t('taskUpdatedMessage', { title: savedTask.title }))
+        toast.success(t('taskUpdated'), { description: t('taskUpdatedMessage', { title: savedTask.title }) })
       } else {
-        let successMessage = t('taskCreatedMessage', { title: savedTask.title })
-        if (customerName) {
-          successMessage = t('taskCreatedWithCustomer', { customer: customerName, title: savedTask.title })
-        } else if (customerCompanyName) {
-          successMessage = t('taskCreatedWithCompany', { company: customerCompanyName, title: savedTask.title })
-        }
-        toast.success(t('taskCreated'), successMessage)
+        // Yeni task oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
+        navigateToDetailToast('task', savedTask.id, savedTask.title)
       }
       
       // onSuccess callback'i çağır - optimistic update için
@@ -174,7 +171,7 @@ export default function TaskForm({ task, open, onClose, onSuccess, defaultTitle,
       await mutation.mutateAsync(data)
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error(t('saveFailed'), error?.message)
+      toast.error(t('saveFailed'), { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }
@@ -322,6 +319,7 @@ export default function TaskForm({ task, open, onClose, onSuccess, defaultTitle,
               type="submit"
               className="bg-gradient-primary text-white w-full sm:w-auto"
               disabled={loading}
+              loading={loading}
             >
               {loading ? t('saving') : task ? t('update') : t('save')}
             </Button>

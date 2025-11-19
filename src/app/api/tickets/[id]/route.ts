@@ -34,9 +34,13 @@ export async function GET(
     const supabase = getSupabaseWithServiceRole()
 
     // Ticket'ı ilişkili verilerle çek
+    // NOT: createdBy/updatedBy kolonları migration'da yoksa hata verir, bu yüzden kaldırıldı
     let ticketQuery = supabase
       .from('Ticket')
-      .select('*, Customer(id, name, email)')
+      .select(`
+        id, title, description, status, priority, customerId, assignedTo, companyId, createdAt, updatedAt,
+        Customer(id, name, email)
+      `)
       .eq('id', id)
     
     // SuperAdmin değilse companyId filtresi ekle
@@ -114,14 +118,29 @@ export async function PUT(
     const { id } = await params
     const body = await request.json()
     const supabase = getSupabaseWithServiceRole()
+    
+    // SuperAdmin kontrolü
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
 
     // Mevcut ticket'ı çek - status değişikliğini kontrol etmek için
-    const { data: currentTicket } = await supabase
+    let ticketQuery = supabase
       .from('Ticket')
-      .select('subject, status, customerId, Customer(id, name, email)')
+      .select('subject, status, customerId, companyId, Customer(id, name, email)')
       .eq('id', id)
-      .eq('companyId', session.user.companyId)
-      .maybeSingle()
+    
+    // SuperAdmin değilse companyId filtresi ekle
+    if (!isSuperAdmin) {
+      ticketQuery = ticketQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { data: currentTicket, error: ticketError } = await ticketQuery.maybeSingle()
+    
+    if (ticketError || !currentTicket) {
+      return NextResponse.json(
+        { error: 'Destek talebi bulunamadı' },
+        { status: 404 }
+      )
+    }
 
     // Ticket verilerini güncelle - SADECE schema.sql'de olan kolonları gönder
     // schema.sql: subject, status, priority, companyId, customerId, updatedAt

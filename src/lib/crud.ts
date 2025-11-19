@@ -130,15 +130,21 @@ export async function getRecordById(table: string, id: string, select?: string) 
 
   // Service role key ile RLS bypass
   const supabase = getSupabaseWithServiceRole()
+  
+  // SuperAdmin kontrolü
+  const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
 
   let query = supabase
     .from(table)
     .select(select || '*')
     .eq('id', id)
-    .eq('companyId', session.user.companyId)
-    .single()
-
-  const { data, error } = await query
+  
+  // Normal kullanıcılar için companyId filtresi
+  if (!isSuperAdmin) {
+    query = query.eq('companyId', session.user.companyId)
+  }
+  
+  const { data, error } = await query.single()
 
   if (error) {
     throw new Error(error.message)
@@ -159,18 +165,36 @@ export async function createRecord(table: string, data: any, logDescription?: st
   // Service role key ile RLS bypass
   const supabase = getSupabaseWithServiceRole()
 
-  // companyId ekle
-  const recordData = {
+  // companyId ve createdBy ekle (audit trail için)
+  // Güvenlik: session.user.id yoksa NULL kullan (foreign key hatası önleme)
+  // ÖNEMLİ: createdBy kolonu yoksa (migration çalıştırılmamışsa) hata vermemesi için
+  const recordData: any = {
     ...data,
     companyId: session.user.companyId,
   }
+  
+  // createdBy kolonunu EKLEME - migration'da yok, hata veriyor
+  // NOT: createdBy kolonu migration'da yoksa hata verir, bu yüzden kaldırıldı
 
   // @ts-ignore - Supabase type inference issue with dynamic table names
-  const { data: created, error } = await (supabase
+  let { data: created, error } = await (supabase
     .from(table) as any)
     .insert(recordData)
     .select()
     .single()
+
+  // Eğer createdBy kolonu hatası varsa (PGRST204), createdBy olmadan tekrar dene
+  if (error && (error.code === 'PGRST204' || error.message?.includes('createdBy'))) {
+    console.warn(`createRecord: createdBy kolonu bulunamadı, createdBy olmadan tekrar deneniyor...`)
+    const { createdBy, ...recordDataWithoutCreatedBy } = recordData
+    const retryResult = await (supabase
+      .from(table) as any)
+      .insert(recordDataWithoutCreatedBy)
+      .select()
+      .single()
+    created = retryResult.data
+    error = retryResult.error
+  }
 
   if (error) {
     console.error(`createRecord error for table ${table}:`, {
@@ -206,24 +230,68 @@ export async function updateRecord(
   // Service role key ile RLS bypass
   const supabase = getSupabaseWithServiceRole()
 
-  // updatedAt ekle
+  // updatedAt ve updatedBy ekle (audit trail için)
   // NOT: data zaten endpoint'lerde filtrelenmiş olmalı (sadece schema.sql kolonları)
-  const updateData = {
+  // Güvenlik: session.user.id yoksa NULL kullan (foreign key hatası önleme)
+  // ÖNEMLİ: updatedBy kolonu yoksa (migration çalıştırılmamışsa) hata vermemesi için
+  const updateData: any = {
     ...data,
     updatedAt: new Date().toISOString(),
   }
+  
+  // updatedBy kolonunu EKLEME - migration'da yok, hata veriyor
+  // NOT: updatedBy kolonu migration'da yoksa hata verir, bu yüzden kaldırıldı
 
-  // @ts-ignore - Supabase type inference issue with dynamic table names
-  const { data: updated, error } = await (supabase
+  // SuperAdmin kontrolü
+  const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+
+  // Update işlemi - SuperAdmin için companyId filtresi yok
+  let updateQuery = (supabase
     .from(table) as any)
     .update(updateData)
     .eq('id', id)
-    .eq('companyId', session.user.companyId)
-    .select()
-    .single()
+  
+  if (!isSuperAdmin) {
+    updateQuery = updateQuery.eq('companyId', session.user.companyId)
+  }
+  
+  let { error: updateError } = await updateQuery
 
-  if (error) {
-    throw new Error(error.message)
+  // Eğer updatedBy kolonu hatası varsa (PGRST204), updatedBy olmadan tekrar dene
+  if (updateError && (updateError.code === 'PGRST204' || updateError.message?.includes('updatedBy'))) {
+    console.warn(`updateRecord: updatedBy kolonu bulunamadı, updatedBy olmadan tekrar deneniyor...`)
+    const { updatedBy, ...updateDataWithoutUpdatedBy } = updateData
+    let retryUpdateQuery = (supabase
+      .from(table) as any)
+      .update(updateDataWithoutUpdatedBy)
+      .eq('id', id)
+    
+    if (!isSuperAdmin) {
+      retryUpdateQuery = retryUpdateQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const retryResult = await retryUpdateQuery
+    updateError = retryResult.error
+  }
+
+  if (updateError) {
+    throw new Error(updateError.message)
+  }
+  
+  // Update başarılı - güncellenmiş veriyi çek (SuperAdmin için companyId filtresi yok)
+  let selectQuery = supabase
+    .from(table)
+    .select('*')
+    .eq('id', id)
+  
+  if (!isSuperAdmin) {
+    selectQuery = selectQuery.eq('companyId', session.user.companyId)
+  }
+  
+  const { data: updated, error: selectError } = await selectQuery.single()
+
+  if (selectError) {
+    throw new Error(selectError.message || 'Güncellenmiş kayıt bulunamadı')
   }
 
   // ActivityLog kaydı

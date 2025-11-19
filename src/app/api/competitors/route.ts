@@ -24,14 +24,43 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = getSupabaseWithServiceRole()
-    const { data, error } = await supabase
+    const { searchParams } = new URL(request.url)
+    const search = searchParams.get('search') || ''
+    
+    // Pagination parametreleri
+    const page = parseInt(searchParams.get('page') || '1', 10)
+    const pageSize = parseInt(searchParams.get('pageSize') || '20', 10) // Default 20 kayıt/sayfa
+
+    // Query oluştur
+    let query = supabase
       .from('Competitor')
-      .select('*')
+      .select('*', { count: 'exact' })
       .eq('companyId', session.user.companyId)
       .order('name')
 
+    // Search filtresi
+    if (search) {
+      query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`)
+    }
+
+    // Pagination uygula - EN SON (filtrelerden sonra)
+    query = query.range((page - 1) * pageSize, page * pageSize - 1)
+
+    const { data, error, count } = await query
+
     if (error) throw error
-    return NextResponse.json(data)
+
+    const totalPages = Math.ceil((count || 0) / pageSize)
+
+    return NextResponse.json({
+      data: data || [],
+      pagination: {
+        page,
+        pageSize,
+        totalItems: count || 0,
+        totalPages,
+      },
+    })
   } catch (error: any) {
     console.error('Competitors fetch error:', error)
     return NextResponse.json(

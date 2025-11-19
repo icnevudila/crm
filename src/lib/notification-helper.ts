@@ -80,6 +80,41 @@ export async function createNotification({
       console.error('Notification creation error:', error)
       // Bildirim oluşturma hatası ana işlemi engellemez
     }
+
+    // ✅ Web Push Notification gönder (async, hata ana işlemi engellemez)
+    if (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+      try {
+        // Push notification'ı arka planda gönder (await yok - non-blocking)
+        fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/push/send`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            userId,
+            payload: {
+              title,
+              message: message || title,
+              url: notificationLink || link || '/',
+              type,
+              priority,
+              relatedTo,
+              relatedId,
+            },
+          }),
+        }).catch((pushError) => {
+          // Push notification hatası ana işlemi engellemez
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('[Push] Push notification gönderilemedi:', pushError)
+          }
+        })
+      } catch (pushError) {
+        // Push notification hatası ana işlemi engellemez
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[Push] Push notification hatası:', pushError)
+        }
+      }
+    }
   } catch (error) {
     console.error('Notification helper error:', error)
     // Bildirim oluşturma hatası ana işlemi engellemez
@@ -222,10 +257,3 @@ export async function createNotificationForRole({
     console.error('Notification helper error:', error)
   }
 }
-
-
-
-
-
-
-

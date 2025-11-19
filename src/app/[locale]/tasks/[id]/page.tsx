@@ -1,17 +1,25 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { ArrowLeft, Edit, CheckSquare, User, Trash2 } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { ArrowLeft, Edit, CheckSquare, User, Trash2, Clock, Calendar, AlertCircle, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import GradientCard from '@/components/ui/GradientCard'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import TaskForm from '@/components/tasks/TaskForm'
+<<<<<<< HEAD
 import { confirm } from '@/lib/toast'
+=======
+import { toastError } from '@/lib/toast'
+import { getStatusBadgeClass } from '@/lib/crm-colors'
+import { useData } from '@/hooks/useData'
+import ContextualActionsBar from '@/components/ui/ContextualActionsBar'
+>>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
 
 interface Task {
   id: string
@@ -30,12 +38,6 @@ interface Task {
   activities?: any[]
 }
 
-async function fetchTask(id: string): Promise<Task> {
-  const res = await fetch(`/api/tasks/${id}`)
-  if (!res.ok) throw new Error('Failed to fetch task')
-  return res.json()
-}
-
 export default function TaskDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -44,38 +46,40 @@ export default function TaskDetailPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
-  const { data: task, isLoading } = useQuery({
-    queryKey: ['task', id],
-    queryFn: () => fetchTask(id),
-  })
+  const { data: task, isLoading, error } = useData<Task>(
+    id ? `/api/tasks/${id}` : null,
+    {
+      dedupingInterval: 30000,
+      revalidateOnFocus: false,
+    }
+  )
 
   if (isLoading) {
     return <SkeletonDetail />
   }
 
-  if (!task) {
+  if (error || !task) {
     return (
-      <div className="text-center py-12">
-        <p className="text-gray-600">Görev bulunamadı</p>
-        <Button
-          variant="outline"
-          className="mt-4"
-          onClick={() => router.push(`/${locale}/tasks`)}
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Geri Dön
-        </Button>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            Görev Bulunamadı
+          </h1>
+          {error && (
+            <p className="text-sm text-gray-600 mb-4">
+              {(error as any)?.message || 'Görev yüklenirken bir hata oluştu'}
+            </p>
+          )}
+          <Button onClick={() => router.push(`/${locale}/tasks`)}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Geri Dön
+          </Button>
+        </div>
       </div>
     )
   }
 
-  const statusColors: Record<string, string> = {
-    TODO: 'bg-gray-100 text-gray-800',
-    IN_PROGRESS: 'bg-blue-100 text-blue-800',
-    DONE: 'bg-green-100 text-green-800',
-    CANCELLED: 'bg-red-100 text-red-800',
-  }
-
+  // Status labels - merkezi renk sistemi kullanılıyor (getStatusBadgeClass)
   const statusLabels: Record<string, string> = {
     TODO: 'Yapılacak',
     IN_PROGRESS: 'Devam Ediyor',
@@ -85,137 +89,203 @@ export default function TaskDetailPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => router.push(`/${locale}/tasks`)}
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-              <CheckSquare className="h-8 w-8" />
-              {task.title}
-            </h1>
-            <p className="mt-1 text-gray-600">Görev Detayları</p>
+      {/* Contextual Actions Bar */}
+      <ContextualActionsBar
+        entityType="task"
+        entityId={id}
+        onEdit={() => setFormOpen(true)}
+        onDelete={async () => {
+          if (!confirm(`${task.title} görevini silmek istediğinize emin misiniz?`)) {
+            return
+          }
+          setDeleteLoading(true)
+          try {
+            const res = await fetch(`/api/tasks/${id}`, {
+              method: 'DELETE',
+            })
+            if (!res.ok) {
+              const errorData = await res.json().catch(() => ({}))
+              throw new Error(errorData.error || 'Silme işlemi başarısız')
+            }
+            router.push(`/${locale}/tasks`)
+          } catch (error: any) {
+            toastError('Silme işlemi başarısız oldu', error?.message)
+          } finally {
+            setDeleteLoading(false)
+          }
+        }}
+      />
+
+      {/* Header - Premium Tasarım */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-cyan-50 border border-emerald-100 p-6 shadow-lg"
+      >
+        {/* Arka plan pattern */}
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute inset-0" style={{
+            backgroundImage: `radial-gradient(circle at 2px 2px, rgb(16, 185, 129) 1px, transparent 0)`,
+            backgroundSize: '40px 40px'
+          }} />
+        </div>
+        
+        <div className="relative flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => router.push(`/${locale}/tasks`)}
+                className="bg-white/80 hover:bg-white shadow-sm"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </motion.div>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="w-20 h-20 rounded-xl bg-gradient-to-br from-emerald-500 via-teal-500 to-cyan-500 flex items-center justify-center shadow-lg ring-4 ring-emerald-100/50"
+            >
+              <CheckSquare className="h-10 w-10 text-white" />
+            </motion.div>
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 bg-clip-text text-transparent">
+                {task.title}
+              </h1>
+              <p className="text-gray-600 mt-1 font-medium">Görev Detayları</p>
+            </div>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => router.push(`/${locale}/tasks`)}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Geri
-          </Button>
-          <Button variant="outline" onClick={() => setFormOpen(true)}>
-            <Edit className="mr-2 h-4 w-4" />
-            Düzenle
-          </Button>
-          <Button
-            variant="outline"
-            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-            onClick={async () => {
-              if (!confirm(`${task.title} görevini silmek istediğinize emin misiniz?`)) {
-                return
-              }
-              setDeleteLoading(true)
-              try {
-                const res = await fetch(`/api/tasks/${id}`, {
-                  method: 'DELETE',
-                })
-                if (!res.ok) {
-                  const errorData = await res.json().catch(() => ({}))
-                  throw new Error(errorData.error || 'Silme işlemi başarısız')
-                }
-                router.push(`/${locale}/tasks`)
-              } catch (error: any) {
-                alert(error?.message || 'Silme işlemi başarısız oldu')
-              } finally {
-                setDeleteLoading(false)
-              }
-            }}
-            disabled={deleteLoading}
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Sil
-          </Button>
-        </div>
-      </div>
+      </motion.div>
 
-      {/* Task Info */}
+      {/* Task Info - Premium Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Görev Bilgileri</h2>
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm text-gray-600">Durum</p>
-              <Badge className={`mt-1 ${statusColors[task.status] || 'bg-gray-100 text-gray-800'}`}>
-                {statusLabels[task.status] || task.status}
-              </Badge>
+        {/* Görev Bilgileri - Premium Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <GradientCard
+            gradientFrom="from-blue-500"
+            gradientTo="to-cyan-500"
+            className="p-6"
+          >
+            <div className="flex items-center gap-2 mb-6">
+              <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                <CheckSquare className="h-5 w-5 text-white" />
+              </div>
+              <h2 className="text-xl font-bold text-white">Görev Bilgileri</h2>
             </div>
-            {task.priority && (
+            <div className="space-y-4">
               <div>
-                <p className="text-sm text-gray-600">Öncelik</p>
-                <Badge className={`mt-1 ${
-                  task.priority === 'HIGH' ? 'bg-red-100 text-red-800' :
-                  task.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' :
-                  'bg-gray-100 text-gray-800'
-                }`}>
-                  {task.priority === 'HIGH' ? 'Yüksek' : task.priority === 'MEDIUM' ? 'Orta' : 'Düşük'}
+                <p className="text-sm text-white/80 mb-2">Durum</p>
+                <Badge className={`${getStatusBadgeClass(task.status)} text-sm font-semibold`}>
+                  {statusLabels[task.status] || task.status}
                 </Badge>
               </div>
-            )}
-            {task.dueDate && (
-              <div>
-                <p className="text-sm text-gray-600">Son Tarih</p>
-                <p className="font-medium mt-1">
-                  {new Date(task.dueDate).toLocaleDateString('tr-TR')}
-                </p>
-              </div>
-            )}
-            {task.User && (
-              <div className="flex items-center gap-2">
-                <User className="h-5 w-5 text-gray-400" />
+              {task.priority && (
                 <div>
-                  <p className="text-sm text-gray-600">Atanan Kullanıcı</p>
-                  <p className="font-medium mt-1">{task.User.name}</p>
-                  <p className="text-sm text-gray-600">{task.User.email}</p>
+                  <p className="text-sm text-white/80 mb-2">Öncelik</p>
+                  <Badge className={`${getStatusBadgeClass(task.priority || 'LOW')} text-sm font-semibold`}>
+                    {task.priority === 'HIGH' ? 'Yüksek' : task.priority === 'MEDIUM' ? 'Orta' : 'Düşük'}
+                  </Badge>
+                </div>
+              )}
+              {task.dueDate && (
+                <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <Clock className="h-5 w-5 text-white" />
+                  <div>
+                    <p className="text-sm text-white/80">Son Tarih</p>
+                    <p className="font-semibold text-white mt-1">
+                      {new Date(task.dueDate).toLocaleDateString('tr-TR', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {task.User && (
+                <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <User className="h-5 w-5 text-white" />
+                  <div>
+                    <p className="text-sm text-white/80">Atanan Kullanıcı</p>
+                    <p className="font-semibold text-white mt-1">{task.User.name}</p>
+                    <p className="text-sm text-white/70">{task.User.email}</p>
+                  </div>
+                </div>
+              )}
+              {task.description && (
+                <div className="pt-4 border-t border-white/20">
+                  <p className="text-sm text-white/80 mb-2">Açıklama</p>
+                  <p className="text-sm text-white/90 whitespace-pre-wrap bg-white/10 p-3 rounded-lg backdrop-blur-sm">
+                    {task.description}
+                  </p>
+                </div>
+              )}
+            </div>
+          </GradientCard>
+        </motion.div>
+
+        {/* Bilgiler - Premium Card */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <GradientCard
+            gradientFrom="from-purple-500"
+            gradientTo="to-pink-500"
+            className="p-6"
+          >
+            <div className="flex items-center gap-2 mb-6">
+              <div className="p-2 rounded-lg bg-white/20 backdrop-blur-sm">
+                <AlertCircle className="h-5 w-5 text-white" />
+              </div>
+              <h2 className="text-xl font-bold text-white">Bilgiler</h2>
+            </div>
+            <div className="space-y-4">
+              <div className="p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                <p className="text-sm text-white/80 mb-1">Görev ID</p>
+                <p className="font-mono text-sm text-white/90 break-all">{task.id}</p>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                <Calendar className="h-5 w-5 text-white" />
+                <div>
+                  <p className="text-sm text-white/80">Oluşturulma Tarihi</p>
+                  <p className="font-semibold text-white mt-1">
+                    {new Date(task.createdAt).toLocaleDateString('tr-TR', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </p>
                 </div>
               </div>
-            )}
-            {task.description && (
-              <div className="pt-4 border-t">
-                <p className="text-sm text-gray-600 mb-2">Açıklama</p>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{task.description}</p>
-              </div>
-            )}
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Bilgiler</h2>
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm text-gray-600">Görev ID</p>
-              <p className="font-mono text-sm mt-1">{task.id}</p>
+              {task.updatedAt && (
+                <div className="flex items-center gap-3 p-3 bg-white/10 rounded-lg backdrop-blur-sm">
+                  <Clock className="h-5 w-5 text-white" />
+                  <div>
+                    <p className="text-sm text-white/80">Son Güncelleme</p>
+                    <p className="font-semibold text-white mt-1">
+                      {new Date(task.updatedAt).toLocaleDateString('tr-TR', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
-            <div>
-              <p className="text-sm text-gray-600">Oluşturulma Tarihi</p>
-              <p className="font-medium mt-1">
-                {new Date(task.createdAt).toLocaleDateString('tr-TR')}
-              </p>
-            </div>
-            {task.updatedAt && (
-              <div>
-                <p className="text-sm text-gray-600">Son Güncelleme</p>
-                <p className="font-medium mt-1">
-                  {new Date(task.updatedAt).toLocaleDateString('tr-TR')}
-                </p>
-              </div>
-            )}
-          </div>
-        </Card>
+          </GradientCard>
+        </motion.div>
       </div>
 
       {/* Activity Timeline */}
@@ -236,8 +306,3 @@ export default function TaskDetailPage() {
     </div>
   )
 }
-
-
-
-
-

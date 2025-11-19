@@ -125,7 +125,7 @@ export default function EmailCampaignForm({
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error('Kampanya kaydedilemedi', error?.message)
+      toast.error('Kampanya kaydedilemedi', { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }
@@ -183,7 +183,7 @@ export default function EmailCampaignForm({
                 onClick={() => {
                   const bodyValue = watch('body')
                   if (!bodyValue) {
-                    toast.warning('Önce içerik yazın')
+                    toast.warning('Önce içerik yazın', { description: 'E-posta kampanyası için içerik gereklidir' })
                     return
                   }
                   setPreviewOpen(true)

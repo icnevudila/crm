@@ -35,6 +35,26 @@ interface StickyNotesContainerProps {
    * Container görünür mü?
    */
   visible?: boolean
+  
+  /**
+   * Header'dan çağrılıyor mu? (butonları render etme)
+   */
+  isHeaderMode?: boolean
+  
+  /**
+   * Not ekleme butonu için callback (header'dan çağrılıyor)
+   */
+  onAddNoteClick?: () => void
+  
+  /**
+   * Notları gizle/göster butonu için callback (header'dan çağrılıyor)
+   */
+  onToggleVisibilityClick?: () => void
+  
+  /**
+   * Not sayısı (header'da gösterilmek için)
+   */
+  noteCount?: number
 }
 
 /**
@@ -45,14 +65,28 @@ export default function StickyNotesContainer({
   relatedTo,
   relatedId,
   visible = true,
+  isHeaderMode = false,
+  onAddNoteClick,
+  onToggleVisibilityClick,
+  noteCount,
 }: StickyNotesContainerProps) {
   const [newNoteOpen, setNewNoteOpen] = useState(false)
   const [newNoteContent, setNewNoteContent] = useState('')
   const [newNoteColor, setNewNoteColor] = useState<StickyNoteType['color']>('yellow')
   const [allNotesVisible, setAllNotesVisible] = useState(true)
+  
+  // ✅ Custom event listener - Kanban kartlarından not ekleme modal'ını açmak için
+  // NOT: Event'ten gelen relatedTo/relatedId bilgilerini state'e kaydet (ActivityLog için)
+  const [eventRelatedTo, setEventRelatedTo] = useState<string | undefined>(relatedTo)
+  const [eventRelatedId, setEventRelatedId] = useState<string | undefined>(relatedId)
+  
+  // useStickyNotes hook'unu event'ten gelen relatedTo/relatedId ile kullan
+  const finalRelatedTo = eventRelatedTo || relatedTo
+  const finalRelatedId = eventRelatedId || relatedId
+  
   const { notes, isLoading, addNote, updateNote, deleteNote } = useStickyNotes({
-    relatedTo,
-    relatedId,
+    relatedTo: finalRelatedTo,
+    relatedId: finalRelatedId,
     maxNotes: 20, // Performans için maksimum 20 not
   })
 
@@ -71,6 +105,38 @@ export default function StickyNotesContainer({
     }
   }, [visibilityStorageKey])
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const handleOpenStickyNote = (event: CustomEvent) => {
+      const { relatedTo: eventRelatedTo, relatedId: eventRelatedId, defaultTitle } = event.detail || {}
+      
+      // Event'ten gelen relatedTo/relatedId bilgilerini state'e kaydet (ActivityLog için)
+      if (eventRelatedTo && eventRelatedId) {
+        setEventRelatedTo(eventRelatedTo)
+        setEventRelatedId(eventRelatedId)
+        // Eğer defaultTitle varsa, not içeriğine ekle
+        if (defaultTitle && !newNoteContent) {
+          setNewNoteContent(defaultTitle + '\n\n')
+        }
+      }
+      
+      // Modal'ı aç
+      setNewNoteOpen(true)
+    }
+
+    window.addEventListener('openStickyNote', handleOpenStickyNote as EventListener)
+    return () => {
+      window.removeEventListener('openStickyNote', handleOpenStickyNote as EventListener)
+    }
+  }, [newNoteContent])
+
+  // relatedTo ve relatedId props değiştiğinde state'i güncelle
+  useEffect(() => {
+    setEventRelatedTo(relatedTo)
+    setEventRelatedId(relatedId)
+  }, [relatedTo, relatedId])
+
   // Görünürlük durumunu kaydet
   const handleToggleVisibility = useCallback(() => {
     const newVisibility = !allNotesVisible
@@ -78,21 +144,64 @@ export default function StickyNotesContainer({
     if (typeof window !== 'undefined') {
       localStorage.setItem(visibilityStorageKey, String(newVisibility))
     }
-  }, [allNotesVisible, visibilityStorageKey])
+    // Header'dan çağrılıyorsa callback'i çağır
+    if (onToggleVisibilityClick) {
+      onToggleVisibilityClick()
+    }
+  }, [allNotesVisible, visibilityStorageKey, onToggleVisibilityClick])
 
   // Yeni not ekle
-  const handleAddNote = useCallback(() => {
+  const handleAddNote = useCallback(async () => {
     if (!newNoteContent.trim()) {
       toastError('Not içeriği gereklidir')
       return
     }
 
+    // Sticky note'u localStorage'a ekle (event'ten gelen relatedTo/relatedId ile)
     addNote(newNoteContent, newNoteColor)
+    
+    // Eğer relatedTo ve relatedId varsa (props veya event'ten), ActivityLog'a da ekle (kayıta bağlı not)
+    const finalRelatedTo = eventRelatedTo || relatedTo
+    const finalRelatedId = eventRelatedId || relatedId
+    
+    if (finalRelatedTo && finalRelatedId) {
+      try {
+        const res = await fetch('/api/activity', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            entity: finalRelatedTo,
+            action: 'NOTE_ADDED',
+            description: `Not eklendi: ${newNoteContent.substring(0, 100)}${newNoteContent.length > 100 ? '...' : ''}`,
+            meta: {
+              entity: finalRelatedTo,
+              action: 'note_added',
+              id: finalRelatedId,
+              noteContent: newNoteContent,
+              noteColor: newNoteColor,
+            },
+          }),
+        })
+        
+        if (!res.ok) {
+          console.error('ActivityLog oluşturulamadı:', await res.text())
+        }
+      } catch (error) {
+        // ActivityLog hatası kritik değil, kullanıcıya bildirme
+        console.error('ActivityLog error:', error)
+      }
+    }
+    
     setNewNoteContent('')
     setNewNoteColor('yellow')
     setNewNoteOpen(false)
-    toastSuccess('Not eklendi')
-  }, [newNoteContent, newNoteColor, addNote])
+    // Event'ten gelen relatedTo/relatedId'yi temizle (bir sonraki not için)
+    if (eventRelatedTo && eventRelatedId && (!relatedTo || !relatedId)) {
+      setEventRelatedTo(undefined)
+      setEventRelatedId(undefined)
+    }
+    toastSuccess('Not eklendi' + (finalRelatedTo && finalRelatedId ? ' ve kayda bağlandı' : ''), 'Not başarıyla kaydedildi')
+  }, [newNoteContent, newNoteColor, addNote, relatedTo, relatedId, eventRelatedTo, eventRelatedId])
 
   if (!visible || isLoading) {
     return null
@@ -100,32 +209,6 @@ export default function StickyNotesContainer({
 
   return (
     <>
-      {/* Floating Toggle Button - Tüm notları gizle/göster */}
-      {notes.length > 0 && (
-        <Button
-          onClick={handleToggleVisibility}
-          className="fixed bottom-20 right-6 h-10 w-10 rounded-full shadow-lg z-[10000] bg-gray-600 hover:bg-gray-700"
-          size="icon"
-          title={allNotesVisible ? 'Tüm Notları Gizle' : 'Tüm Notları Göster'}
-        >
-          {allNotesVisible ? (
-            <EyeOff className="h-5 w-5" />
-          ) : (
-            <Eye className="h-5 w-5" />
-          )}
-        </Button>
-      )}
-
-      {/* Floating Add Button */}
-      <Button
-        onClick={() => setNewNoteOpen(true)}
-        className="fixed bottom-6 right-6 h-12 w-12 rounded-full shadow-lg z-[10000] bg-indigo-600 hover:bg-indigo-700"
-        size="icon"
-        title="Yeni Not Ekle"
-      >
-        <Plus className="h-6 w-6" />
-      </Button>
-
       {/* Sticky Notes - Sadece görünürse göster */}
       {allNotesVisible && notes.map((note) => (
         <StickyNote

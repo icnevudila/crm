@@ -61,7 +61,7 @@ export default function ApprovalDetailModal({
       await mutateApproval()
       await mutate('/api/approvals')
       toast.dismiss(toastId)
-      toast.success('Onaylandı', 'Onay talebi başarıyla onaylandı.')
+      toast.success('Onaylandı', { description: 'Onay talebi başarıyla onaylandı.' })
     } catch (error: any) {
       console.error('Approve error:', error)
       toast.dismiss(toastId)
@@ -74,7 +74,7 @@ export default function ApprovalDetailModal({
   const handleReject = async () => {
     const reason = prompt('Red nedeni:')
     if (!reason || reason.trim() === '') {
-      toast.warning('Red nedeni girmeniz gerekiyor')
+      toast.warning('Red nedeni girmeniz gerekiyor', { description: 'Lütfen red nedeni giriniz' })
       return
     }
 
@@ -98,7 +98,7 @@ export default function ApprovalDetailModal({
       await mutateApproval()
       await mutate('/api/approvals')
       toast.dismiss(toastId)
-      toast.success('Reddedildi', 'Onay talebi reddedildi.')
+      toast.success('Reddedildi', { description: 'Onay talebi reddedildi.' })
     } catch (error: any) {
       console.error('Reject error:', error)
       toast.dismiss(toastId)

@@ -256,7 +256,7 @@ export async function POST(request: Request) {
     // Zorunlu alanları kontrol et
     if (!body.name || body.name.trim() === '') {
       return NextResponse.json(
-        { error: 'Müşteri adı gereklidir' },
+        { error: (await import('@/lib/api-locale')).getErrorMessage('errors.api.customerNameRequired', request) },
         { status: 400 }
       )
     }
@@ -265,10 +265,13 @@ export async function POST(request: Request) {
     // schema.sql: name, email, phone, city, status, companyId
     // schema-extension.sql: address, sector, website, taxNumber, fax, notes (migration çalıştırılmamış olabilir - GÖNDERME!)
     // migration 004: customerCompanyId (müşteri hangi firmada çalışıyor)
+    // Güvenlik: createdBy ve updatedBy otomatik dolduruluyor (CRUD fonksiyonunda), body'den alınmamalı
+    const { id, companyId: bodyCompanyId, createdAt, updatedAt, createdBy, updatedBy, ...cleanBody } = body
+    
     const customerData: any = {
-      name: body.name.trim(),
-      status: body.status || 'ACTIVE',
-      companyId: session.user.companyId,
+      name: cleanBody.name.trim(),
+      status: cleanBody.status || 'ACTIVE',
+      // companyId ve createdBy CRUD fonksiyonunda otomatik ekleniyor
     }
 
     // Sadece schema.sql'de olan alanlar
@@ -291,10 +294,12 @@ export async function POST(request: Request) {
     }
     // NOT: address, sector, website, taxNumber, fax, notes schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
+    const { getActivityMessage, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const locale = getLocaleFromRequest(request)
     const created = await createRecord(
       'Customer',
       customerData,
-      `Yeni müşteri eklendi: ${body.name}`
+      getActivityMessage(locale, 'customerCreated', { name: body.name })
     )
 
     // Oluşturulan kaydı tam bilgileriyle çek (CustomerCompany ilişkisi dahil)
@@ -337,6 +342,32 @@ export async function POST(request: Request) {
       })
     }
 
+    // ActivityLog - Kritik modül için CREATE log'u (async, hata olsa bile devam et)
+    if (responseData?.id) {
+      try {
+        const { logAction } = await import('@/lib/logger')
+        // Async olarak logla - ana işlemi engellemez
+        logAction({
+          entity: 'Customer',
+          action: 'CREATE',
+          description: getActivityMessage(locale, 'customerCreatedDescription', { name: (responseData as any)?.name || getActivityMessage(locale, 'defaultCustomerName') }),
+          meta: { 
+            entity: 'Customer', 
+            action: 'create', 
+            id: (responseData as any).id,
+            name: (responseData as any)?.name,
+            status: (responseData as any)?.status,
+          },
+          userId: session.user.id,
+          companyId: session.user.companyId,
+        }).catch(() => {
+          // ActivityLog hatası ana işlemi engellemez
+        })
+      } catch (activityError) {
+        // ActivityLog hatası ana işlemi engellemez
+      }
+    }
+
     // Bildirim: Müşteri oluşturuldu
     if (responseData?.id) {
       try {
@@ -344,8 +375,8 @@ export async function POST(request: Request) {
         await createNotificationForRole({
           companyId: session.user.companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-          title: 'Yeni Müşteri Oluşturuldu',
-          message: `Yeni bir müşteri oluşturuldu. Detayları görmek ister misiniz?`,
+          title: (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.customerCreatedTitle,
+          message: (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.customerCreatedMessage,
           type: 'info',
           relatedTo: 'Customer',
           relatedId: (responseData as any).id,
@@ -363,12 +394,9 @@ export async function POST(request: Request) {
       },
     })
   } catch (error: any) {
-    if (process.env.NODE_ENV === 'development') {
-      console.error('Customers POST API error:', error)
-    }
-    return NextResponse.json(
-      { error: error?.message || 'Failed to create customer' },
-      { status: 500 }
-    )
+    // Error handling helper kullan
+    const { createErrorResponse } = await import('@/lib/error-handling')
+    return createErrorResponse(error)
   }
 }
+

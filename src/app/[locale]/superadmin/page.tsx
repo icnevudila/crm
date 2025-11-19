@@ -27,6 +27,7 @@ import {
 } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
+import { toastSuccess, toastError, toastWarning } from '@/lib/toast'
 import {
   Dialog,
   DialogContent,
@@ -183,7 +184,7 @@ export default function SuperAdminPage() {
 
   const handleSaveCompany = async () => {
     if (!companyFormData.name?.trim()) {
-      alert('Şirket adı gereklidir')
+      toastWarning('Şirket adı gereklidir')
       return
     }
 
@@ -244,10 +245,10 @@ export default function SuperAdminPage() {
       setCompanyFormData({})
       setCompanyModuleIds([])
       setAdminData({ adminName: '', adminEmail: '', adminPassword: '' })
-      alert('Şirket başarıyla kaydedildi!')
+      toastSuccess('Şirket başarıyla kaydedildi!')
     } catch (error: any) {
       console.error('Error saving company:', error)
-      alert(error?.message || 'Şirket kaydedilemedi')
+      toastError('Şirket kaydedilemedi', error?.message)
     } finally {
       setSavingCompany(false)
     }
@@ -271,10 +272,10 @@ export default function SuperAdminPage() {
 
       await mutateCompanies()
       await mutate('/api/superadmin/companies')
-      alert('Şirket başarıyla silindi!')
+      toastSuccess('Şirket başarıyla silindi!')
     } catch (error: any) {
       console.error('Error deleting company:', error)
-      alert(error?.message || 'Şirket silinemedi')
+      toastError('Şirket silinemedi', error?.message)
     } finally {
       setDeletingCompany(null)
     }
@@ -309,7 +310,7 @@ export default function SuperAdminPage() {
 
     // Sistem rolü kontrolü
     if (selectedRole.isSystemRole) {
-      alert('Sistem rolleri değiştirilemez')
+      toastWarning('Sistem rolleri değiştirilemez')
       return
     }
 
@@ -339,10 +340,10 @@ export default function SuperAdminPage() {
 
       await mutateRoles()
       await mutate('/api/superadmin/roles')
-      alert('Rol izinleri başarıyla güncellendi!')
+      toastSuccess('Rol izinleri başarıyla güncellendi!')
     } catch (error: any) {
       console.error('Error saving role:', error)
-      alert(error?.message || 'Rol izinleri güncellenemedi')
+      toastError('Rol izinleri güncellenemedi', error?.message)
     } finally {
       setSavingRole(false)
     }
@@ -378,10 +379,10 @@ export default function SuperAdminPage() {
       await mutateUsers()
       await mutate('/api/superadmin/users')
       setSelectedUser(null)
-      alert('Kullanıcı başarıyla güncellendi!')
+      toastSuccess('Kullanıcı başarıyla güncellendi!')
     } catch (error: any) {
       console.error('Error saving user:', error)
-      alert(error?.message || 'Kullanıcı güncellenemedi')
+      toastError('Kullanıcı güncellenemedi', error?.message)
     } finally {
       setSavingUser(false)
     }
@@ -389,12 +390,12 @@ export default function SuperAdminPage() {
 
   const handleCreateUser = async () => {
     if (!newUserData.name?.trim() || !newUserData.email?.trim()) {
-      alert('Ad ve e-posta gereklidir')
+      toastWarning('Ad ve e-posta gereklidir')
       return
     }
 
     if (!newUserData.companyId) {
-      alert('Kurum seçimi zorunludur')
+      toastWarning('Kurum seçimi zorunludur')
       return
     }
 
@@ -470,13 +471,16 @@ export default function SuperAdminPage() {
       })
       
       if (generatedPassword) {
-        alert(`Kullanıcı başarıyla oluşturuldu!\n\nGeçici şifre: ${generatedPassword}\n\nLütfen bu şifreyi kullanıcıyla paylaşın.`)
+        toastSuccess(
+          'Kullanıcı başarıyla oluşturuldu!',
+          `Geçici şifre: ${generatedPassword}\n\nLütfen bu şifreyi kullanıcıyla paylaşın.`
+        )
       } else {
-        alert('Kullanıcı başarıyla oluşturuldu!')
+        toastSuccess('Kullanıcı başarıyla oluşturuldu!')
       }
     } catch (error: any) {
       console.error('Error creating user:', error)
-      alert(error?.message || 'Kullanıcı oluşturulamadı')
+      toastError('Kullanıcı oluşturulamadı', error?.message)
     } finally {
       setSavingUser(false)
     }

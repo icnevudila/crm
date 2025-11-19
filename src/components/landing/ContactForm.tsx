@@ -69,7 +69,7 @@ export default function ContactForm({ open, onClose }: ContactFormProps) {
         onClose()
       }, 3000)
     } catch (error: any) {
-      toast.error('Bir hata oluştu. Lütfen tekrar deneyin.', error?.message)
+      toast.error('Bir hata oluştu. Lütfen tekrar deneyin.', { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }

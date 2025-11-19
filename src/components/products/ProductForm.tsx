@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { toast, handleApiError } from '@/lib/toast'
+import { useNavigateToDetailToast } from '@/lib/quick-action-helper'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -49,7 +50,11 @@ const productSchema = z.object({
   dimensions: z.string().max(100, 'Boyutlar en fazla 100 karakter olabilir').optional(),
 }).refine((data) => {
   // minStock < maxStock kontrolü
-  if (data.minStock !== undefined && data.maxStock !== undefined && data.minStock > data.maxStock) {
+  // ÖNEMLİ: maxStock 0 veya undefined ise kontrolü atla (opsiyonel alan)
+  if (data.minStock !== undefined && 
+      data.maxStock !== undefined && 
+      data.maxStock > 0 && // maxStock 0 ise kontrolü atla
+      data.minStock > data.maxStock) {
     return false
   }
   return true
@@ -83,6 +88,7 @@ async function fetchProducts() {
 export default function ProductForm({ product, open, onClose, onSuccess }: ProductFormProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const navigateToDetailToast = useNavigateToDetailToast()
   const [loading, setLoading] = useState(false)
   const [uploadingImage, setUploadingImage] = useState(false)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
@@ -194,14 +200,14 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
 
     // Dosya tipi kontrolü (sadece resim)
     if (!file.type.startsWith('image/')) {
-      toast.error('Hata', 'Lütfen geçerli bir resim dosyası seçin')
+      toast.error('Hata', { description: 'Lütfen geçerli bir resim dosyası seçin' })
       return
     }
 
     // Dosya boyutu kontrolü (5MB max)
     const maxSize = 5 * 1024 * 1024 // 5MB
     if (file.size > maxSize) {
-      toast.error('Hata', 'Resim boyutu 5MB\'dan büyük olamaz')
+      toast.error('Hata', { description: 'Resim boyutu 5MB\'dan büyük olamaz' })
       return
     }
 
@@ -237,7 +243,7 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
       // Form'a imageUrl'i set et
       setValue('imageUrl', uploadedFile.url)
       
-      toast.success('Başarılı', 'Fotoğraf başarıyla yüklendi')
+      toast.success('Başarılı', { description: 'Fotoğraf başarıyla yüklendi' })
     } catch (error: any) {
       console.error('Image upload error:', error)
       toast.error('Hata', error?.message || 'Fotoğraf yüklenemedi')
@@ -271,18 +277,52 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
       })
 
       if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.error || 'Failed to save product')
+        // Response body'yi güvenli bir şekilde parse et
+        let result: any = {}
+        let responseText = ''
+        try {
+          responseText = await res.text()
+          if (responseText) {
+            result = JSON.parse(responseText)
+          }
+        } catch (parseError) {
+          // JSON parse edilemezse boş obje kullan
+          console.warn('Response JSON parse edilemedi:', parseError, 'Response text:', responseText)
+          // Parse edilemezse bile response text'i kullan
+          if (responseText) {
+            result = { error: responseText, message: responseText }
+          }
+        }
+        
+        // Daha detaylı hata mesajı oluştur
+        const errorMessage = result?.error || result?.message || responseText || `Ürün kaydedilemedi (${res.status})`
+        const apiError: any = {
+          status: res.status,
+          message: errorMessage,
+          error: result?.error || errorMessage,
+          code: result?.code || `HTTP_${res.status}`,
+          details: result,
+          responseText, // Debug için response text'i de ekle
+        }
+        console.error('ProductForm API Error:', {
+          status: res.status,
+          error: apiError,
+          result,
+          responseText,
+        })
+        throw apiError
       }
 
       return res.json()
     },
     onSuccess: (result) => {
       // Success toast göster
-      toast.success(
-        product ? 'Ürün güncellendi' : 'Ürün kaydedildi',
-        product ? `${result.name} başarıyla güncellendi.` : `${result.name} başarıyla eklendi.`
-      )
+      if (product) {
+        toast.success('Ürün güncellendi', { description: `${result.name} başarıyla güncellendi.` })
+      } else {
+        // Yeni ürün oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
+        navigateToDetailToast('product', result.id, result.name)
+      }
       
       // Parent component'e callback gönder - optimistic update için
       if (onSuccess) {
@@ -323,43 +363,67 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
         </DialogHeader>
 
         <form ref={formRef} onSubmit={handleSubmit(onSubmit, onError)} className="space-y-4">
+          {/* Zorunlu Alanlar Bilgisi */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+            <p className="text-xs text-blue-800">
+              <span className="font-semibold">*</span> işareti olan alanlar zorunludur. Diğer alanlar isteğe bağlıdır.
+            </p>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Name */}
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">Ürün Adı *</label>
+              <label className="text-sm font-medium flex items-center gap-1">
+                Ürün Adı <span className="text-red-500 font-bold">*</span>
+                <span className="text-xs text-gray-500 font-normal">(Zorunlu)</span>
+              </label>
               <Input
                 {...register('name')}
-                placeholder="Ürün adı"
+                placeholder="Örn: Domates Suyu"
                 disabled={loading}
+                className={errors.name ? 'border-red-500' : ''}
               />
-              {errors.name && (
-                <p className="text-sm text-red-600">{errors.name.message}</p>
+              {errors.name ? (
+                <p className="text-sm text-red-600 font-medium">{errors.name.message}</p>
+              ) : (
+                <p className="text-xs text-gray-500">Ürünün görünen adını girin</p>
               )}
             </div>
 
             {/* SKU */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">SKU (Stok Kodu)</label>
+              <label className="text-sm font-medium flex items-center gap-1">
+                SKU (Stok Kodu)
+                <span className="text-xs text-gray-500 font-normal">(Opsiyonel)</span>
+              </label>
               <Input
                 {...register('sku')}
                 placeholder="Örn: PRD-001"
                 disabled={loading}
               />
+              <p className="text-xs text-gray-500">Ürünün benzersiz stok kodunu girin</p>
             </div>
 
             {/* Barcode */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Barkod</label>
+              <label className="text-sm font-medium flex items-center gap-1">
+                Barkod
+                <span className="text-xs text-gray-500 font-normal">(Opsiyonel)</span>
+              </label>
               <Input
                 {...register('barcode')}
                 placeholder="Örn: 1234567890123"
                 disabled={loading}
               />
+              <p className="text-xs text-gray-500">Ürünün barkod numarasını girin</p>
             </div>
 
             {/* Category */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Kategori</label>
+              <label className="text-sm font-medium flex items-center gap-1">
+                Kategori
+                <span className="text-xs text-gray-500 font-normal">(Opsiyonel)</span>
+              </label>
               <div className="flex gap-2">
                 <Select
                   value={watch('category') || 'none'}
@@ -380,7 +444,7 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
                 </Select>
                 <Input
                   {...register('category')}
-                  placeholder="Yeni kategori"
+                  placeholder="Yeni kategori yazın"
                   disabled={loading}
                   className="flex-1"
                   onKeyDown={(e) => {
@@ -396,13 +460,16 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
                 />
               </div>
               <p className="text-xs text-gray-500">
-                Mevcut kategorilerden seçin veya yeni kategori yazıp Enter&apos;a basın
+                Mevcut kategorilerden seçin veya yeni kategori yazıp <span className="font-semibold">Enter</span> tuşuna basın
               </p>
             </div>
 
             {/* Status */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Durum</label>
+              <label className="text-sm font-medium flex items-center gap-1">
+                Durum
+                <span className="text-xs text-gray-500 font-normal">(Opsiyonel - Varsayılan: Aktif)</span>
+              </label>
               <Select
                 value={watch('status') || 'ACTIVE'}
                 onValueChange={(value) => setValue('status', value as 'ACTIVE' | 'INACTIVE' | 'DISCONTINUED')}
@@ -412,16 +479,20 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
                   <SelectValue placeholder="Durum seçin" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ACTIVE">Aktif</SelectItem>
-                  <SelectItem value="INACTIVE">Pasif</SelectItem>
+                  <SelectItem value="ACTIVE">Aktif (Satışta)</SelectItem>
+                  <SelectItem value="INACTIVE">Pasif (Satışta Değil)</SelectItem>
                   <SelectItem value="DISCONTINUED">Üretimden Kalktı</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-gray-500">Ürünün satış durumunu belirleyin</p>
             </div>
 
             {/* Unit */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Birim</label>
+              <label className="text-sm font-medium flex items-center gap-1">
+                Birim
+                <span className="text-xs text-gray-500 font-normal">(Opsiyonel - Varsayılan: Adet)</span>
+              </label>
               <Select
                 value={watch('unit') || 'ADET'}
                 onValueChange={(value) => setValue('unit', value)}
@@ -440,67 +511,105 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
                   <SelectItem value="KUTU">Kutu</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-gray-500">Stok miktarının ölçü birimini seçin</p>
             </div>
 
             {/* Price */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Fiyat (₺) *</label>
+              <label className="text-sm font-medium flex items-center gap-1">
+                Fiyat (₺)
+                <span className="text-red-500 font-bold">*</span>
+                <span className="text-xs text-gray-500 font-normal">(Zorunlu)</span>
+              </label>
               <Input
                 type="number"
                 step="0.01"
+                min="0"
                 {...register('price', { valueAsNumber: true })}
                 placeholder="0.00"
                 disabled={loading}
+                className={errors.price ? 'border-red-500' : ''}
               />
-              {errors.price && (
-                <p className="text-sm text-red-600">{errors.price.message}</p>
+              {errors.price ? (
+                <p className="text-sm text-red-600 font-medium">{errors.price.message}</p>
+              ) : (
+                <p className="text-xs text-gray-500">Ürünün satış fiyatını girin (TL cinsinden)</p>
               )}
             </div>
 
             {/* Stock */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Stok Miktarı</label>
+              <label className="text-sm font-medium flex items-center gap-1">
+                Stok Miktarı
+                <span className="text-xs text-gray-500 font-normal">(Opsiyonel - Varsayılan: 0)</span>
+              </label>
               <Input
                 type="number"
                 min="0"
                 {...register('stock', { valueAsNumber: true })}
                 placeholder="0"
                 disabled={loading}
+                className={errors.stock ? 'border-red-500' : ''}
               />
-              {errors.stock && (
-                <p className="text-sm text-red-600">{errors.stock.message}</p>
+              {errors.stock ? (
+                <p className="text-sm text-red-600 font-medium">{errors.stock.message}</p>
+              ) : (
+                <p className="text-xs text-gray-500">Mevcut stok miktarını girin</p>
               )}
             </div>
 
             {/* Min Stock */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Minimum Stok</label>
+              <label className="text-sm font-medium flex items-center gap-1">
+                Minimum Stok
+                <span className="text-xs text-gray-500 font-normal">(Opsiyonel)</span>
+              </label>
               <Input
                 type="number"
                 min="0"
                 {...register('minStock', { valueAsNumber: true })}
                 placeholder="0"
                 disabled={loading}
+                className={errors.minStock ? 'border-red-500' : ''}
               />
-              <p className="text-xs text-gray-500">Stok bu seviyenin altına düştüğünde uyarı verilir</p>
+              {errors.minStock ? (
+                <p className="text-sm text-red-600 font-medium">{errors.minStock.message}</p>
+              ) : (
+                <p className="text-xs text-gray-500">
+                  Stok bu seviyenin altına düştüğünde <span className="font-semibold text-orange-600">uyarı bildirimi</span> gönderilir
+                </p>
+              )}
             </div>
 
             {/* Max Stock */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Maksimum Stok</label>
+              <label className="text-sm font-medium flex items-center gap-1">
+                Maksimum Stok
+                <span className="text-xs text-gray-500 font-normal">(Opsiyonel)</span>
+              </label>
               <Input
                 type="number"
                 min="0"
                 {...register('maxStock', { valueAsNumber: true })}
-                placeholder="0"
+                placeholder="0 (boş bırakılabilir)"
                 disabled={loading}
+                className={errors.maxStock ? 'border-red-500' : ''}
               />
-              <p className="text-xs text-gray-500">Maksimum stok seviyesi (opsiyonel)</p>
+              {errors.maxStock ? (
+                <p className="text-sm text-red-600 font-medium">{errors.maxStock.message}</p>
+              ) : (
+                <p className="text-xs text-gray-500">
+                  Maksimum stok seviyesi. <span className="font-semibold">0 girilirse kontrol edilmez.</span> Minimum stoktan büyük olmalıdır.
+                </p>
+              )}
             </div>
 
             {/* Vendor */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Tedarikçi</label>
+              <label className="text-sm font-medium flex items-center gap-1">
+                Tedarikçi
+                <span className="text-xs text-gray-500 font-normal">(Opsiyonel)</span>
+              </label>
               <Select
                 value={watch('vendorId') || 'none'}
                 onValueChange={(value) => setValue('vendorId', value === 'none' ? undefined : value)}
@@ -518,11 +627,15 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-gray-500">Ürünü tedarik eden firma veya kişiyi seçin</p>
             </div>
 
             {/* Weight */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Ağırlık (kg)</label>
+              <label className="text-sm font-medium flex items-center gap-1">
+                Ağırlık (kg)
+                <span className="text-xs text-gray-500 font-normal">(Opsiyonel)</span>
+              </label>
               <Input
                 type="number"
                 step="0.01"
@@ -531,21 +644,29 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
                 placeholder="0.00"
                 disabled={loading}
               />
+              <p className="text-xs text-gray-500">Ürünün ağırlığını kilogram cinsinden girin</p>
             </div>
 
             {/* Dimensions */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">Boyutlar</label>
+              <label className="text-sm font-medium flex items-center gap-1">
+                Boyutlar
+                <span className="text-xs text-gray-500 font-normal">(Opsiyonel)</span>
+              </label>
               <Input
                 {...register('dimensions')}
                 placeholder="Örn: 10x20x30 cm"
                 disabled={loading}
               />
+              <p className="text-xs text-gray-500">Ürünün boyutlarını girin (uzunluk x genişlik x yükseklik)</p>
             </div>
 
             {/* Image Upload */}
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">Ürün Fotoğrafı</label>
+              <label className="text-sm font-medium flex items-center gap-1">
+                Ürün Fotoğrafı
+                <span className="text-xs text-gray-500 font-normal">(Opsiyonel)</span>
+              </label>
               
               {/* Fotoğraf Preview */}
               {imagePreview && (
@@ -633,13 +754,17 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
 
             {/* Description */}
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">Açıklama</label>
+              <label className="text-sm font-medium flex items-center gap-1">
+                Açıklama
+                <span className="text-xs text-gray-500 font-normal">(Opsiyonel)</span>
+              </label>
               <Textarea
                 {...register('description')}
                 placeholder="Ürün açıklaması ve özellikleri"
                 rows={4}
                 disabled={loading}
               />
+              <p className="text-xs text-gray-500">Ürün hakkında detaylı bilgi ve özelliklerini yazın (maksimum 2000 karakter)</p>
             </div>
           </div>
 

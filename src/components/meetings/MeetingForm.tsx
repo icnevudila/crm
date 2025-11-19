@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { toast } from '@/lib/toast'
+import { toast, toastWarning } from '@/lib/toast'
 import { useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
+import { useNavigateToDetailToast } from '@/lib/quick-action-helper'
+import { AutomationConfirmationModal } from '@/lib/automations/toast-confirmation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -38,6 +40,8 @@ interface MeetingFormProps {
   customerId?: string // Prop olarak customerId geçilebilir (modal içinde kullanım için)
   customerCompanyId?: string
   customerCompanyName?: string
+  invoiceId?: string
+  initialDate?: Date // Takvimden seçilen tarih
 }
 
 export default function MeetingForm({
@@ -50,6 +54,7 @@ export default function MeetingForm({
   customerId: customerIdProp,
   customerCompanyId: customerCompanyIdProp,
   customerCompanyName,
+  initialDate,
 }: MeetingFormProps) {
   const t = useTranslations('meetings.form')
   const tCommon = useTranslations('common.form')
@@ -68,6 +73,14 @@ export default function MeetingForm({
   const [loading, setLoading] = useState(false)
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([])
   const [creatingVideoMeeting, setCreatingVideoMeeting] = useState(false)
+  const navigateToDetailToast = useNavigateToDetailToast()
+  const [automationModalOpen, setAutomationModalOpen] = useState(false)
+  const [automationModalType, setAutomationModalType] = useState<'email' | 'sms' | 'whatsapp'>('email')
+  const [automationModalOptions, setAutomationModalOptions] = useState<any>(null)
+  // ✅ Recurring meeting state
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [recurrenceEndType, setRecurrenceEndType] = useState<'date' | 'count'>('date')
+  const [selectedDaysOfWeek, setSelectedDaysOfWeek] = useState<number[]>([])
 
   // Schema'yı component içinde oluştur - locale desteği için
   const meetingSchema = z.object({
@@ -91,6 +104,13 @@ export default function MeetingForm({
     outcomes: z.string().optional(), // Çıktılar/sonuçlar
     actionItems: z.string().optional(), // Aksiyon maddeleri
     attendees: z.string().optional(), // Katılımcılar (metin)
+    // ✅ Recurring meeting alanları
+    isRecurring: z.boolean().optional().default(false),
+    recurrenceType: z.enum(['DAILY', 'WEEKLY', 'MONTHLY', 'YEARLY']).optional(),
+    recurrenceInterval: z.number().min(1).max(365).optional().default(1),
+    recurrenceEndDate: z.string().optional(),
+    recurrenceCount: z.number().min(1).max(1000).optional(),
+    recurrenceDaysOfWeek: z.array(z.number()).optional(), // 0=Pazar, 1=Pazartesi, ...
   })
 
   type MeetingFormData = z.infer<typeof meetingSchema>
@@ -191,6 +211,12 @@ export default function MeetingForm({
       customerId: '',
       dealId: '',
       customerCompanyId: customerCompanyId || '',
+      isRecurring: false,
+      recurrenceType: 'WEEKLY',
+      recurrenceInterval: 1,
+      recurrenceEndDate: '',
+      recurrenceCount: undefined,
+      recurrenceDaysOfWeek: [],
     },
   })
 
@@ -201,6 +227,11 @@ export default function MeetingForm({
         // Düzenleme modu - participant'ları da yükle
         const participantIds = meeting.participants?.map((p: any) => p.userId) || []
         setSelectedParticipants(participantIds)
+        
+        // Recurring meeting state'lerini yükle
+        setIsRecurring(meeting.isRecurring || false)
+        setRecurrenceEndType(meeting.recurrenceEndDate ? 'date' : (meeting.recurrenceCount ? 'count' : 'date'))
+        setSelectedDaysOfWeek(meeting.recurrenceDaysOfWeek || [])
         
         reset({
           title: meeting.title || '',
@@ -216,6 +247,12 @@ export default function MeetingForm({
           dealId: meeting.dealId || '',
           participantIds: participantIds,
           customerCompanyId: meeting.customerCompanyId || customerCompanyId || '',
+          isRecurring: meeting.isRecurring || false,
+          recurrenceType: meeting.recurrenceType || 'WEEKLY',
+          recurrenceInterval: meeting.recurrenceInterval || 1,
+          recurrenceEndDate: meeting.recurrenceEndDate ? new Date(meeting.recurrenceEndDate).toISOString().slice(0, 10) : '',
+          recurrenceCount: meeting.recurrenceCount || undefined,
+          recurrenceDaysOfWeek: meeting.recurrenceDaysOfWeek || [],
         })
       } else {
         // Yeni kayıt modu
@@ -263,11 +300,15 @@ export default function MeetingForm({
             setValue('customerId', quote.customerId)
           }
         } else {
-          // Normal yeni kayıt modu
+          // Normal yeni kayıt modu - initialDate varsa kullan
+          setIsRecurring(false)
+          setRecurrenceEndType('date')
+          setSelectedDaysOfWeek([])
+          
           reset({
             title: '',
             description: '',
-            meetingDate: new Date().toISOString().slice(0, 16),
+            meetingDate: initialDate ? initialDate.toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16),
             meetingDuration: 60,
             location: '',
             status: 'PLANNED',
@@ -275,6 +316,12 @@ export default function MeetingForm({
             dealId: dealId || '',
             participantIds: [],
             customerCompanyId: customerCompanyId || '',
+            isRecurring: false,
+            recurrenceType: 'WEEKLY',
+            recurrenceInterval: 1,
+            recurrenceEndDate: '',
+            recurrenceCount: undefined,
+            recurrenceDaysOfWeek: [],
           })
           // Prop veya URL'den gelen ID'leri set et
           if (dealId) {
@@ -286,7 +333,7 @@ export default function MeetingForm({
         }
       }
     }
-  }, [meeting, open, reset, dealId, customerId, setValue, dealData, quoteId, quoteData, customerCompanyId]) // Tüm dependency'ler gerekli - dealData ve quoteData query sonuçları, değişebilir
+  }, [meeting, open, reset, dealId, customerId, setValue, dealData, quoteId, quoteData, customerCompanyId, initialDate]) // initialDate eklendi
 
   const status = watch('status')
   const selectedCustomerId = watch('customerId') // Form'dan seçilen müşteri ID'si
@@ -314,6 +361,13 @@ export default function MeetingForm({
           ? data.customerCompanyId
           : customerCompanyId || null,
         participantIds: selectedParticipants, // Çoklu kullanıcı seçimi
+        // ✅ Recurring meeting alanları
+        isRecurring: isRecurring,
+        recurrenceType: isRecurring ? (data.recurrenceType || 'WEEKLY') : null,
+        recurrenceInterval: isRecurring ? (data.recurrenceInterval || 1) : null,
+        recurrenceEndDate: isRecurring && recurrenceEndType === 'date' && data.recurrenceEndDate ? data.recurrenceEndDate : null,
+        recurrenceCount: isRecurring && recurrenceEndType === 'count' && data.recurrenceCount ? data.recurrenceCount : null,
+        recurrenceDaysOfWeek: isRecurring && data.recurrenceType === 'WEEKLY' && selectedDaysOfWeek.length > 0 ? selectedDaysOfWeek : null,
       }
 
       const url = meeting
@@ -329,6 +383,24 @@ export default function MeetingForm({
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
+        
+        // ✅ Zaman çakışması kontrolü - özel hata mesajı göster
+        if (res.status === 409 && errorData.conflicts) {
+          // Çakışma var - kullanıcıya detaylı bilgi göster
+          const conflictMessage = errorData.conflicts.length === 1
+            ? errorData.conflicts[0]
+            : `Aşağıdaki çakışmalar tespit edildi:\n\n${errorData.conflicts.map((c: string, i: number) => `${i + 1}. ${c}`).join('\n')}`
+          
+          toast.error(
+            'Zaman Çakışması',
+            conflictMessage,
+            {
+              duration: 10000, // 10 saniye göster
+            }
+          )
+          throw new Error(errorData.message || 'Zaman çakışması tespit edildi')
+        }
+        
         throw new Error(errorData.error || 'Failed to save meeting')
       }
 
@@ -337,7 +409,7 @@ export default function MeetingForm({
       // Toast mesajı göster
       if (meeting) {
         // Güncelleme durumu
-        toast.success(t('meetingUpdated'), t('meetingUpdatedMessage', { title: savedMeeting.title }))
+        toast.success(t('meetingUpdated'), { description: t('meetingUpdatedMessage', { title: savedMeeting.title }) })
       } else {
         // Yeni oluşturma durumu
         const stageUpdated = savedMeeting.dealStageUpdated === true
@@ -363,7 +435,8 @@ export default function MeetingForm({
           successMessage = t('meetingCreatedWithCompany', { company: customerCompanyName })
         }
         
-        toast.success(successTitle, successMessage)
+        // Yeni meeting oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
+        navigateToDetailToast('meeting', savedMeeting.id, savedMeeting.title)
       }
       
       // onSuccess callback'i çağır - yönlendirme burada yapılacak
@@ -373,18 +446,84 @@ export default function MeetingForm({
         await onSuccess(savedMeeting)
       }
       
+      // ✅ Otomasyon: Meeting oluşturulduğunda email gönder (kullanıcı tercihine göre)
+      if (!meeting && savedMeeting.customerId) {
+        try {
+          // Customer bilgisini çek
+          const customerRes = await fetch(`/api/customers/${savedMeeting.customerId}`)
+          if (customerRes.ok) {
+            const customer = await customerRes.json()
+            if (customer?.email) {
+              // Automation API'yi kontrol et
+              const automationRes = await fetch('/api/automations/meeting-created-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ meeting: savedMeeting }),
+              })
+              
+              if (automationRes.ok) {
+                const automationData = await automationRes.json()
+                if (automationData.shouldAsk) {
+                  // Kullanıcıya sor (modal aç)
+                  setAutomationModalType('email')
+                  setAutomationModalOptions({
+                    entityType: 'MEETING',
+                    entityId: savedMeeting.id,
+                    entityTitle: savedMeeting.title,
+                    customerEmail: customer.email,
+                    customerPhone: customer.phone,
+                    customerName: customer.name,
+                    defaultSubject: `Toplantı: ${savedMeeting.title}`,
+                    defaultMessage: `Merhaba ${customer.name},\n\nYeni toplantı planlandı: ${savedMeeting.title}\n\nTarih: ${savedMeeting.meetingDate ? new Date(savedMeeting.meetingDate).toLocaleString('tr-TR') : 'Belirtilmemiş'}\nLokasyon: ${savedMeeting.location || 'Belirtilmemiş'}\n\nDetayları görüntülemek için lütfen bizimle iletişime geçin.`,
+                    defaultHtml: `<p>Merhaba ${customer.name},</p><p>Yeni toplantı planlandı: <strong>${savedMeeting.title}</strong></p><p>Tarih: ${savedMeeting.meetingDate ? new Date(savedMeeting.meetingDate).toLocaleString('tr-TR') : 'Belirtilmemiş'}</p><p>Lokasyon: ${savedMeeting.location || 'Belirtilmemiş'}</p>`,
+                    onSent: () => {
+                      toast.success('E-posta gönderildi', { description: 'Müşteriye meeting bilgisi gönderildi' })
+                    },
+                    onAlwaysSend: async () => {
+                      await fetch('/api/automations/preferences', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          automationType: 'emailOnMeetingCreated',
+                          preference: 'ALWAYS',
+                        }),
+                      })
+                    },
+                    onNeverSend: async () => {
+                      await fetch('/api/automations/preferences', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          automationType: 'emailOnMeetingCreated',
+                          preference: 'NEVER',
+                        }),
+                      })
+                    },
+                  })
+                  setAutomationModalOpen(true)
+                }
+              }
+            }
+          }
+        } catch (error) {
+          // Automation hatası ana işlemi engellemez
+          console.error('Meeting automation error:', error)
+        }
+      }
+      
       reset()
       // Form'u kapat - onSuccess callback'inden SONRA (sonsuz döngü önleme)
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error(t('saveFailed'), error?.message)
+      toast.error(t('saveFailed'), { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }
   }
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -518,12 +657,12 @@ export default function MeetingForm({
                       const meetingDuration = watch('meetingDuration') || 60
 
                       if (!title || title.trim() === '') {
-                        alert('Önce toplantı başlığını girin')
+                        toastWarning('Önce toplantı başlığını girin')
                         return
                       }
 
                       if (!meetingDate) {
-                        alert('Önce toplantı tarihini girin')
+                        toastWarning('Önce toplantı tarihini girin')
                         return
                       }
 
@@ -760,6 +899,136 @@ export default function MeetingForm({
             </Select>
           </div>
 
+          {/* ✅ Recurring Meeting Options */}
+          <div className="space-y-4 p-4 border rounded-lg bg-gradient-to-r from-indigo-50 to-purple-50">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="isRecurring"
+                checked={isRecurring}
+                onCheckedChange={(checked) => {
+                  setIsRecurring(checked === true)
+                  setValue('isRecurring', checked === true)
+                }}
+              />
+              <label htmlFor="isRecurring" className="text-sm font-medium cursor-pointer">
+                🔁 Tekrar Eden Randevu
+              </label>
+            </div>
+
+            {isRecurring && (
+              <div className="space-y-4 pl-6 border-l-2 border-indigo-300">
+                {/* Recurrence Type */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Tekrar Tipi</label>
+                  <Select
+                    value={watch('recurrenceType') || 'WEEKLY'}
+                    onValueChange={(value) => setValue('recurrenceType', value as any)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="DAILY">Günlük</SelectItem>
+                      <SelectItem value="WEEKLY">Haftalık</SelectItem>
+                      <SelectItem value="MONTHLY">Aylık</SelectItem>
+                      <SelectItem value="YEARLY">Yıllık</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Recurrence Interval */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Her {watch('recurrenceType') === 'DAILY' ? 'kaç günde' : 
+                          watch('recurrenceType') === 'WEEKLY' ? 'kaç haftada' :
+                          watch('recurrenceType') === 'MONTHLY' ? 'kaç ayda' : 'kaç yılda'} bir?
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    max="365"
+                    {...register('recurrenceInterval', { valueAsNumber: true })}
+                    defaultValue={1}
+                    disabled={loading}
+                  />
+                </div>
+
+                {/* Weekly: Days of Week */}
+                {watch('recurrenceType') === 'WEEKLY' && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Hangi Günler?</label>
+                    <div className="grid grid-cols-7 gap-2">
+                      {['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'].map((day, index) => (
+                        <div key={index} className="flex items-center space-x-1">
+                          <Checkbox
+                            id={`day-${index}`}
+                            checked={selectedDaysOfWeek.includes(index === 0 ? 0 : index)}
+                            onCheckedChange={(checked) => {
+                              const dayNum = index === 0 ? 0 : index
+                              if (checked) {
+                                const newDays = [...selectedDaysOfWeek, dayNum]
+                                setSelectedDaysOfWeek(newDays)
+                                setValue('recurrenceDaysOfWeek', newDays)
+                              } else {
+                                const newDays = selectedDaysOfWeek.filter(d => d !== dayNum)
+                                setSelectedDaysOfWeek(newDays)
+                                setValue('recurrenceDaysOfWeek', newDays)
+                              }
+                            }}
+                          />
+                          <label htmlFor={`day-${index}`} className="text-xs cursor-pointer">
+                            {day}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* End Type: Date or Count */}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Bitiş Şekli</label>
+                  <Select
+                    value={recurrenceEndType}
+                    onValueChange={(value) => setRecurrenceEndType(value as 'date' | 'count')}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="date">Bitiş Tarihi</SelectItem>
+                      <SelectItem value="count">Kaç Kez Tekrarlanacak</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* End Date or Count */}
+                {recurrenceEndType === 'date' ? (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Bitiş Tarihi</label>
+                    <Input
+                      type="date"
+                      {...register('recurrenceEndDate')}
+                      disabled={loading}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Kaç Kez Tekrarlanacak?</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="1000"
+                      {...register('recurrenceCount', { valueAsNumber: true })}
+                      placeholder="Örn: 10"
+                      disabled={loading}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Actions */}
           <div className="flex flex-col sm:flex-row sm:justify-end gap-2 pt-4">
             <Button
@@ -782,6 +1051,20 @@ export default function MeetingForm({
         </form>
       </DialogContent>
     </Dialog>
+    
+    {/* Automation Confirmation Modal */}
+    {automationModalOpen && automationModalOptions && (
+      <AutomationConfirmationModal
+        type={automationModalType}
+        options={automationModalOptions}
+        open={automationModalOpen}
+        onClose={() => {
+          setAutomationModalOpen(false)
+          setAutomationModalOptions(null)
+        }}
+      />
+    )}
+    </>
   )
 }
 

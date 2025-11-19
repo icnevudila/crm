@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
+import { useData } from '@/hooks/useData'
 import { 
   ArrowLeft, 
   Edit, 
@@ -47,7 +48,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatCurrency } from '@/lib/utils'
+import { toastSuccess, toastError } from '@/lib/toast'
 import { motion } from 'framer-motion'
+import SendEmailButton from '@/components/integrations/SendEmailButton'
+import SendSmsButton from '@/components/integrations/SendSmsButton'
+import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
+import { useQuickActionSuccess } from '@/lib/quick-action-helper'
 
 async function fetchShipment(id: string) {
   const res = await fetch(`/api/shipments/${id}`, {
@@ -94,6 +100,7 @@ export default function ShipmentDetailPage() {
   const id = params.id as string
   const queryClient = useQueryClient()
   const [approving, setApproving] = useState(false)
+  const { handleQuickActionSuccess } = useQuickActionSuccess()
 
   const { data: shipment, isLoading, error, refetch } = useQuery({
     queryKey: ['shipment', id],
@@ -133,10 +140,10 @@ export default function ShipmentDetailPage() {
       // Veriyi yeniden çek
       await refetch()
 
-      alert(result.message || 'Sevkiyat başarıyla onaylandı! Stok düşürüldü ve rezerve miktar azaltıldı.')
+      toastSuccess('Sevkiyat başarıyla onaylandı!', result.message || 'Stok düşürüldü ve rezerve miktar azaltıldı.')
     } catch (error: any) {
       console.error('Approve error:', error)
-      alert(error?.message || 'Sevkiyat onaylanırken bir hata oluştu')
+      toastError('Sevkiyat onaylanırken bir hata oluştu', error?.message)
     } finally {
       setApproving(false)
     }
@@ -168,10 +175,10 @@ export default function ShipmentDetailPage() {
 
       await refetch()
 
-      alert(result.message || `Sevkiyat durumu "${statusLabels[newStatus]}" olarak güncellendi.`)
+      toastSuccess('Sevkiyat durumu güncellendi', result.message || `Sevkiyat durumu "${statusLabels[newStatus]}" olarak güncellendi.`)
     } catch (error: any) {
       console.error('Status change error:', error)
-      alert(error?.message || 'Durum değiştirilemedi')
+      toastError('Durum değiştirilemedi', error?.message)
     }
   }
 
@@ -330,7 +337,7 @@ export default function ShipmentDetailPage() {
             <DollarSign className="h-5 w-5 text-gray-400" />
           </div>
           <p className="text-2xl font-bold text-gray-900">
-            {shipment.Invoice ? formatCurrency(shipment.Invoice.total || 0) : '-'}
+            {shipment.Invoice ? formatCurrency(shipment.Invoice.total || shipment.Invoice.totalAmount || 0) : '-'}
           </p>
         </motion.div>
 
@@ -351,6 +358,59 @@ export default function ShipmentDetailPage() {
           </p>
         </motion.div>
       </div>
+
+      {/* Quick Actions */}
+      {customer && (customer.email || customer.phone) && (
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Hızlı İşlemler</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {customer.email && (
+              <SendEmailButton
+                to={customer.email}
+                subject={`Sevkiyat Takip: ${shipment.tracking || shipment.id.substring(0, 8)}`}
+                html={`
+                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px;">
+                      Sevkiyat Bilgileri
+                    </h2>
+                    <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                      <p><strong>Takip No:</strong> ${shipment.tracking || shipment.id.substring(0, 8)}</p>
+                      <p><strong>Durum:</strong> ${statusLabels[shipment.status] || shipment.status}</p>
+                      ${shipment.Invoice?.invoiceNumber ? `<p><strong>Fatura No:</strong> ${shipment.Invoice.invoiceNumber}</p>` : ''}
+                      ${shipment.shippingDate ? `<p><strong>Sevkiyat Tarihi:</strong> ${new Date(shipment.shippingDate).toLocaleDateString('tr-TR')}</p>` : ''}
+                      ${shipment.expectedDeliveryDate ? `<p><strong>Tahmini Teslimat:</strong> ${new Date(shipment.expectedDeliveryDate).toLocaleDateString('tr-TR')}</p>` : ''}
+                    </div>
+                    <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">
+                      Bu e-posta CRM Enterprise V3 sisteminden gönderilmiştir.
+                    </p>
+                  </div>
+                `}
+                category="GENERAL"
+                entityData={shipment}
+                onSuccess={() => handleQuickActionSuccess({
+                  entityType: 'shipment',
+                  entityName: shipment.tracking || shipment.id.substring(0, 8),
+                  entityId: shipment.id,
+                })}
+              />
+            )}
+            {customer.phone && (
+              <>
+                <SendSmsButton
+                  to={customer.phone}
+                  message={`Merhaba ${customer.name}, sevkiyatınız hakkında bilgi vermek istiyoruz. Takip No: ${shipment.tracking || shipment.id.substring(0, 8)}`}
+                />
+                <SendWhatsAppButton
+                  phoneNumber={customer.phone}
+                  entityType="shipment"
+                  entityId={shipment.id}
+                  customerName={customer.name}
+                />
+              </>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* Tabs: Detaylı Bilgiler */}
       <Tabs defaultValue="overview" className="w-full">
@@ -476,7 +536,7 @@ export default function ShipmentDetailPage() {
                 <div className="md:col-span-2">
                   <p className="text-sm text-gray-600 mb-1">Toplam Tutar</p>
                   <p className="text-xl font-bold text-gray-900">
-                    {formatCurrency(shipment.Invoice.total || 0)}
+                    {formatCurrency(shipment.Invoice.total || shipment.Invoice.totalAmount || 0)}
                   </p>
                   {/* KDV ve İndirim Detayları */}
                   {(() => {

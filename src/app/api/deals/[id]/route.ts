@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { updateRecord } from '@/lib/crud'
 import { 
   isValidDealTransition, 
   isDealImmutable, 
@@ -16,14 +17,32 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // DEBUG: API endpoint çağrıldı
+    console.log('[Deals [id] API] 🚀 GET endpoint called')
+    
     // Session kontrolü - hata yakalama ile
     const { session, error: sessionError } = await getSafeSession(request)
     if (sessionError) {
+      console.error('[Deals [id] API] ❌ Session Error:', sessionError)
       return sessionError
     }
 
-    if (!session?.user?.companyId) {
-      return NextResponse.json({ error: 'Yetkisiz erişim' }, { status: 401 })
+    // ✅ ÇÖZÜM: SuperAdmin için companyId kontrolü bypass et
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    if (!isSuperAdmin && !session?.user?.companyId) {
+      const { getErrorMessage } = await import('@/lib/api-locale')
+      return NextResponse.json({ error: getErrorMessage('errors.unauthorized', request) }, { status: 401 })
+    }
+
+    // DEBUG: SuperAdmin kontrolü
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Deals [id] API] 🔍 Session Check:', {
+        userId: session.user.id,
+        email: session.user.email,
+        role: session.user.role,
+        companyId: session.user.companyId,
+        isSuperAdmin,
+      })
     }
 
     // Permission check - canRead kontrolü
@@ -34,18 +53,28 @@ export async function GET(
     }
 
     const { id } = await params
+    
+    // DEBUG: Deal ID kontrolü
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Deals [id] API] 🔍 Fetching Deal:', {
+        dealId: id,
+        isSuperAdmin,
+      })
+    }
+    
     const supabase = getSupabaseWithServiceRole()
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
-    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
-    const companyId = session.user.companyId
+    // ✅ ÇÖZÜM: SuperAdmin'in companyId'si null olabilir, bu durumda filtreleme yapma
+    const companyId = session.user.companyId || null
 
     // Deal'ı sadece gerekli kolonlarla çek (performans için)
+    // NOT: createdBy/updatedBy kolonları migration'da yoksa hata verir, bu yüzden kaldırıldı
     let query = supabase
       .from('Deal')
       .select(
         `
-        id, title, stage, value, status, customerId, customerCompanyId, priorityScore, isPriority, leadSource, companyId, createdAt, updatedAt,
+        id, title, stage, value, status, customerId, customerCompanyId, priorityScore, isPriority, leadSource, description, companyId, createdAt, updatedAt,
         Customer (
           id,
           name,
@@ -57,30 +86,104 @@ export async function GET(
           status,
           totalAmount,
           createdAt
-        ),
-        Contract (
-          id,
-          title,
-          status,
-          createdAt
         )
       `
       )
       .eq('id', id)
     
-    // SuperAdmin değilse companyId filtresi ekle
-    if (!isSuperAdmin) {
+    // SuperAdmin değilse ve companyId varsa filtrele
+    if (!isSuperAdmin && companyId) {
       query = query.eq('companyId', companyId)
+    } else if (isSuperAdmin) {
+      // DEBUG: SuperAdmin bypass - tüm şirketlerden deal çekiliyor
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Deals [id] API] ✅ SuperAdmin bypass - fetching deal from all companies')
+      }
     }
     
-    const { data, error } = await query.single()
+    let { data, error } = await query.single()
+    
+    // Hata varsa (kolon bulunamadı veya foreign key hatası), tekrar dene
+    if (error && (error.code === 'PGRST200' || error.message?.includes('Could not find a relationship') || error.message?.includes('does not exist'))) {
+      console.warn('Deal GET API: Hata oluştu, tekrar deneniyor...', error.message)
+      let queryWithoutJoin = supabase
+        .from('Deal')
+        .select(
+          `
+          id, title, stage, value, status, customerId, customerCompanyId, priorityScore, isPriority, leadSource, description, companyId, createdAt, updatedAt,
+          Customer (
+            id,
+            name,
+            email
+          ),
+          Quote (
+            id,
+            title,
+            status,
+            totalAmount,
+            createdAt
+          )
+        `
+        )
+        .eq('id', id)
+      
+      if (!isSuperAdmin && companyId) {
+        queryWithoutJoin = queryWithoutJoin.eq('companyId', companyId)
+      }
+      
+      const retryResult = await queryWithoutJoin.single()
+      const retryData: any = retryResult.data
+      error = retryResult.error
+      
+      // createdBy/updatedBy kolonları kaldırıldı, User bilgileri çekilmiyor
+      data = retryData
+    }
+    
+    // DEBUG: Query sonucu
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Deals [id] API] 🔍 Query Result:', {
+        dealId: id,
+        hasData: !!data,
+        error: error?.message || null,
+        errorCode: error?.code || null,
+      })
+    }
 
     if (error || !data) {
-      // Hata mesajını Türkçe ve anlaşılır yap
-      if (error?.code === 'PGRST116' || error?.message?.includes('No rows')) {
-        return NextResponse.json({ error: 'Fırsat bulunamadı' }, { status: 404 })
+      // DEBUG: Detaylı hata bilgisi
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[Deals [id] API] ❌ Deal Not Found:', {
+          dealId: id,
+          error: error?.message || 'No error message',
+          errorCode: error?.code || 'No error code',
+          isSuperAdmin,
+          companyId,
+          queryApplied: !isSuperAdmin && companyId ? `companyId=${companyId}` : 'No companyId filter (SuperAdmin)',
+        })
       }
-      return NextResponse.json({ error: error?.message || 'Fırsat bulunamadı' }, { status: 404 })
+      
+      // Hata mesajını Türkçe ve anlaşılır yap
+      const debugInfo = {
+        dealId: id,
+        isSuperAdmin,
+        companyId,
+        queryApplied: !isSuperAdmin && companyId ? `companyId=${companyId}` : 'No companyId filter (SuperAdmin)',
+        errorCode: error?.code,
+        errorMessage: error?.message,
+        nodeEnv: process.env.NODE_ENV,
+      }
+      
+      const { getErrorMessage } = await import('@/lib/api-locale')
+      if (error?.code === 'PGRST116' || error?.message?.includes('No rows')) {
+        return NextResponse.json({ 
+          error: getErrorMessage('errors.api.dealNotFound', request),
+          debug: debugInfo, // Her zaman ekle - development kontrolü kaldırıldı
+        }, { status: 404 })
+      }
+      return NextResponse.json({ 
+        error: error?.message || getErrorMessage('errors.api.dealNotFound', request),
+        debug: debugInfo, // Her zaman ekle - development kontrolü kaldırıldı
+      }, { status: 404 })
     }
 
     // Meeting'leri çek (dealId ile ilişkili)
@@ -91,6 +194,23 @@ export async function GET(
       .order('meetingDate', { ascending: false })
       .limit(10)
 
+    // ✅ ÇÖZÜM: Contract'ları ayrı query ile çek (PGRST201 hatası nedeniyle)
+    // Deal ve Contract arasında çift yönlü ilişki var (Contract.dealId ve Deal.contractId)
+    // Bu yüzden Supabase hangi foreign key'i kullanacağını bilemiyor
+    let contractQuery = supabase
+      .from('Contract')
+      .select('id, title, status, createdAt, contractNumber')
+      .eq('dealId', id)
+      .order('createdAt', { ascending: false })
+      .limit(10)
+    
+    // SuperAdmin değilse ve companyId varsa filtrele
+    if (!isSuperAdmin && companyId) {
+      contractQuery = contractQuery.eq('companyId', companyId)
+    }
+    
+    const { data: contracts } = await contractQuery
+
     // ActivityLog'lar KALDIRILDI - Lazy load için ayrı endpoint kullanılacak (/api/activity?entity=Deal&id=...)
     // (Performans optimizasyonu: Detay sayfası daha hızlı açılır, ActivityLog'lar gerektiğinde yüklenir)
     // NOT: Deal WON/LOST/CLOSED için ActivityLog'lar hala tutuluyor (PUT endpoint'inde)
@@ -98,6 +218,7 @@ export async function GET(
     return NextResponse.json({
       ...(data as any),
       Meeting: meetings || [],
+      Contract: contracts || [], // ✅ ÇÖZÜM: Ayrı query ile çekilen Contract'lar
       activities: [], // Boş array - lazy load için ayrı endpoint kullanılacak
     })
   } catch (error) {
@@ -119,7 +240,9 @@ export async function PUT(
       return sessionError
     }
 
-    if (!session?.user?.companyId) {
+    // ✅ ÇÖZÜM: SuperAdmin için companyId kontrolü bypass et
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    if (!isSuperAdmin && !session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -140,8 +263,8 @@ export async function PUT(
     const supabase = getSupabaseWithServiceRole()
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
-    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
-    const companyId = session.user.companyId
+    // ✅ ÇÖZÜM: SuperAdmin'in companyId'si null olabilir
+    const companyId = session.user.companyId || null
 
     // Permission check - canUpdate kontrolü
     const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')
@@ -156,8 +279,8 @@ export async function PUT(
       .select('title, stage, status, value, customerId, companyId')
       .eq('id', id)
     
-    // SuperAdmin değilse companyId filtresi ekle
-    if (!isSuperAdmin) {
+    // SuperAdmin değilse ve companyId varsa filtrele
+    if (!isSuperAdmin && companyId) {
       existingDealQuery = existingDealQuery.eq('companyId', companyId)
     }
     
@@ -165,19 +288,23 @@ export async function PUT(
 
     if (existingDealError || !existingDeal) {
       // Hata mesajını Türkçe ve anlaşılır yap
+      const { getErrorMessage } = await import('@/lib/api-locale')
       if (existingDealError?.code === 'PGRST116' || existingDealError?.message?.includes('No rows')) {
-        return NextResponse.json({ error: 'Deal not found' }, { status: 404 })
+        return NextResponse.json({ error: getErrorMessage('errors.api.dealNotFound', request) }, { status: 404 })
       }
-      return NextResponse.json({ error: 'Deal not found' }, { status: 404 })
+      return NextResponse.json({ error: getErrorMessage('errors.api.dealNotFound', request) }, { status: 404 })
     }
 
     // ÖNEMLİ: Stage validation - Immutable kontrol
+    const { getErrorMessage, getMessages, getLocaleFromRequest, getActivityMessage } = await import('@/lib/api-locale')
+    const locale = getLocaleFromRequest(request)
+    const msgs = getMessages(locale)
     const currentStage = (existingDeal as any)?.stage
     if (currentStage && isDealImmutable(currentStage)) {
       return NextResponse.json(
         { 
-          error: 'Bu fırsat artık değiştirilemez',
-          message: `${currentStage} durumundaki fırsatlar değiştirilemez (immutable). Sözleşme oluşturulmuştur.`,
+          error: getErrorMessage('errors.api.dealCannotBeChanged', request),
+          message: getErrorMessage('errors.api.dealCannotBeChangedMessage', request, { stage: currentStage }),
           reason: 'IMMUTABLE_DEAL',
           stage: currentStage
         },
@@ -204,12 +331,28 @@ export async function PUT(
       }
     }
 
+    // ÖNEMLİ: LOST stage'inde lostReason zorunlu
+    if (body.stage === 'LOST' || (body.stage === undefined && currentStage === 'LOST')) {
+      const lostReasonToCheck = body.lostReason !== undefined ? body.lostReason : (existingDeal as any)?.lostReason
+      if (!lostReasonToCheck || typeof lostReasonToCheck !== 'string' || lostReasonToCheck.trim().length === 0) {
+        return NextResponse.json(
+          {
+            error: getErrorMessage('errors.api.dealLostReasonRequired', request),
+            message: getErrorMessage('errors.api.dealLostReasonRequired', request),
+            reason: 'LOST_REASON_REQUIRED',
+            stage: body.stage || currentStage
+          },
+          { status: 400 }
+        )
+      }
+    }
+
     // ÖNEMLİ: Deal CLOSED olduğunda değiştirilemez
     if ((existingDeal as any)?.status === 'CLOSED') {
       return NextResponse.json(
         { 
-          error: 'Kapatılmış fırsatlar değiştirilemez',
-          message: 'Bu fırsat kapatıldı. Fırsat bilgilerini değiştirmek mümkün değildir.',
+          error: getErrorMessage('errors.api.dealClosedCannotBeChanged', request),
+          message: getErrorMessage('errors.api.dealClosedCannotBeChangedMessage', request),
           reason: 'CLOSED_DEAL_CANNOT_BE_UPDATED'
         },
         { status: 403 }
@@ -219,98 +362,112 @@ export async function PUT(
     // Deal verilerini güncelle - SADECE gönderilen alanları güncelle (partial update)
     // schema.sql: title, stage, value, status, companyId, customerId, updatedAt
     // schema-extension.sql: winProbability, expectedCloseDate, description (migration çalıştırılmamış olabilir - GÖNDERME!)
+    // Güvenlik: createdBy ve updatedBy otomatik dolduruluyor (CRUD fonksiyonunda), body'den alınmamalı
+    const { id: bodyId, companyId: bodyCompanyId, createdAt, updatedAt, createdBy, updatedBy, ...cleanBody } = body
+    
     const updateData: any = {
-      updatedAt: new Date().toISOString(),
+      // updatedAt ve updatedBy CRUD fonksiyonunda otomatik ekleniyor
     }
 
     // Sadece gönderilen alanları güncelle (undefined olanları mevcut değerle koru)
     // NOT: Sadece temel kolonları güncelle - migration kolonları (leadSource, lostReason, status) opsiyonel
-    if (body.title !== undefined) updateData.title = body.title
-    if (body.stage !== undefined) {
-      updateData.stage = body.stage
+    if (cleanBody.title !== undefined) updateData.title = cleanBody.title
+    if (cleanBody.stage !== undefined) {
+      updateData.stage = cleanBody.stage
       // NOT: Status kolonu opsiyonel - kolon yoksa hata vermemesi için status'u updateData'ya ekleme
       // Status kolonu varsa ayrı bir update ile güncellenecek (aşağıda)
     }
     // NOT: Status kolonu güncelleme kaldırıldı - kolon yoksa hata vermemesi için
-    if (body.value !== undefined) updateData.value = typeof body.value === 'string' ? parseFloat(body.value) || 0 : (body.value || 0)
-    if (body.customerId !== undefined) updateData.customerId = body.customerId || null
+    if (cleanBody.value !== undefined) updateData.value = typeof cleanBody.value === 'string' ? parseFloat(cleanBody.value) || 0 : (cleanBody.value || 0)
+    if (cleanBody.customerId !== undefined) updateData.customerId = cleanBody.customerId || null
     // lostReason: LOST stage'inde gönderilirse ekle (kolon yoksa hata vermemesi için try-catch ile)
-    if (body.lostReason !== undefined && body.stage === 'LOST') {
-      updateData.lostReason = body.lostReason
+    if (cleanBody.lostReason !== undefined && cleanBody.stage === 'LOST') {
+      updateData.lostReason = cleanBody.lostReason
     }
     // NOT: leadSource gibi migration kolonları kaldırıldı - kolon yoksa hata vermemesi için
     // NOT: description, winProbability, expectedCloseDate schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
-    // Update query - Supabase'in otomatik join'ini önlemek için select yapmıyoruz
-    // NOT: Supabase update query'si Invoice tablosuna otomatik join yapıyor (i.total hatası)
-    // Bu yüzden select çağrısını tamamen kaldırıyoruz ve response'u manuel oluşturuyoruz
-    // NOT: Supabase'in update metodu select yapmadan da çalışır, sadece error döner
-    
-    // Update işlemini yap - select yapmıyoruz (Invoice join'i i.total hatası veriyor)
-    // NOT: Supabase'in update metodu select yapmadan da çalışır, sadece error döner
-    let updateQuery = supabase
-      .from('Deal')
-      .update(updateData)
-      .eq('id', id)
-    
-    // SuperAdmin değilse companyId filtresi ekle
-    if (!isSuperAdmin) {
-      updateQuery = updateQuery.eq('companyId', companyId)
-    }
-    
-    // Update işlemini yap - Status kolonu yoksa hata vermemesi için fallback mekanizması
-    let updatedDealData: any = null
-    let error: any = null
-    
-    // Status kolonunu updateData'dan ayır (kolon yoksa hata vermemesi için)
-    // NOT: Status kolonu hiç eklenmediği için ayırma işlemi gerekmiyor
+    // updateRecord kullanarak audit trail desteği (updatedBy otomatik eklenir)
+    // NOT: Status kolonu yoksa hata vermemesi için status'u updateData'dan çıkarıyoruz
     const updateDataFinal = { ...updateData }
     delete updateDataFinal.status // Status kolonunu kaldır (yoksa hata vermemesi için)
     
-    // Update yap
-    let retryQuery = supabase
-      .from('Deal')
-      .update(updateDataFinal)
-      .eq('id', id)
-    
-    if (!isSuperAdmin) {
-      retryQuery = retryQuery.eq('companyId', companyId)
-    }
-    
-    // Update yap ve select et
-    const retryResult = await retryQuery.select('id, title, stage, value, customerId, companyId, updatedAt').single()
-    error = retryResult.error
-    updatedDealData = retryResult.data
-    
-    // Eğer hala hata varsa ve status kolonu hatası değilse, hatayı döndür
-    if (error && !(error.message?.includes('status') || (error.message?.includes('column') && error.message?.includes('does not exist')))) {
-      // Status kolonu hatası değil, başka bir hata var
-      // Devam et, lostReason kontrolüne geç
-    }
-
-    if (error) {
+    try {
+      const dealTitle = cleanBody.title || existingDeal?.title || msgs.activity.defaultDealTitle
+      const updatedDealData = await updateRecord(
+        'Deal',
+        id,
+        updateDataFinal,
+        getActivityMessage(locale, 'dealUpdated', { title: dealTitle })
+      )
+      
+      if (!updatedDealData) {
+        return NextResponse.json({ error: getErrorMessage('errors.api.dealCannotBeUpdated', request) }, { status: 500 })
+      }
+      
+      // Güncellenmiş veriyi çek
+      let query = supabase
+        .from('Deal')
+        .select('*')
+        .eq('id', id)
+      
+      if (!isSuperAdmin && companyId) {
+        query = query.eq('companyId', companyId)
+      }
+      
+      const { data: deal, error: fetchError } = await query.single()
+      
+      if (fetchError || !deal) {
+        return NextResponse.json({ error: getErrorMessage('errors.api.dealNotFound', request) }, { status: 404 })
+      }
+      
+      return NextResponse.json(deal)
+    } catch (updateError: any) {
       // lostReason kolonu yoksa hatayı yok say (opsiyonel kolon)
-      if (error.message?.includes('lostReason') || error.code === '42703') {
+      if (updateError?.message?.includes('lostReason') || updateError?.code === '42703') {
         // lostReason'ı updateData'dan kaldır ve tekrar dene
-        const { lostReason, ...updateDataWithoutLostReason } = updateData
-        const { error: retryError } = await supabase
-          .from('Deal')
-          .update(updateDataWithoutLostReason)
-          .eq('id', id)
-          .eq('companyId', companyId)
-        
-        if (retryError) {
+        const { lostReason, ...updateDataWithoutLostReason } = updateDataFinal
+        try {
+          const updatedDealData = await updateRecord(
+            'Deal',
+            id,
+            updateDataWithoutLostReason,
+            getActivityMessage(locale, 'dealUpdated', { title: cleanBody.title || existingDeal?.title || getActivityMessage(locale, 'defaultDealTitle') })
+          )
+          
+          if (!updatedDealData) {
+            return NextResponse.json({ error: getErrorMessage('errors.api.dealCannotBeUpdated', request) }, { status: 500 })
+          }
+          
+          // Güncellenmiş veriyi çek
+          let query = supabase
+            .from('Deal')
+            .select('*')
+            .eq('id', id)
+          
+          if (!isSuperAdmin && companyId) {
+            query = query.eq('companyId', companyId)
+          }
+          
+          const { data: deal, error: fetchError } = await query.single()
+          
+          if (fetchError || !deal) {
+            return NextResponse.json({ error: getErrorMessage('errors.api.dealNotFound', request) }, { status: 404 })
+          }
+          
+          return NextResponse.json(deal)
+        } catch (retryError: any) {
           if (process.env.NODE_ENV === 'development') {
             console.error('Deals [id] PUT API update error (retry):', {
-              error: retryError.message,
-              code: retryError.code,
+              error: retryError?.message,
+              code: retryError?.code,
               updateData: updateDataWithoutLostReason,
               dealId: id,
             })
           }
           return NextResponse.json(
             { 
-              error: retryError.message || 'Failed to update deal',
+              error: retryError?.message || 'Failed to update deal',
             },
             { status: 500 }
           )
@@ -318,72 +475,25 @@ export async function PUT(
       } else {
         if (process.env.NODE_ENV === 'development') {
           console.error('Deals [id] PUT API update error:', {
-            error: error.message,
-            code: error.code,
-            details: error.details,
-            hint: error.hint,
+            error: updateError?.message,
+            code: updateError?.code,
             updateData,
             dealId: id,
           })
         }
         return NextResponse.json(
           { 
-            error: error.message || 'Failed to update deal',
-            ...(process.env.NODE_ENV === 'development' && {
-              details: error,
-              code: error.code,
-              hint: error.hint,
-            }),
+            error: updateError?.message || 'Failed to update deal',
           },
           { status: 500 }
         )
       }
     }
 
-    // ActivityLog kaydı - hata olsa bile ana işlem başarılı
-    try {
-      let activityDescription = `Fırsat güncellendi: ${body.title || existingDeal?.title || 'Fırsat'}`
-      
-      // Stage değiştiyse özel mesaj
-      if (body.stage !== undefined && body.stage !== currentStage) {
-        if (body.stage === 'WON') {
-          activityDescription = `Fırsat kazanıldı: ${body.title || existingDeal?.title || 'Fırsat'}. Sözleşme otomatik oluşturuldu.`
-        } else if (body.stage === 'LOST') {
-          activityDescription = `Fırsat kaybedildi: ${body.title || existingDeal?.title || 'Fırsat'}${body.lostReason ? '. Sebep: ' + body.lostReason : ''}`
-        } else {
-          activityDescription = `Fırsat aşaması değiştirildi: ${currentStage} → ${body.stage}`
-        }
-      }
-      
-      // @ts-ignore - Supabase type inference issue with dynamic table names
-      await (supabase.from('ActivityLog') as any).insert([
-        {
-          entity: 'Deal',
-          action: body.stage === 'WON' ? 'WON' : body.stage === 'LOST' ? 'LOST' : 'UPDATE',
-          description: activityDescription,
-          meta: { 
-            entity: 'Deal', 
-            action: body.stage === 'WON' ? 'won' : body.stage === 'LOST' ? 'lost' : 'update', 
-            id,
-            ...(body.stage === 'LOST' && body.lostReason && { lostReason: body.lostReason }),
-            ...(body.stage && { stage: body.stage, previousStage: currentStage }),
-          },
-          userId: session.user.id,
-          companyId: session.user.companyId,
-        },
-      ])
-    } catch (logError) {
-      // ActivityLog hatası ana işlemi etkilemez
-      console.error('ActivityLog insert error:', logError)
-    }
-    
-    // Response oluştur - updatedDealData varsa onu kullan, yoksa existingDeal'ı kullan
-    const responseData = updatedDealData || existingDeal
-
     // ÖNEMLİ: Deal CLOSED olduğunda özel ActivityLog ve bildirim
-    if (body.status === 'CLOSED' && (existingDeal as any)?.status !== 'CLOSED') {
+    if (cleanBody.status === 'CLOSED' && (existingDeal as any)?.status !== 'CLOSED') {
       try {
-        const dealTitle = body.title || (existingDeal as any)?.title || 'Fırsat'
+        const dealTitle = cleanBody.title || (existingDeal as any)?.title || getActivityMessage(locale, 'defaultDealTitle')
         
         // Özel ActivityLog kaydı
         // @ts-ignore - Supabase type inference issue with dynamic table names
@@ -391,7 +501,7 @@ export async function PUT(
           {
             entity: 'Deal',
             action: 'UPDATE',
-            description: `Fırsat kapatıldı: ${dealTitle}`,
+            description: getActivityMessage(locale, 'dealClosed', { title: dealTitle }),
             meta: { 
               entity: 'Deal', 
               action: 'closed', 
@@ -409,8 +519,8 @@ export async function PUT(
         await createNotificationForRole({
           companyId: session.user.companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-          title: 'Fırsat Kapatıldı',
-          message: `${dealTitle} fırsatı kapatıldı. Detayları görmek ister misiniz?`,
+          title: msgs.activity.dealClosedTitle,
+          message: getActivityMessage(locale, 'dealClosedMessage', { title: dealTitle }),
           type: 'info',
           relatedTo: 'Deal',
           relatedId: id,
@@ -427,14 +537,14 @@ export async function PUT(
     const automationInfo: any = {}
     
     // ÖNEMLİ: Deal WON olduğunda otomatik Quote ve Contract oluştur
-    if (body.stage === 'WON' && (existingDeal as any)?.stage !== 'WON') {
+    if (cleanBody.stage === 'WON' && (existingDeal as any)?.stage !== 'WON') {
       let newQuote: any = null
       let newContract: any = null
       
       try {
-        const dealTitle = body.title || (existingDeal as any)?.title || 'Fırsat'
-        const dealValue = body.value !== undefined ? body.value : ((existingDeal as any)?.value || 0)
-        const dealCustomerId = body.customerId || (existingDeal as any)?.customerId || null
+        const dealTitle = cleanBody.title || (existingDeal as any)?.title || getActivityMessage(locale, 'defaultDealTitle')
+        const dealValue = cleanBody.value !== undefined ? cleanBody.value : ((existingDeal as any)?.value || 0)
+        const dealCustomerId = cleanBody.customerId || (existingDeal as any)?.customerId || null
         
         // Otomatik Quote oluştur
         const now = new Date()
@@ -486,7 +596,7 @@ export async function PUT(
             {
               entity: 'Quote',
               action: 'CREATE',
-              description: `Fırsat kazanıldığı için otomatik teklif oluşturuldu: ${quoteTitle}`,
+              description: getActivityMessage(locale, 'autoQuoteCreatedMessage', { dealTitle, quoteTitle }),
               meta: { 
                 entity: 'Quote', 
                 action: 'auto_created_from_deal', 
@@ -504,8 +614,8 @@ export async function PUT(
           await createNotificationForRole({
             companyId: session.user.companyId,
             role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-            title: 'Otomatik Teklif Oluşturuldu',
-            message: `${dealTitle} fırsatı kazanıldı. Otomatik olarak ${quoteTitle} teklifi oluşturuldu.`,
+            title: msgs.activity.autoQuoteCreated,
+            message: getActivityMessage(locale, 'autoQuoteCreatedMessage', { dealTitle, quoteTitle }),
             type: 'success',
             relatedTo: 'Quote',
             relatedId: (newQuote as any).id,
@@ -589,7 +699,7 @@ export async function PUT(
               {
                 entity: 'Contract',
                 action: 'CREATE',
-                description: `Fırsat kazanıldığı için otomatik sözleşme oluşturuldu: ${contractNumber}`,
+                description: getActivityMessage(locale, 'autoContractCreatedMessage', { dealTitle, contractNumber }),
                 meta: { 
                   entity: 'Contract', 
                   action: 'auto_created_from_deal', 
@@ -608,8 +718,8 @@ export async function PUT(
             await createNotificationForRole({
               companyId: session.user.companyId,
               role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-              title: 'Otomatik Sözleşme Oluşturuldu',
-              message: `${dealTitle} fırsatı kazanıldı. Otomatik olarak ${contractNumber} sözleşmesi oluşturuldu.`,
+              title: msgs.activity.autoContractCreated,
+              message: getActivityMessage(locale, 'autoContractCreatedMessage', { dealTitle, contractNumber }),
               type: 'success',
               relatedTo: 'Contract',
               relatedId: (newContract as any).id,
@@ -648,7 +758,7 @@ export async function PUT(
                 // Email gönder
                 const emailResult = await sendEmail({
                   to: variables.customerEmail as string,
-                  subject: emailTemplate.subject || 'Fırsat Kazanıldı',
+                  subject: emailTemplate.subject || msgs.activity.dealWonEmailSubject,
                   html: emailTemplate.body,
                 })
                 
@@ -677,9 +787,9 @@ export async function PUT(
     }
 
     // ÖNEMLİ: Deal LOST olduğunda özel ActivityLog ve bildirim
-    if (body.stage === 'LOST' && (existingDeal as any)?.stage !== 'LOST') {
+    if (cleanBody.stage === 'LOST' && (existingDeal as any)?.stage !== 'LOST') {
       try {
-        const dealTitle = body.title || (existingDeal as any)?.title || 'Fırsat'
+        const dealTitle = cleanBody.title || (existingDeal as any)?.title || getActivityMessage(locale, 'defaultDealTitle')
         
         // Özel ActivityLog kaydı
         // @ts-ignore - Supabase type inference issue with dynamic table names
@@ -687,7 +797,7 @@ export async function PUT(
           {
             entity: 'Deal',
             action: 'UPDATE',
-            description: `Fırsat kaybedildi: ${dealTitle}`,
+            description: getActivityMessage(locale, 'dealLost', { title: dealTitle }),
             meta: { 
               entity: 'Deal', 
               action: 'lost', 
@@ -705,8 +815,8 @@ export async function PUT(
         await createNotificationForRole({
           companyId: session.user.companyId,
           role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-          title: 'Fırsat Kaybedildi',
-          message: `${dealTitle} fırsatı kaybedildi. Detayları görmek ister misiniz?`,
+          title: msgs.activity.dealLostTitle,
+          message: getActivityMessage(locale, 'dealLostMessage', { title: dealTitle }),
           type: 'warning',
           relatedTo: 'Deal',
           relatedId: id,
@@ -721,19 +831,21 @@ export async function PUT(
 
     // Cache headers - PUT sonrası fresh data için cache'i kapat
     // NOT: dynamic = 'force-dynamic' ile cache zaten kapalı
-    // Update başarılı - güncellenmiş deal'ı manuel oluştur (select yapmıyoruz - Invoice join hatası)
-    // Response oluştur - updatedDealData varsa onu kullan, yoksa existingDeal + updateData birleştir
-    const updatedDeal = responseData ? {
-      ...responseData,
-      ...updateData,
-    } : {
-      id,
-      ...updateData,
-      ...existingDeal,
+    // Update başarılı - güncellenmiş deal'ı çek
+    let updatedDealQuery = supabase
+      .from('Deal')
+      .select('*')
+      .eq('id', id)
+    
+    if (!isSuperAdmin && companyId) {
+      updatedDealQuery = updatedDealQuery.eq('companyId', companyId)
     }
     
+    const { data: updatedDealData } = await updatedDealQuery.single()
+    const updatedDeal = updatedDealData || existingDeal
+    
     // LOST durumunda Task oluşturuldu mu kontrol et
-    if (body.stage === 'LOST' && (existingDeal as any)?.stage !== 'LOST') {
+    if (cleanBody.stage === 'LOST' && (existingDeal as any)?.stage !== 'LOST') {
       try {
         const { data: tasks } = await supabase
           .from('Task')
@@ -779,7 +891,9 @@ export async function DELETE(
       return sessionError
     }
 
-    if (!session?.user?.companyId) {
+    // ✅ ÇÖZÜM: SuperAdmin için companyId kontrolü bypass et
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    if (!isSuperAdmin && !session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -793,16 +907,28 @@ export async function DELETE(
     const { id } = await params
     const supabase = getSupabaseWithServiceRole()
 
+    // ✅ ÇÖZÜM: SuperAdmin'in companyId'si null olabilir
+    const companyId = session.user.companyId || null
+
     // Önce deal'ı kontrol et - koruma kontrolü için
-    const { data: deal } = await supabase
+    let dealQuery = supabase
       .from('Deal')
       .select('title, stage, status')
       .eq('id', id)
-      .eq('companyId', session.user.companyId)
-      .maybeSingle()
+    
+    // SuperAdmin değilse ve companyId varsa filtrele
+    if (!isSuperAdmin && companyId) {
+      dealQuery = dealQuery.eq('companyId', companyId)
+    }
+    
+    const { data: deal } = await dealQuery.maybeSingle()
 
+    const { getErrorMessage, getMessages, getLocaleFromRequest, getActivityMessage } = await import('@/lib/api-locale')
+    const deleteLocale = getLocaleFromRequest(request)
+    const deleteMsgs = getMessages(deleteLocale)
+    
     if (!deal) {
-      return NextResponse.json({ error: 'Deal not found' }, { status: 404 })
+      return NextResponse.json({ error: getErrorMessage('errors.api.dealNotFound', request) }, { status: 404 })
     }
 
     // ÖNEMLİ: Delete validation - Stage kontrolü
@@ -810,11 +936,11 @@ export async function DELETE(
     if (!deleteCheck.canDelete) {
       return NextResponse.json(
         { 
-          error: 'Bu fırsat silinemez',
+          error: getErrorMessage('errors.api.dealCannotBeDeleted', request),
           message: deleteCheck.error,
           reason: 'CANNOT_DELETE_DEAL',
           stage: (deal as any)?.stage,
-          alternative: 'Fırsatı kapatmak için durumunu CLOSED yapabilirsiniz'
+          alternative: deleteMsgs.activity.dealCannotBeDeletedAlternative
         },
         { status: 403 }
       )
@@ -824,19 +950,25 @@ export async function DELETE(
     if ((deal as any)?.status === 'CLOSED') {
       return NextResponse.json(
         { 
-          error: 'Kapatılmış fırsatlar silinemez',
-          message: 'Bu fırsat kapatıldı. Kapatılmış fırsatları silmek mümkün değildir.',
+          error: getErrorMessage('errors.api.dealClosedCannotBeDeleted', request),
+          message: getErrorMessage('errors.api.dealClosedCannotBeDeletedMessage', request),
           reason: 'CLOSED_DEAL_CANNOT_BE_DELETED'
         },
         { status: 403 }
       )
     }
 
-    const { error } = await supabase
+    let deleteQuery = supabase
       .from('Deal')
       .delete()
       .eq('id', id)
-      .eq('companyId', session.user.companyId)
+    
+    // SuperAdmin değilse ve companyId varsa filtrele
+    if (!isSuperAdmin && companyId) {
+      deleteQuery = deleteQuery.eq('companyId', companyId)
+    }
+    
+    const { error } = await deleteQuery
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
@@ -850,7 +982,7 @@ export async function DELETE(
           {
             entity: 'Deal',
             action: 'DELETE',
-            description: `Fırsat silindi: ${(deal as any).title}`,
+            description: getActivityMessage(deleteLocale, 'dealDeleted', { title: (deal as any).title || getActivityMessage(deleteLocale, 'defaultDealTitle') }),
             meta: { entity: 'Deal', action: 'delete', id },
             userId: session.user.id,
             companyId: session.user.companyId,
@@ -870,6 +1002,7 @@ export async function DELETE(
     )
   }
 }
+
 
 
 

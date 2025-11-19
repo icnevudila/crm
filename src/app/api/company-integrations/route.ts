@@ -17,13 +17,21 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Sadece Admin ve SuperAdmin görebilir
-    if (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    // Admin, SuperAdmin ve normal kullanıcılar kendi şirketlerinin entegrasyonlarını görebilir
+    // (Kullanıcı entegrasyonları sayfasından yapılandırma için)
 
     const supabase = getSupabaseWithServiceRole()
-    const companyId = session.user.companyId
+    
+    // SuperAdmin için companyId query parametresinden alınabilir
+    const { searchParams } = new URL(request.url)
+    const requestedCompanyId = searchParams.get('companyId')
+    const companyId = session.user.role === 'SUPER_ADMIN' && requestedCompanyId 
+      ? requestedCompanyId 
+      : session.user.companyId
+
+    if (!companyId) {
+      return NextResponse.json({ error: 'Company ID bulunamadı' }, { status: 400 })
+    }
 
     // CompanyIntegration kaydını getir
     const { data, error } = await supabase
@@ -67,10 +75,8 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Sadece Admin ve SuperAdmin güncelleyebilir
-    if (session.user.role !== 'ADMIN' && session.user.role !== 'SUPER_ADMIN') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    // Admin, SuperAdmin ve normal kullanıcılar kendi şirketlerinin entegrasyonlarını güncelleyebilir
+    // (Kullanıcı entegrasyonları sayfasından yapılandırma için)
 
     let body
     try {
@@ -83,39 +89,94 @@ export async function PUT(request: Request) {
     }
 
     const supabase = getSupabaseWithServiceRole()
-    const companyId = session.user.companyId
+    
+    // SuperAdmin için companyId body'den alınabilir
+    const companyId = session.user.role === 'SUPER_ADMIN' && body.companyId
+      ? body.companyId
+      : session.user.companyId
+
+    if (!companyId) {
+      return NextResponse.json({ error: 'Company ID bulunamadı' }, { status: 400 })
+    }
 
     // Mevcut kaydı kontrol et
     const { data: existing } = await supabase
       .from('CompanyIntegration')
-      .select('id')
+      .select('*')
       .eq('companyId', companyId)
       .maybeSingle()
 
+    // Sadece body'de gönderilen alanları güncelle, diğerlerini mevcut değerlerden al
     const integrationData: any = {
       companyId,
-      // Video meeting entegrasyonları
-      zoomEnabled: body.zoomEnabled || false,
-      zoomAccountId: body.zoomAccountId || null,
-      zoomClientId: body.zoomClientId || null,
-      zoomClientSecret: body.zoomClientSecret || null,
-      googleEnabled: body.googleEnabled || false,
-      googleAccessToken: body.googleAccessToken || null,
-      microsoftEnabled: body.microsoftEnabled || false,
-      microsoftAccessToken: body.microsoftAccessToken || null,
-      // E-posta entegrasyonları
-      gmailEnabled: body.gmailEnabled || false,
-      outlookEnabled: body.outlookEnabled || false,
-      smtpEnabled: body.smtpEnabled || false,
-      smtpHost: body.smtpHost || null,
-      smtpPort: body.smtpPort || null,
-      smtpUser: body.smtpUser || null,
-      smtpPassword: body.smtpPassword || null,
-      smtpFromEmail: body.smtpFromEmail || null,
-      smtpFromName: body.smtpFromName || null,
-      emailProvider: body.emailProvider || null,
       updatedAt: new Date().toISOString(),
     }
+
+    // E-posta entegrasyonları (body'de varsa güncelle)
+    if (body.hasOwnProperty('gmailEnabled')) integrationData.gmailEnabled = body.gmailEnabled || false
+    if (body.hasOwnProperty('outlookEnabled')) integrationData.outlookEnabled = body.outlookEnabled || false
+    if (body.hasOwnProperty('smtpEnabled')) integrationData.smtpEnabled = body.smtpEnabled || false
+    if (body.hasOwnProperty('resendEnabled')) integrationData.resendEnabled = body.resendEnabled || false
+    if (body.hasOwnProperty('smtpHost')) integrationData.smtpHost = body.smtpHost || null
+    if (body.hasOwnProperty('smtpPort')) integrationData.smtpPort = body.smtpPort || null
+    if (body.hasOwnProperty('smtpUser')) integrationData.smtpUser = body.smtpUser || null
+    if (body.hasOwnProperty('smtpPassword')) integrationData.smtpPassword = body.smtpPassword || null
+    if (body.hasOwnProperty('smtpFromEmail')) integrationData.smtpFromEmail = body.smtpFromEmail || null
+    if (body.hasOwnProperty('smtpFromName')) integrationData.smtpFromName = body.smtpFromName || null
+    if (body.hasOwnProperty('resendApiKey')) integrationData.resendApiKey = body.resendApiKey || null
+    if (body.hasOwnProperty('resendFromEmail')) integrationData.resendFromEmail = body.resendFromEmail || null
+    if (body.hasOwnProperty('emailProvider')) integrationData.emailProvider = body.emailProvider || null
+    
+    // Email status hesapla
+    if (body.hasOwnProperty('resendEnabled') || body.hasOwnProperty('resendApiKey')) {
+      const resendEnabled = body.resendEnabled ?? existing?.resendEnabled ?? false
+      const resendApiKey = body.resendApiKey ?? existing?.resendApiKey ?? null
+      integrationData.emailStatus = resendEnabled && resendApiKey ? (body.emailStatus || 'ACTIVE') : (body.emailStatus || existing?.emailStatus || 'INACTIVE')
+    }
+
+    // Video meeting entegrasyonları (body'de varsa güncelle)
+    if (body.hasOwnProperty('zoomEnabled')) integrationData.zoomEnabled = body.zoomEnabled || false
+    if (body.hasOwnProperty('zoomAccountId')) integrationData.zoomAccountId = body.zoomAccountId || null
+    if (body.hasOwnProperty('zoomClientId')) integrationData.zoomClientId = body.zoomClientId || null
+    if (body.hasOwnProperty('zoomClientSecret')) integrationData.zoomClientSecret = body.zoomClientSecret || null
+    if (body.hasOwnProperty('googleEnabled')) integrationData.googleEnabled = body.googleEnabled || false
+    if (body.hasOwnProperty('googleAccessToken')) integrationData.googleAccessToken = body.googleAccessToken || null
+    if (body.hasOwnProperty('googleRefreshToken')) integrationData.googleRefreshToken = body.googleRefreshToken || null
+    if (body.hasOwnProperty('microsoftEnabled')) integrationData.microsoftEnabled = body.microsoftEnabled || false
+    if (body.hasOwnProperty('microsoftAccessToken')) integrationData.microsoftAccessToken = body.microsoftAccessToken || null
+    if (body.hasOwnProperty('microsoftRefreshToken')) integrationData.microsoftRefreshToken = body.microsoftRefreshToken || null
+    
+    // Microsoft OAuth alanları - sadece body'de varsa ve migration çalışmışsa ekle
+    if (body.hasOwnProperty('microsoftClientId')) {
+      // Kolonun var olup olmadığını kontrol etmek için try-catch kullanabiliriz
+      // Ama şimdilik sadece body'de varsa ekleyelim
+      integrationData.microsoftClientId = body.microsoftClientId || null
+    }
+    if (body.hasOwnProperty('microsoftClientSecret')) {
+      integrationData.microsoftClientSecret = body.microsoftClientSecret || null
+    }
+    if (body.hasOwnProperty('microsoftRedirectUri')) {
+      integrationData.microsoftRedirectUri = body.microsoftRedirectUri || null
+    }
+
+    // SMS entegrasyonları (body'de varsa güncelle)
+    if (body.hasOwnProperty('smsEnabled')) integrationData.smsEnabled = body.smsEnabled || false
+    if (body.hasOwnProperty('smsProvider')) integrationData.smsProvider = body.smsProvider || null
+    if (body.hasOwnProperty('twilioAccountSid')) integrationData.twilioAccountSid = body.twilioAccountSid || null
+    if (body.hasOwnProperty('twilioAuthToken')) integrationData.twilioAuthToken = body.twilioAuthToken || null
+    if (body.hasOwnProperty('twilioPhoneNumber')) integrationData.twilioPhoneNumber = body.twilioPhoneNumber || null
+    if (body.hasOwnProperty('smsStatus')) integrationData.smsStatus = body.smsStatus || null
+
+    // WhatsApp entegrasyonları (body'de varsa güncelle)
+    if (body.hasOwnProperty('whatsappEnabled')) integrationData.whatsappEnabled = body.whatsappEnabled || false
+    if (body.hasOwnProperty('whatsappProvider')) integrationData.whatsappProvider = body.whatsappProvider || null
+    if (body.hasOwnProperty('twilioWhatsappNumber')) integrationData.twilioWhatsappNumber = body.twilioWhatsappNumber || null
+    if (body.hasOwnProperty('whatsappStatus')) integrationData.whatsappStatus = body.whatsappStatus || null
+
+    // Google Calendar entegrasyonları (body'de varsa güncelle)
+    if (body.hasOwnProperty('googleCalendarClientId')) integrationData.googleCalendarClientId = body.googleCalendarClientId || null
+    if (body.hasOwnProperty('googleCalendarClientSecret')) integrationData.googleCalendarClientSecret = body.googleCalendarClientSecret || null
+    if (body.hasOwnProperty('googleCalendarRedirectUri')) integrationData.googleCalendarRedirectUri = body.googleCalendarRedirectUri || null
 
     let result
     if (existing) {
@@ -154,12 +215,18 @@ export async function PUT(request: Request) {
       ...result,
       zoomClientSecret: result.zoomClientSecret ? '***' : null,
       googleAccessToken: result.googleAccessToken ? '***' : null,
+      googleRefreshToken: result.googleRefreshToken ? '***' : null,
       microsoftAccessToken: result.microsoftAccessToken ? '***' : null,
+      microsoftRefreshToken: result.microsoftRefreshToken ? '***' : null,
+      microsoftClientSecret: result.microsoftClientSecret ? '***' : null,
       gmailOAuthToken: result.gmailOAuthToken ? '***' : null,
       gmailOAuthRefreshToken: result.gmailOAuthRefreshToken ? '***' : null,
       outlookOAuthToken: result.outlookOAuthToken ? '***' : null,
       outlookOAuthRefreshToken: result.outlookOAuthRefreshToken ? '***' : null,
       smtpPassword: result.smtpPassword ? '***' : null,
+      resendApiKey: result.resendApiKey ? '***' : null,
+      twilioAuthToken: result.twilioAuthToken ? '***' : null,
+      googleCalendarClientSecret: result.googleCalendarClientSecret ? '***' : null,
     }
 
     return NextResponse.json(response)

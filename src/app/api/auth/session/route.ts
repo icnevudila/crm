@@ -5,11 +5,18 @@ import { getSupabaseWithServiceRole } from '@/lib/supabase'
 // Supabase Auth ile session endpoint
 export async function GET() {
   try {
+    // Cache'i tamamen kapat - her zaman fresh session kontrolü
     const cookieStore = await cookies()
     const sessionCookie = cookieStore.get('crm_session')
 
     if (!sessionCookie) {
-      return NextResponse.json({ user: null })
+      return NextResponse.json({ user: null }, {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      })
     }
 
     try {
@@ -18,7 +25,13 @@ export async function GET() {
       // Session'ın geçerli olup olmadığını kontrol et
       if (new Date(sessionData.expires) < new Date()) {
         cookieStore.delete('crm_session')
-        return NextResponse.json({ user: null })
+        return NextResponse.json({ user: null }, {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+        })
       }
 
       // User bilgisini güncelle (veritabanından)
@@ -31,7 +44,13 @@ export async function GET() {
 
       if (!user) {
         cookieStore.delete('crm_session')
-        return NextResponse.json({ user: null })
+        return NextResponse.json({ user: null }, {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          },
+        })
       }
 
       // Company bilgisini al
@@ -54,14 +73,32 @@ export async function GET() {
           companyId: user.companyId || null,
           companyName,
         },
+      }, {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
       })
     } catch {
       cookieStore.delete('crm_session')
-      return NextResponse.json({ user: null })
+      return NextResponse.json({ user: null }, {
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+        },
+      })
     }
   } catch (error: any) {
     console.error('Session error:', error)
-    return NextResponse.json({ user: null })
+    return NextResponse.json({ user: null }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0',
+      },
+    })
   }
 }
 

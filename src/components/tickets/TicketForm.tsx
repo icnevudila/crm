@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from '@/lib/toast'
+import { useNavigateToDetailToast } from '@/lib/quick-action-helper'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useForm } from 'react-hook-form'
@@ -58,7 +59,7 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
     subject: z.string().min(1, t('subjectRequired')).max(200, t('subjectMaxLength')),
     status: z.enum(['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'CANCELLED']).default('OPEN'),
     priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT']).default('MEDIUM'),
-    customerId: z.string().optional(),
+    customerId: z.string().min(1, 'Müşteri seçimi zorunludur'),
     assignedTo: z.string().optional(),
     description: z.string().max(2000, t('descriptionMaxLength')).optional(),
   })
@@ -152,9 +153,10 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
     onSuccess: (savedTicket) => {
       // Toast mesajı göster
       if (ticket) {
-        toast.success(t('ticketUpdated'), t('ticketUpdatedMessage', { subject: savedTicket.subject }))
+        toast.success(t('ticketUpdated'), { description: t('ticketUpdatedMessage', { subject: savedTicket.subject }) })
       } else {
-        toast.success(t('ticketCreated'), t('ticketCreatedMessage', { subject: savedTicket.subject }))
+        // Yeni ticket oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
+        navigateToDetailToast('ticket', savedTicket.id, savedTicket.subject)
       }
       
       // onSuccess callback'i çağır - optimistic update için
@@ -172,7 +174,7 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
       await mutation.mutateAsync(data)
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error(t('saveFailed'), error?.message)
+      toast.error(t('saveFailed'), { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }
@@ -207,17 +209,16 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
 
             {/* Customer */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t('customerLabel')}</label>
+              <label className="text-sm font-medium">{t('customerLabel')} *</label>
               <Select
-                value={customerId || 'none'}
-                onValueChange={(value) => setValue('customerId', value === 'none' ? '' : value)}
+                value={customerId || ''}
+                onValueChange={(value) => setValue('customerId', value)}
                 disabled={loading}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={t('customerPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">{t('customerNotSelected')}</SelectItem>
                   {customers.map((customer: any) => (
                     <SelectItem key={customer.id} value={customer.id}>
                       {customer.name}
@@ -225,6 +226,9 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
                   ))}
                 </SelectContent>
               </Select>
+              {errors.customerId && (
+                <p className="text-sm text-red-600">{errors.customerId.message}</p>
+              )}
             </div>
 
             {/* Assigned To */}

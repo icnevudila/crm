@@ -80,7 +80,7 @@ export default function EmailCampaignDetailPage() {
 
       await mutate()
       toast.dismiss(toastId)
-      toast.success('Gönderildi', 'Kampanya başarıyla gönderildi.')
+      toast.success('Gönderildi', { description: 'Kampanya başarıyla gönderildi.' })
     } catch (error: any) {
       console.error('Send error:', error)
       toast.dismiss(toastId)

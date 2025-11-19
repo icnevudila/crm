@@ -31,6 +31,8 @@ import SkeletonList from '@/components/skeletons/SkeletonList'
 import ModuleStats from '@/components/stats/ModuleStats'
 import { AutomationInfo } from '@/components/automation/AutomationInfo'
 import RefreshButton from '@/components/ui/RefreshButton'
+import EmptyState from '@/components/ui/EmptyState'
+import Pagination from '@/components/ui/Pagination'
 import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils'
 import dynamic from 'next/dynamic'
@@ -59,7 +61,9 @@ interface Product {
   barcode?: string
   status?: string
   minStock?: number
+  minimumStock?: number // API'den minimumStock olarak geliyor
   maxStock?: number
+  maximumStock?: number // API'den maximumStock olarak geliyor
   unit?: string
   description?: string
   imageUrl?: string
@@ -103,6 +107,10 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
   const [selectedProductData, setSelectedProductData] = useState<Product | null>(null)
   
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  
   // SuperAdmin için firmaları çek
   const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
     isOpen && isSuperAdmin ? '/api/superadmin/companies' : null,
@@ -119,6 +127,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
+      setCurrentPage(1) // Arama değiştiğinde ilk sayfaya dön
     }, 300)
     
     return () => clearTimeout(timer)
@@ -134,6 +143,8 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     if (categoryFilter) params.append('category', categoryFilter)
     if (statusFilter) params.append('status', statusFilter)
     if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+    params.append('page', currentPage.toString())
+    params.append('pageSize', pageSize.toString())
     return `/api/products?${params.toString()}`
   }, [
     isOpen,
@@ -143,9 +154,21 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     statusFilter,
     isSuperAdmin,
     filterCompanyId,
+    currentPage,
+    pageSize,
   ])
 
-  const { data: productsData, isLoading, error, mutate: mutateProducts } = useData<Product[]>(
+  interface ProductsResponse {
+    data: Product[]
+    pagination: {
+      page: number
+      pageSize: number
+      totalItems: number
+      totalPages: number
+    }
+  }
+
+  const { data: productsData, isLoading, error, mutate: mutateProducts } = useData<Product[] | ProductsResponse>(
     apiUrl,
     {
       dedupingInterval: 5000,
@@ -163,14 +186,26 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     ])
   }
 
-  // API'den dönen veriyi parse et - array olarak bekliyoruz (useMemo ile memoize)
+  // API'den dönen veriyi parse et - hem array hem de { data, pagination } formatını destekle
   const products = useMemo(() => {
     // Hata varsa boş array döndür
     if (error) {
       return []
     }
-    return Array.isArray(productsData) ? productsData : []
+    if (Array.isArray(productsData)) return productsData
+    if (productsData && typeof productsData === 'object' && 'data' in productsData) {
+      return (productsData as ProductsResponse).data || []
+    }
+    return []
   }, [productsData, error])
+  
+  const pagination = useMemo(() => {
+    if (!productsData || Array.isArray(productsData)) return null
+    if (productsData && typeof productsData === 'object' && 'pagination' in productsData) {
+      return (productsData as ProductsResponse).pagination || null
+    }
+    return null
+  }, [productsData])
 
   // Unique kategorileri çıkar (dropdown için)
   const categories = useMemo(() => {
@@ -217,13 +252,13 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
       ])
       
       // Success toast göster
-      toast.success('Ürün silindi', `${name} başarıyla silindi.`)
+      toast.success(tCommon('productDeletedSuccess'), { description: tCommon('deleteSuccessMessage', { name }) })
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error(tCommon('error'), error?.message)
+      toast.error(tCommon('error'), { description: error?.message || 'Bir hata oluştu' })
     }
   }, [products, mutateProducts, apiUrl, t, tCommon])
 
@@ -246,10 +281,13 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     }
   )
 
-  const getStockBadge = (stock: number, minStock?: number) => {
+  const getStockBadge = (stock: number, minStock?: number, product?: Product) => {
+    // minimumStock kolonu API'den minimumStock olarak geliyor
+    const actualMinStock = product ? ((product as any).minimumStock || product.minStock) : minStock
+    
     if (stock === 0) {
       return <Badge className="bg-red-100 text-red-800">{t('stockStatus.outOfStock')}</Badge>
-    } else if (minStock && stock <= minStock) {
+    } else if (actualMinStock && stock <= actualMinStock) {
       return <Badge className="bg-red-100 text-red-800">{t('stockStatus.critical')}</Badge>
     } else if (stock <= 10) {
       return <Badge className="bg-yellow-100 text-yellow-800">{t('stockStatus.low')}</Badge>
@@ -260,10 +298,22 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
 
   // Stok istatistiklerini hesapla
   const stockStats = useMemo(() => {
-    const critical = products.filter(p => p.minStock && p.stock <= p.minStock).length
-    const lowStock = products.filter(p => !p.minStock && p.stock > 0 && p.stock <= 10).length
+    // ÖNEMLİ: Kritik stok = minimumStock varsa ve stock <= minimumStock ise kritik
+    // minimumStock yoksa ve stock <= 10 ise düşük stok
+    const critical = products.filter(p => {
+      // minimumStock kolonu API'den minimumStock olarak geliyor, ama interface'de minStock olarak tanımlı
+      const minStock = (p as any).minimumStock || p.minStock
+      return minStock && p.stock !== null && p.stock <= minStock
+    }).length
+    const lowStock = products.filter(p => {
+      const minStock = (p as any).minimumStock || p.minStock
+      return !minStock && p.stock > 0 && p.stock <= 10
+    }).length
     const outOfStock = products.filter(p => p.stock === 0).length
-    const inStock = products.filter(p => p.stock > (p.minStock || 10)).length
+    const inStock = products.filter(p => {
+      const minStock = (p as any).minimumStock || p.minStock
+      return p.stock > (minStock || 10)
+    }).length
     
     // Son giriş ve çıkış tarihlerini bul
     const lastEntry = products
@@ -456,7 +506,10 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
           />
         </div>
         {isSuperAdmin && (
-          <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
+          <Select value={filterCompanyId || 'all'} onValueChange={(v) => {
+            setFilterCompanyId(v === 'all' ? '' : v)
+            setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+          }}>
             <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder={t('selectCompany')} />
             </SelectTrigger>
@@ -470,7 +523,10 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
             </SelectContent>
           </Select>
         )}
-        <Select value={stockFilter || 'all'} onValueChange={(v) => setStockFilter(v === 'all' ? '' : v)}>
+        <Select value={stockFilter || 'all'} onValueChange={(v) => {
+          setStockFilter(v === 'all' ? '' : v)
+          setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+        }}>
           <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder={t('selectStockStatus')} />
           </SelectTrigger>
@@ -481,7 +537,10 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
             <SelectItem value="outOfStock">{t('stockStatus.outOfStock')}</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={categoryFilter || 'all'} onValueChange={(v) => setCategoryFilter(v === 'all' ? '' : v)}>
+        <Select value={categoryFilter || 'all'} onValueChange={(v) => {
+          setCategoryFilter(v === 'all' ? '' : v)
+          setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+        }}>
           <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder={t('selectCategory')} />
           </SelectTrigger>
@@ -492,7 +551,10 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
             ))}
           </SelectContent>
         </Select>
-        <Select value={statusFilter || 'all'} onValueChange={(v) => setStatusFilter(v === 'all' ? '' : v)}>
+        <Select value={statusFilter || 'all'} onValueChange={(v) => {
+          setStatusFilter(v === 'all' ? '' : v)
+          setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+        }}>
           <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder={t('selectStatus')} />
           </SelectTrigger>
@@ -505,9 +567,10 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
         </Select>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow-card overflow-hidden">
-        <Table>
+      {/* Table - Desktop View */}
+      <div className="hidden md:block bg-white rounded-lg shadow-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <Table>
           <TableHeader>
             <TableRow>
               <TableHead>{t('tableHeaders.name')}</TableHead>
@@ -524,8 +587,17 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
           <TableBody>
             {products.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-8 text-gray-500">
-                  {t('noProductsFound')}
+                <TableCell colSpan={isSuperAdmin ? 9 : 8} className="p-0">
+                  <EmptyState
+                    icon={Package}
+                    title={t('noProductsFound')}
+                    description={t('emptyStateDescription') || 'Yeni ürün ekleyerek başlayın'}
+                    action={{
+                      label: t('newProduct'),
+                      onClick: handleAdd,
+                    }}
+                    className="border-0 shadow-none"
+                  />
                 </TableCell>
               </TableRow>
             ) : (
@@ -538,13 +610,26 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
                   className={`border-b hover:bg-gray-50 transition-colors ${(product as any).reservedQuantity > 0 ? 'bg-orange-50/30 border-l-4 border-orange-400' : ''}`}
                 >
                   <TableCell className="font-medium">
-                    <div>
-                      <div>{product.name}</div>
-                      {product.status && product.status !== 'ACTIVE' && (
-                        <Badge variant="outline" className="mt-1 text-xs">
-                          {product.status === 'INACTIVE' ? tCommon('inactive') : t('discontinued')}
-                        </Badge>
+                    <div className="flex items-center gap-3">
+                      {product.imageUrl && (
+                        <img 
+                          src={product.imageUrl} 
+                          alt={product.name}
+                          className="w-10 h-10 object-cover rounded border border-gray-200 flex-shrink-0"
+                          onError={(e) => {
+                            // Fotoğraf yüklenemezse gizle
+                            (e.target as HTMLImageElement).style.display = 'none'
+                          }}
+                        />
                       )}
+                      <div>
+                        <div>{product.name}</div>
+                        {product.status && product.status !== 'ACTIVE' && (
+                          <Badge variant="outline" className="mt-1 text-xs">
+                            {product.status === 'INACTIVE' ? tCommon('inactive') : t('discontinued')}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </TableCell>
                   {isSuperAdmin && (
@@ -581,11 +666,15 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
                     <div className="flex items-center gap-2">
                       <div>
                         <div className="font-medium">{product.stock || 0} {product.unit || 'ADET'}</div>
-                        {product.minStock && (
-                          <div className="text-xs text-gray-500 mt-0.5">
-                            {t('min')}: {product.minStock} {product.maxStock ? `| ${t('max')}: ${product.maxStock}` : ''}
-                          </div>
-                        )}
+                        {(() => {
+                          const minStock = (product as any).minimumStock || product.minStock
+                          const maxStock = (product as any).maximumStock || product.maxStock
+                          return minStock && (
+                            <div className="text-xs text-gray-500 mt-0.5">
+                              {t('min')}: {minStock} {maxStock ? `| ${t('max')}: ${maxStock}` : ''}
+                            </div>
+                          )
+                        })()}
                         {product.updatedAt && (
                           <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
                             <Clock className="h-3 w-3" />
@@ -593,19 +682,22 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
                           </div>
                         )}
                       </div>
-                      {product.minStock && product.stock <= product.minStock && (
-                        <div className="relative group">
-                          <AlertTriangle className="h-5 w-5 text-red-500" />
-                          <div className="absolute left-0 top-6 hidden group-hover:block z-10 bg-red-600 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
-                            {t('stockStatus.critical')}
+                      {(() => {
+                        const minStock = (product as any).minimumStock || product.minStock
+                        return minStock && product.stock !== null && product.stock <= minStock && (
+                          <div className="relative group">
+                            <AlertTriangle className="h-5 w-5 text-red-500" />
+                            <div className="absolute left-0 top-6 hidden group-hover:block z-10 bg-red-600 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
+                              {t('stockStatus.critical')}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )
+                      })()}
                     </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      {getStockBadge(product.stock || 0, product.minStock)}
+                      {getStockBadge(product.stock || 0, product.minStock, product)}
                       {(product as any).reservedQuantity > 0 && (
                         <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">
                           {t('reserved')}: {(product as any).reservedQuantity}
@@ -653,7 +745,126 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
               ))
             )}
           </TableBody>
-        </Table>
+          </Table>
+        </div>
+        {/* Pagination */}
+        {pagination && (
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            pageSize={pagination.pageSize}
+            totalItems={pagination.totalItems}
+            onPageChange={(page) => setCurrentPage(page)}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              setCurrentPage(1) // Sayfa boyutu değiştiğinde ilk sayfaya dön
+            }}
+          />
+        )}
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-3">
+        {products.length === 0 ? (
+          <EmptyState
+            icon={Package}
+            title={t('noProductsFound')}
+            description={t('emptyStateDescription') || 'Yeni ürün ekleyerek başlayın'}
+            action={{
+              label: t('newProduct'),
+              onClick: handleAdd,
+            }}
+          />
+        ) : (
+          products.map((product) => (
+            <div
+              key={product.id}
+              className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-gray-900 truncate">{product.name}</h3>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {product.category && (
+                      <Badge variant="outline" className="text-xs">{product.category}</Badge>
+                    )}
+                    {getStockBadge(product.stock || 0, product.minStock, product)}
+                    <Badge className={`text-xs ${
+                      product.status === 'ACTIVE' ? 'bg-green-600 text-white' :
+                      product.status === 'INACTIVE' ? 'bg-gray-600 text-white' :
+                      'bg-red-600 text-white'
+                    }`}>
+                      {product.status === 'ACTIVE' ? tCommon('active') :
+                       product.status === 'INACTIVE' ? tCommon('inactive') :
+                       t('discontinued')}
+                    </Badge>
+                    {isSuperAdmin && product.Company?.name && (
+                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                        {product.Company.name}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-2 space-y-1">
+                    {product.imageUrl && (
+                      <div className="mb-2">
+                        <img 
+                          src={product.imageUrl} 
+                          alt={product.name}
+                          className="w-16 h-16 object-cover rounded-md border border-gray-200"
+                          onError={(e) => {
+                            // Fotoğraf yüklenemezse gizle
+                            (e.target as HTMLImageElement).style.display = 'none'
+                          }}
+                        />
+                      </div>
+                    )}
+                    <p className="text-sm font-semibold text-gray-900">
+                      {formatCurrency(product.price || 0)}
+                    </p>
+                    <p className="text-xs text-gray-600">
+                      {t('tableHeaders.stock')}: {product.stock || 0} {product.unit || 'ADET'}
+                    </p>
+                    {product.sku && (
+                      <p className="text-xs font-mono text-gray-500">SKU: {product.sku}</p>
+                    )}
+                    {product.barcode && (
+                      <p className="text-xs font-mono text-gray-500">Barkod: {product.barcode}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => {
+                      setSelectedProductId(product.id)
+                      setDetailModalOpen(true)
+                    }}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handleEdit(product)}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-red-600"
+                    onClick={() => handleDelete(product.id, product.name)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Detail Modal */}

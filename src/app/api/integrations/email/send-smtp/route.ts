@@ -62,7 +62,8 @@ export async function POST(request: Request) {
     // NOT: nodemailer package.json'da yok, dinamik import kullanıyoruz
     let nodemailer: any
     try {
-      nodemailer = await import('nodemailer')
+      // @ts-expect-error - Paket yoksa hata vermemesi için
+      nodemailer = await import('nodemailer').catch(() => null)
     } catch (importError) {
       // Nodemailer yoksa, direkt fetch ile SMTP sunucusuna bağlanmayı dene
       // Veya basit bir SMTP client kullan
@@ -107,6 +108,8 @@ export async function POST(request: Request) {
     )
   }
 }
+
+
 
 
 

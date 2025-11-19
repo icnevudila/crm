@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useSession } from '@/hooks/useSession'
 import { useTranslations, useLocale } from 'next-intl'
 import { useRouter } from 'next/navigation'
-import { Settings, User, Bell, Globe, Shield, Video, Mail } from 'lucide-react'
+import { Settings, User, Bell, Globe, Shield, Video, Mail, Send, Loader2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,7 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+<<<<<<< HEAD
 import { toast, confirm } from '@/lib/toast'
+=======
+import { toastError, toastSuccess } from '@/lib/toast'
+>>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
 
 export default function SettingsPage() {
   const { data: session, status } = useSession()
@@ -54,6 +58,9 @@ export default function SettingsPage() {
     gmailEnabled: false,
     outlookEnabled: false,
     smtpEnabled: false,
+    resendEnabled: false,
+    resendApiKey: '',
+    resendFromEmail: '',
     smtpHost: 'smtp.gmail.com',
     smtpPort: 587,
     smtpUser: '',
@@ -64,6 +71,7 @@ export default function SettingsPage() {
     emailLastError: '',
   })
   const [emailIntegrationLoading, setEmailIntegrationLoading] = useState(false)
+  const [testEmailLoading, setTestEmailLoading] = useState(false)
 
   // Session yüklendikten sonra state'i güncelle
   useEffect(() => {
@@ -96,6 +104,9 @@ export default function SettingsPage() {
               gmailEnabled: data.gmailEnabled || false,
               outlookEnabled: data.outlookEnabled || false,
               smtpEnabled: data.smtpEnabled || false,
+              resendEnabled: data.resendEnabled || false,
+              resendApiKey: data.resendApiKey || '',
+              resendFromEmail: data.resendFromEmail || '',
               smtpHost: data.smtpHost || 'smtp.gmail.com',
               smtpPort: data.smtpPort || 587,
               smtpUser: data.smtpUser || '',
@@ -113,7 +124,7 @@ export default function SettingsPage() {
 
   const handleSaveIntegrations = async () => {
     if (!session?.user?.companyId) {
-      toast.error('Hata', 'Oturum bilgisi bulunamadı')
+      toastError('Hata', 'Oturum bilgisi bulunamadı')
       return
     }
 
@@ -130,10 +141,10 @@ export default function SettingsPage() {
         throw new Error(error.error || 'Entegrasyonlar kaydedilemedi')
       }
 
-      toast.success('Başarılı', 'API entegrasyonları başarıyla kaydedildi')
+      toastSuccess('Başarılı', 'API entegrasyonları başarıyla kaydedildi')
     } catch (error: any) {
       console.error('Integrations save error:', error)
-      toast.error('Hata', error?.message || 'Entegrasyonlar kaydedilemedi')
+      toastError('Hata', error?.message || 'Entegrasyonlar kaydedilemedi')
     } finally {
       setIntegrationsLoading(false)
     }
@@ -141,7 +152,7 @@ export default function SettingsPage() {
 
   const handleSaveEmailIntegration = async () => {
     if (!session?.user?.companyId) {
-      toast.error('Hata', 'Oturum bilgisi bulunamadı')
+      toastError('Hata', 'Oturum bilgisi bulunamadı')
       return
     }
 
@@ -158,13 +169,13 @@ export default function SettingsPage() {
         throw new Error(error.error || 'E-posta entegrasyonları kaydedilemedi')
       }
 
-      toast.success('Başarılı', 'E-posta entegrasyonları başarıyla kaydedildi')
+      toastSuccess('Başarılı', 'E-posta entegrasyonları başarıyla kaydedildi')
       
       // Sayfayı yenile (emailStatus güncellemesi için)
       router.refresh()
     } catch (error: any) {
       console.error('Email integration save error:', error)
-      toast.error('Hata', error?.message || 'E-posta entegrasyonları kaydedilemedi')
+      toastError('Hata', error?.message || 'E-posta entegrasyonları kaydedilemedi')
     } finally {
       setEmailIntegrationLoading(false)
     }
@@ -176,6 +187,34 @@ export default function SettingsPage() {
 
   const handleConnectOutlook = () => {
     window.location.href = '/api/integrations/oauth/outlook/authorize'
+  }
+
+  const handleTestEmail = async () => {
+    if (!session?.user?.email) {
+      toastError('Hata', 'Email adresi bulunamadı')
+      return
+    }
+
+    setTestEmailLoading(true)
+    try {
+      const res = await fetch('/api/integrations/test/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Test email gönderilemedi')
+      }
+
+      toastSuccess('Başarılı', data.message || 'Test email başarıyla gönderildi! Gelen kutunuzu kontrol edin.')
+    } catch (error: any) {
+      console.error('Test email error:', error)
+      toastError('Hata', error?.message || 'Test email gönderilemedi')
+    } finally {
+      setTestEmailLoading(false)
+    }
   }
 
   // Session yüklenene kadar bekle
@@ -203,7 +242,7 @@ export default function SettingsPage() {
 
   const handleSave = async () => {
     if (!session?.user?.id) {
-      toast.error('Hata', 'Oturum bilgisi bulunamadı')
+      toastError('Hata', 'Oturum bilgisi bulunamadı')
       return
     }
 
@@ -222,13 +261,13 @@ export default function SettingsPage() {
         throw new Error(error.error || 'Ayarlar kaydedilemedi')
       }
 
-      toast.success('Başarılı', 'Ayarlar başarıyla kaydedildi')
+      toastSuccess('Başarılı', 'Ayarlar başarıyla kaydedildi')
       
       // Session'ı yenile
       router.refresh()
     } catch (error: any) {
       console.error('Settings save error:', error)
-      toast.error('Hata', error?.message || 'Ayarlar kaydedilemedi')
+      toastError('Hata', error?.message || 'Ayarlar kaydedilemedi')
     } finally {
       setLoading(false)
     }
@@ -445,6 +484,79 @@ export default function SettingsPage() {
               )}
 
               <div className="space-y-6">
+                {/* Resend Integration */}
+                <div className="space-y-3 border-b pb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-base font-semibold">Resend (Önerilen)</Label>
+                      <p className="text-xs text-gray-600 mt-1">
+                        Modern ve kolay e-posta servisi - API key ile hızlı kurulum
+                      </p>
+                    </div>
+                    <Button
+                      variant={emailIntegration.resendEnabled ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setEmailIntegration({ ...emailIntegration, resendEnabled: !emailIntegration.resendEnabled })}
+                    >
+                      {emailIntegration.resendEnabled ? 'Açık' : 'Kapalı'}
+                    </Button>
+                  </div>
+                  {emailIntegration.resendEnabled && (
+                    <div className="space-y-3 pl-4 border-l-2">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <Label htmlFor="resendApiKey">Resend API Key</Label>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleTestEmail}
+                            disabled={testEmailLoading || !emailIntegration.resendApiKey}
+                            className="flex items-center gap-1"
+                          >
+                            {testEmailLoading ? (
+                              <>
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                <span>Gönderiliyor...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Send className="h-3 w-3" />
+                                <span>Test Et</span>
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                        <Input
+                          id="resendApiKey"
+                          type="password"
+                          value={emailIntegration.resendApiKey}
+                          onChange={(e) => setEmailIntegration({ ...emailIntegration, resendApiKey: e.target.value })}
+                          placeholder="re_xxxxxxxxxxxxx"
+                          className="w-full"
+                        />
+                        <p className="text-xs text-gray-500">
+                          Resend hesabınızdan API key alın: <a href="https://resend.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">resend.com/api-keys</a>
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="resendFromEmail">From Email (Gönderen Email)</Label>
+                        <Input
+                          id="resendFromEmail"
+                          type="email"
+                          value={emailIntegration.resendFromEmail || ''}
+                          onChange={(e) => setEmailIntegration({ ...emailIntegration, resendFromEmail: e.target.value })}
+                          placeholder="noreply@icnevudila.xyz"
+                          className="w-full"
+                        />
+                        <p className="text-xs text-gray-500">
+                          Domain doğrulaması yaptıktan sonra kendi domain'inizi kullanın (örn: noreply@icnevudila.xyz). 
+                          Domain doğrulaması için: <a href="https://resend.com/domains" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">resend.com/domains</a>
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Gmail OAuth Integration */}
                 <div className="space-y-3 border-b pb-4">
                   <div className="flex items-center justify-between">
@@ -457,6 +569,25 @@ export default function SettingsPage() {
                     {emailIntegration.gmailEnabled ? (
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-green-600">✓ Bağlı</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleTestEmail}
+                          disabled={testEmailLoading}
+                          className="flex items-center gap-1"
+                        >
+                          {testEmailLoading ? (
+                            <>
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              <span>Gönderiliyor...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Send className="h-3 w-3" />
+                              <span>Test Et</span>
+                            </>
+                          )}
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"
@@ -493,6 +624,25 @@ export default function SettingsPage() {
                     {emailIntegration.outlookEnabled ? (
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-green-600">✓ Bağlı</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleTestEmail}
+                          disabled={testEmailLoading}
+                          className="flex items-center gap-1"
+                        >
+                          {testEmailLoading ? (
+                            <>
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              <span>Gönderiliyor...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Send className="h-3 w-3" />
+                              <span>Test Et</span>
+                            </>
+                          )}
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"
@@ -536,6 +686,27 @@ export default function SettingsPage() {
                   </div>
                   {emailIntegration.smtpEnabled && (
                     <div className="space-y-3 pl-4 border-l-2">
+                      <div className="flex items-center justify-end mb-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleTestEmail}
+                          disabled={testEmailLoading || !emailIntegration.smtpUser || !emailIntegration.smtpPassword}
+                          className="flex items-center gap-1"
+                        >
+                          {testEmailLoading ? (
+                            <>
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              <span>Gönderiliyor...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Send className="h-3 w-3" />
+                              <span>Test Email Gönder</span>
+                            </>
+                          )}
+                        </Button>
+                      </div>
                       <div className="space-y-2">
                         <Label htmlFor="smtpHost">SMTP Host</Label>
                         <Input
@@ -773,3 +944,6 @@ export default function SettingsPage() {
     </div>
   )
 }
+
+
+

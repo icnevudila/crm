@@ -6,11 +6,11 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react'
 
 import dynamic from 'next/dynamic'
 
-import { toast, confirm } from '@/lib/toast'
+import { toast, toastSuccess, confirm } from '@/lib/toast'
 
 import { useLocale, useTranslations } from 'next-intl'
 
-import { Plus, Search, Edit, Trash2, Eye, Download, FileSpreadsheet, FileText, Users, Briefcase, FileText as FileTextIcon, Receipt, Calendar, Building2, Sparkles } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Eye, Download, FileSpreadsheet, FileText, Users, Briefcase, FileText as FileTextIcon, Receipt, Calendar, Building2, Sparkles, CheckSquare } from 'lucide-react'
 
 import { motion } from 'framer-motion'
 
@@ -88,11 +88,15 @@ const CompanyForm = dynamic(() => import('./CompanyForm'), { ssr: false, loading
 
 const DealForm = dynamic(() => import('../deals/DealForm'), { ssr: false, loading: () => null })
 
+const QuoteForm = dynamic(() => import('../quotes/QuoteForm'), { ssr: false, loading: () => null })
+
 const InvoiceForm = dynamic(() => import('../invoices/InvoiceForm'), { ssr: false, loading: () => null })
 
 const FinanceForm = dynamic(() => import('../finance/FinanceForm'), { ssr: false, loading: () => null })
 
 const MeetingForm = dynamic(() => import('../meetings/MeetingForm'), { ssr: false, loading: () => null })
+
+const TaskForm = dynamic(() => import('../tasks/TaskForm'), { ssr: false, loading: () => null })
 
 const CompanyDetailModal = dynamic(() => import('./CompanyDetailModal'), { ssr: false, loading: () => null })
 
@@ -115,6 +119,8 @@ interface Company {
   taxNumber?: string
 
   lastMeetingDate?: string
+
+  lastContactDate?: string
 
   contactPerson?: string
 
@@ -216,7 +222,7 @@ export default function CompanyList() {
 
   const [selectedCompanyData, setSelectedCompanyData] = useState<Company | null>(null)
 
-  const [quickAction, setQuickAction] = useState<{ type: 'deal' | 'invoice' | 'finance' | 'meeting'; company: Company } | null>(null)
+  const [quickAction, setQuickAction] = useState<{ type: 'deal' | 'quote' | 'invoice' | 'finance' | 'meeting' | 'task'; company: Company } | null>(null)
 
 
 
@@ -376,7 +382,9 @@ export default function CompanyList() {
 
       toast.dismiss(toastId)
 
-      toast.success('Silindi', 'Firma başarıyla silindi.')
+      toast.success('Firma başarıyla silindi.', {
+        description: 'Firma ve tüm ilişkili veriler silindi.',
+      })
 
     } catch (error: any) {
 
@@ -390,7 +398,7 @@ export default function CompanyList() {
 
       toast.dismiss(toastId)
 
-      toast.error('Silme başarısız', error?.message || 'Silme işlemi sırasında bir hata oluştu.')
+      toast.error('Silme başarısız', { description: error?.message || 'Silme işlemi sırasında bir hata oluştu.' })
 
     }
 
@@ -468,7 +476,7 @@ export default function CompanyList() {
 
     } catch (error) {
 
-      toast.warning(t('exportFailed'))
+      toast.warning(t('exportFailed'), { description: t('exportFailedMessage') || 'Dışa aktarma işlemi başarısız oldu' })
 
     }
 
@@ -680,11 +688,13 @@ export default function CompanyList() {
 
 
 
-      {/* Table */}
+      {/* Table - Desktop View */}
 
-      <div className="bg-white rounded-lg shadow-card overflow-hidden">
+      <div className="hidden md:block bg-white rounded-lg shadow-card overflow-hidden">
 
-        <Table>
+        <div className="overflow-x-auto">
+
+          <Table>
 
           <TableHeader>
 
@@ -884,6 +894,20 @@ export default function CompanyList() {
 
                           <DropdownMenuItem 
 
+                            onSelect={() => setQuickAction({ type: 'quote', company })}
+
+                            disabled={!company.stats?.customers || company.stats.customers === 0}
+
+                          >
+
+                            <FileText className="h-4 w-4" />
+
+                            {t('quickActions.createQuote')}
+
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem 
+
                             onSelect={() => setQuickAction({ type: 'invoice', company })}
 
                             disabled={!company.stats?.customers || company.stats.customers === 0}
@@ -911,6 +935,14 @@ export default function CompanyList() {
                             <Calendar className="h-4 w-4" />
 
                             <span>{t('quickActions.scheduleMeeting')}</span>
+
+                          </DropdownMenuItem>
+
+                          <DropdownMenuItem onSelect={() => setQuickAction({ type: 'task', company })}>
+
+                            <CheckSquare className="h-4 w-4" />
+
+                            <span>{t('quickActions.createTask')}</span>
 
                           </DropdownMenuItem>
 
@@ -988,7 +1020,215 @@ export default function CompanyList() {
 
           </TableBody>
 
-        </Table>
+          </Table>
+
+        </div>
+
+      </div>
+
+
+
+      {/* Mobile Card View */}
+
+      <div className="md:hidden space-y-3">
+
+        {companies.length === 0 ? (
+
+          <div className="text-center py-8 text-gray-500">
+
+            Müşteri firması bulunamadı
+
+          </div>
+
+        ) : (
+
+          companies.map((company) => (
+
+            <div
+
+              key={company.id}
+
+              className={`bg-white rounded-lg border p-4 shadow-sm ${
+
+                statusRowColors[company.status] || 'border-gray-200'
+
+              }`}
+
+            >
+
+              <div className="flex items-start justify-between gap-3">
+
+                <div className="flex-1 min-w-0">
+
+                  <div className="flex items-center gap-2 mb-2">
+
+                    {company.logoUrl && (
+
+                      <Image
+
+                        src={company.logoUrl}
+
+                        alt={company.name}
+
+                        width={32}
+
+                        height={32}
+
+                        className="w-8 h-8 rounded object-cover flex-shrink-0"
+
+                        unoptimized={company.logoUrl.startsWith('blob:') || company.logoUrl.startsWith('data:')}
+
+                      />
+
+                    )}
+
+                    <Link 
+
+                      href={`/${locale}/companies/${company.id}`} 
+
+                      prefetch={true}
+
+                      className="hover:text-primary-600 transition-colors"
+
+                    >
+
+                      <h3 className="font-semibold text-gray-900 truncate">{company.name}</h3>
+
+                    </Link>
+
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 mt-2">
+
+                    {company.city && (
+
+                      <Badge variant="outline" className="text-xs">{company.city}</Badge>
+
+                    )}
+
+                    <Badge className={`text-xs ${
+
+                      company.status === 'MUS' ? 'bg-green-100 text-green-800' :
+
+                      company.status === 'POT' ? 'bg-yellow-100 text-yellow-800' :
+
+                      company.status === 'ALT' ? 'bg-blue-100 text-blue-800' :
+
+                      'bg-gray-100 text-gray-800'
+
+                    }`}>
+
+                      {company.status === 'MUS' ? 'Müşteri' :
+
+                       company.status === 'POT' ? 'Potansiyel' :
+
+                       company.status === 'ALT' ? 'Alt Bayi' :
+
+                       company.status}
+
+                    </Badge>
+
+                  </div>
+
+                  <div className="space-y-1 mt-2">
+
+                    {company.taxOffice && (
+
+                      <p className="text-xs text-gray-600">Vergi Dairesi: {company.taxOffice}</p>
+
+                    )}
+
+                    {company.taxNumber && (
+
+                      <p className="text-xs text-gray-600">Vergi No: {company.taxNumber}</p>
+
+                    )}
+
+                    {company.lastContactDate && (
+
+                      <p className="text-xs text-gray-500">
+
+                        Son Görüşme: {new Date(company.lastContactDate).toLocaleDateString('tr-TR')}
+
+                      </p>
+
+                    )}
+
+                  </div>
+
+                </div>
+
+                <DropdownMenu>
+
+                  <DropdownMenuTrigger asChild>
+
+                    <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
+
+                      <Sparkles className="h-4 w-4 text-indigo-500" />
+
+                    </Button>
+
+                  </DropdownMenuTrigger>
+
+                  <DropdownMenuContent align="end" className="w-56">
+
+                    <DropdownMenuItem
+
+                      onSelect={() => {
+
+                        setSelectedCompanyId(company.id)
+
+                        setSelectedCompanyData(company)
+
+                        setDetailModalOpen(true)
+
+                      }}
+
+                    >
+
+                      <Eye className="h-4 w-4 mr-2" />
+
+                      Görüntüle
+
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem
+
+                      onSelect={() => handleEdit(company)}
+
+                    >
+
+                      <Edit className="h-4 w-4 mr-2" />
+
+                      Düzenle
+
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem
+
+                      onSelect={() => handleDelete(company.id, company.name)}
+
+                      className="text-red-600"
+
+                    >
+
+                      <Trash2 className="h-4 w-4 mr-2" />
+
+                      Sil
+
+                    </DropdownMenuItem>
+
+                  </DropdownMenuContent>
+
+                </DropdownMenu>
+
+              </div>
+
+            </div>
+
+          ))
+
+        )}
 
       </div>
 
@@ -1172,28 +1412,40 @@ export default function CompanyList() {
 
       />
 
-      <MeetingForm
-
-        open={quickAction?.type === 'meeting'}
-
+      <QuoteForm
+        open={quickAction?.type === 'quote'}
         onClose={closeQuickAction}
-
-        onSuccess={async (savedMeeting) => {
-
+        onSuccess={async (savedQuote) => {
           // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
-
           // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
-
           // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
-
           // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
-
         }}
-
         customerCompanyId={quickAction?.company.id}
-
         customerCompanyName={quickAction?.company.name}
-
+      />
+      <MeetingForm
+        open={quickAction?.type === 'meeting'}
+        onClose={closeQuickAction}
+        onSuccess={async (savedMeeting) => {
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
+          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
+          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
+        }}
+        customerCompanyId={quickAction?.company.id}
+        customerCompanyName={quickAction?.company.name}
+      />
+      <TaskForm
+        open={quickAction?.type === 'task'}
+        onClose={closeQuickAction}
+        onSuccess={async (savedTask) => {
+          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+          // Form zaten kendi içinde onClose() çağırıyor, bu da closeQuickAction'ı tetikliyor
+          // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
+          // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
+        }}
+        customerCompanyName={quickAction?.company.name}
       />
 
     </div>

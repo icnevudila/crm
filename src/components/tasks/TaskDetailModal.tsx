@@ -74,39 +74,69 @@ export default function TaskDetailModal({
       onClose()
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error('Silme işlemi başarısız', error?.message)
+      toast.error('Silme işlemi başarısız', { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setDeleteLoading(false)
     }
   }
 
-  if (!open || !taskId) return null
-
-  if (isLoading && !initialData && !displayTask) {
-    return (
-      <DetailModal open={open} onClose={onClose} title="Görev Detayları" size="lg">
-        <div className="p-4">Yükleniyor...</div>
-      </DetailModal>
-    )
-  }
-
-  if (error && !initialData && !displayTask) {
+  // ✅ ÇÖZÜM: taskId null kontrolü - modal açılmadan önce kontrol et
+  if (!open) return null
+  
+  if (!taskId) {
     return (
       <DetailModal open={open} onClose={onClose} title="Hata" size="md">
         <div className="p-4 text-center">
-          <p className="text-gray-500 mb-4">Görev yüklenemedi</p>
-          <Button onClick={onClose}>Kapat</Button>
+          <p className="text-gray-500 mb-4">Görev ID bulunamadı</p>
+          <Button onClick={onClose} className="bg-gradient-primary text-white">
+            Kapat
+          </Button>
         </div>
       </DetailModal>
     )
   }
 
+  // Loading state - modal açıldığında göster
+  if (isLoading && !initialData && !displayTask) {
+    return (
+      <DetailModal open={open} onClose={onClose} title="Görev Detayları" size="lg">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent"></div>
+            <p className="mt-4 text-sm text-gray-600">Yükleniyor...</p>
+          </div>
+        </div>
+      </DetailModal>
+    )
+  }
+
+  // Error state - API hatası veya veri bulunamadı
+  if (error && !initialData && !displayTask) {
+    return (
+      <DetailModal open={open} onClose={onClose} title="Hata" size="md">
+        <div className="p-4 text-center">
+          <p className="text-gray-500 mb-4">
+            {error?.message?.includes('404') || error?.message?.includes('bulunamadı')
+              ? 'Görev bulunamadı'
+              : 'Görev yüklenemedi'}
+          </p>
+          <Button onClick={onClose} className="bg-gradient-primary text-white">
+            Kapat
+          </Button>
+        </div>
+      </DetailModal>
+    )
+  }
+
+  // Veri yoksa göster
   if (!displayTask) {
     return (
       <DetailModal open={open} onClose={onClose} title="Görev Bulunamadı" size="md">
         <div className="p-4 text-center">
           <p className="text-gray-500 mb-4">Görev bulunamadı</p>
-          <Button onClick={onClose}>Kapat</Button>
+          <Button onClick={onClose} className="bg-gradient-primary text-white">
+            Kapat
+          </Button>
         </div>
       </DetailModal>
     )

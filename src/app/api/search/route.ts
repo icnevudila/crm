@@ -34,6 +34,9 @@ export async function GET(request: Request) {
     const companyId = session.user.companyId
     const searchTerm = `%${query.toLowerCase()}%`
     
+    // Locale'i URL'den al veya default 'tr' kullan
+    const locale = searchParams.get('locale') || 'tr'
+    
     const results: Array<{
       id: string
       type: string
@@ -57,7 +60,7 @@ export async function GET(request: Request) {
           type: 'customer',
           title: customer.name || 'İsimsiz Müşteri',
           subtitle: customer.email || customer.phone || undefined,
-          url: `/tr/customers/${customer.id}`,
+          url: `/${locale}/customers/${customer.id}`,
         })
       })
     }
@@ -77,7 +80,7 @@ export async function GET(request: Request) {
           type: 'deal',
           title: deal.title || 'İsimsiz Fırsat',
           subtitle: deal.stage ? `Aşama: ${deal.stage}` : undefined,
-          url: `/tr/deals/${deal.id}`,
+          url: `/${locale}/deals/${deal.id}`,
         })
       })
     }
@@ -97,7 +100,7 @@ export async function GET(request: Request) {
           type: 'quote',
           title: quote.title || quote.quoteNumber || 'İsimsiz Teklif',
           subtitle: quote.quoteNumber || quote.status || undefined,
-          url: `/tr/quotes/${quote.id}`,
+          url: `/${locale}/quotes/${quote.id}`,
         })
       })
     }
@@ -117,7 +120,7 @@ export async function GET(request: Request) {
           type: 'invoice',
           title: invoice.title || invoice.invoiceNumber || 'İsimsiz Fatura',
           subtitle: invoice.invoiceNumber || invoice.status || undefined,
-          url: `/tr/invoices/${invoice.id}`,
+          url: `/${locale}/invoices/${invoice.id}`,
         })
       })
     }
@@ -137,7 +140,7 @@ export async function GET(request: Request) {
           type: 'product',
           title: product.name || 'İsimsiz Ürün',
           subtitle: product.sku || undefined,
-          url: `/tr/products/${product.id}`,
+          url: `/${locale}/products/${product.id}`,
         })
       })
     }
@@ -157,7 +160,7 @@ export async function GET(request: Request) {
           type: 'task',
           title: task.title || 'İsimsiz Görev',
           subtitle: task.status || undefined,
-          url: `/tr/tasks/${task.id}`,
+          url: `/${locale}/tasks/${task.id}`,
         })
       })
     }
@@ -177,7 +180,7 @@ export async function GET(request: Request) {
           type: 'meeting',
           title: meeting.title || 'İsimsiz Görüşme',
           subtitle: meeting.meetingDate ? new Date(meeting.meetingDate).toLocaleDateString('tr-TR') : undefined,
-          url: `/tr/meetings/${meeting.id}`,
+          url: `/${locale}/meetings/${meeting.id}`,
         })
       })
     }

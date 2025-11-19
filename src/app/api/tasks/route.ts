@@ -56,6 +56,10 @@ export async function GET(request: Request) {
     const assignedTo = searchParams.get('assignedTo') || ''
     const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
 
+    // Pagination parametreleri
+    const page = parseInt(searchParams.get('page') || '1', 10)
+    const pageSize = parseInt(searchParams.get('pageSize') || '20', 10) // Default 20 kayıt/sayfa
+
     // SuperAdmin için direkt Supabase sorgusu yap (tüm şirketlerin verilerini görebilir)
     if (isSuperAdmin) {
       const { getSupabaseWithServiceRole } = await import('@/lib/supabase')
@@ -63,9 +67,8 @@ export async function GET(request: Request) {
       
       let query = supabase
         .from('Task')
-        .select('*, User(name, email), Company:companyId(id, name)')
+        .select('*, User:assignedTo(id, name, email), Company:companyId(id, name)', { count: 'exact' })
         .order('createdAt', { ascending: false })
-        .limit(500)
       
       // SuperAdmin firma filtresi seçtiyse sadece o firmayı göster
       if (filterCompanyId) {
@@ -82,7 +85,10 @@ export async function GET(request: Request) {
         query = query.eq('assignedTo', assignedTo)
       }
       
-      const { data, error } = await query
+      // Pagination uygula
+      query = query.range((page - 1) * pageSize, page * pageSize - 1)
+      
+      const { data, error, count } = await query
       
       if (error) {
         return NextResponse.json(
@@ -91,7 +97,17 @@ export async function GET(request: Request) {
         )
       }
       
-      return NextResponse.json(data || [], {
+      const totalPages = Math.ceil((count || 0) / pageSize)
+      
+      return NextResponse.json({
+        data: data || [],
+        pagination: {
+          page,
+          pageSize,
+          totalItems: count || 0,
+          totalPages,
+        },
+      }, {
         headers: {
           'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=30, max-age=5', // Kısa cache - yeni task'ları görmek için
           'CDN-Cache-Control': 'public, s-maxage=10',
@@ -100,21 +116,43 @@ export async function GET(request: Request) {
       })
     }
 
-    // Normal kullanıcılar için getRecords kullan (companyId filtresi ile)
-    const filters: any = {}
-    if (status) filters.status = status
-    if (assignedTo) filters.assignedTo = assignedTo
-
-    const data = await getRecords({
-      table: 'Task',
-      filters,
-      orderBy: 'createdAt',
-      orderDirection: 'desc',
-      select: '*, User(name, email), Company:companyId(id, name)',
-    })
+    // Normal kullanıcılar için direkt Supabase query (pagination için)
+    const { getSupabaseWithServiceRole } = await import('@/lib/supabase')
+    const supabase = getSupabaseWithServiceRole()
+    
+    let query = supabase
+      .from('Task')
+      .select('*, User:assignedTo(id, name, email), Company:companyId(id, name)', { count: 'exact' })
+      .eq('companyId', session.user.companyId)
+      .order('createdAt', { ascending: false })
+    
+    if (status) query = query.eq('status', status)
+    if (assignedTo) query = query.eq('assignedTo', assignedTo)
+    
+    // Pagination uygula
+    query = query.range((page - 1) * pageSize, page * pageSize - 1)
+    
+    const { data, error, count } = await query
+    
+    if (error) {
+      return NextResponse.json(
+        { error: error.message || 'Failed to fetch tasks' },
+        { status: 500 }
+      )
+    }
+    
+    const totalPages = Math.ceil((count || 0) / pageSize)
 
     // Kısa cache headers - yeni task'ları görmek için
-    return NextResponse.json(data || [], {
+    return NextResponse.json({
+      data: data || [],
+      pagination: {
+        page,
+        pageSize,
+        totalItems: count || 0,
+        totalPages,
+      },
+    }, {
       headers: {
         'Cache-Control': 'public, s-maxage=10, stale-while-revalidate=30, max-age=5', // Kısa cache - yeni task'ları görmek için
         'CDN-Cache-Control': 'public, s-maxage=10',

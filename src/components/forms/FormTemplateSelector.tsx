@@ -59,7 +59,7 @@ export default function FormTemplateSelector({
     const template = templates.find((t) => t.id === templateId)
     if (template) {
       onSelectTemplate(template)
-      toast.success('Şablon yüklendi', 'Form şablonu başarıyla yüklendi.')
+      toast.success('Şablon yüklendi', { description: 'Form şablonu başarıyla yüklendi.' })
     }
   }
 
@@ -78,7 +78,7 @@ export default function FormTemplateSelector({
 
     try {
       addTemplate(templateName.trim(), formType, currentFormData)
-      toast.success('Şablon kaydedildi', 'Form şablonu başarıyla kaydedildi.')
+      toast.success('Şablon kaydedildi', { description: 'Form şablonu başarıyla kaydedildi.' })
       setTemplateName('')
       setSaveDialogOpen(false)
       
@@ -95,7 +95,7 @@ export default function FormTemplateSelector({
     e.stopPropagation()
     if (confirm('Bu şablonu silmek istediğinize emin misiniz?')) {
       deleteTemplate(templateId)
-      toast.success('Şablon silindi', 'Form şablonu başarıyla silindi.')
+      toast.success('Şablon silindi', { description: 'Form şablonu başarıyla silindi.' })
     }
   }
 

@@ -86,3 +86,7 @@ Tüm API endpoint'lerinde kullanılan modüller migration'da tanımlı ve permis
 
 
 
+
+
+
+

@@ -97,7 +97,7 @@ export default function DocumentsPage() {
       await mutateDocuments()
       await mutate(apiUrl)
       toast.dismiss(toastId)
-      toast.success('Silindi', 'Döküman başarıyla silindi.')
+      toast.success('Silindi', { description: 'Döküman başarıyla silindi.' })
     } catch (error: any) {
       console.error('Delete error:', error)
       toast.dismiss(toastId)

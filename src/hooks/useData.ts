@@ -53,6 +53,10 @@ export function useData<T = any>(
       errorRetryCount: 3,
       // On error retry
       onErrorRetry: (error, key, config, revalidate, { retryCount }) => {
+        // ✅ ÇÖZÜM: 404 hatalarını retry etme - direkt error olarak göster
+        if (error?.status === 404 || error?.message?.includes('404')) {
+          return // 404 için retry yapma
+        }
         // Exponential backoff: 1s, 2s, 4s
         const delay = errorRetryInterval * Math.pow(2, retryCount)
         if (retryCount >= 3) return

@@ -21,6 +21,11 @@ const MeetingForm = dynamic(() => import('./MeetingForm'), {
   loading: () => null,
 })
 
+const QuoteForm = dynamic(() => import('../quotes/QuoteForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
 interface MeetingDetailModalProps {
   meetingId: string | null
   open: boolean
@@ -38,6 +43,7 @@ export default function MeetingDetailModal({
   const locale = useLocale()
   const { data: session } = useSession()
   const [formOpen, setFormOpen] = useState(false)
+  const [quoteFormOpen, setQuoteFormOpen] = useState(false)
 
   const { data: meeting, isLoading, error, mutate: mutateMeeting } = useData<any>(
     meetingId && open ? `/api/meetings/${meetingId}` : null,
@@ -82,7 +88,7 @@ export default function MeetingDetailModal({
 
       await mutate('/api/meetings')
       toast.dismiss(toastId)
-      toast.success('Silindi', 'Görüşme başarıyla silindi.')
+      toast.success('Silindi', { description: 'Görüşme başarıyla silindi.' })
       onClose()
     } catch (error: any) {
       console.error('Delete error:', error)
@@ -91,33 +97,63 @@ export default function MeetingDetailModal({
     }
   }
 
-  if (!open || !meetingId) return null
-
-  if (isLoading && !initialData && !displayMeeting) {
-    return (
-      <DetailModal open={open} onClose={onClose} title="Görüşme Detayları" size="lg">
-        <div className="p-4">Yükleniyor...</div>
-      </DetailModal>
-    )
-  }
-
-  if (error && !initialData && !displayMeeting) {
+  // ✅ ÇÖZÜM: meetingId null kontrolü - modal açılmadan önce kontrol et
+  if (!open) return null
+  
+  if (!meetingId) {
     return (
       <DetailModal open={open} onClose={onClose} title="Hata" size="md">
         <div className="p-4 text-center">
-          <p className="text-gray-500 mb-4">Görüşme yüklenemedi</p>
-          <Button onClick={onClose}>Kapat</Button>
+          <p className="text-gray-500 mb-4">Görüşme ID bulunamadı</p>
+          <Button onClick={onClose} className="bg-gradient-primary text-white">
+            Kapat
+          </Button>
         </div>
       </DetailModal>
     )
   }
 
+  // Loading state - modal açıldığında göster
+  if (isLoading && !initialData && !displayMeeting) {
+    return (
+      <DetailModal open={open} onClose={onClose} title="Görüşme Detayları" size="lg">
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent"></div>
+            <p className="mt-4 text-sm text-gray-600">Yükleniyor...</p>
+          </div>
+        </div>
+      </DetailModal>
+    )
+  }
+
+  // Error state - API hatası veya veri bulunamadı
+  if (error && !initialData && !displayMeeting) {
+    return (
+      <DetailModal open={open} onClose={onClose} title="Hata" size="md">
+        <div className="p-4 text-center">
+          <p className="text-gray-500 mb-4">
+            {error?.message?.includes('404') || error?.message?.includes('bulunamadı')
+              ? 'Görüşme bulunamadı'
+              : 'Görüşme yüklenemedi'}
+          </p>
+          <Button onClick={onClose} className="bg-gradient-primary text-white">
+            Kapat
+          </Button>
+        </div>
+      </DetailModal>
+    )
+  }
+
+  // Veri yoksa göster
   if (!displayMeeting) {
     return (
       <DetailModal open={open} onClose={onClose} title="Görüşme Bulunamadı" size="md">
         <div className="p-4 text-center">
           <p className="text-gray-500 mb-4">Görüşme bulunamadı</p>
-          <Button onClick={onClose}>Kapat</Button>
+          <Button onClick={onClose} className="bg-gradient-primary text-white">
+            Kapat
+          </Button>
         </div>
       </DetailModal>
     )
@@ -414,10 +450,7 @@ export default function MeetingDetailModal({
                     <Button
                       variant="outline"
                       className="w-full justify-start"
-                      onClick={() => {
-                        onClose()
-                        router.push(`/${locale}/quotes/new?customerId=${displayMeeting.customerId}&dealId=${displayMeeting.dealId || ''}`)
-                      }}
+                      onClick={() => setQuoteFormOpen(true)}
                     >
                       <FileText className="mr-2 h-4 w-4" />
                       Teklif Oluştur
@@ -460,6 +493,23 @@ export default function MeetingDetailModal({
           }}
         />
       )}
+
+      {/* Quote Form Modal */}
+      <QuoteForm
+        quote={undefined}
+        open={quoteFormOpen}
+        onClose={() => setQuoteFormOpen(false)}
+        onSuccess={async (savedQuote: any) => {
+          // Cache'i güncelle - optimistic update
+          await mutateMeeting()
+          setQuoteFormOpen(false)
+          // Başarılı kayıt sonrası teklif detay sayfasına yönlendir
+          router.push(`/${locale}/quotes/${savedQuote.id}`)
+        }}
+        dealId={displayMeeting?.dealId}
+        customerId={displayMeeting?.customerId}
+        customerCompanyId={displayMeeting?.companyId}
+      />
     </>
   )
 }

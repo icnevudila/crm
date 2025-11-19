@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { toast, handleApiError } from '@/lib/toast'
+import { useNavigateToDetailToast } from '@/lib/quick-action-helper'
 import SmartAutocomplete from '@/components/autocomplete/SmartAutocomplete'
 import { handleFormValidationErrors } from '@/lib/form-validation'
 import FormProgressBar from '@/components/forms/FormProgressBar'
@@ -56,6 +57,7 @@ interface CustomerFormProps {
   open: boolean
   onClose: () => void
   onSuccess?: (newCustomer: any) => void // Cache güncelleme için callback - yeni kaydı parametre olarak geçiyoruz
+  skipDialog?: boolean // Wizard içinde kullanım için Dialog wrapper'ı atla
 }
 
 export default function CustomerForm({
@@ -63,8 +65,10 @@ export default function CustomerForm({
   open,
   onClose,
   onSuccess,
+  skipDialog = false,
 }: CustomerFormProps) {
   const router = useRouter()
+  const navigateToDetailToast = useNavigateToDetailToast()
   const [loading, setLoading] = useState(false)
   const [logoPreview, setLogoPreview] = useState(customer?.logoUrl || '')
 
@@ -186,14 +190,40 @@ export default function CustomerForm({
         body: JSON.stringify(data),
       })
 
-      const result = await res.json()
+      // Response body'yi güvenli bir şekilde parse et
+      let result: any = {}
+      let responseText = ''
+      try {
+        responseText = await res.text()
+        if (responseText) {
+          result = JSON.parse(responseText)
+        }
+      } catch (parseError) {
+        // JSON parse edilemezse boş obje kullan
+        console.warn('Response JSON parse edilemedi:', parseError, 'Response text:', responseText)
+        // Parse edilemezse bile response text'i kullan
+        if (responseText) {
+          result = { error: responseText, message: responseText }
+        }
+      }
       
       if (!res.ok) {
+        // Daha detaylı hata mesajı oluştur
+        const errorMessage = result?.error || result?.message || responseText || `Müşteri kaydedilemedi (${res.status})`
         const apiError: any = {
           status: res.status,
-          message: result.error || result.message || 'Müşteri kaydedilemedi',
-          error: result.error,
+          message: errorMessage,
+          error: result?.error || errorMessage,
+          code: result?.code || `HTTP_${res.status}`,
+          details: result,
+          responseText, // Debug için response text'i de ekle
         }
+        console.error('CustomerForm API Error:', {
+          status: res.status,
+          error: apiError,
+          result,
+          responseText,
+        })
         throw apiError
       }
       
@@ -204,24 +234,42 @@ export default function CustomerForm({
       }
       
       // Başarı toast'ı göster
-      toast.success(
-        customer ? 'Müşteri güncellendi' : 'Müşteri kaydedildi',
-        customer ? 'Müşteri bilgileri başarıyla güncellendi.' : 'Yeni müşteri başarıyla eklendi.'
-      )
+      if (customer) {
+        toast.success('Müşteri güncellendi', {
+          description: 'Müşteri bilgileri başarıyla güncellendi.',
+        })
+      } else {
+        // Yeni müşteri oluşturuldu
+        // skipDialog true ise (wizard içinde) navigateToDetailToast çağırma, sadece onSuccess callback'i yeterli
+        if (!skipDialog) {
+          // Normal form kullanımı - "Detay sayfasına gitmek ister misiniz?" toast'u göster
+          // Güvenlik: result.id ve result.name kontrolü
+          if (result?.id) {
+            const customerName = result.name || result.title || 'Müşteri'
+            navigateToDetailToast('customer', result.id, customerName)
+          } else {
+            toast.success('Müşteri oluşturuldu', { description: 'Müşteri başarıyla oluşturuldu.' })
+          }
+        } else {
+          // Wizard içinde - sadece basit toast göster
+          const customerName = result?.name || result?.title || 'Müşteri'
+          toast.success('Müşteri oluşturuldu', { description: `${customerName} başarıyla oluşturuldu.` })
+        }
+      }
       
       reset()
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      handleApiError(error, 'Müşteri kaydedilemedi', 'Müşteri kaydetme işlemi sırasında bir hata oluştu. Lütfen tüm alanları kontrol edip tekrar deneyin.')
+      handleApiError(error, 'Müşteri kaydedilemedi')
     } finally {
       setLoading(false)
     }
   }
 
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+  const formContent = (
+    <div className="space-y-4">
+      {!skipDialog && (
         <DialogHeader>
           <div className="flex items-start justify-between">
             <div className="flex-1">
@@ -249,19 +297,20 @@ export default function CustomerForm({
             )}
           </div>
         </DialogHeader>
+      )}
 
-        {/* Form Progress Bar - Sadece yeni kayıt modunda göster */}
-        {!customer && (
-          <FormProgressBar
-            formValues={watch()}
-            requiredFields={['name']}
-            allFields={['name', 'email', 'phone', 'city', 'address', 'sector', 'website', 'taxNumber', 'notes', 'status', 'customerCompanyId']}
-            minPercentage={10}
-            className="mb-4"
-          />
-        )}
+      {/* Form Progress Bar - Sadece yeni kayıt modunda ve Dialog içindeyken göster */}
+      {!skipDialog && !customer && (
+        <FormProgressBar
+          formValues={watch()}
+          requiredFields={['name']}
+          allFields={['name', 'email', 'phone', 'city', 'address', 'sector', 'website', 'taxNumber', 'notes', 'status', 'customerCompanyId']}
+          minPercentage={10}
+          className="mb-4"
+        />
+      )}
 
-        <form ref={formRef} onSubmit={handleSubmit(onSubmit, onError)} className="space-y-4">
+      <form ref={formRef} onSubmit={handleSubmit(onSubmit, onError)} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Logo Upload */}
             <div className="space-y-2 md:col-span-2">
@@ -523,17 +572,24 @@ export default function CustomerForm({
               type="submit"
               className="bg-gradient-primary text-white w-full sm:w-auto"
               disabled={loading}
+              loading={loading}
             >
               {loading ? 'Kaydediliyor...' : customer ? 'Güncelle' : 'Kaydet'}
             </Button>
           </div>
         </form>
+    </div>
+  )
+
+  if (skipDialog) {
+    return formContent
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+        {formContent}
       </DialogContent>
     </Dialog>
   )
 }
-
-
-
-
-

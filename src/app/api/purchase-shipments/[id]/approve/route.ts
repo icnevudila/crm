@@ -14,7 +14,7 @@ interface PurchaseTransaction {
   updatedAt?: string
 }
 
-// PUT: Mal Kabul'ü onayla (stok girişi tetiklenir - trigger ile)
+// PUT: Satın Alma'yı onayla (stok girişi tetiklenir - trigger ile)
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -31,7 +31,7 @@ export async function PUT(
     const { id } = await params
     const supabase = getSupabaseWithServiceRole()
 
-    // Mevcut mal kabulü al
+    // Mevcut satın alma kaydını al
     // @ts-ignore - Supabase type inference issue (maybeSingle returns never type)
     const { data: currentPurchaseData, error: fetchError } = await supabase
       .from('PurchaseTransaction')
@@ -41,11 +41,11 @@ export async function PUT(
       .maybeSingle()
 
     if (fetchError) {
-      return NextResponse.json({ error: fetchError.message || 'Mal kabul bulunamadı' }, { status: 500 })
+      return NextResponse.json({ error: fetchError.message || 'Satın alma kaydı bulunamadı' }, { status: 500 })
     }
 
     if (!currentPurchaseData) {
-      return NextResponse.json({ error: 'Mal kabul bulunamadı' }, { status: 404 })
+      return NextResponse.json({ error: 'Satın alma kaydı bulunamadı' }, { status: 404 })
     }
 
     // Type assertion - Supabase type cache güncel olmayabilir
@@ -54,7 +54,7 @@ export async function PUT(
     // @ts-ignore - Supabase type inference issue (maybeSingle returns never type)
     if ((currentPurchaseData as any).status === 'APPROVED') {
       // @ts-ignore - Supabase type inference issue
-      return NextResponse.json({ error: 'Mal kabul zaten onaylanmış' }, { status: 400 })
+      return NextResponse.json({ error: 'Satın alma zaten onaylanmış' }, { status: 400 })
     }
 
     // Durumu APPROVED yap - trigger otomatik olarak stok girişi yapacak
@@ -74,7 +74,7 @@ export async function PUT(
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    // Mal kabul onaylandığında faturaya bildirim ekle ve fatura durumunu güncelle
+    // Satın alma onaylandığında faturaya bildirim ekle ve fatura durumunu güncelle
     // @ts-ignore - Supabase type inference issue
     if ((currentPurchaseData as any).invoiceId) {
       try {
@@ -92,10 +92,10 @@ export async function PUT(
           const invoiceTitle = invoiceData.title || invoiceData.invoiceNumber || `Fatura #${(currentPurchaseData as any).invoiceId.substring(0, 8)}`
           const purchaseId = id.substring(0, 8)
 
-          // Fatura durumunu güncelle (mal kabul onaylandığında fatura "Mal Kabul Edildi" olur)
-          // ÖNEMLİ: Mal kabul onaylandığında fatura HER ZAMAN RECEIVED durumuna geçer
+          // Fatura durumunu güncelle (satın alma onaylandığında fatura "Satın Alma Onaylandı" olur)
+          // ÖNEMLİ: Satın alma onaylandığında fatura HER ZAMAN RECEIVED durumuna geçer
           const invoiceUpdateData: any = {
-            status: 'RECEIVED', // Mal kabul edildi durumu
+            status: 'RECEIVED', // Satın alma onaylandı durumu
             updatedAt: new Date().toISOString(),
           }
 
@@ -116,7 +116,7 @@ export async function PUT(
           await supabase.from('ActivityLog').insert([{
             entity: 'Invoice',
             action: 'UPDATE',
-            description: `Mal kabul onaylandı: ${purchaseId} - ${invoiceTitle} faturasına ait mal kabul onaylandı ve stok girişi yapıldı. İlgili fatura "Mal Kabul Edildi" olarak işaretlendi.`,
+            description: `✅ Satın alma onaylandı ve fatura durumu güncellendi: ${invoiceTitle} faturası "Satın Alma Onaylandı" (RECEIVED) durumuna taşındı. Stok girişleri yapıldı.`,
             meta: { 
               entity: 'Invoice', 
               action: 'purchase_approved', 
@@ -132,6 +132,26 @@ export async function PUT(
             userId: session.user.id,
             companyId: session.user.companyId,
           }])
+
+          // Notification ekle - Kullanıcıya bildirim göster
+          try {
+            // @ts-expect-error - Supabase database type tanımları eksik
+            await supabase.from('Notification').insert([{
+              title: '✅ Satın Alma Onaylandı',
+              message: `${invoiceTitle} faturasına ait satın alma onaylandı. Fatura "Satın Alma Onaylandı" durumuna taşındı ve stok girişleri yapıldı.`,
+              type: 'success',
+              relatedTo: 'Invoice',
+              // @ts-ignore - Supabase type inference issue
+              relatedId: (currentPurchaseData as any).invoiceId,
+              companyId: session.user.companyId,
+              userId: session.user.id,
+            }])
+          } catch (notificationError) {
+            // Notification hatası ana işlemi engellemez
+            if (process.env.NODE_ENV === 'development') {
+              console.error('Notification error:', notificationError)
+            }
+          }
         }
       } catch (invoiceActivityError) {
         // Fatura ActivityLog hatası ana işlemi engellemez
@@ -141,30 +161,34 @@ export async function PUT(
       }
     }
 
-    // ActivityLog kaydı (Mal Kabul için)
+    // ActivityLog kaydı (Satın Alma için)
     try {
       // @ts-expect-error - Supabase database type tanımları eksik
       await supabase.from('ActivityLog').insert([{
         entity: 'PurchaseTransaction',
         action: 'APPROVE',
         // @ts-ignore - Supabase type inference issue
-        description: `Mal kabul onaylandı: Fatura #${(currentPurchaseData as any).invoiceId?.substring(0, 8) || id.substring(0, 8)}`,
+        description: `✅ Satın alma kaydı onaylandı: Fatura #${(currentPurchaseData as any).invoiceId?.substring(0, 8) || id.substring(0, 8)} için satın alma onaylandı. Stok girişleri yapıldı ve fatura durumu güncellendi.`,
         meta: { 
           entity: 'PurchaseTransaction', 
           action: 'approve', 
           id,
-          invoiceId: currentPurchase.invoiceId,
+          // @ts-ignore - Supabase type inference issue
+          invoiceId: (currentPurchaseData as any).invoiceId,
         },
         userId: session.user.id,
         companyId: session.user.companyId,
       }])
     } catch (activityError) {
       // ActivityLog hatası ana işlemi engellemez
+      if (process.env.NODE_ENV === 'development') {
+        console.error('PurchaseTransaction ActivityLog error:', activityError)
+      }
     }
 
     return NextResponse.json({
       ...data,
-      message: `Mal kabul #${id.substring(0, 8)} onaylandı. Stok girişleri yapıldı.`,
+      message: `Satın alma #${id.substring(0, 8)} onaylandı. Stok girişleri yapıldı.`,
     })
   } catch (error: any) {
     return NextResponse.json(

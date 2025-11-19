@@ -182,7 +182,7 @@ export async function POST(request: Request) {
     // Zorunlu alanları kontrol et
     if (!body.title || body.title.trim() === '') {
       return NextResponse.json(
-        { error: 'Fatura başlığı gereklidir' },
+        { error: (await import('@/lib/api-locale')).getErrorMessage('errors.api.invoiceTitleRequired', request) },
         { status: 400 }
       )
     }
@@ -240,10 +240,12 @@ export async function POST(request: Request) {
     // NOT: invoiceNumber, dueDate, paymentDate, taxRate, vendorId schema-extension/schema-vendor'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
     // createRecord kullanarak tip sorununu bypass ediyoruz
+    const { getActivityMessage, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const locale = getLocaleFromRequest(request)
     const data = await createRecord(
       'Invoice',
       invoiceData,
-      `Yeni fatura oluşturuldu: ${body.title}`
+      getActivityMessage(locale, 'invoiceCreated', { title: body.title })
     )
 
     // Oluşturulan invoice'ı tam bilgileriyle çek (commit edildiğinden emin olmak için)
@@ -401,7 +403,7 @@ export async function POST(request: Request) {
             await supabase.from('ActivityLog').insert([{
               entity: 'PurchaseTransaction',
               action: 'CREATE',
-              description: `Fatura için taslak mal kabul oluşturuldu`,
+              description: (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.draftPurchaseCreated,
               meta: { 
                 entity: 'PurchaseTransaction', 
                 action: 'create', 
@@ -418,7 +420,7 @@ export async function POST(request: Request) {
           // Invoice sonucuna purchaseShipmentId ekle
           invoiceResult.purchaseShipmentId = (purchaseData as any).id
           invoiceResult.purchaseShipmentCreated = true
-          invoiceResult.purchaseShipmentMessage = `Bu alış faturası için taslak mal kabul oluşturuldu (#${(purchaseData as any).id})`
+          invoiceResult.purchaseShipmentMessage = getActivityMessage(locale, 'draftPurchaseCreatedMessage', { id: (purchaseData as any).id })
         }
       } catch (error) {
         // Hata olsa bile invoice oluşturuldu, sadece logla
@@ -541,7 +543,7 @@ export async function POST(request: Request) {
             await supabase.from('ActivityLog').insert([{
               entity: 'Shipment',
               action: 'CREATE',
-              description: `Fatura için taslak sevkiyat oluşturuldu`,
+              description: (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.draftShipmentCreated,
               meta: { 
                 entity: 'Shipment', 
                 action: 'create', 
@@ -558,11 +560,39 @@ export async function POST(request: Request) {
           // Invoice sonucuna shipmentId ekle
           invoiceResult.shipmentId = (shipmentData as any).id
           invoiceResult.shipmentCreated = true
-          invoiceResult.shipmentMessage = `Bu fatura için taslak sevkiyat oluşturuldu (#${(shipmentData as any).id})`
+          invoiceResult.shipmentMessage = getActivityMessage(locale, 'draftShipmentCreatedMessage', { id: (shipmentData as any).id })
         }
       } catch (error) {
         // Hata olsa bile invoice oluşturuldu, sadece logla
         console.error('Reserved stock and shipment creation error:', error)
+      }
+    }
+
+    // ActivityLog - Kritik modül için CREATE log'u (async, hata olsa bile devam et)
+    if (invoiceResult?.id) {
+      try {
+        const { logAction } = await import('@/lib/logger')
+        // Async olarak logla - ana işlemi engellemez
+        logAction({
+          entity: 'Invoice',
+          action: 'CREATE',
+          description: `Yeni fatura oluşturuldu: ${(invoiceResult as any)?.title || 'Başlıksız'}`,
+          meta: { 
+            entity: 'Invoice', 
+            action: 'create', 
+            id: (invoiceResult as any).id,
+            title: (invoiceResult as any)?.title,
+            status: (invoiceResult as any)?.status,
+            totalAmount: (invoiceResult as any)?.totalAmount,
+            invoiceType: (invoiceResult as any)?.invoiceType,
+          },
+          userId: session.user.id,
+          companyId: session.user.companyId,
+        }).catch(() => {
+          // ActivityLog hatası ana işlemi engellemez
+        })
+      } catch (activityError) {
+        // ActivityLog hatası ana işlemi engellemez
       }
     }
 
@@ -630,6 +660,28 @@ export async function POST(request: Request) {
           invoiceId: (invoiceResult as any)?.id,
           companyId: session.user.companyId,
         })
+      }
+    }
+
+    // ✅ Otomasyon: Invoice oluşturulduğunda email gönder (kullanıcı tercihine göre)
+    try {
+      const automationRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/automations/invoice-created-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invoice: invoiceResult,
+        }),
+      })
+      // Automation hatası ana işlemi engellemez (sadece log)
+      if (!automationRes.ok) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[Invoice Automation] Email gönderimi başarısız veya kullanıcı tercihi ASK')
+        }
+      }
+    } catch (automationError) {
+      // Automation hatası ana işlemi engellemez
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[Invoice Automation] Error:', automationError)
       }
     }
 

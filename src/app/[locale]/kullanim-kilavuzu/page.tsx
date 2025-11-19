@@ -5,10 +5,12 @@
 import React, { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { motion } from 'framer-motion'
-import { Download, BookOpen, Users, Shield, Building2, FileText, Package, Truck, ShoppingCart, BarChart3, CheckSquare, HelpCircle, Calendar, Briefcase, Receipt, Store, Activity, UserCog, Settings, Crown, Info, LayoutDashboard } from 'lucide-react'
+import { Download, BookOpen, Users, Shield, Building2, FileText, Package, Truck, ShoppingCart, BarChart3, CheckSquare, HelpCircle, Calendar, Briefcase, Receipt, Store, Activity, UserCog, Settings, Crown, Info, LayoutDashboard, Video, Mail, Phone, MessageSquare, Zap, Link as LinkIcon, Keyboard, Lightbulb, Rocket, AlertTriangle, CheckCircle2, PlayCircle, TrendingUp } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
+import { toastError } from '@/lib/toast'
 
 export default function KullanimKilavuzuPage() {
   const t = useTranslations('common')
@@ -39,7 +41,7 @@ export default function KullanimKilavuzuPage() {
       }, 100)
     } catch (error: any) {
       console.error('PDF indirme hatası:', error)
-      alert('PDF oluşturulurken bir hata oluştu:\n\n' + (error?.message || 'Bilinmeyen hata'))
+      toastError('PDF oluşturulurken bir hata oluştu', error?.message || 'Bilinmeyen hata')
     } finally {
       setIsGeneratingPDF(false)
     }
@@ -84,17 +86,24 @@ export default function KullanimKilavuzuPage() {
             <a href="#moduller" className="text-indigo-600 hover:underline">3. Modüller ve Kullanım</a>
             <a href="#veri-akisi" className="text-indigo-600 hover:underline">4. Veri Akışı ve İlişkiler</a>
             <a href="#ozellikler" className="text-indigo-600 hover:underline">5. Özellikler</a>
-            <a href="#raporlar" className="text-indigo-600 hover:underline">6. Raporlar ve Analitik</a>
-            <a href="#sik-sorulan-sorular" className="text-indigo-600 hover:underline">7. Sık Sorulan Sorular</a>
+            <a href="#entegrasyonlar" className="text-indigo-600 hover:underline">6. Entegrasyonlar</a>
+            <a href="#otomasyonlar" className="text-indigo-600 hover:underline">7. Otomasyonlar ve İş Akışları</a>
+            <a href="#hizli-baslangic" className="text-indigo-600 hover:underline">8. Hızlı Başlangıç (5 Dakikada)</a>
+            <a href="#ipuclari" className="text-indigo-600 hover:underline">9. İpuçları ve Püf Noktaları</a>
+            <a href="#ornek-senaryolar" className="text-indigo-600 hover:underline">10. Örnek Senaryolar</a>
+            <a href="#raporlar" className="text-indigo-600 hover:underline">11. Raporlar ve Analitik</a>
+            <a href="#sik-sorulan-sorular" className="text-indigo-600 hover:underline">12. Sık Sorulan Sorular</a>
           </div>
         </CardContent>
       </Card>
 
       <Tabs defaultValue="genel" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="genel">Genel</TabsTrigger>
           <TabsTrigger value="moduller">Modüller</TabsTrigger>
           <TabsTrigger value="ozellikler">Özellikler</TabsTrigger>
+          <TabsTrigger value="entegrasyonlar">Entegrasyonlar</TabsTrigger>
+          <TabsTrigger value="ipuclari">İpuçları</TabsTrigger>
           <TabsTrigger value="teknik">Teknik</TabsTrigger>
         </TabsList>
 
@@ -443,6 +452,70 @@ export default function KullanimKilavuzuPage() {
                   </div>
                 </div>
 
+                {/* Meetings */}
+                <div className="border-l-4 border-violet-500 pl-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Video className="h-5 w-5 text-violet-600" />
+                    <h3 className="font-semibold text-lg">Toplantılar</h3>
+                  </div>
+                  <p className="text-gray-700 mb-3">
+                    Toplantı yönetimi. Video toplantı entegrasyonları, takvim entegrasyonu.
+                  </p>
+                  <div className="bg-gray-50 p-3 rounded space-y-2">
+                    <p className="font-semibold text-sm">Özellikler:</p>
+                    <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                      <li>Toplantı oluşturma ve yönetimi</li>
+                      <li>Zoom, Google Meet, Microsoft Teams entegrasyonu</li>
+                      <li>Otomatik toplantı linki oluşturma</li>
+                      <li>Google Calendar entegrasyonu</li>
+                      <li>Toplantı katılımcıları yönetimi</li>
+                      <li>Toplantı notları ve takibi</li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Tickets */}
+                <div className="border-l-4 border-rose-500 pl-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <MessageSquare className="h-5 w-5 text-rose-600" />
+                    <h3 className="font-semibold text-lg">Destek Talepleri</h3>
+                  </div>
+                  <p className="text-gray-700 mb-3">
+                    Müşteri destek talepleri yönetimi. Durum takibi, atama sistemi.
+                  </p>
+                  <div className="bg-gray-50 p-3 rounded space-y-2">
+                    <p className="font-semibold text-sm">Özellikler:</p>
+                    <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                      <li>Destek talebi oluşturma</li>
+                      <li>Durum yönetimi (OPEN, IN_PROGRESS, RESOLVED, CLOSED)</li>
+                      <li>Kullanıcı atama sistemi</li>
+                      <li>Öncelik yönetimi</li>
+                      <li>Müşteri ile ilişkilendirme</li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Contracts */}
+                <div className="border-l-4 border-amber-500 pl-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <FileText className="h-5 w-5 text-amber-600" />
+                    <h3 className="font-semibold text-lg">Sözleşmeler</h3>
+                  </div>
+                  <p className="text-gray-700 mb-3">
+                    Sözleşme yönetimi. Otomatik oluşturma, yenileme takibi.
+                  </p>
+                  <div className="bg-gray-50 p-3 rounded space-y-2">
+                    <p className="font-semibold text-sm">Özellikler:</p>
+                    <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                      <li>Sözleşme oluşturma ve yönetimi</li>
+                      <li>Otomatik sözleşme oluşturma (Quote ACCEPTED)</li>
+                      <li>Yenileme takibi</li>
+                      <li>Fatura ve sevkiyat ile ilişkilendirme</li>
+                      <li>Sözleşme durumu yönetimi</li>
+                    </ul>
+                  </div>
+                </div>
+
                 {/* Reports */}
                 <div className="border-l-4 border-indigo-500 pl-4">
                   <div className="flex items-center gap-2 mb-2">
@@ -596,6 +669,609 @@ export default function KullanimKilavuzuPage() {
                     </ol>
                   </div>
                 </div>
+
+                <div>
+                  <h3 className="font-semibold text-lg mb-3">Modül İlişkileri</h3>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-700 mb-2">
+                      Tüm modüller birbiriyle ilişkilendirilebilir. Örneğin:
+                    </p>
+                    <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-4">
+                      <li><strong>Görevler (Task):</strong> Müşteri, Fırsat, Teklif, Fatura, Sözleşme, Toplantı, Destek Talebi ile ilişkilendirilebilir</li>
+                      <li><strong>Toplantılar (Meeting):</strong> Müşteri, Fırsat, Teklif, Fatura, Sözleşme, Destek Talebi ile ilişkilendirilebilir</li>
+                      <li><strong>Finans (Finance):</strong> Fatura, Sevkiyat, Görev, Toplantı, Destek Talebi, Ürün, Fırsat, Teklif, Sözleşme ile ilişkilendirilebilir</li>
+                      <li><strong>Dökümanlar (Document):</strong> Tüm modüllerle ilişkilendirilebilir</li>
+                      <li><strong>Destek Talepleri (Ticket):</strong> Müşteri, Fırsat, Teklif, Fatura, Sözleşme, Toplantı, Ürün ile ilişkilendirilebilir</li>
+                    </ul>
+                    <p className="text-sm text-gray-700 mt-3">
+                      Bu sayede her kayıt için ilgili tüm bilgilere tek yerden erişebilirsiniz.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        </TabsContent>
+
+        {/* ENTEGRASYONLAR */}
+        <TabsContent value="entegrasyonlar" className="space-y-6">
+          <section id="entegrasyonlar">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <LinkIcon className="h-5 w-5" />
+                  6. Entegrasyonlar
+                </CardTitle>
+                <CardDescription>Video toplantılar, e-posta, SMS ve WhatsApp entegrasyonları</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Video Toplantı Entegrasyonları */}
+                <div className="border-l-4 border-blue-500 pl-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Video className="h-5 w-5 text-blue-600" />
+                    <h3 className="font-semibold text-lg">Video Toplantı Entegrasyonları</h3>
+                  </div>
+                  <p className="text-gray-700 mb-3">
+                    Zoom, Google Meet ve Microsoft Teams ile entegrasyon. Toplantı linklerini otomatik oluşturun.
+                  </p>
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                    <div>
+                      <p className="font-semibold mb-2">Zoom Entegrasyonu:</p>
+                      <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1 ml-4">
+                        <li>SuperAdmin {'>'} Entegrasyonlar {'>'} Video Toplantılar sekmesine gidin</li>
+                        <li>Zoom Account ID, Client ID ve Client Secret bilgilerini girin</li>
+                        <li>Toplantı oluştururken "Toplantı Tipi" olarak "Zoom" seçin</li>
+                        <li>"Otomatik Oluştur" butonuna tıklayın</li>
+                        <li>Toplantı linki ve şifre otomatik oluşturulur</li>
+                      </ol>
+                    </div>
+                    <div>
+                      <p className="font-semibold mb-2">Google Meet Entegrasyonu:</p>
+                      <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1 ml-4">
+                        <li>SuperAdmin {'>'} Entegrasyonlar {'>'} Google Calendar sekmesine gidin</li>
+                        <li>Google Calendar Client ID ve Client Secret bilgilerini girin</li>
+                        <li>Kullanıcı Entegrasyonları sayfasından Google hesabınızı bağlayın</li>
+                        <li>Toplantı oluştururken "Google Meet" seçin</li>
+                        <li>Toplantı otomatik olarak Google Calendar'a eklenir</li>
+                      </ol>
+                    </div>
+                    <div>
+                      <p className="font-semibold mb-2">Microsoft Teams Entegrasyonu:</p>
+                      <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1 ml-4">
+                        <li>SuperAdmin {'>'} Entegrasyonlar {'>'} Video Toplantılar sekmesine gidin</li>
+                        <li>Microsoft Teams entegrasyonunu aktifleştirin</li>
+                        <li>Kullanıcı Entegrasyonları sayfasından Microsoft hesabınızı bağlayın</li>
+                        <li>Toplantı oluştururken "Teams" seçin</li>
+                        <li>Toplantı linki otomatik oluşturulur</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+
+                {/* E-posta Entegrasyonu */}
+                <div className="border-l-4 border-green-500 pl-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Mail className="h-5 w-5 text-green-600" />
+                    <h3 className="font-semibold text-lg">E-posta Entegrasyonu (Resend)</h3>
+                  </div>
+                  <p className="text-gray-700 mb-3">
+                    Resend ile e-posta gönderimi. Müşterilere doğrudan e-posta gönderebilirsiniz.
+                  </p>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1 ml-4">
+                        <li>SuperAdmin {'>'} Entegrasyonlar {'>'} Email sekmesine gidin</li>
+                      <li>Resend API Key'i girin (Resend.com'dan alabilirsiniz)</li>
+                      <li>Müşteri detay sayfasında "E-posta Gönder" butonuna tıklayın</li>
+                      <li>Konu ve içerik girip gönderin</li>
+                      <li>E-posta müşteriye otomatik gönderilir</li>
+                    </ol>
+                    <p className="text-sm text-gray-700 mt-3 font-semibold">
+                      Ücretsiz Limit: Ayda 3,000 e-posta (kredi kartı gerekmez)
+                    </p>
+                  </div>
+                </div>
+
+                {/* SMS ve WhatsApp Entegrasyonu */}
+                <div className="border-l-4 border-purple-500 pl-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Phone className="h-5 w-5 text-purple-600" />
+                    <h3 className="font-semibold text-lg">SMS ve WhatsApp Entegrasyonu (Twilio)</h3>
+                  </div>
+                  <p className="text-gray-700 mb-3">
+                    Twilio ile SMS ve WhatsApp gönderimi. Müşterilere doğrudan mesaj gönderebilirsiniz.
+                  </p>
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                    <div>
+                      <p className="font-semibold mb-2">SMS Entegrasyonu:</p>
+                      <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1 ml-4">
+                        <li>SuperAdmin {'>'} Entegrasyonlar {'>'} SMS sekmesine gidin</li>
+                        <li>Twilio Account SID, Auth Token ve Telefon Numarası bilgilerini girin</li>
+                        <li>Müşteri detay sayfasında "SMS Gönder" butonuna tıklayın</li>
+                        <li>Mesaj girip gönderin</li>
+                      </ol>
+                      <p className="text-sm text-gray-700 mt-2 font-semibold">
+                        Ücretsiz Trial: $15.50 kredi (yaklaşık 1,000 SMS)
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-semibold mb-2">WhatsApp Entegrasyonu:</p>
+                      <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1 ml-4">
+                        <li>SuperAdmin {'>'} Entegrasyonlar {'>'} WhatsApp sekmesine gidin</li>
+                        <li>Twilio Account SID, Auth Token ve WhatsApp Numarası bilgilerini girin</li>
+                        <li>Müşteri detay sayfasında "WhatsApp Gönder" butonuna tıklayın</li>
+                        <li>Mesaj girip gönderin</li>
+                      </ol>
+                      <p className="text-sm text-gray-700 mt-2 font-semibold">
+                        Ücretsiz Sandbox: Sınırsız mesaj (sadece kayıtlı numaralara)
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Google Calendar Entegrasyonu */}
+                <div className="border-l-4 border-orange-500 pl-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Calendar className="h-5 w-5 text-orange-600" />
+                    <h3 className="font-semibold text-lg">Google Calendar Entegrasyonu</h3>
+                  </div>
+                  <p className="text-gray-700 mb-3">
+                    Toplantılarınızı otomatik olarak Google Calendar'a ekleyin.
+                  </p>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1 ml-4">
+                      <li>SuperAdmin {'>'} Entegrasyonlar {'>'} Google Calendar sekmesine gidin</li>
+                      <li>Google Calendar Client ID ve Client Secret bilgilerini girin</li>
+                      <li>Kullanıcı Entegrasyonları sayfasından Google hesabınızı bağlayın</li>
+                      <li>Toplantı oluşturduğunuzda otomatik olarak Google Calendar'a eklenir</li>
+                      <li>Toplantı linki ve şifre açıklamada yer alır</li>
+                    </ol>
+                    <p className="text-sm text-gray-700 mt-3 font-semibold">
+                      Tamamen Ücretsiz: Sınırsız kullanım
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        </TabsContent>
+
+        {/* İPUÇLARI VE PÜF NOKTALARI */}
+        <TabsContent value="ipuclari" className="space-y-6">
+          {/* Hızlı Başlangıç */}
+          <section id="hizli-baslangic">
+            <Card className="border-l-4 border-indigo-500">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Rocket className="h-5 w-5 text-indigo-600" />
+                  Hızlı Başlangıç (5 Dakikada Başlayın)
+                </CardTitle>
+                <CardDescription>İlk kez kullanıyorsanız bu rehberi takip edin</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-lg border border-indigo-200">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-white font-bold text-sm">1</div>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-gray-800 mb-1">Hesabınıza Giriş Yapın</h4>
+                        <p className="text-sm text-gray-700">E-posta ve şifrenizle sisteme giriş yapın. İlk girişte Dashboard'a yönlendirilirsiniz.</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-4 rounded-lg border border-purple-200">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-600 text-white font-bold text-sm">2</div>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-gray-800 mb-1">İlk Müşterinizi Ekleyin</h4>
+                        <p className="text-sm text-gray-700">Müşteriler {'>'} Yeni Müşteri {'>'} İsim, e-posta ve telefon bilgilerini girin {'>'} Kaydet</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-r from-pink-50 to-orange-50 p-4 rounded-lg border border-pink-200">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-pink-600 text-white font-bold text-sm">3</div>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-gray-800 mb-1">İlk Fırsatınızı Oluşturun</h4>
+                        <p className="text-sm text-gray-700">Fırsatlar {'>'} Yeni Fırsat {'>'} Müşteriyi seçin {'>'} Başlık ve değer girin {'>'} Kaydet</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-r from-orange-50 to-yellow-50 p-4 rounded-lg border border-orange-200">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-600 text-white font-bold text-sm">4</div>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-gray-800 mb-1">Dashboard'u Keşfedin</h4>
+                        <p className="text-sm text-gray-700">Dashboard sayfasında KPI'ları, grafikleri ve son aktiviteleri görüntüleyin.</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-gradient-to-r from-yellow-50 to-green-50 p-4 rounded-lg border border-yellow-200">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-yellow-600 text-white font-bold text-sm">5</div>
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-gray-800 mb-1">İlk Teklifinizi Hazırlayın</h4>
+                        <p className="text-sm text-gray-700">Teklifler {'>'} Yeni Teklif {'>'} Fırsatı seçin {'>'} Ürünler ekleyin {'>'} Gönderin</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+
+          <section id="ipuclari">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Lightbulb className="h-5 w-5" />
+                  8. İpuçları ve Püf Noktaları
+                </CardTitle>
+                <CardDescription>Sistemi daha verimli kullanmak için ipuçları ve best practices</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Hızlı İşlemler */}
+                <div className="border-l-4 border-indigo-500 pl-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Keyboard className="h-5 w-5 text-indigo-600" />
+                    <h3 className="font-semibold text-lg">Hızlı İşlemler</h3>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                    <p className="text-sm text-gray-700 font-semibold mb-2">Klavye Kısayolları:</p>
+                    <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-4">
+                      <li><strong>Ctrl + K:</strong> Global arama (yakında)</li>
+                      <li><strong>Ctrl + N:</strong> Yeni kayıt oluştur (yakında)</li>
+                      <li><strong>Esc:</strong> Modal'ı kapat</li>
+                      <li><strong>Enter:</strong> Form gönder</li>
+                    </ul>
+                    <p className="text-sm text-gray-700 font-semibold mt-3 mb-2">Hızlı Erişim:</p>
+                    <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-4">
+                      <li>Detay sayfalarında "Hızlı İşlemler" butonlarını kullanın</li>
+                      <li>Müşteri detay sayfasından direkt teklif, görev veya toplantı oluşturabilirsiniz</li>
+                      <li>Kanban board'larda drag & drop ile hızlı durum değişikliği yapabilirsiniz</li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Verimlilik İpuçları */}
+                <div className="border-l-4 border-green-500 pl-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <TrendingUp className="h-5 w-5 text-green-600" />
+                    <h3 className="font-semibold text-lg">Verimlilik İpuçları</h3>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                    <div>
+                      <p className="font-semibold mb-2 text-sm text-gray-800">1. Toplu İşlemler:</p>
+                      <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-4">
+                        <li>Birden fazla kaydı seçip toplu silme veya güncelleme yapabilirsiniz</li>
+                        <li>Excel'den toplu import yaparak zaman kazanın</li>
+                        <li>Filtreleme ile istediğiniz kayıtları bulup toplu işlem yapın</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold mb-2 text-sm text-gray-800">2. Modül İlişkileri:</p>
+                      <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-4">
+                        <li>Görevleri müşteri, fırsat veya teklif ile ilişkilendirin - tek yerden tüm bilgilere erişin</li>
+                        <li>Toplantıları ilgili kayıtlarla bağlayın - geçmiş görüşmeleri kolayca bulun</li>
+                        <li>Dökümanları tüm modüllerle ilişkilendirin - merkezi dokümantasyon</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold mb-2 text-sm text-gray-800">3. Otomasyonları Kullanın:</p>
+                      <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-4">
+                        <li>Teklif kabul edildiğinde otomatik fatura oluşur - manuel işlem yapmayın</li>
+                        <li>Fatura ödendiğinde otomatik finans kaydı oluşur</li>
+                        <li>İş akışı şemalarını takip edin - sistem sizi yönlendirir</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sık Yapılan Hatalar */}
+                <div className="border-l-4 border-red-500 pl-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="h-5 w-5 text-red-600" />
+                    <h3 className="font-semibold text-lg">Sık Yapılan Hatalar ve Çözümleri</h3>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                    <div>
+                      <p className="font-semibold mb-2 text-sm text-red-800">❌ Hata: Teklif göndermek için en az 1 ürün eklenmeli</p>
+                      <p className="text-sm text-gray-700 ml-4">
+                        ✅ <strong>Çözüm:</strong> Teklif detay sayfasına gidin, "Ürün Ekle" butonuna tıklayın ve en az 1 ürün ekleyin.
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-semibold mb-2 text-sm text-red-800">❌ Hata: Fırsat kazanmak için değer (value) girmelisiniz</p>
+                      <p className="text-sm text-gray-700 ml-4">
+                        ✅ <strong>Çözüm:</strong> Deal'i düzenleyin, "Değer" alanına tutarı girin ve kaydedin. Sonra WON yapabilirsiniz.
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-semibold mb-2 text-sm text-red-800">❌ Hata: Görevi başlatmak için önce bir kullanıcıya atamanız gerekiyor</p>
+                      <p className="text-sm text-gray-700 ml-4">
+                        ✅ <strong>Çözüm:</strong> Task'ı düzenleyin, "Atanan Kullanıcı" alanından bir kullanıcı seçin ve kaydedin.
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-semibold mb-2 text-sm text-red-800">❌ Hata: LEAD aşamasından direkt WON yapılamaz</p>
+                      <p className="text-sm text-gray-700 ml-4">
+                        ✅ <strong>Çözüm:</strong> İş akışını takip edin: LEAD → CONTACTED → PROPOSAL → NEGOTIATION → WON. Her adımı sırayla tamamlayın.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Best Practices */}
+                <div className="border-l-4 border-blue-500 pl-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle2 className="h-5 w-5 text-blue-600" />
+                    <h3 className="font-semibold text-lg">Best Practices (En İyi Uygulamalar)</h3>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                    <div>
+                      <p className="font-semibold mb-2 text-sm text-gray-800">✅ Deal Yönetimi:</p>
+                      <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-4">
+                        <li>Deal oluştururken müşteriyi hemen seçin</li>
+                        <li>Stage'leri sırayla ilerletin (atlama yapmayın)</li>
+                        <li>WON yapmadan önce mutlaka değer (value) girin</li>
+                        <li>LOST yaparken kayıp sebebini (lostReason) mutlaka yazın</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold mb-2 text-sm text-gray-800">✅ Quote Yönetimi:</p>
+                      <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-4">
+                        <li>Ürün eklemeden SENT yapmayın</li>
+                        <li>Müşteri seçmeyi unutmayın</li>
+                        <li>Quote ACCEPTED olduktan sonra otomatik oluşan Invoice'u kontrol edin</li>
+                        <li>ACCEPTED sonrası Quote'u düzenlemeyin (immutable)</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold mb-2 text-sm text-gray-800">✅ Invoice Yönetimi:</p>
+                      <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-4">
+                        <li>Fatura numarasını mutlaka girin</li>
+                        <li>PAID yapmadan önce ödeme tarihini kontrol edin</li>
+                        <li>PAID sonrası faturayı değiştirmeyin (immutable)</li>
+                        <li>Ödeme geldiğinde hemen PAID yapın - otomatik finans kaydı oluşur</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold mb-2 text-sm text-gray-800">✅ Genel:</p>
+                      <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-4">
+                        <li>Her kayıt için açıklayıcı başlık ve notlar kullanın</li>
+                        <li>İlgili kayıtları birbiriyle ilişkilendirin</li>
+                        <li>Düzenli olarak raporları kontrol edin</li>
+                        <li>Dashboard'u günlük olarak takip edin</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Performans İpuçları */}
+                <div className="border-l-4 border-cyan-500 pl-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <TrendingUp className="h-5 w-5 text-cyan-600" />
+                    <h3 className="font-semibold text-lg">Performans İpuçları</h3>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                    <p className="text-sm text-gray-700 font-semibold mb-2">Sistemi Daha Hızlı Kullanmak İçin:</p>
+                    <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-4">
+                      <li><strong>Filtreleme kullanın:</strong> Arama ve filtrelerle istediğiniz kayıtları hızlıca bulun</li>
+                      <li><strong>Sayfalama:</strong> Büyük listelerde sayfalama kullanarak performansı artırın</li>
+                      <li><strong>Cache:</strong> Sistem otomatik cache kullanır - aynı sayfaya tekrar geldiğinizde hızlı yüklenir</li>
+                      <li><strong>Debounced Search:</strong> Arama yaparken yazmayı bitirdikten sonra otomatik arama yapılır</li>
+                      <li><strong>Optimistic Updates:</strong> Kayıt ekleme/düzenleme işlemleri anında görünür - beklemenize gerek yok</li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Güvenlik İpuçları */}
+                <div className="border-l-4 border-emerald-500 pl-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield className="h-5 w-5 text-emerald-600" />
+                    <h3 className="font-semibold text-lg">Güvenlik İpuçları</h3>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                    <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-4">
+                      <li><strong>Şifre Güvenliği:</strong> Güçlü şifre kullanın ve düzenli olarak değiştirin</li>
+                      <li><strong>Oturum Yönetimi:</strong> İşiniz bitince çıkış yapın, özellikle paylaşımlı bilgisayarlarda</li>
+                      <li><strong>Yetki Kontrolü:</strong> Her kullanıcının sadece yetkili olduğu modüllere erişebildiğini bilin</li>
+                      <li><strong>Veri Gizliliği:</strong> Hassas bilgileri paylaşırken dikkatli olun</li>
+                      <li><strong>Multi-Tenant:</strong> Sistem otomatik olarak şirket verilerini izole eder - başka şirket verilerini göremezsiniz</li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Mobil Kullanım */}
+                <div className="border-l-4 border-teal-500 pl-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Phone className="h-5 w-5 text-teal-600" />
+                    <h3 className="font-semibold text-lg">Mobil Kullanım</h3>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                    <p className="text-sm text-gray-700 mb-2">Sistemi mobil cihazlarda kullanırken:</p>
+                    <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-4">
+                      <li>Tüm sayfalar mobil uyumludur - responsive tasarım</li>
+                      <li>Touch-friendly butonlar - kolay dokunma için optimize edilmiş</li>
+                      <li>Hamburger menü - mobilde sidebar yerine hamburger menü kullanılır</li>
+                      <li>Kanban board'lar mobilde scrollable - kaydırarak görüntüleyebilirsiniz</li>
+                      <li>Form'lar mobilde tek sütun - kolay doldurma</li>
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Raporlama Rehberi */}
+                <div className="border-l-4 border-violet-500 pl-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <BarChart3 className="h-5 w-5 text-violet-600" />
+                    <h3 className="font-semibold text-lg">Raporlama Rehberi</h3>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+                    <div>
+                      <p className="font-semibold mb-2 text-sm text-gray-800">Rapor Oluşturma:</p>
+                      <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1 ml-4">
+                        <li>Raporlar sayfasına gidin</li>
+                        <li>Rapor tipini seçin (Müşteri, Satış, Finansal, Ürün, Performans)</li>
+                        <li>Filtreleri ayarlayın (Tarih, Kullanıcı, Firma, Modül)</li>
+                        <li>Raporu görüntüleyin veya export edin</li>
+                      </ol>
+                    </div>
+                    <div>
+                      <p className="font-semibold mb-2 text-sm text-gray-800">Export Seçenekleri:</p>
+                      <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-4">
+                        <li><strong>Excel (.xlsx):</strong> Detaylı veri analizi için</li>
+                        <li><strong>PDF:</strong> Sunum ve paylaşım için</li>
+                        <li><strong>CSV:</strong> Veri import/export için</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-semibold mb-2 text-sm text-gray-800">Filtreleme Stratejileri:</p>
+                      <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-4">
+                        <li>Tarih aralığı seçerek belirli dönemleri analiz edin</li>
+                        <li>Kullanıcı filtresi ile kişi bazlı performans görün</li>
+                        <li>Modül filtresi ile belirli modüllere odaklanın</li>
+                        <li>Birden fazla filtreyi kombinleyerek detaylı analiz yapın</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* Örnek Senaryolar */}
+          <section id="ornek-senaryolar">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <PlayCircle className="h-5 w-5" />
+                  9. Örnek Senaryolar
+                </CardTitle>
+                <CardDescription>Gerçek hayat senaryoları ve adım adım çözümler</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Senaryo 1 */}
+                <Card className="border-l-4 border-indigo-500">
+                  <CardHeader>
+                    <CardTitle className="text-base">Senaryo 1: Yeni Müşteri → Satış Süreci</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-2">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 text-xs font-semibold">1</div>
+                        <div>
+                          <p className="font-semibold text-sm text-gray-800">Müşteri Oluştur</p>
+                          <p className="text-sm text-gray-700">Müşteriler {'>'} Yeni Müşteri {'>'} İsim, e-posta, telefon bilgilerini girin {'>'} Kaydet</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 text-xs font-semibold">2</div>
+                        <div>
+                          <p className="font-semibold text-sm text-gray-800">Fırsat Oluştur</p>
+                          <p className="text-sm text-gray-700">Fırsatlar {'>'} Yeni Fırsat {'>'} Müşteriyi seçin {'>'} Başlık ve değer girin {'>'} Stage: LEAD {'>'} Kaydet</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 text-xs font-semibold">3</div>
+                        <div>
+                          <p className="font-semibold text-sm text-gray-800">İletişime Geç</p>
+                          <p className="text-sm text-gray-700">Fırsat detay sayfası {'>'} Stage'i CONTACTED yapın {'>'} Sistem bildirim gönderir</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 text-xs font-semibold">4</div>
+                        <div>
+                          <p className="font-semibold text-sm text-gray-800">Teklif Hazırla</p>
+                          <p className="text-sm text-gray-700">Teklifler {'>'} Yeni Teklif {'>'} Fırsatı seçin {'>'} Ürünler ekleyin {'>'} SENT yapın</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 text-xs font-semibold">5</div>
+                        <div>
+                          <p className="font-semibold text-sm text-gray-800">Teklifi Kabul Et</p>
+                          <p className="text-sm text-gray-700">Teklif detay sayfası {'>'} ACCEPTED yapın {'>'} Otomatik Invoice ve Contract oluşur!</p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Senaryo 2 */}
+                <Card className="border-l-4 border-green-500">
+                  <CardHeader>
+                    <CardTitle className="text-base">Senaryo 2: Toplantı Planlama ve Takip</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-2">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-green-700 text-xs font-semibold">1</div>
+                        <div>
+                          <p className="font-semibold text-sm text-gray-800">Toplantı Oluştur</p>
+                          <p className="text-sm text-gray-700">Toplantılar {'>'} Yeni Toplantı {'>'} Müşteri ve tarih seçin</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-green-700 text-xs font-semibold">2</div>
+                        <div>
+                          <p className="font-semibold text-sm text-gray-800">Video Toplantı Linki Oluştur</p>
+                          <p className="text-sm text-gray-700">Toplantı Tipi: Zoom/Google Meet/Teams seçin {'>'} "Otomatik Oluştur" tıklayın {'>'} Link oluşturulur</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-green-700 text-xs font-semibold">3</div>
+                        <div>
+                          <p className="font-semibold text-sm text-gray-800">Toplantı Linkini Gönder</p>
+                          <p className="text-sm text-gray-700">Toplantı detay sayfası {'>'} "Toplantı Linki Gönder" {'>'} E-posta veya WhatsApp seçin {'>'} Gönder</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-green-700 text-xs font-semibold">4</div>
+                        <div>
+                          <p className="font-semibold text-sm text-gray-800">Google Calendar'a Ekle</p>
+                          <p className="text-sm text-gray-700">Google Calendar entegrasyonu aktifse otomatik eklenir. Calendar'ınızı kontrol edin!</p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Senaryo 3 */}
+                <Card className="border-l-4 border-purple-500">
+                  <CardHeader>
+                    <CardTitle className="text-base">Senaryo 3: Fatura ve Ödeme Takibi</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-2">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100 text-purple-700 text-xs font-semibold">1</div>
+                        <div>
+                          <p className="font-semibold text-sm text-gray-800">Fatura Oluştur</p>
+                          <p className="text-sm text-gray-700">Faturalar {'>'} Yeni Fatura {'>'} Tekliften oluştur veya manuel oluştur {'>'} Ürünler ekle {'>'} Fatura numarası ver</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100 text-purple-700 text-xs font-semibold">2</div>
+                        <div>
+                          <p className="font-semibold text-sm text-gray-800">Faturayı Gönder</p>
+                          <p className="text-sm text-gray-700">Fatura detay sayfası {'>'} SENT yapın {'>'} Müşteriye PDF gönderin (E-posta entegrasyonu ile)</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100 text-purple-700 text-xs font-semibold">3</div>
+                        <div>
+                          <p className="font-semibold text-sm text-gray-800">Ödeme Geldiğinde</p>
+                          <p className="text-sm text-gray-700">Fatura detay sayfası {'>'} PAID yapın {'>'} Ödeme tarihini girin {'>'} Otomatik Finance kaydı oluşur!</p>
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-2">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-purple-100 text-purple-700 text-xs font-semibold">4</div>
+                        <div>
+                          <p className="font-semibold text-sm text-gray-800">Finans Takibi</p>
+                          <p className="text-sm text-gray-700">Finans sayfasından otomatik oluşan kaydı görüntüleyin. Raporlardan gelir analizi yapın.</p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </CardContent>
             </Card>
           </section>
@@ -648,22 +1324,139 @@ export default function KullanimKilavuzuPage() {
                   </div>
                 </div>
 
+                {/* Otomasyonlar - Accordion */}
                 <div>
-                  <h3 className="font-semibold text-lg mb-2">Otomasyonlar</h3>
-                  <div className="bg-gray-50 p-4 rounded-lg space-y-2">
-                    <p className="text-sm text-gray-700">
-                      <strong>Quote ACCEPTED:</strong> Otomatik Invoice oluştur + ActivityLog
-                    </p>
-                    <p className="text-sm text-gray-700">
-                      <strong>Invoice PAID:</strong> Otomatik Finance kaydı oluştur + ActivityLog
-                    </p>
-                    <p className="text-sm text-gray-700">
-                      <strong>Shipment DELIVERED:</strong> ActivityLog yaz
-                    </p>
-                    <p className="text-sm text-gray-700">
-                      <strong>Tüm CRUD:</strong> ActivityLog'a meta JSON ile kaydet
-                    </p>
-                  </div>
+                  <Card className="border-indigo-200/70 bg-indigo-50/40 shadow-sm">
+                    <Accordion type="single" collapsible className="w-full">
+                      <AccordionItem value="basic-automations" className="border-none">
+                        <AccordionTrigger className="px-4 py-3 hover:no-underline data-[state=closed]:bg-indigo-100/40 data-[state=open]:bg-white/80">
+                          <div className="flex items-center gap-3 text-left">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 ring-2 ring-indigo-500/40">
+                              <Zap className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-indigo-900">Temel Otomasyonlar</p>
+                              <p className="text-xs text-indigo-700">Otomatik işlemleri görmek için tıklayın</p>
+                            </div>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="px-4 pb-4">
+                          <div className="space-y-2 bg-white/90 rounded-lg p-3 border border-indigo-200">
+                            <p className="text-sm text-gray-700">
+                              <strong className="text-indigo-800">Quote ACCEPTED:</strong> Otomatik Invoice oluştur + ActivityLog
+                            </p>
+                            <p className="text-sm text-gray-700">
+                              <strong className="text-indigo-800">Invoice PAID:</strong> Otomatik Finance kaydı oluştur + ActivityLog
+                            </p>
+                            <p className="text-sm text-gray-700">
+                              <strong className="text-indigo-800">Shipment DELIVERED:</strong> ActivityLog yaz
+                            </p>
+                            <p className="text-sm text-gray-700">
+                              <strong className="text-indigo-800">Tüm CRUD:</strong> ActivityLog'a meta JSON ile kaydet
+                            </p>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  </Card>
+                </div>
+
+                {/* İş Akışı Otomasyonları - Accordion */}
+                <div>
+                  <Card className="border-purple-200/70 bg-purple-50/40 shadow-sm">
+                    <Accordion type="single" collapsible className="w-full">
+                      <AccordionItem value="workflow-automations" className="border-none">
+                        <AccordionTrigger className="px-4 py-3 hover:no-underline data-[state=closed]:bg-purple-100/40 data-[state=open]:bg-white/80">
+                          <div className="flex items-center gap-3 text-left">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-purple-100 text-purple-700 ring-2 ring-purple-500/40">
+                              <Zap className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-purple-900">İş Akışı Otomasyonları</p>
+                              <p className="text-xs text-purple-700">Detaylı iş akışlarını görmek için tıklayın</p>
+                            </div>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="px-4 pb-4">
+                          <div className="space-y-4 bg-white/90 rounded-lg p-4 border border-purple-200">
+                            <div className="border-l-4 border-indigo-500 pl-3">
+                              <p className="font-semibold mb-2 text-sm text-gray-800">Fırsat (Deal) İş Akışı:</p>
+                              <p className="text-sm text-gray-700 mb-2">Akış Sırası: LEAD → CONTACTED → PROPOSAL → NEGOTIATION → WON/LOST</p>
+                              <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-2">
+                                <li><strong>WON:</strong> Otomatik Contract DRAFT oluşturulur</li>
+                                <li><strong>LOST:</strong> Kayıp sebebi (lostReason) zorunlu</li>
+                                <li>Her aşama değişiminde bildirim gönderilir</li>
+                              </ul>
+                            </div>
+                            <div className="border-l-4 border-orange-500 pl-3">
+                              <p className="font-semibold mb-2 text-sm text-gray-800">Teklif (Quote) İş Akışı:</p>
+                              <p className="text-sm text-gray-700 mb-2">Akış Sırası: DRAFT → SENT → ACCEPTED/REJECTED</p>
+                              <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-2">
+                                <li><strong>ACCEPTED:</strong> Otomatik Invoice DRAFT + Contract DRAFT oluşturulur</li>
+                                <li><strong>REJECTED:</strong> Revizyon görevi otomatik oluşturulur</li>
+                                <li>SENT için en az 1 ürün, müşteri ve toplam tutar zorunlu</li>
+                              </ul>
+                            </div>
+                            <div className="border-l-4 border-red-500 pl-3">
+                              <p className="font-semibold mb-2 text-sm text-gray-800">Fatura (Invoice) İş Akışı:</p>
+                              <p className="text-sm text-gray-700 mb-2">Akış Sırası: DRAFT → SENT → PAID</p>
+                              <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-2">
+                                <li><strong>PAID:</strong> Otomatik Finance INCOME kaydı oluşturulur</li>
+                                <li><strong>PAID:</strong> Fatura değiştirilemez (immutable)</li>
+                                <li>SENT için en az 1 ürün, müşteri ve fatura numarası zorunlu</li>
+                              </ul>
+                            </div>
+                            <div className="border-l-4 border-amber-500 pl-3">
+                              <p className="font-semibold mb-2 text-sm text-gray-800">Sözleşme (Contract) İş Akışı:</p>
+                              <p className="text-sm text-gray-700 mb-2">Akış Sırası: DRAFT → ACTIVE</p>
+                              <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-2">
+                                <li><strong>ACTIVE:</strong> Otomatik Invoice oluşturulur</li>
+                                <li><strong>ACTIVE:</strong> Sözleşme değiştirilemez (immutable)</li>
+                                <li>ACTIVE için müşteri, tarihler, değer ve sözleşme numarası zorunlu</li>
+                              </ul>
+                            </div>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  </Card>
+                </div>
+
+                {/* Otomatik Bildirimler - Accordion */}
+                <div>
+                  <Card className="border-pink-200/70 bg-pink-50/40 shadow-sm">
+                    <Accordion type="single" collapsible className="w-full">
+                      <AccordionItem value="notifications" className="border-none">
+                        <AccordionTrigger className="px-4 py-3 hover:no-underline data-[state=closed]:bg-pink-100/40 data-[state=open]:bg-white/80">
+                          <div className="flex items-center gap-3 text-left">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-pink-100 text-pink-700 ring-2 ring-pink-500/40">
+                              <Zap className="h-4 w-4" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-semibold text-pink-900">Otomatik Bildirimler ve Yönlendirmeler</p>
+                              <p className="text-xs text-pink-700">Bildirim sistemini görmek için tıklayın</p>
+                            </div>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="px-4 pb-4">
+                          <div className="bg-white/90 rounded-lg p-4 border border-pink-200 space-y-2">
+                            <p className="text-sm text-gray-700">
+                              Sistem, her aşama değişiminde otomatik bildirimler gönderir:
+                            </p>
+                            <ul className="list-disc list-inside text-sm text-gray-700 space-y-1 ml-4">
+                              <li><strong className="text-pink-800">Sonraki adım önerisi:</strong> Bir sonraki yapılması gereken işlem önerilir</li>
+                              <li><strong className="text-pink-800">Tebrikler mesajı:</strong> Başarılı işlemler için kutlama mesajı</li>
+                              <li><strong className="text-pink-800">Uyarı mesajı:</strong> Eksik bilgiler veya hatalar için uyarı</li>
+                              <li><strong className="text-pink-800">Yönlendirme linki:</strong> İlgili sayfaya direkt yönlendirme butonu</li>
+                            </ul>
+                            <p className="text-sm text-gray-700 mt-3">
+                              Detay sayfalarında görsel iş akışı şemaları ile nerede olduğunuzu görebilirsiniz.
+                            </p>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  </Card>
                 </div>
               </CardContent>
             </Card>
@@ -672,7 +1465,7 @@ export default function KullanimKilavuzuPage() {
           <section id="sik-sorulan-sorular">
             <Card>
               <CardHeader>
-                <CardTitle>7. Sık Sorulan Sorular</CardTitle>
+                <CardTitle>9. Sık Sorulan Sorular</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
@@ -699,6 +1492,55 @@ export default function KullanimKilavuzuPage() {
                   <h3 className="font-semibold mb-2">S: Veriler nerede saklanır?</h3>
                   <p className="text-sm text-gray-700">
                     C: Tüm veriler Supabase (PostgreSQL) veritabanında saklanır. Dosyalar Supabase Storage'da saklanır.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">S: Video toplantı linki nasıl oluşturulur?</h3>
+                  <p className="text-sm text-gray-700">
+                    C: Toplantı oluştururken "Toplantı Tipi" seçin (Zoom, Google Meet veya Teams) ve "Otomatik Oluştur" butonuna tıklayın. 
+                    Link otomatik oluşturulur ve toplantı bilgilerine eklenir.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">S: Müşteriye nasıl e-posta gönderirim?</h3>
+                  <p className="text-sm text-gray-700">
+                    C: Müşteri detay sayfasında "E-posta Gönder" butonuna tıklayın. Resend entegrasyonu aktifse doğrudan gönderebilirsiniz. 
+                    Ücretsiz limit: Ayda 3,000 e-posta.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">S: Otomatik iş akışları nasıl çalışır?</h3>
+                  <p className="text-sm text-gray-700">
+                    C: Sistem, belirli durum değişikliklerinde otomatik işlemler yapar. Örneğin, teklif kabul edildiğinde otomatik fatura oluşturulur. 
+                    Detay sayfalarında "Otomasyon Bilgileri" bölümünden hangi otomasyonların aktif olduğunu görebilirsiniz.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">S: Modüller arası ilişkiler nasıl çalışır?</h3>
+                  <p className="text-sm text-gray-700">
+                    C: Tüm modüller birbiriyle ilişkilendirilebilir. Örneğin, bir görevi müşteri, fırsat, teklif veya fatura ile ilişkilendirebilirsiniz. 
+                    Bu sayede ilgili tüm bilgilere tek yerden erişebilirsiniz.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">S: Hızlı işlemler için ne yapabilirim?</h3>
+                  <p className="text-sm text-gray-700">
+                    C: Detay sayfalarındaki "Hızlı İşlemler" butonlarını kullanın. Müşteri detay sayfasından direkt teklif, görev veya toplantı oluşturabilirsiniz. 
+                    Kanban board'larda drag & drop ile hızlı durum değişikliği yapabilirsiniz.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">S: Toplu işlem nasıl yapılır?</h3>
+                  <p className="text-sm text-gray-700">
+                    C: Liste sayfasında kayıtların yanındaki checkbox'ları işaretleyin. Üstte "Toplu İşlemler" butonu görünür. 
+                    Toplu silme veya güncelleme yapabilirsiniz. Excel'den toplu import da yapabilirsiniz.
+                  </p>
+                </div>
+                <div>
+                  <h3 className="font-semibold mb-2">S: İş akışı şemaları nerede görünür?</h3>
+                  <p className="text-sm text-gray-700">
+                    C: Deal, Quote, Invoice ve Contract detay sayfalarında görsel iş akışı şemaları bulunur. 
+                    Nerede olduğunuzu, sonraki adımı ve gereklilikleri görebilirsiniz.
                   </p>
                 </div>
               </CardContent>

@@ -48,7 +48,7 @@ export default function GlobalSearchBar() {
   
   // Arama yap (sadece 2+ karakter için)
   const shouldSearch = debouncedQuery.length >= 2
-  const searchUrl = shouldSearch ? `/api/search?q=${encodeURIComponent(debouncedQuery)}` : null
+  const searchUrl = shouldSearch ? `/api/search?q=${encodeURIComponent(debouncedQuery)}&locale=${locale}` : null
   
   const { data, isLoading } = useData<SearchResponse>(searchUrl, {
     dedupingInterval: 2000,

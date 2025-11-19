@@ -14,7 +14,9 @@ export async function GET(request: Request) {
       return sessionError
     }
 
-    if (!session?.user?.companyId) {
+    // ✅ ÇÖZÜM: SuperAdmin için companyId kontrolü bypass et
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    if (!isSuperAdmin && !session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -26,6 +28,7 @@ export async function GET(request: Request) {
         role: session.user.role,
         companyId: session.user.companyId,
         companyName: session.user.companyName,
+        isSuperAdmin,
       })
     }
 
@@ -46,13 +49,15 @@ export async function GET(request: Request) {
     }
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
-    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
-    const companyId = session.user.companyId
+    // ✅ ÇÖZÜM: SuperAdmin'in companyId'si null olabilir
+    const companyId = session.user.companyId || null
     const supabase = getSupabaseWithServiceRole()
     const { searchParams } = new URL(request.url)
     const stage = searchParams.get('stage') || ''
     const customerId = searchParams.get('customerId') || ''
     const customerCompanyId = searchParams.get('customerCompanyId') || '' // Firma bazlı filtreleme
+    const contactId = searchParams.get('contactId') || '' // Contact bazlı filtreleme (migration 035)
+    const competitorId = searchParams.get('competitorId') || '' // Rakip bazlı filtreleme (migration 036)
     const leadSource = searchParams.get('leadSource') || '' // Lead source filtreleme (migration 025)
     const search = searchParams.get('search') || ''
     const minValue = searchParams.get('minValue')
@@ -79,7 +84,7 @@ export async function GET(request: Request) {
     let query = supabase
       .from('Deal')
       .select(`
-        id, title, stage, value, customerId, customerCompanyId, priorityScore, isPriority, leadSource, createdAt, companyId,
+        id, title, stage, value, status, customerId, customerCompanyId, contactId, competitorId, priorityScore, isPriority, leadSource, createdAt, companyId,
         Company:companyId (
           id,
           name
@@ -107,6 +112,16 @@ export async function GET(request: Request) {
     // Firma bazlı filtreleme (customerCompanyId)
     if (customerCompanyId) {
       query = query.eq('customerCompanyId', customerCompanyId)
+    }
+
+    // Contact bazlı filtreleme (contactId) - migration 035
+    if (contactId) {
+      query = query.eq('contactId', contactId)
+    }
+
+    // Rakip bazlı filtreleme (competitorId) - migration 036
+    if (competitorId) {
+      query = query.eq('competitorId', competitorId)
     }
 
     // Lead Source filtreleme (migration 025)
@@ -159,7 +174,7 @@ export async function GET(request: Request) {
       let queryWithStatus = supabase
         .from('Deal')
         .select(`
-          id, title, stage, value, status, customerId, customerCompanyId, priorityScore, isPriority, leadSource, createdAt, companyId,
+          id, title, stage, value, status, customerId, customerCompanyId, contactId, competitorId, priorityScore, isPriority, leadSource, createdAt, companyId,
           Company:companyId (
             id,
             name
@@ -182,6 +197,12 @@ export async function GET(request: Request) {
       }
       if (customerCompanyId) {
         queryWithStatus = queryWithStatus.eq('customerCompanyId', customerCompanyId)
+      }
+      if (contactId) {
+        queryWithStatus = queryWithStatus.eq('contactId', contactId)
+      }
+      if (competitorId) {
+        queryWithStatus = queryWithStatus.eq('competitorId', competitorId)
       }
       if (leadSource) {
         queryWithStatus = queryWithStatus.eq('leadSource', leadSource)
@@ -258,7 +279,9 @@ export async function POST(request: Request) {
       return sessionError
     }
 
-    if (!session?.user?.companyId) {
+    // ✅ ÇÖZÜM: SuperAdmin için companyId kontrolü bypass et
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    if (!isSuperAdmin && !session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -273,6 +296,9 @@ export async function POST(request: Request) {
     let body
     try {
       body = await request.json()
+      // Güvenlik: createdBy ve updatedBy otomatik dolduruluyor (CRUD fonksiyonunda), body'den alınmamalı
+      const { id, companyId: bodyCompanyId, createdAt, updatedAt, createdBy, updatedBy, ...cleanBody } = body
+      body = cleanBody // cleanBody'yi kullan
     } catch (jsonError: any) {
       if (process.env.NODE_ENV === 'development') {
         console.error('Deals POST API JSON parse error:', jsonError)
@@ -286,12 +312,36 @@ export async function POST(request: Request) {
     // Zorunlu alanları kontrol et
     if (!body.title || body.title.trim() === '') {
       return NextResponse.json(
-        { error: 'Fırsat başlığı gereklidir' },
+        { error: (await import('@/lib/api-locale')).getErrorMessage('errors.api.dealTitleRequired', request) },
         { status: 400 }
       )
     }
 
+    // ÖNEMLİ: LOST stage'inde lostReason zorunlu
+    if (body.stage === 'LOST') {
+      if (!body.lostReason || typeof body.lostReason !== 'string' || body.lostReason.trim().length === 0) {
+        return NextResponse.json(
+          {
+            error: (await import('@/lib/api-locale')).getErrorMessage('errors.api.lostReasonRequired', request),
+            message: (await import('@/lib/api-locale')).getErrorMessage('errors.api.dealLostReasonRequired', request),
+            reason: 'LOST_REASON_REQUIRED',
+            stage: body.stage
+          },
+          { status: 400 }
+        )
+      }
+    }
+
     const supabase = getSupabaseWithServiceRole()
+
+    // ✅ ÇÖZÜM: SuperAdmin body'den companyId gönderebilir, değilse session'dan al
+    const companyId = isSuperAdmin && body.companyId 
+      ? body.companyId 
+      : session.user.companyId
+    
+    if (!companyId) {
+      return NextResponse.json({ error: 'Company ID is required' }, { status: 400 })
+    }
 
     // Deal verilerini oluştur - SADECE schema.sql'de olan kolonları gönder
     // schema.sql: title, stage, value, status, companyId, customerId
@@ -302,7 +352,7 @@ export async function POST(request: Request) {
       stage: body.stage || 'LEAD',
       status: body.status || 'OPEN',
       value: body.value !== undefined ? parseFloat(body.value) : 0,
-      companyId: session.user.companyId,
+      companyId: companyId,
     }
 
     // Sadece schema.sql'de olan alanlar
@@ -311,12 +361,13 @@ export async function POST(request: Request) {
     if (body.customerCompanyId) dealData.customerCompanyId = body.customerCompanyId
     // Lead Source (migration 025)
     if (body.leadSource) dealData.leadSource = body.leadSource
+    // Lost Reason (LOST stage'inde zorunlu)
+    if (body.lostReason) dealData.lostReason = body.lostReason.trim()
     // NOT: description, winProbability, expectedCloseDate schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
     // @ts-ignore - Supabase database type tanımları eksik, insert metodu dinamik tip bekliyor
     const { data, error } = await supabase
       .from('Deal')
-      // @ts-expect-error - Supabase database type tanımları eksik
       .insert([dealData])
       .select()
       .single()
@@ -331,24 +382,71 @@ export async function POST(request: Request) {
       )
     }
 
-    // ActivityLog KALDIRILDI - Sadece kritik işlemler için ActivityLog tutulacak
-    // (Performans optimizasyonu: Gereksiz log'lar veritabanını yavaşlatıyor)
-    // Deal WON/LOST/CLOSED durumlarında ActivityLog tutulacak (deals/[id]/route.ts'de)
+    // ActivityLog - Kritik modül için CREATE log'u (async, hata olsa bile devam et)
+    if (data?.id) {
+      try {
+        const { logAction } = await import('@/lib/logger')
+        const { getActivityMessage, getLocaleFromRequest } = await import('@/lib/api-locale')
+        const locale = getLocaleFromRequest(request)
+        // Async olarak logla - ana işlemi engellemez
+        logAction({
+          entity: 'Deal',
+          action: 'CREATE',
+          description: getActivityMessage(locale, 'dealCreated', { title: (data as any)?.title || getActivityMessage(locale, 'defaultDealTitle') }),
+          meta: { 
+            entity: 'Deal', 
+            action: 'create', 
+            id: (data as any).id,
+            title: (data as any)?.title,
+            stage: (data as any)?.stage,
+            value: (data as any)?.value,
+          },
+          userId: session.user.id,
+          companyId: companyId, // ✅ SuperAdmin için doğru companyId kullan
+        }).catch(() => {
+          // ActivityLog hatası ana işlemi engellemez
+        })
+      } catch (activityError) {
+        // ActivityLog hatası ana işlemi engellemez
+      }
+    }
 
     // Bildirim: Fırsat oluşturuldu
     try {
       const { createNotificationForRole } = await import('@/lib/notification-helper')
       await createNotificationForRole({
-        companyId: session.user.companyId,
+        companyId: companyId, // ✅ ÇÖZÜM: SuperAdmin için doğru companyId kullan
         role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-        title: 'Yeni Fırsat Oluşturuldu',
-        message: `Yeni bir fırsat oluşturuldu. Detayları görmek ister misiniz?`,
+        title: (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.dealCreatedTitle,
+        message: (await import('@/lib/api-locale')).getMessages((await import('@/lib/api-locale')).getLocaleFromRequest(request)).activity.dealCreatedMessage,
         type: 'info',
         relatedTo: 'Deal',
         relatedId: (data as any).id,
       })
     } catch (notificationError) {
       // Bildirim hatası ana işlemi engellemez
+    }
+
+    // ✅ Otomasyon: Deal oluşturulduğunda email gönder (kullanıcı tercihine göre)
+    try {
+      const automationRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/automations/deal-created-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deal: data,
+        }),
+      })
+      // Automation hatası ana işlemi engellemez (sadece log)
+      if (!automationRes.ok) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[Deal Automation] Email gönderimi başarısız veya kullanıcı tercihi ASK')
+        }
+      }
+    } catch (automationError) {
+      // Automation hatası ana işlemi engellemez
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[Deal Automation] Error:', automationError)
+      }
     }
 
     return NextResponse.json(data, { status: 201 })
@@ -362,4 +460,5 @@ export async function POST(request: Request) {
     )
   }
 }
+
 

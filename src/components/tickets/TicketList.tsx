@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { toast, confirm } from '@/lib/toast'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSession } from '@/hooks/useSession'
@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select'
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import { AutomationInfo } from '@/components/automation/AutomationInfo'
+import Pagination from '@/components/ui/Pagination'
 import RefreshButton from '@/components/ui/RefreshButton'
 import Link from 'next/link'
 import { useData } from '@/hooks/useData'
@@ -98,6 +99,10 @@ export default function TicketList() {
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
   const [selectedTicketData, setSelectedTicketData] = useState<Ticket | null>(null)
   
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+  
   // SuperAdmin için firmaları çek
   const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
     isSuperAdmin ? '/api/superadmin/companies' : null,
@@ -109,16 +114,46 @@ export default function TicketList() {
   )
 
   // SWR ile veri çekme (repo kurallarına uygun)
-  const params = new URLSearchParams()
-  if (status) params.append('status', status)
-  if (priority) params.append('priority', priority)
-    if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId) // SuperAdmin için firma filtresi
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams()
+    if (status) params.append('status', status)
+    if (priority) params.append('priority', priority)
+    if (isSuperAdmin && filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+    params.append('page', currentPage.toString())
+    params.append('pageSize', pageSize.toString())
+    return `/api/tickets?${params.toString()}`
+  }, [status, priority, isSuperAdmin, filterCompanyId, currentPage, pageSize])
+
+  interface TicketsResponse {
+    data: Ticket[]
+    pagination: {
+      page: number
+      pageSize: number
+      totalItems: number
+      totalPages: number
+    }
+  }
   
-  const apiUrl = `/api/tickets?${params.toString()}`
-  const { data: tickets = [], isLoading, error, mutate: mutateTickets } = useData<Ticket[]>(apiUrl, {
-    dedupingInterval: 5000, // 5 saniye cache (daha kısa - güncellemeler daha hızlı)
-    revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
+  const { data: ticketsData, isLoading, error, mutate: mutateTickets } = useData<Ticket[] | TicketsResponse>(apiUrl, {
+    dedupingInterval: 5000,
+    revalidateOnFocus: false,
   })
+  
+  const tickets = useMemo(() => {
+    if (Array.isArray(ticketsData)) return ticketsData
+    if (ticketsData && typeof ticketsData === 'object' && 'data' in ticketsData) {
+      return (ticketsData as TicketsResponse).data || []
+    }
+    return []
+  }, [ticketsData])
+  
+  const pagination = useMemo(() => {
+    if (!ticketsData || Array.isArray(ticketsData)) return null
+    if (ticketsData && typeof ticketsData === 'object' && 'pagination' in ticketsData) {
+      return (ticketsData as TicketsResponse).pagination || null
+    }
+    return null
+  }, [ticketsData])
 
   // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
   const handleRefresh = async () => {
@@ -159,13 +194,14 @@ export default function TicketList() {
       ])
       
       // Success toast göster
-      toast.success('Destek talebi silindi', `${subject} başarıyla silindi.`)
+      const tCommon = useTranslations('common')
+      toast.success(tCommon('ticketDeletedSuccess'), { description: tCommon('deleteSuccessMessage', { name: subject }) })
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
         console.error('Delete error:', error)
       }
-      toast.error(tCommon('error'), error?.message)
+      toast.error(tCommon('error'), { description: error?.message || 'Bir hata oluştu' })
     }
   }, [tickets, mutateTickets, apiUrl, t, tCommon])
 
@@ -235,7 +271,10 @@ export default function TicketList() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
         {isSuperAdmin && (
-          <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
+          <Select value={filterCompanyId || 'all'} onValueChange={(v) => {
+            setFilterCompanyId(v === 'all' ? '' : v)
+            setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+          }}>
             <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder={t('selectCompany')} />
             </SelectTrigger>
@@ -249,7 +288,10 @@ export default function TicketList() {
             </SelectContent>
           </Select>
         )}
-        <Select value={status || 'all'} onValueChange={(v) => setStatus(v === 'all' ? '' : v)}>
+        <Select value={status || 'all'} onValueChange={(v) => {
+          setStatus(v === 'all' ? '' : v)
+          setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+        }}>
           <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder={t('selectStatus')} />
           </SelectTrigger>
@@ -260,7 +302,10 @@ export default function TicketList() {
             <SelectItem value="CLOSED">{t('statusClosed')}</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={priority || 'all'} onValueChange={(v) => setPriority(v === 'all' ? '' : v)}>
+        <Select value={priority || 'all'} onValueChange={(v) => {
+          setPriority(v === 'all' ? '' : v)
+          setCurrentPage(1) // Filtre değiştiğinde ilk sayfaya dön
+        }}>
           <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder={t('selectPriority')} />
           </SelectTrigger>
@@ -273,9 +318,10 @@ export default function TicketList() {
         </Select>
       </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-lg shadow-card overflow-hidden">
-        <Table>
+      {/* Table - Desktop View */}
+      <div className="hidden md:block bg-white rounded-lg shadow-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <Table>
           <TableHeader>
             <TableRow>
               <TableHead>{t('tableHeaders.subject')}</TableHead>
@@ -372,7 +418,100 @@ export default function TicketList() {
               ))
             )}
           </TableBody>
-        </Table>
+          </Table>
+        </div>
+        {/* Pagination */}
+        {pagination && (
+          <Pagination
+            currentPage={pagination.page}
+            totalPages={pagination.totalPages}
+            pageSize={pagination.pageSize}
+            totalItems={pagination.totalItems}
+            onPageChange={(page) => setCurrentPage(page)}
+            onPageSizeChange={(size) => {
+              setPageSize(size)
+              setCurrentPage(1)
+            }}
+          />
+        )}
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-3">
+        {tickets.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            {t('noTicketsFound')}
+          </div>
+        ) : (
+          tickets.map((ticket) => (
+            <div
+              key={ticket.id}
+              className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-gray-900 truncate">{ticket.subject}</h3>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <Badge className={`text-xs ${priorityColors[ticket.priority] || 'bg-gray-100 text-gray-800'}`}>
+                      {priorityLabels[ticket.priority] || ticket.priority}
+                    </Badge>
+                    <Badge className={`text-xs ${statusColors[ticket.status] || 'bg-gray-100 text-gray-800'}`}>
+                      {statusLabels[ticket.status] || ticket.status}
+                    </Badge>
+                    {isSuperAdmin && ticket.Company?.name && (
+                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                        {ticket.Company.name}
+                      </Badge>
+                    )}
+                  </div>
+                  {ticket.Customer?.name && (
+                    <p className="text-xs text-gray-600 mt-1">
+                      {t('customer')}: {ticket.Customer.name}
+                    </p>
+                  )}
+                  {ticket.User?.name && (
+                    <p className="text-xs text-gray-600 mt-1">
+                      {t('assignedTo')}: {ticket.User.name}
+                    </p>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    {new Date(ticket.createdAt).toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US')}
+                  </p>
+                </div>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => {
+                      setSelectedTicketId(ticket.id)
+                      setSelectedTicketData(ticket)
+                      setDetailModalOpen(true)
+                    }}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handleEdit(ticket)}
+                  >
+                    <Edit className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-red-600"
+                    onClick={() => handleDelete(ticket.id, ticket.subject)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* Detail Modal */}

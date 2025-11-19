@@ -75,7 +75,7 @@ export default function EmailCampaignDetailModal({
       await mutateCampaign()
       await mutate('/api/email-campaigns')
       toast.dismiss(toastId)
-      toast.success('Gönderildi', 'Kampanya başarıyla gönderildi.')
+      toast.success('Gönderildi', { description: 'Kampanya başarıyla gönderildi.' })
     } catch (error: any) {
       console.error('Send error:', error)
       toast.dismiss(toastId)

@@ -70,12 +70,12 @@ export default function DocumentAccessForm({
     e.preventDefault()
     
     if (accessType === 'USER' && !selectedUserId) {
-      toast.warning('Kullanıcı seçiniz')
+      toast.warning('Kullanıcı seçiniz', { description: 'Lütfen bir kullanıcı seçin' })
       return
     }
     
     if (accessType === 'CUSTOMER' && !selectedCustomerId) {
-      toast.warning('Müşteri seçiniz')
+      toast.warning('Müşteri seçiniz', { description: 'Lütfen bir müşteri seçin' })
       return
     }
 

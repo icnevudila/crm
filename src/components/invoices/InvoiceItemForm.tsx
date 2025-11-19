@@ -26,7 +26,9 @@ import { formatCurrency } from '@/lib/utils'
 const invoiceItemSchema = z.object({
   productId: z.string().min(1, 'Ürün seçilmelidir'),
   quantity: z.number().min(0.01, 'Miktar 0\'dan büyük olmalı'),
-  unitPrice: z.number().min(0, 'Birim fiyat 0\'dan büyük olmalı'),
+  unitPrice: z.number().min(0.01, 'Birim fiyat 0\'dan büyük olmalı').refine((val) => val > 0, {
+    message: 'Fatura kalemi birim fiyatı 0 olamaz. Lütfen geçerli bir fiyat girin.',
+  }),
 })
 
 type InvoiceItemFormData = z.infer<typeof invoiceItemSchema>
@@ -71,7 +73,7 @@ export default function InvoiceItemForm({
     defaultValues: {
       productId: '',
       quantity: 1,
-      unitPrice: 0,
+      unitPrice: 0.01, // ✅ Sıfır olamaz, minimum 0.01
     },
   })
 
@@ -96,7 +98,7 @@ export default function InvoiceItemForm({
       reset({
         productId: '',
         quantity: 1,
-        unitPrice: 0,
+        unitPrice: 0.01, // ✅ Sıfır olamaz, minimum 0.01
       })
     }
   }, [open, reset])
@@ -130,7 +132,7 @@ export default function InvoiceItemForm({
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error('Ürün ekleme işlemi başarısız oldu', error?.message)
+      toast.error('Ürün ekleme işlemi başarısız oldu', { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }
@@ -193,9 +195,9 @@ export default function InvoiceItemForm({
             <Input
               type="number"
               step="0.01"
-              min="0"
+              min="0.01"
               {...register('unitPrice', { valueAsNumber: true })}
-              placeholder="0.00"
+              placeholder="0.01"
               disabled={loading}
             />
             {errors.unitPrice && (

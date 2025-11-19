@@ -33,7 +33,7 @@ export async function GET(
     
     const supabase = getSupabaseWithServiceRole()
 
-    // Finance kaydını çek
+    // Finance kaydını çek - ilişkili Invoice/Contract bilgilerini de çek (eğer varsa)
     let financeQuery = supabase
       .from('Finance')
       .select('*')
@@ -48,6 +48,82 @@ export async function GET(
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    if (!finance) {
+      return NextResponse.json({ error: 'Finans kaydı bulunamadı' }, { status: 404 })
+    }
+
+    // Invoice ilişkisini çek (eğer varsa)
+    let invoiceData = null
+    if ((finance as any).invoiceId) {
+      try {
+        const { data: invoice } = await supabase
+          .from('Invoice')
+          .select(`
+            id,
+            title,
+            invoiceNumber,
+            status,
+            totalAmount,
+            total,
+            createdAt,
+            Customer (
+              id,
+              name,
+              email
+            )
+          `)
+          .eq('id', (finance as any).invoiceId)
+          .eq('companyId', companyId)
+          .maybeSingle()
+        
+        if (invoice) {
+          invoiceData = {
+            ...invoice,
+            total: (invoice as any).totalAmount || (invoice as any).total || 0,
+          }
+        }
+      } catch (invoiceErr) {
+        // Hata olsa bile devam et
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Invoice fetch error:', invoiceErr)
+        }
+      }
+    }
+
+    // Contract ilişkisini çek (eğer varsa)
+    let contractData = null
+    if ((finance as any).contractId) {
+      try {
+        const { data: contract } = await supabase
+          .from('Contract')
+          .select(`
+            id,
+            title,
+            contractNumber,
+            status,
+            totalAmount,
+            createdAt,
+            CustomerCompany (
+              id,
+              name,
+              email
+            )
+          `)
+          .eq('id', (finance as any).contractId)
+          .eq('companyId', companyId)
+          .maybeSingle()
+        
+        if (contract) {
+          contractData = contract
+        }
+      } catch (contractErr) {
+        // Hata olsa bile devam et
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Contract fetch error:', contractErr)
+        }
+      }
     }
 
     // ActivityLog'ları çek
@@ -76,6 +152,8 @@ export async function GET(
 
     return NextResponse.json({
       ...(finance as any),
+      Invoice: invoiceData,
+      Contract: contractData,
       activities: activities || [],
     })
   } catch (error: any) {
@@ -113,6 +191,30 @@ export async function PUT(
 
     const { id } = await params
     const body = await request.json()
+    
+    const supabase = getSupabaseWithServiceRole()
+    
+    // SuperAdmin kontrolü
+    const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
+    
+    // ÖNCE: Mevcut kaydı kontrol et (SuperAdmin için companyId kontrolü yapma)
+    let existingQuery = supabase
+      .from('Finance')
+      .select('id, companyId')
+      .eq('id', id)
+    
+    if (!isSuperAdmin) {
+      existingQuery = existingQuery.eq('companyId', session.user.companyId)
+    }
+    
+    const { data: existing, error: existingError } = await existingQuery.single()
+    
+    if (existingError || !existing) {
+      return NextResponse.json(
+        { error: 'Finans kaydı bulunamadı' },
+        { status: 404 }
+      )
+    }
 
     const description = `Finans kaydı güncellendi: ${body.type === 'INCOME' ? 'Gelir' : 'Gider'} - ${body.amount} ₺`
     const data = await updateRecord('Finance', id, body, description)

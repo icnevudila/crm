@@ -97,7 +97,12 @@ export default function NotificationItem({ notification, onClick }: Notification
 
   if (notification.link) {
     return (
-      <Link href={notification.link} onClick={onClick} className="block">
+      <Link 
+        href={notification.link} 
+        onClick={onClick} 
+        className="block"
+        prefetch={true} // ÖNEMLİ: Prefetch aktif - sayfa daha hızlı yüklenir
+      >
         {content}
       </Link>
     )
@@ -152,3 +157,58 @@ export default function NotificationItem({ notification, onClick }: Notification
 
 
 
+<<<<<<< HEAD
+=======
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+>>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8

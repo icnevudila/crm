@@ -3,7 +3,7 @@ import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import React from 'react'
 import { renderToBuffer } from '@react-pdf/renderer'
-import InvoicePDF from '@/components/pdf/InvoicePDF'
+import InvoiceRecordPDF from '@/components/pdf/InvoiceRecordPDF'
 
 // @react-pdf/renderer için React.createElement kullanılmalı
 
@@ -125,7 +125,7 @@ export async function GET(
     try {
       const { data: company, error: companyError } = await supabase
         .from('Company')
-        .select('id, name, taxNumber, address, city, phone, email')
+        .select('id, name, address, city, phone, email')
         .eq('id', companyId)
         .maybeSingle()
       
@@ -168,9 +168,9 @@ export async function GET(
     let pdfBuffer: Buffer
     try {
       // @react-pdf/renderer için React.createElement kullan
-      // InvoicePDF component'ini doğru şekilde oluştur
-      const InvoicePDFComponent = InvoicePDF as React.ComponentType<{ invoice: any }>
-      const pdfElement = React.createElement(InvoicePDFComponent, { invoice })
+      // InvoiceRecordPDF component'ini doğru şekilde oluştur
+      const InvoiceRecordPDFComponent = InvoiceRecordPDF as React.ComponentType<{ invoice: any }>
+      const pdfElement = React.createElement(InvoiceRecordPDFComponent, { invoice })
       pdfBuffer = await renderToBuffer(pdfElement)
     } catch (renderError: any) {
       console.error('PDF renderToBuffer error:', {
@@ -193,7 +193,7 @@ export async function GET(
     return new NextResponse(pdfBuffer as any, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="fatura-${invoice.id.substring(0, 8)}.pdf"`,
+        'Content-Disposition': `attachment; filename="islem_ozeti_${invoice.id.substring(0, 8)}.pdf"`,
       },
     })
   } catch (error: any) {

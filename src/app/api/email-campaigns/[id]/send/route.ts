@@ -111,8 +111,9 @@ export async function POST(
       })
       .eq('id', campaignId)
 
-    // Send emails (MOCK - gerçek email service entegrasyonu lazım)
-    // TODO: SendGrid, AWS SES, veya Resend kullan
+    // Send emails - Resend entegrasyonu kullan
+    const { sendEmail } = await import('@/lib/integrations/email')
+    
     let successCount = 0
     let failCount = 0
     
@@ -120,8 +121,25 @@ export async function POST(
       if (!customer.email) continue
 
       try {
-        // Email gönder (mock)
+        // Email gönder - Resend entegrasyonu kullan
         console.log(`Sending email to ${customer.email}`)
+        
+        const emailResult = await sendEmail(
+          campaign.companyId,
+          {
+            to: customer.email,
+            subject: campaign.subject,
+            html: campaign.htmlContent || campaign.body || '',
+            from: campaign.fromEmail || undefined,
+            fromName: campaign.fromName || undefined,
+          }
+        )
+        
+        if (!emailResult.success) {
+          console.error(`Failed to send email to ${customer.email}:`, emailResult.error)
+          failCount++
+          continue
+        }
         
         // Email log oluştur (trigger stats'ı otomatik güncelleyecek)
         await supabase.from('EmailLog').insert({
@@ -130,6 +148,7 @@ export async function POST(
           recipientName: customer.name,
           status: 'SENT', // Trigger 'SENT' status'ünü bekliyor
           sentAt: new Date().toISOString(),
+          messageId: emailResult.messageId || null,
           companyId: campaign.companyId,
         })
         

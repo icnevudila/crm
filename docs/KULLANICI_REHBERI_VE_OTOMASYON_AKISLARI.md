@@ -768,11 +768,15 @@ DRAFT → ACTIVE → COMPLETED/CANCELLED
 
 | Kategori | Sayı |
 |----------|------|
-| Toplam Trigger | 71+ |
+| Toplam Trigger | 91+ |
 | Validation | 15+ |
 | Notification | 30+ |
 | ActivityLog | 25+ |
 | Reminder | 7 |
+
+> Not: Toplam trigger sayısı; temel akış otomasyonlarına ek olarak  
+> `YENI_AKILLI_OTOMASYONLAR_REHBERI.md` (10 adet) ve  
+> `ILERI_SEVIYE_OTOMASYONLAR_REHBERI.md` (10 adet, 6 cron job) ile birlikte **güncel sistem toplamını** yansıtır.
 
 ---
 

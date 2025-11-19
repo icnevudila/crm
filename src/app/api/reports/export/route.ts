@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabase } from '@/lib/supabase'
 import * as XLSX from 'xlsx'
+import React from 'react'
+import { renderToBuffer } from '@react-pdf/renderer'
+import ReportsPDF from '@/components/pdf/ReportsPDF'
 
 export async function GET(request: Request) {
   try {
@@ -79,10 +82,50 @@ export async function GET(request: Request) {
       })
     }
 
-    // PDF için basit bir text response (PDF generation daha karmaşık)
+    // ✅ PDF Export - @react-pdf/renderer ile
+    if (format === 'pdf') {
+      try {
+        const ReportsPDFComponent = ReportsPDF as React.ComponentType<{
+          reports: any[]
+          filters?: {
+            startDate?: string
+            endDate?: string
+            module?: string
+            userId?: string
+          }
+        }>
+        
+        const pdfElement = React.createElement(ReportsPDFComponent, {
+          reports: reports || [],
+          filters: {
+            startDate: startDate || undefined,
+            endDate: endDate || undefined,
+            module: reportModule || undefined,
+            userId: userId || undefined,
+          },
+        })
+        
+        const pdfBuffer = await renderToBuffer(pdfElement)
+        
+        return new NextResponse(pdfBuffer as any, {
+          headers: {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `attachment; filename="rapor_${new Date().toISOString().split('T')[0]}.pdf"`,
+          },
+        })
+      } catch (pdfError: any) {
+        console.error('PDF generation error:', pdfError)
+        return NextResponse.json(
+          { error: 'PDF oluşturulamadı', message: pdfError?.message },
+          { status: 500 }
+        )
+      }
+    }
+    
+    // Format tanınmıyor
     return NextResponse.json(
-      { error: 'PDF export not implemented yet' },
-      { status: 501 }
+      { error: 'Geçersiz format. Desteklenen formatlar: excel, csv, pdf' },
+      { status: 400 }
     )
   } catch (error: any) {
     return NextResponse.json(

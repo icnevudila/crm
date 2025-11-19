@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import { toast, confirm } from '@/lib/toast'
+import { toast, toastSuccess, toastError, confirm } from '@/lib/toast'
 import { Plus, Search, Edit, Trash2, Eye, CheckCircle, MoreVertical, Calendar, FileText, PackageCheck, BarChart3, X } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -50,6 +50,13 @@ import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import { formatCurrency } from '@/lib/utils'
 import { Card } from '@/components/ui/card'
+import dynamic from 'next/dynamic'
+
+// Lazy load InvoiceForm - performans için
+const InvoiceForm = dynamic(() => import('../invoices/InvoiceForm'), {
+  ssr: false,
+  loading: () => null,
+})
 
 interface PurchaseShipment {
   id: string
@@ -61,7 +68,8 @@ interface PurchaseShipment {
     id: string
     title: string
     invoiceNumber?: string
-    total: number
+    total?: number
+    totalAmount?: number
     createdAt: string
     Vendor?: {
       id: string
@@ -128,6 +136,7 @@ export default function PurchaseShipmentList() {
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [detailPurchaseShipment, setDetailPurchaseShipment] = useState<PurchaseShipment | null>(null)
   const [approvingId, setApprovingId] = useState<string | null>(null)
+  const [invoiceFormOpen, setInvoiceFormOpen] = useState(false)
 
   // Debounced search
   const [debouncedSearch, setDebouncedSearch] = useState(search)
@@ -238,19 +247,37 @@ export default function PurchaseShipmentList() {
   // Detay modal aç
   const handleViewDetail = useCallback(async (purchaseShipment: PurchaseShipment) => {
     try {
-      const res = await fetch(`/api/purchase-shipments/${purchaseShipment.id}`)
-      if (!res.ok) throw new Error(t('errorLoadingDetails'))
+      setDetailModalOpen(true) // Modal'ı hemen aç (loading state için)
+      setDetailPurchaseShipment(null) // Önceki veriyi temizle
+      
+      const res = await fetch(`/api/purchase-shipments/${purchaseShipment.id}`, {
+        cache: 'no-store',
+        credentials: 'include',
+      })
+      
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        setDetailModalOpen(false) // Hata durumunda modal'ı kapat
+        throw new Error(errorData.error || t('errorLoadingDetails') || 'Satın alma detayı yüklenemedi')
+      }
+      
       const detail = await res.json()
+      
+      if (!detail || !detail.id) {
+        setDetailModalOpen(false)
+        throw new Error('Satın alma detayı geçersiz format')
+      }
+      
       setDetailPurchaseShipment(detail)
-      setDetailModalOpen(true)
     } catch (error: any) {
       console.error('Detail fetch error:', error)
+      setDetailModalOpen(false) // Hata durumunda modal'ı kapat
       toast.error(
-        t('errorLoadingDetails'),
-        error?.message || t('errorLoadingDetailsMessage')
+        t('errorLoadingDetails') || 'Detay Yüklenemedi',
+        error?.message || t('errorLoadingDetailsMessage') || 'Satın alma bilgileri yüklenirken bir hata oluştu. Lütfen tekrar deneyin.'
       )
     }
-  }, [])
+  }, [t])
 
   const handleDelete = useCallback(async (id: string) => {
     if (!(await confirm(t('deleteConfirm')))) {
@@ -292,6 +319,15 @@ export default function PurchaseShipmentList() {
     return <SkeletonList />
   }
 
+  if (error) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-red-600 mb-4">Satın alma sevkiyatları yüklenirken bir hata oluştu.</p>
+        <Button onClick={() => mutatePurchaseShipments()}>Yeniden Dene</Button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -300,13 +336,22 @@ export default function PurchaseShipmentList() {
           <h1 className="text-3xl font-bold text-gray-900">{t('title')}</h1>
           <p className="mt-2 text-gray-600">{t('totalRecords', { count: stats.total })}</p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => {}}
-        >
-          <BarChart3 className="mr-2 h-4 w-4" />
-          {t('reports')}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            onClick={() => setInvoiceFormOpen(true)}
+            className="bg-gradient-primary text-white"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Yeni Satın Alma Talebi
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {}}
+          >
+            <BarChart3 className="mr-2 h-4 w-4" />
+            {t('reports')}
+          </Button>
+        </div>
       </div>
 
       {/* Üst Panel - Durum Bazlı KPI Kartları */}
@@ -456,7 +501,7 @@ export default function PurchaseShipmentList() {
                               <p><strong>{t('tooltip.invoiceNumber')}:</strong> {purchaseShipment.Invoice.invoiceNumber || purchaseShipment.invoiceId.substring(0, 8)}</p>
                               <p><strong>{t('tooltip.title')}:</strong> {purchaseShipment.Invoice.title || '-'}</p>
                               <p><strong>{t('tooltip.vendor')}:</strong> {getVendorName(purchaseShipment)}</p>
-                              <p><strong>{t('tooltip.total')}:</strong> {formatCurrency(purchaseShipment.Invoice.totalAmount || 0)}</p>
+                              <p><strong>{t('tooltip.total')}:</strong> {formatCurrency(purchaseShipment.Invoice.total || purchaseShipment.Invoice.totalAmount || 0)}</p>
                               <p><strong>{t('tooltip.date')}:</strong> {new Date(purchaseShipment.Invoice.createdAt).toLocaleDateString('tr-TR')}</p>
                             </div>
                           </TooltipContent>
@@ -583,7 +628,7 @@ export default function PurchaseShipmentList() {
                     href={`/${locale}/invoices/${detailPurchaseShipment.Invoice.id}`}
                     className="text-indigo-600 hover:underline"
                   >
-                    {detailPurchaseShipment.Invoice.title} - {formatCurrency(detailPurchaseShipment.Invoice.totalAmount || 0)}
+                    {detailPurchaseShipment.Invoice.title} - {formatCurrency(detailPurchaseShipment.Invoice.total || detailPurchaseShipment.Invoice.totalAmount || 0)}
                   </Link>
                 </Card>
               )}
@@ -670,6 +715,32 @@ export default function PurchaseShipmentList() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Yeni Satın Alma Talebi Formu (PURCHASE Faturası) */}
+      <InvoiceForm
+        open={invoiceFormOpen}
+        onClose={() => setInvoiceFormOpen(false)}
+        defaultInvoiceType="PURCHASE"
+        onSuccess={async (newInvoice) => {
+          // Fatura oluşturuldu - otomatik PurchaseTransaction oluşturulacak (SENT olduğunda)
+          // Cache'leri güncelle
+          await Promise.all([
+            mutate('/api/purchase-shipments', undefined, { revalidate: true }),
+            mutate('/api/purchase-shipments?', undefined, { revalidate: true }),
+            mutate(apiUrl, undefined, { revalidate: true }),
+            mutate('/api/invoices', undefined, { revalidate: true }),
+            mutate('/api/invoices?', undefined, { revalidate: true }),
+            mutate('/api/analytics/invoice-kanban', undefined, { revalidate: true }),
+          ])
+          
+          toastSuccess(
+            'Satın Alma Talebi Oluşturuldu',
+            `${newInvoice.title} faturası oluşturuldu. Faturayı "Gönderildi" durumuna taşıdığınızda otomatik olarak satın alma kaydı oluşturulacak.`
+          )
+          
+          setInvoiceFormOpen(false)
+        }}
+      />
     </div>
   )
 }

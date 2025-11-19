@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react'
 import { toast } from '@/lib/toast'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { FileText, Edit, Trash2, Eye, Send, CheckCircle, XCircle, GripVertical, RefreshCw, Mail, Clock, History, ChevronLeft, ChevronRight } from 'lucide-react'
+import { FileText, Edit, Trash2, Eye, Send, CheckCircle, XCircle, GripVertical, RefreshCw, Mail, Clock, History, ChevronLeft, ChevronRight, StickyNote, Sparkles } from 'lucide-react'
+import { getStatusColor, getStatusBadgeClass, getStatusCardClass, getStatusHeaderClass } from '@/lib/crm-colors'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -12,6 +13,14 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
 import { Button } from '@/components/ui/button'
@@ -49,6 +58,10 @@ import { CSS } from '@dnd-kit/utilities'
 import { isValidQuoteTransition, isQuoteImmutable } from '@/lib/stageValidation'
 import { translateStage, getStageMessage } from '@/lib/stageTranslations'
 import RelatedRecordsDialog from '@/components/activity/RelatedRecordsDialog'
+import SendEmailButton from '@/components/integrations/SendEmailButton'
+import SendSmsButton from '@/components/integrations/SendSmsButton'
+import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
+import AddToCalendarButton from '@/components/integrations/AddToCalendarButton'
 
 interface QuoteKanbanChartProps {
   data: Array<{
@@ -89,48 +102,15 @@ const statusInfoMessages: Record<string, string> = {
 }
 
 
-// Premium renk kodları - daha belirgin ve okunabilir
-const statusColors: Record<string, { bg: string; text: string; border: string }> = {
-  DRAFT: {
-    bg: 'bg-gray-50',
-    text: 'text-gray-700',
-    border: 'border-gray-300',
-  },
-  SENT: {
-    bg: 'bg-blue-50',
-    text: 'text-blue-700',
-    border: 'border-blue-300',
-  },
-  ACCEPTED: {
-    bg: 'bg-green-50',
-    text: 'text-green-700',
-    border: 'border-green-300',
-  },
-  REJECTED: {
-    bg: 'bg-red-50',
-    text: 'text-red-700',
-    border: 'border-red-300',
-  },
-  DECLINED: {
-    bg: 'bg-red-50',
-    text: 'text-red-700',
-    border: 'border-red-300',
-  },
-  WAITING: {
-    bg: 'bg-yellow-50',
-    text: 'text-yellow-700',
-    border: 'border-yellow-300',
-  },
-}
+// ✅ CRM Renk Sistemi - Merkezi renk kullanımı
+// Status renkleri artık merkezi sistemden geliyor
+const statusColors = (status: string) => ({
+  bg: getStatusColor(status, 'bg'),
+  text: getStatusColor(status, 'text'),
+  border: getStatusColor(status, 'border'),
+})
 
-const statusBadgeColors: Record<string, string> = {
-  DRAFT: 'bg-gray-500 text-white',
-  SENT: 'bg-blue-500 text-white',
-  ACCEPTED: 'bg-green-500 text-white',
-  REJECTED: 'bg-red-500 text-white',
-  DECLINED: 'bg-red-500 text-white',
-  WAITING: 'bg-yellow-500 text-white',
-}
+const statusBadgeColors = (status: string) => getStatusBadgeClass(status)
 
 // ✅ PREMIUM: Droppable Column Component - Smooth hover effects
 function DroppableColumn({ status, children }: { status: string; children: React.ReactNode }) {
@@ -141,9 +121,9 @@ function DroppableColumn({ status, children }: { status: string; children: React
   return (
     <div
       ref={setNodeRef}
-      className={`flex-1 transition-all duration-300 ease-out ${
+      className={`flex-1 transition-all duration-200 ease-out ${
         isOver 
-          ? 'bg-gradient-to-br from-primary-50 to-primary-100/50 border-2 border-primary-400 border-dashed rounded-xl shadow-lg scale-[1.02]' 
+          ? 'bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border-2 border-indigo-400 border-dashed rounded-xl shadow-xl scale-[1.01] ring-4 ring-indigo-200/50' 
           : ''
       }`}
     >
@@ -162,55 +142,47 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
   onView?: (quoteId: string) => void // ✅ ÇÖZÜM: Modal açmak için callback
 }) {
   const locale = useLocale()
-  const [dragMode, setDragMode] = useState(false)
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
   
   // Kilitli durum kontrolü - ACCEPTED ve REJECTED durumları taşınamaz
   const isLocked = isQuoteImmutable(status)
   
+  // ✅ Drag & drop şimdilik olduğu gibi - sonra düzeltilecek
   const {
     attributes,
     listeners,
     setNodeRef,
     transform,
     isDragging,
-  } = useSortable({ id: quote.id, disabled: !dragMode || isLocked })
+  } = useSortable({ id: quote.id, disabled: isLocked })
 
-  // ✅ PREMIUM: Ultra-smooth drag animations with GPU acceleration
+  // ✅ PERFORMANCE OPTIMIZED: Ultra-fast drag with minimal transforms
   const x = transform?.x ?? 0
   const y = transform?.y ?? 0
   const style: React.CSSProperties = transform 
     ? {
-        transform: `translate3d(${x}px,${y}px,0) scale(1)`,
-        WebkitTransform: `translate3d(${x}px,${y}px,0) scale(1) translateZ(0)`,
-        transition: isDragging ? 'none' : 'transform 150ms cubic-bezier(0.25, 0.46, 0.45, 0.94)', // ✅ Daha hızlı ve smooth transition
+        // ✅ Sadece translate3d - en hızlı transform (scale/rotate/filter kaldırıldı - performans için)
+        transform: `translate3d(${x}px,${y}px,0)`,
+        WebkitTransform: `translate3d(${x}px,${y}px,0) translateZ(0)`,
+        transition: 'none', // ✅ Drag sırasında transition YOK
         willChange: 'transform',
-        opacity: isDragging ? 0.7 : 1, // ✅ Daha görünür opacity
-        cursor: dragMode && !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'default',
-        transformOrigin: 'center center',
+        opacity: 1, // ✅ Tam opak - filter yok, opacity değişikliği yok
+        cursor: !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'not-allowed',
+        zIndex: isDragging ? 9999 : 1,
+        // ✅ Minimal GPU acceleration - sadece gerekli olanlar
         backfaceVisibility: 'hidden',
-        perspective: 1000,
-        isolation: 'isolate',
-        zIndex: isDragging ? 50 : 1, // ✅ Drag sırasında üstte
-        // ✅ GPU acceleration optimizations
         WebkitBackfaceVisibility: 'hidden',
-        WebkitPerspective: 1000,
-        WebkitTransformStyle: 'preserve-3d',
-        transformStyle: 'preserve-3d',
+        pointerEvents: isDragging ? 'none' : 'auto',
+        // ✅ Filter kaldırıldı - çok ağır, performans sorunu yaratıyor
       }
     : {
-        transition: 'transform 150ms cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 150ms ease-out', // ✅ Daha hızlı transitions
-        willChange: dragMode && !isLocked ? 'transform' : 'auto',
-        opacity: isDragging ? 0.7 : 1,
-        cursor: dragMode && !isLocked ? (isDragging ? 'grabbing' : 'grab') : 'default',
-        // ✅ GPU acceleration optimizations
-        WebkitBackfaceVisibility: 'hidden',
-        WebkitPerspective: 1000,
-        WebkitTransformStyle: 'preserve-3d',
-        transformStyle: 'preserve-3d',
+        transition: isDragging ? 'none' : 'transform 150ms ease-out', // ✅ Daha hızlı transition
+        willChange: !isLocked ? 'transform' : 'auto',
+        opacity: 1,
+        cursor: !isLocked ? 'grab' : 'not-allowed',
       }
 
-  const colors = statusColors[status] || statusColors.DRAFT
+  const colors = statusColors(status)
 
   const handleEdit = (e: React.MouseEvent) => {
     e.preventDefault()
@@ -229,20 +201,24 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
       <ContextMenuTrigger asChild>
         <Card
           ref={setNodeRef}
+          {...(!isLocked ? attributes : {})}
           style={{
             ...style,
             contain: 'layout style paint', // CSS containment for performance
             isolation: 'isolate', // Force GPU layer
           }}
-          className={`bg-white border-2 transition-all duration-200 ${
+          className={`bg-white border-2 ${
+            isDragging ? '' : 'transition-all duration-150' // ✅ Drag sırasında transition YOK
+          } ${
             isLocked 
               ? status === 'ACCEPTED'
-                ? 'border-green-300 bg-green-50/30 hover:border-green-400'
-                : 'border-red-300 bg-red-50/30 hover:border-red-400'
-              : `${colors.border} hover:border-primary-400 hover:shadow-lg`
-          } relative ${dragMode && !isLocked ? 'ring-2 ring-primary-400 ring-opacity-50' : ''} ${
-            isDragging ? 'shadow-2xl scale-105 rotate-1' : 'hover:scale-[1.02]'
+                ? 'border-green-300 bg-green-50/30 hover:border-green-400 cursor-not-allowed'
+                : 'border-red-300 bg-red-50/30 hover:border-red-400 cursor-not-allowed'
+              : `${colors.border} hover:border-primary-400 hover:shadow-lg cursor-grab active:cursor-grabbing`
+          } relative ${
+            isDragging ? 'shadow-xl' : 'transition-shadow duration-150' // ✅ Sadece shadow transition - daha hızlı
           }`}
+          {...(!isLocked ? listeners : {})}
         >
           {/* Kilitli Durum Badge - Kilitli kartlarda göster */}
           {isLocked && (
@@ -255,69 +231,23 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
             </div>
           )}
           
-          {/* Drag Handle Button - Sadece kilitli değilse göster */}
-          {!isLocked && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-                setDragMode(!dragMode)
-              }}
-              className={`absolute top-2 right-2 z-50 p-1.5 rounded-md ${isDragging ? 'transition-none' : 'transition-all'} ${
-                dragMode
-                  ? 'bg-primary-500 text-white shadow-md hover:bg-primary-600'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-              title={dragMode ? 'Sürükle-bırak modunu kapat' : 'Sürükle-bırak modunu aç'}
-            >
-              <GripVertical className="h-4 w-4" />
-            </button>
-          )}
-
-          {/* Drag Handle Overlay - Sadece drag mode aktifken ve kilitli değilse */}
-          {dragMode && !isLocked && (
-            <div
-              {...attributes}
-              {...listeners}
-              className="absolute inset-0 z-40 cursor-grab active:cursor-grabbing rounded-lg"
-              style={{
-                willChange: 'transform, opacity',
-                touchAction: 'none',
-                backfaceVisibility: 'hidden',
-                WebkitTransform: 'translateZ(0)', // Force GPU acceleration
-                transform: 'translateZ(0)', // Force GPU acceleration
-              }}
-              onClick={(e) => {
-                if (isDragging) {
-                  e.preventDefault()
-                  e.stopPropagation()
-                }
-              }}
-              onContextMenu={(e) => {
-                e.stopPropagation()
-              }}
-            />
-          )}
-
           <Link
             href={`/${locale}/quotes/${quote.id}`}
             prefetch={true}
-            className={`block relative z-0 ${dragMode ? 'pointer-events-none' : ''}`}
+            className={`block relative z-0 ${isDragging ? 'pointer-events-none' : ''}`}
             onClick={(e) => {
-              // Drag mode aktifken link'e tıklamayı engelle
-              if (dragMode || isDragging) {
+              if (isDragging) {
                 e.preventDefault()
                 e.stopPropagation()
               }
             }}
           >
-        <div className="p-3">
+        <div className="p-3 relative z-20">
           <div className="flex items-start gap-2 mb-2">
             <FileText className={`h-4 w-4 ${colors.text} mt-0.5 flex-shrink-0`} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
-                <p className="font-medium text-sm text-gray-900 line-clamp-2">
+                <p className="font-medium text-sm text-gray-900 line-clamp-2 flex-1">
                   {quote.title}
                 </p>
                 {/* REJECTED durumunda not simgesi - hover ile tooltip */}
@@ -394,19 +324,21 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                       onClick={async (e) => {
                         e.preventDefault()
                         e.stopPropagation()
-                        if (dragMode || isDragging) return
+                        e.nativeEvent.stopImmediatePropagation()
+                        if (isDragging) return
                         
                         if (onStatusChange) {
                           try {
                             await onStatusChange(quote.id, 'ACCEPTED')
-                            toast.success('Teklif kabul edildi! Fatura ve sözleşme oluşturuldu.')
+                            // Toast mesajı onStatusChange içinde gösteriliyor
                           } catch (error: any) {
                             if (process.env.NODE_ENV === 'development') {
                               console.error('Status change error:', error)
                             }
+                            toast.error('Durum değiştirilemedi', { description: error?.message || 'Bir hata oluştu' })
                           }
                         } else {
-                          toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                          toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                         }
                       }}
                     >
@@ -429,19 +361,19 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                       onClick={async (e) => {
                         e.preventDefault()
                         e.stopPropagation()
-                        if (dragMode || isDragging) return
+                        if (isDragging) return
                         
                         if (onStatusChange) {
                           try {
                             await onStatusChange(quote.id, 'REJECTED')
-                            toast.success('Teklif reddedildi')
+                            toast.success('Teklif reddedildi', { description: 'Teklif reddedildi' })
                           } catch (error: any) {
                             if (process.env.NODE_ENV === 'development') {
                               console.error('Status change error:', error)
                             }
                           }
                         } else {
-                          toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                          toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                         }
                       }}
                     >
@@ -470,21 +402,23 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                       onClick={async (e) => {
                   e.preventDefault()
                   e.stopPropagation()
-                  if (dragMode || isDragging) return
+                  e.nativeEvent.stopImmediatePropagation()
+                  if (isDragging) return
                   
                   // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak ve cache'i güncelleyecek
                   if (onStatusChange) {
                     try {
                       await onStatusChange(quote.id, 'SENT')
-                      toast.success('Teklif gönderildi')
+                      // Toast mesajı onStatusChange içinde gösteriliyor
                     } catch (error: any) {
                       // Hata zaten onStatusChange içinde handle ediliyor, burada sadece log
                       if (process.env.NODE_ENV === 'development') {
                         console.error('Status change error:', error)
                       }
+                      toast.error('Durum değiştirilemedi', { description: String(error?.message || 'Bir hata oluştu') })
                     }
                   } else {
-                    toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                    toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                   }
                 }}
                     >
@@ -509,21 +443,22 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                         onClick={async (e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    if (dragMode || isDragging) return
+                    if (isDragging) return
                     
                     // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                     if (onStatusChange) {
                       try {
                         await onStatusChange(quote.id, 'ACCEPTED')
-                        toast.success('Teklif kabul edildi! Fatura ve sözleşme oluşturuldu.')
+                        toast.success('Teklif kabul edildi!', { description: 'Fatura ve sözleşme oluşturuldu.' })
                       } catch (error: any) {
-                        // Hata zaten onStatusChange içinde handle ediliyor
+                        // Hata zaten onStatusChange içinde handle ediliyor, burada sadece log
                         if (process.env.NODE_ENV === 'development') {
                           console.error('Status change error:', error)
                         }
+                        toast.error('Durum değiştirilemedi', { description: String(error?.message || 'Bir hata oluştu') })
                       }
                     } else {
-                      toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                      toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                     }
                   }}
                       >
@@ -545,21 +480,22 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                         onClick={async (e) => {
                     e.preventDefault()
                     e.stopPropagation()
-                    if (dragMode || isDragging) return
+                    if (isDragging) return
                     
                     // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                     if (onStatusChange) {
                       try {
                         await onStatusChange(quote.id, 'REJECTED')
-                        toast.success('Teklif reddedildi')
+                        toast.success('Teklif reddedildi', { description: 'Teklif reddedildi' })
                       } catch (error: any) {
-                        // Hata zaten onStatusChange içinde handle ediliyor
+                        // Hata zaten onStatusChange içinde handle ediliyor, burada sadece log
                         if (process.env.NODE_ENV === 'development') {
                           console.error('Status change error:', error)
                         }
+                        toast.error('Durum değiştirilemedi', { description: String(error?.message || 'Bir hata oluştu') })
                       }
                     } else {
-                      toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                      toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                     }
                   }}
                       >
@@ -577,7 +513,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
         </div>
       </Link>
           {/* Action Buttons - Kartın altında, drag & drop'u etkilemez */}
-          <div className={`px-3 pb-3 pt-2 border-t border-gray-200 bg-white relative z-50 ${dragMode ? 'pointer-events-none opacity-50' : ''}`}>
+          <div className="px-3 pb-3 pt-2 border-t border-gray-200 bg-white relative z-50" onPointerDown={(e) => e.stopPropagation()}>
             <div className="flex gap-2 flex-wrap">
               {/* DRAFT → Gönder */}
               {quote.status === 'DRAFT' && (
@@ -591,13 +527,13 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                         onClick={async (e) => {
                           e.preventDefault()
                           e.stopPropagation()
-                          if (dragMode) return
+                          if (isDragging) return
                           
                           // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                           if (onStatusChange) {
                             try {
                               await onStatusChange(quote.id, 'SENT')
-                              toast.success('Teklif gönderildi', 'Teklif başarıyla gönderildi ve durumu güncellendi.')
+                              toast.success('Teklif gönderildi', { description: 'Teklif başarıyla gönderildi ve durumu güncellendi.' })
                             } catch (error: any) {
                               // Hata zaten onStatusChange içinde handle ediliyor
                               if (process.env.NODE_ENV === 'development') {
@@ -605,7 +541,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                               }
                             }
                           } else {
-                            toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                            toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                           }
                         }}
                       >
@@ -634,13 +570,14 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                           onClick={async (e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            if (dragMode) return
+                            e.nativeEvent.stopImmediatePropagation()
+                            if (isDragging) return
                             
                             // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                             if (onStatusChange) {
                               try {
                                 await onStatusChange(quote.id, 'ACCEPTED')
-                                toast.success('Teklif kabul edildi', 'Teklif kabul edildi, otomatik olarak fatura ve sözleşme oluşturuldu.')
+                                toast.success('Teklif kabul edildi', { description: 'Teklif kabul edildi, otomatik olarak fatura ve sözleşme oluşturuldu.' })
                               } catch (error: any) {
                                 // Hata zaten onStatusChange içinde handle ediliyor
                                 if (process.env.NODE_ENV === 'development') {
@@ -648,7 +585,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                                 }
                               }
                             } else {
-                              toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                              toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                             }
                           }}
                         >
@@ -673,13 +610,14 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                           onClick={async (e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            if (dragMode) return
+                            e.nativeEvent.stopImmediatePropagation()
+                            if (isDragging) return
                             
                             // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                             if (onStatusChange) {
                               try {
                                 await onStatusChange(quote.id, 'REJECTED')
-                                toast.success('Teklif reddedildi', 'Teklif reddedildi, otomatik olarak revizyon görevi oluşturuldu.')
+                                toast.success('Teklif reddedildi', { description: 'Teklif reddedildi, otomatik olarak revizyon görevi oluşturuldu.' })
                               } catch (error: any) {
                                 // Hata zaten onStatusChange içinde handle ediliyor
                                 if (process.env.NODE_ENV === 'development') {
@@ -687,7 +625,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                                 }
                               }
                             } else {
-                              toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                              toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                             }
                           }}
                         >
@@ -717,13 +655,14 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                           onClick={async (e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            if (dragMode) return
+                            e.nativeEvent.stopImmediatePropagation()
+                            if (isDragging) return
                             
                             // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                             if (onStatusChange) {
                               try {
                                 await onStatusChange(quote.id, 'ACCEPTED')
-                                toast.success('Teklif kabul edildi', 'Teklif kabul edildi, otomatik olarak fatura ve sözleşme oluşturuldu.')
+                                toast.success('Teklif kabul edildi', { description: 'Teklif kabul edildi, otomatik olarak fatura ve sözleşme oluşturuldu.' })
                               } catch (error: any) {
                                 // Hata zaten onStatusChange içinde handle ediliyor
                                 if (process.env.NODE_ENV === 'development') {
@@ -731,7 +670,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                                 }
                               }
                             } else {
-                              toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                              toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                             }
                           }}
                         >
@@ -756,13 +695,14 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                           onClick={async (e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            if (dragMode) return
+                            e.nativeEvent.stopImmediatePropagation()
+                            if (isDragging) return
                             
                             // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                             if (onStatusChange) {
                               try {
                                 await onStatusChange(quote.id, 'REJECTED')
-                                toast.success('Teklif reddedildi', 'Teklif reddedildi, otomatik olarak revizyon görevi oluşturuldu.')
+                                toast.success('Teklif reddedildi', { description: 'Teklif reddedildi, otomatik olarak revizyon görevi oluşturuldu.' })
                               } catch (error: any) {
                                 // Hata zaten onStatusChange içinde handle ediliyor
                                 if (process.env.NODE_ENV === 'development') {
@@ -770,7 +710,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                                 }
                               }
                             } else {
-                              toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                              toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                             }
                           }}
                         >
@@ -795,20 +735,21 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                           onClick={async (e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            if (dragMode) return
+                            e.nativeEvent.stopImmediatePropagation()
+                            if (isDragging) return
                             
                             // Tekrar gönder - SENT durumuna taşı
                             if (onStatusChange) {
                               try {
                                 await onStatusChange(quote.id, 'SENT')
-                                toast.success('Teklif tekrar gönderildi', 'Teklif başarıyla tekrar gönderildi.')
+                                toast.success('Teklif tekrar gönderildi', { description: 'Teklif başarıyla tekrar gönderildi.' })
                               } catch (error: any) {
                                 if (process.env.NODE_ENV === 'development') {
                                   console.error('Status change error:', error)
                                 }
                               }
                             } else {
-                              toast.error('Durum değiştirilemedi', 'onStatusChange callback tanımlı değil')
+                              toast.error('Durum değiştirilemedi', { description: 'onStatusChange callback tanımlı değil' })
                             }
                           }}
                         >
@@ -833,10 +774,11 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                           onClick={async (e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            if (dragMode) return
+                            e.nativeEvent.stopImmediatePropagation()
+                            if (isDragging) return
                             
                             // Hatırlatma gönder - şimdilik sadece toast göster, gelecekte e-posta gönderilebilir
-                            toast.info('Hatırlatma gönderildi', 'Müşteriye hatırlatma bildirimi gönderildi.')
+                            toast.info('Hatırlatma gönderildi', { description: 'Müşteriye hatırlatma bildirimi gönderildi.' })
                           }}
                         >
                           <Mail className="h-3 w-3 mr-1" />
@@ -854,23 +796,80 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
               )}
             </div>
             
-            {/* Geçmiş Butonu */}
-            <div className="flex gap-1 pt-2 border-t border-gray-200 mt-2">
+            {/* Premium Quick Action ve Diğer Butonlar */}
+            <div className="flex items-center gap-1.5 pt-2 border-t border-gray-200 mt-2 relative z-50" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+              {/* Premium Quick Action Button */}
+              <DropdownMenu>
+                <TooltipProvider delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7 p-0 border-0 bg-gradient-to-br from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 flex-shrink-0 relative overflow-hidden group"
+                        >
+                          {/* Shine effect */}
+                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
+                          <Sparkles className="h-4 w-4 relative z-10" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs">
+                      <p>Hızlı İşlemler</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuLabel className="text-xs">Hızlı İşlemler</DropdownMenuLabel>
+                  {/* ACCEPTED: Invoice oluştur */}
+                  {status === 'ACCEPTED' && (
+                    <DropdownMenuItem
+                      className="text-xs"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        // Invoice oluştur - parent component'e bildir
+                        if (onStatusChange) {
+                          // Bu durumda invoice zaten oluşturulmuş olmalı
+                          toast.info('Fatura zaten oluşturulmuş', { description: 'Bu teklif için fatura mevcut.' })
+                        }
+                      }}
+                    >
+                      <FileText className="h-3 w-3 mr-2" />
+                      Fatura Oluştur
+                    </DropdownMenuItem>
+                  )}
+                  {/* Diğer durumlar için genel işlemler */}
+                  <DropdownMenuItem
+                    className="text-xs"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setHistoryDialogOpen(true)
+                    }}
+                  >
+                    <History className="h-3 w-3 mr-2" />
+                    İşlem Geçmişi
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              
+              {/* Geçmiş Butonu - Sadece ikon */}
               <TooltipProvider delayDuration={0}>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="flex-1 h-6 text-xs px-1"
+                      className="h-7 w-7 p-0 flex-shrink-0"
                       onClick={(e) => {
                         e.preventDefault()
                         e.stopPropagation()
                         setHistoryDialogOpen(true)
                       }}
                     >
-                      <History className="h-3 w-3 mr-1" />
-                      Geçmiş
+                      <History className="h-4 w-4 text-gray-600" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>
@@ -878,6 +877,91 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+              
+              {/* Görüntüle Butonu - Sadece ikon */}
+              <TooltipProvider delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0 flex-shrink-0"
+                      onClick={async (e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        // ✅ ÇÖZÜM: Modal aç - yeni sekme açma
+                        if (onView) {
+                          try {
+                            onView(quote.id)
+                          } catch (error) {
+                            console.error('View error:', error)
+                            // Fallback: Eğer hata olursa yeni sekmede aç
+                            window.open(`/${locale}/quotes/${quote.id}`, '_blank')
+                          }
+                        } else {
+                          // Fallback: Eğer onView yoksa yeni sekmede aç (eski davranış)
+                          window.open(`/${locale}/quotes/${quote.id}`, '_blank')
+                        }
+                      }}
+                    >
+                      <Eye className="h-4 w-4 text-blue-600" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Teklif detaylarını görüntüle</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              
+              {/* Düzenle Butonu - Sadece ikon */}
+              {onEdit && (
+                <TooltipProvider delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 flex-shrink-0"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleEdit(e)
+                        }}
+                      >
+                        <Edit className="h-4 w-4 text-indigo-600" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Teklif bilgilerini düzenle</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              
+              {/* Sil Butonu - Sadece ikon */}
+              {onDelete && (
+                <TooltipProvider delayDuration={0}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0 flex-shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleDelete(e)
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>Teklifi sil</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             </div>
           </div>
         </Card>
@@ -951,6 +1035,17 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
   )
 }
 
+// Memoize the component with custom comparison
+const MemoizedSortableQuoteCard = memo(SortableQuoteCard, (prevProps, nextProps) => {
+  // ✅ Custom comparison - sadece quote.id ve status değiştiğinde re-render
+  return (
+    prevProps.quote.id === nextProps.quote.id &&
+    prevProps.status === nextProps.status &&
+    prevProps.quote.title === nextProps.quote.title &&
+    prevProps.quote.totalAmount === nextProps.quote.totalAmount
+  )
+})
+
 export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChange, onView }: QuoteKanbanChartProps) {
   const locale = useLocale()
   const [activeId, setActiveId] = useState<string | null>(null)
@@ -1001,17 +1096,17 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
   // ✅ ÇÖZÜM: dragLocalData null ise localData'yı kullan - optimistic update için
   const displayData = dragLocalData || localData
 
-  // ✅ PREMIUM: Optimized sensors for smooth drag & drop
+  // ✅ PERFORMANCE: Ultra-fast activation - anında başlar
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 5, // ✅ 5px - Daha hassas, daha hızlı aktivasyon
+        distance: 3, // ✅ 3px hareket ettiğinde aktif - çok hızlı
       },
     }),
     useSensor(TouchSensor, {
       activationConstraint: {
-        distance: 5, // ✅ 5px - Touch için de aynı
-        delay: 50, // ✅ 50ms - Daha hızlı aktivasyon, yanlışlıkla drag'i önle
+        delay: 0, // ✅ 0ms delay - anında başlar
+        tolerance: 3, // ✅ 3px tolerance - daha hassas
       },
     }),
     useSensor(KeyboardSensor, {
@@ -1058,7 +1153,7 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
       // Immutable kontrol
       if (isQuoteImmutable(currentStatus)) {
         const message = getStageMessage(currentStatus, 'quote', 'immutable')
-        toast.error(message.title, message.description) // ✅ Toast zaten 4 saniye gösteriyor
+        toast.error(message.title, { description: message.description }) // ✅ Toast zaten 4 saniye gösteriyor
         // ✅ Kartı taşıma - sadece hata göster
         return
       }
@@ -1073,9 +1168,10 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
         
         toast.error(
           `${currentName} → ${targetName} geçişi yapılamıyor`,
-          allowed.length > 0 
+          { description: allowed.length > 0 
             ? `Bu teklifi şu durumlara taşıyabilirsiniz: ${allowedNames}` 
             : getStageMessage(currentStatus, 'quote', 'transition').description
+          }
         ) // ✅ Toast zaten 4 saniye gösteriyor
         // ✅ Kartı taşıma - sadece hata göster
         return
@@ -1131,26 +1227,30 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
           if (overStatus.status === 'ACCEPTED') {
             toast.success(
               'Teklif kabul edildi',
-              'Teklif kabul edildi. Fatura ve sözleşme otomatik olarak oluşturuldu. Faturalar sayfasından kontrol edebilirsiniz.',
-              {
-                label: 'Faturalar Sayfasına Git',
-                onClick: () => window.location.href = `/${locale}/invoices`,
+              { 
+                description: 'Teklif kabul edildi. Fatura ve sözleşme otomatik olarak oluşturuldu. Faturalar sayfasından kontrol edebilirsiniz.',
+                action: {
+                  label: 'Faturalar Sayfasına Git',
+                  onClick: () => window.location.href = `/${locale}/invoices`,
+                }
               }
             )
           } else if (overStatus.status === 'REJECTED') {
             toast.success(
               'Teklif reddedildi',
-              'Teklif reddedildi. Revizyon görevi otomatik olarak oluşturuldu. Görevler sayfasından kontrol edebilirsiniz.',
-              {
-                label: 'Görevler Sayfasına Git',
-                onClick: () => window.location.href = `/${locale}/tasks`,
+              { 
+                description: 'Teklif reddedildi. Revizyon görevi otomatik olarak oluşturuldu. Görevler sayfasından kontrol edebilirsiniz.',
+                action: {
+                  label: 'Görevler Sayfasına Git',
+                  onClick: () => window.location.href = `/${locale}/tasks`,
+                }
               }
             )
           }
         } catch (error: any) {
           // Hata durumunda eski haline geri dön
           setDragLocalData(null) // Drag local state'i temizle - computed data kullanılacak
-          toast.error('Teklif durumu değiştirilemedi', error?.message)
+          toast.error('Teklif durumu değiştirilemedi', { description: error?.message || 'Bir hata oluştu' })
         }
       }
     } else {
@@ -1184,7 +1284,7 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
             console.error('Batch order update error:', errorData)
             // Hata durumunda eski haline geri dön
             setDragLocalData(null) // Drag local state'i temizle - computed data kullanılacak
-            toast.error('Sıralama kaydedilemedi', errorData.error || 'Bir hata oluştu.')
+            toast.error('Sıralama kaydedilemedi', { description: errorData.error || 'Bir hata oluştu.' })
           } else {
             // Başarılı olduğunda drag local state'i temizle - computed data kullanılacak
             setDragLocalData(null)
@@ -1193,7 +1293,7 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
           console.error('Batch order update error:', error)
           // Hata durumunda eski haline geri dön
           setDragLocalData(null) // Drag local state'i temizle - computed data kullanılacak
-          toast.error('Sıralama kaydedilemedi', error?.message || 'Bir hata oluştu.')
+          toast.error('Sıralama kaydedilemedi', { description: error?.message || 'Bir hata oluştu.' })
         }
       }
     }
@@ -1203,18 +1303,18 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
     .flatMap((col) => col.quotes)
     .find((quote) => quote.id === activeId)
 
-  // ✅ PREMIUM: Smooth drop animation
+  // ✅ PERFORMANCE: Fast drop animation
   const dropAnimation: DropAnimation = useMemo(() => ({
     sideEffects: defaultDropAnimationSideEffects({
       styles: {
         active: {
-          opacity: '0.85',
-          scale: '1.02',
+          opacity: '0.98',
+          scale: '1.05', // ✅ Daha küçük scale - daha hızlı
         },
       },
     }),
-    duration: 150, // ✅ 150ms - Daha hızlı ve smooth drop animation
-    easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)', // ✅ Daha smooth easing (ease-out-quad)
+    duration: 150, // ✅ Daha hızlı - 150ms
+    easing: 'cubic-bezier(0.4, 0, 0.2, 1)', // ✅ Daha hızlı easing - bounce yok
   }), [])
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
@@ -1233,7 +1333,6 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      {/* Horizontal Scroll Controls */}
       <div className="sticky top-0 z-20 mb-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white/95 px-4 py-2 shadow-sm backdrop-blur">
         <p className="text-sm font-medium text-slate-600">
           Kanbanı yatay kaydırmak için okları ya da trackpad&apos;inizi kullanın.
@@ -1267,7 +1366,7 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
         style={{ scrollbarWidth: 'thin', scrollbarColor: '#cbd5e1 #f1f5f9' }}
       >
         {displayData.map((column) => {
-          const colors = statusColors[column.status] || statusColors.DRAFT
+          const colors = statusColors(column.status)
           return (
             <Card
               key={column.status}
@@ -1309,7 +1408,7 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
                       </Tooltip>
                     </TooltipProvider>
                   </div>
-                  <Badge className={statusBadgeColors[column.status] || 'bg-gray-500 text-white'}>
+                  <Badge className={statusBadgeColors(column.status)}>
                     {column.count}
                   </Badge>
                 </div>
@@ -1342,7 +1441,7 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
                       </div>
                     ) : (
                       column.quotes.map((quote) => (
-                        <SortableQuoteCard
+                        <MemoizedSortableQuoteCard
                           key={quote.id}
                           quote={quote}
                           status={column.status}
@@ -1364,20 +1463,17 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
       <DragOverlay dropAnimation={dropAnimation}>
         {activeQuote ? (
           <Card 
-            className="bg-white border-2 border-primary-500 shadow-2xl min-w-[300px] rotate-1 transition-all duration-150"
+            className="bg-white border-2 border-indigo-500 shadow-xl min-w-[300px]"
             style={{
-              willChange: 'transform, opacity',
-              transform: 'translate3d(0, 0, 0) scale(1.02) translateZ(0)',
+              willChange: 'transform, opacity', // ✅ Filter kaldırıldı
+              transform: 'translate3d(0, 0, 0) scale(1.05) translateZ(0)', // ✅ Rotate kaldırıldı - daha hızlı
               backfaceVisibility: 'hidden',
-              WebkitTransform: 'translate3d(0, 0, 0) scale(1.02) translateZ(0)',
+              WebkitTransform: 'translate3d(0, 0, 0) scale(1.05) translateZ(0)',
               WebkitBackfaceVisibility: 'hidden',
-              perspective: 1000,
-              WebkitPerspective: 1000,
               pointerEvents: 'none',
-              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-              // ✅ GPU acceleration optimizations
-              WebkitTransformStyle: 'preserve-3d',
-              transformStyle: 'preserve-3d',
+              // ✅ Daha hafif shadow - performans için
+              boxShadow: '0 20px 40px -10px rgba(99, 102, 241, 0.3)',
+              // ✅ Filter kaldırıldı - çok ağır
             }}
           >
             <div className="p-3">
@@ -1399,8 +1495,3 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
     </DndContext>
   )
 }
-
-
-
-
-

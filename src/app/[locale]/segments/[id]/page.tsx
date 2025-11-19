@@ -2,17 +2,23 @@
 
 import { useParams, useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { ArrowLeft, Users, Filter, Edit, Trash2, UserPlus, UserMinus, TrendingUp } from 'lucide-react'
+import { ArrowLeft, Users, Filter, Edit, Trash2, UserPlus, UserMinus, TrendingUp, Search, Check } from 'lucide-react'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
 import { useData } from '@/hooks/useData'
 import SegmentForm from '@/components/segments/SegmentForm'
 import { mutate } from 'swr'
+<<<<<<< HEAD
 import { confirm } from '@/lib/toast'
+=======
+import { toastError, toast, toastSuccess } from '@/lib/toast'
+>>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
 
 interface SegmentMember {
   id: string
@@ -46,8 +52,26 @@ export default function SegmentDetailPage() {
   const segmentId = params.id as string
 
   const [formOpen, setFormOpen] = useState(false)
+  const [addMemberModalOpen, setAddMemberModalOpen] = useState(false)
+  const [customerSearch, setCustomerSearch] = useState('')
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
 
   const { data: segment, isLoading } = useData<Segment>(`/api/segments/${segmentId}`)
+  
+  // Müşteri listesi için API
+  const customersApiUrl = `/api/customers?pageSize=100${customerSearch ? `&search=${customerSearch}` : ''}`
+  const { data: customersData } = useData<{ data: any[] } | any[]>(customersApiUrl)
+  
+  // Müşteri listesini güvenli şekilde al
+  const customers = Array.isArray(customersData) 
+    ? customersData 
+    : (customersData && typeof customersData === 'object' && 'data' in customersData && Array.isArray(customersData.data))
+      ? customersData.data
+      : []
+  
+  // Segment'te zaten üye olan müşterileri filtrele
+  const existingMemberIds = segment?.members?.map(m => m.customerId) || []
+  const availableCustomers = customers.filter((c: any) => !existingMemberIds.includes(c.id))
 
   const handleDelete = async () => {
     if (!confirm(`${segment?.name} segmentini silmek istediğinize emin misiniz?`)) {
@@ -66,7 +90,7 @@ export default function SegmentDetailPage() {
       router.push(`/${locale}/segments`)
     } catch (error: any) {
       console.error('Delete error:', error)
-      alert(error?.message || 'Silme işlemi başarısız oldu')
+      toastError('Silme işlemi başarısız oldu', error?.message)
     }
   }
 
@@ -86,9 +110,48 @@ export default function SegmentDetailPage() {
 
       // Refresh segment data
       mutate(`/api/segments/${segmentId}`)
+      toastSuccess('Üye çıkarıldı', `${customerName} segmentten çıkarıldı.`)
     } catch (error: any) {
       console.error('Remove member error:', error)
-      alert(error?.message || 'Üye çıkarma işlemi başarısız oldu')
+      toastError('Üye çıkarma işlemi başarısız oldu', error?.message)
+    }
+  }
+
+  const handleAddMember = async () => {
+    if (!selectedCustomerId) {
+      toast.error('Müşteri seçilmedi', { description: 'Lütfen bir müşteri seçin.' })
+      return
+    }
+
+    const selectedCustomer = availableCustomers.find((c: any) => c.id === selectedCustomerId)
+    if (!selectedCustomer) {
+      toast.error('Müşteri bulunamadı', { description: 'Seçilen müşteri bulunamadı.' })
+      return
+    }
+
+    try {
+      const res = await fetch(`/api/segments/${segmentId}/members`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ customerId: selectedCustomerId }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Üye eklenemedi')
+      }
+
+      // Refresh segment data
+      mutate(`/api/segments/${segmentId}`)
+      toastSuccess('Üye eklendi', `${selectedCustomer.name} segment'e eklendi.`)
+      
+      // Modal'ı kapat ve form'u temizle
+      setAddMemberModalOpen(false)
+      setSelectedCustomerId(null)
+      setCustomerSearch('')
+    } catch (error: any) {
+      console.error('Add member error:', error)
+      toastError('Üye ekleme işlemi başarısız oldu', error?.message)
     }
   }
 
@@ -207,7 +270,11 @@ export default function SegmentDetailPage() {
             <Users className="h-5 w-5 text-indigo-600" />
             Segment Üyeleri ({segment.members?.length || 0})
           </h3>
-          <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700">
+          <Button 
+            size="sm" 
+            className="bg-indigo-600 hover:bg-indigo-700"
+            onClick={() => setAddMemberModalOpen(true)}
+          >
             <UserPlus className="h-4 w-4 mr-2" />
             Üye Ekle
           </Button>
@@ -257,7 +324,11 @@ export default function SegmentDetailPage() {
           <div className="text-center py-12 text-gray-500">
             <Users className="h-12 w-12 mx-auto mb-3 text-gray-400" />
             <p>Bu segmentte henüz üye yok</p>
-            <Button size="sm" className="mt-4 bg-indigo-600 hover:bg-indigo-700">
+            <Button 
+              size="sm" 
+              className="mt-4 bg-indigo-600 hover:bg-indigo-700"
+              onClick={() => setAddMemberModalOpen(true)}
+            >
               <UserPlus className="h-4 w-4 mr-2" />
               İlk Üyeyi Ekle
             </Button>
@@ -275,6 +346,82 @@ export default function SegmentDetailPage() {
           setFormOpen(false)
         }}
       />
+
+      {/* Add Member Modal */}
+      <Dialog open={addMemberModalOpen} onOpenChange={setAddMemberModalOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Segment'e Üye Ekle</DialogTitle>
+            <DialogDescription>
+              {segment?.name} segment'ine eklenecek müşteriyi seçin
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Search */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="Müşteri ara..."
+                value={customerSearch}
+                onChange={(e) => setCustomerSearch(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+
+            {/* Customer List */}
+            <div className="border rounded-lg max-h-[400px] overflow-y-auto">
+              {availableCustomers.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <p>Eklenecek müşteri bulunamadı</p>
+                  {existingMemberIds.length > 0 && (
+                    <p className="text-sm mt-2">Tüm müşteriler zaten bu segmentte</p>
+                  )}
+                </div>
+              ) : (
+                <Table>
+                  <TableBody>
+                    {availableCustomers.map((customer: any) => (
+                      <TableRow
+                        key={customer.id}
+                        className="cursor-pointer hover:bg-gray-50"
+                        onClick={() => setSelectedCustomerId(customer.id)}
+                      >
+                        <TableCell className="w-12">
+                          {selectedCustomerId === customer.id && (
+                            <Check className="h-5 w-5 text-indigo-600" />
+                          )}
+                        </TableCell>
+                        <TableCell className="font-medium">{customer.name}</TableCell>
+                        <TableCell>{customer.email || '-'}</TableCell>
+                        <TableCell>{customer.phone || '-'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => {
+                setAddMemberModalOpen(false)
+                setSelectedCustomerId(null)
+                setCustomerSearch('')
+              }}>
+                İptal
+              </Button>
+              <Button 
+                onClick={handleAddMember}
+                disabled={!selectedCustomerId}
+                className="bg-indigo-600 hover:bg-indigo-700"
+              >
+                Ekle
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

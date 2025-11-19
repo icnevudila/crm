@@ -100,15 +100,16 @@ export async function GET(request: Request) {
       ? new Date(Date.now() + expires_in * 1000).toISOString()
       : null
 
-    // CompanyIntegration kaydını güncelle veya oluştur
     const supabase = getSupabaseWithServiceRole()
-    const { data: existingIntegration } = await supabase
+
+    // CompanyIntegration kaydını güncelle veya oluştur (mevcut sistem için)
+    const { data: existingCompanyIntegration } = await supabase
       .from('CompanyIntegration')
       .select('id')
       .eq('companyId', stateData.companyId)
       .maybeSingle()
 
-    const updateData: any = {
+    const companyUpdateData: any = {
       outlookOAuthToken: access_token,
       outlookOAuthRefreshToken: refresh_token || null,
       outlookOAuthTokenExpiresAt: expiresAt,
@@ -118,35 +119,61 @@ export async function GET(request: Request) {
       updatedAt: new Date().toISOString(),
     }
 
-    let result
-    if (existingIntegration) {
-      result = await supabase
+    if (existingCompanyIntegration) {
+      await supabase
         .from('CompanyIntegration')
-        .update(updateData)
-        .eq('id', existingIntegration.id)
-        .select()
-        .single()
+        .update(companyUpdateData)
+        .eq('id', existingCompanyIntegration.id)
     } else {
-      result = await supabase
+      await supabase
         .from('CompanyIntegration')
         .insert({
-          ...updateData,
+          ...companyUpdateData,
           companyId: stateData.companyId,
         })
-        .select()
-        .single()
     }
 
-    if (result.error) {
-      console.error('CompanyIntegration save error:', result.error)
-      return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/settings?error=save_failed`
-      )
+    // UserIntegration kaydını güncelle veya oluştur (yeni sistem için)
+    // Outlook hem Calendar hem Email için kullanılabilir, state'ten tip belirlenebilir
+    // Şimdilik MICROSOFT_EMAIL olarak kaydediyoruz
+    const { data: existingUserIntegration } = await supabase
+      .from('UserIntegration')
+      .select('id')
+      .eq('userId', stateData.userId)
+      .eq('companyId', stateData.companyId)
+      .eq('integrationType', 'MICROSOFT_EMAIL')
+      .maybeSingle()
+
+    if (existingUserIntegration) {
+      // Güncelle
+      await supabase
+        .from('UserIntegration')
+        .update({
+          accessToken: access_token,
+          refreshToken: refresh_token || null,
+          tokenExpiresAt: expiresAt,
+          status: 'ACTIVE',
+          lastError: null,
+        })
+        .eq('id', existingUserIntegration.id)
+    } else {
+      // Yeni kayıt oluştur
+      await supabase
+        .from('UserIntegration')
+        .insert({
+          userId: stateData.userId,
+          companyId: stateData.companyId,
+          integrationType: 'MICROSOFT_EMAIL',
+          accessToken: access_token,
+          refreshToken: refresh_token || null,
+          tokenExpiresAt: expiresAt,
+          status: 'ACTIVE',
+        })
     }
 
-    // Başarılı - settings sayfasına yönlendir
+    // Başarılı - user-integrations sayfasına yönlendir
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/settings?email_connected=outlook`
+      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/user-integrations?success=outlook_connected`
     )
   } catch (error: any) {
     console.error('Outlook OAuth callback error:', error)

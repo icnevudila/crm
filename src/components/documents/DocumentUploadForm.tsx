@@ -168,7 +168,7 @@ export default function DocumentUploadForm({
 
   const onSubmit = async (data: DocumentFormData) => {
     if (!file) {
-      toast.warning('Dosya seçmediniz')
+      toast.warning('Dosya seçmediniz', { description: 'Lütfen yüklenecek bir dosya seçin' })
       return
     }
 
@@ -210,7 +210,7 @@ export default function DocumentUploadForm({
       onClose()
     } catch (error: any) {
       console.error('Upload error:', error)
-      toast.error('Yükleme başarısız oldu', error?.message)
+      toast.error('Yükleme başarısız oldu', { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }

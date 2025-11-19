@@ -279,3 +279,7 @@ if (role === 'MANAGER') {
 **Son Güncelleme:** 2024  
 **Durum:** ✅ Türkçe Destek Aktif, Rol Sistemi Genişletilebilir
 
+
+
+
+

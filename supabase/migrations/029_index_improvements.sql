@@ -71,3 +71,7 @@ COMMENT ON INDEX idx_ticket_created_at IS 'Ticket createdAt index - geç kaldı 
 
 
 
+
+
+
+

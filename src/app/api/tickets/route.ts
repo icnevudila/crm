@@ -55,12 +55,16 @@ export async function GET(request: Request) {
     const customerId = searchParams.get('customerId') || ''
     const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
 
+    // Pagination parametreleri
+    const page = parseInt(searchParams.get('page') || '1', 10)
+    const pageSize = parseInt(searchParams.get('pageSize') || '20', 10) // Default 20 kayıt/sayfa
+
     // SuperAdmin için direkt Supabase query (getRecords companyId filtresi uygular)
     if (isSuperAdmin) {
       const supabase = getSupabaseWithServiceRole()
       let query = supabase
         .from('Ticket')
-        .select('*, Customer(name, email), Company:companyId(id, name)')
+        .select('*, Customer(name, email), Company:companyId(id, name)', { count: 'exact' })
         .order('createdAt', { ascending: false })
       
       // SuperAdmin firma filtresi seçtiyse sadece o firmayı göster
@@ -115,7 +119,7 @@ export async function GET(request: Request) {
     })
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message || 'Destek talepleri getirilemedi' },
+      { error: error.message || (await import('@/lib/api-locale')).getErrorMessage('errors.api.ticketsCannotBeFetched', request) },
       { status: 500 }
     )
   }

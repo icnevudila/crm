@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
+import { useData } from '@/hooks/useData'
 
 interface Vendor {
   id: string
@@ -72,6 +73,15 @@ export default function VendorDetailPage() {
     queryKey: ['vendor', id],
     queryFn: () => fetchVendor(id),
   })
+
+  // Vendor'ın ürünlerini çek (SWR cache ile)
+  const { data: vendorProducts = [] } = useData<any[]>(
+    id ? `/api/products?vendorId=${id}` : null,
+    {
+      dedupingInterval: 30000, // 30 saniye cache
+      revalidateOnFocus: false,
+    }
+  )
 
   if (isLoading) {
     return <SkeletonDetail />
@@ -251,14 +261,14 @@ export default function VendorDetailPage() {
         )}
 
         {/* Ürünler */}
-        {vendor.Product && vendor.Product.length > 0 && (
+        {(vendorProducts.length > 0 || (vendor.Product && vendor.Product.length > 0)) && (
           <Card className="p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold flex items-center gap-2">
                 <Package className="h-5 w-5" />
-                Ürünler ({vendor.Product.length})
+                Ürünler ({vendorProducts.length > 0 ? vendorProducts.length : (vendor.Product?.length || 0)})
               </h2>
-              {vendor.Product.length > 5 && (
+              {(vendorProducts.length > 5 || (vendor.Product && vendor.Product.length > 5)) && (
                 <Link href={`/${locale}/products?vendorId=${vendor.id}`}>
                   <Button variant="outline" size="sm">
                     Tümünü Gör
@@ -267,18 +277,21 @@ export default function VendorDetailPage() {
               )}
             </div>
             <div className="space-y-2">
-              {vendor.Product.slice(0, 5).map((product) => (
+              {(vendorProducts.length > 0 ? vendorProducts : (vendor.Product || [])).slice(0, 5).map((product: any) => (
                 <Link key={product.id} href={`/${locale}/products/${product.id}`}>
-                  <div className="flex items-center justify-between p-2 border rounded hover:bg-gray-50 cursor-pointer">
+                  <div className="flex items-center justify-between p-2 border rounded hover:bg-gray-50 cursor-pointer transition-colors">
                     <div>
                       <p className="font-medium">{product.name}</p>
-                      <p className="text-sm text-gray-600">Stok: {product.stock}</p>
+                      <p className="text-sm text-gray-600">Stok: {product.stock || 0}</p>
                     </div>
-                    <p className="font-semibold">{new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(product.price)}</p>
+                    <p className="font-semibold">{new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(product.price || 0)}</p>
                   </div>
                 </Link>
               ))}
             </div>
+            {vendorProducts.length === 0 && (!vendor.Product || vendor.Product.length === 0) && (
+              <p className="text-gray-500 text-center py-4">Bu tedarikçiye ait ürün bulunmuyor</p>
+            )}
           </Card>
         )}
 
@@ -348,9 +361,10 @@ export default function VendorDetailPage() {
       </div>
 
       {/* Activity Timeline */}
-      {vendor.activities && vendor.activities.length > 0 && (
-        <ActivityTimeline activities={vendor.activities} />
-      )}
+      <Card className="p-6">
+        <h2 className="text-xl font-semibold mb-4">İşlem Geçmişi</h2>
+        <ActivityTimeline entityType="Vendor" entityId={id} />
+      </Card>
     </div>
   )
 }

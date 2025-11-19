@@ -14,6 +14,8 @@ import { Plus, Trash2, Package } from 'lucide-react'
 import { toast } from '@/lib/toast'
 import { translateStage, getStageMessage } from '@/lib/stageTranslations'
 import { handleFormValidationErrors } from '@/lib/form-validation'
+import { useNavigateToDetailToast } from '@/lib/quick-action-helper'
+import { AutomationConfirmationModal } from '@/lib/automations/toast-confirmation'
 import {
   Dialog,
   DialogContent,
@@ -46,6 +48,9 @@ interface InvoiceFormProps {
   customerCompanyId?: string
   customerCompanyName?: string
   customerId?: string
+  quoteId?: string // Prop olarak quoteId geçilebilir (modal içinde kullanım için)
+  skipDialog?: boolean // Wizard içinde kullanım için Dialog wrapper'ı atla
+  defaultInvoiceType?: 'SALES' | 'PURCHASE' | 'SERVICE_SALES' | 'SERVICE_PURCHASE' // Varsayılan fatura tipi (Satın Alma modülünden açıldığında PURCHASE)
 }
 
 async function fetchCustomers() {
@@ -93,11 +98,15 @@ export default function InvoiceForm({
   customerCompanyId: customerCompanyIdProp,
   customerCompanyName,
   customerId: customerIdProp,
+  quoteId: quoteIdProp,
+  skipDialog = false,
+  defaultInvoiceType,
 }: InvoiceFormProps) {
   const t = useTranslations('invoices.form')
   const tCommon = useTranslations('common.form')
   const router = useRouter()
   const queryClient = useQueryClient()
+  const navigateToDetailToast = useNavigateToDetailToast()
   const searchParams = useSearchParams()
   const searchCustomerCompanyId = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
   const customerCompanyId = customerCompanyIdProp || searchCustomerCompanyId
@@ -106,6 +115,9 @@ export default function InvoiceForm({
   const [itemFormOpen, setItemFormOpen] = useState(false)
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null)
   const [serviceSubtotal, setServiceSubtotal] = useState<number>(0) // Hizmet faturaları için KDV hariç tutar
+  const [automationModalOpen, setAutomationModalOpen] = useState(false)
+  const [automationModalType, setAutomationModalType] = useState<'email' | 'sms' | 'whatsapp'>('email')
+  const [automationModalOptions, setAutomationModalOptions] = useState<any>(null)
 
   // Schema'yı component içinde oluştur - locale desteği için
   const invoiceSchema = z.object({
@@ -131,6 +143,17 @@ export default function InvoiceForm({
     paymentNotes: z.string().max(500, t('paymentNotesMaxLength')).optional(),
     description: z.string().max(2000, t('descriptionMaxLength')).optional(),
   })
+    .refine((data) => {
+      // PURCHASE veya SERVICE_PURCHASE faturası için tedarikçi zorunlu
+      if (data.invoiceType === 'PURCHASE' || data.invoiceType === 'SERVICE_PURCHASE') {
+        return !!(data.vendorId && data.vendorId.trim() !== '')
+      }
+      // SALES veya SERVICE_SALES faturası için müşteri veya teklif zorunlu
+      return !!(data.customerId && data.customerId.trim() !== '') || !!(data.quoteId && data.quoteId.trim() !== '')
+    }, {
+      message: 'Müşteri, Teklif veya Tedarikçi seçimi zorunludur',
+      path: ['customerId'] // İlk alan olarak customerId gösterilir, ama mesaj genel
+    })
     .refine((data) => {
       // SALES veya SERVICE_SALES faturası için müşteri zorunlu
       if ((data.invoiceType === 'SALES' || data.invoiceType === 'SERVICE_SALES') && !data.customerId) {
@@ -215,7 +238,7 @@ export default function InvoiceForm({
       title: '',
       status: 'DRAFT',
       total: 0,
-      invoiceType: 'SALES', // Varsayılan fatura tipi
+      invoiceType: invoice?.invoiceType || defaultInvoiceType || 'SALES', // Varsayılan fatura tipi (eğer invoice varsa onun tipini kullan, yoksa defaultInvoiceType, yoksa SALES)
       serviceDescription: '',
       customerId: '',
       quoteId: '',
@@ -241,6 +264,18 @@ export default function InvoiceForm({
   const invoiceType = watch('invoiceType') || 'SALES'
   const selectedCustomer = customers.find((c: any) => c.id === customerId)
   
+  // quoteIdProp geldiğinde quote bilgilerini çek (wizard'larda kullanım için)
+  const { data: quoteData } = useQuery({
+    queryKey: ['quote', quoteIdProp],
+    queryFn: async () => {
+      if (!quoteIdProp) return null
+      const res = await fetch(`/api/quotes/${quoteIdProp}`)
+      if (!res.ok) return null
+      return res.json()
+    },
+    enabled: open && !invoice && !!quoteIdProp, // Sadece yeni invoice ve quoteIdProp varsa
+  })
+  
   // Durum bazlı koruma kontrolü - form alanlarını devre dışı bırakmak için
   const isProtected = invoice && (
     invoice.status === 'PAID' || 
@@ -255,7 +290,7 @@ export default function InvoiceForm({
       // ÖNEMLİ: PAID (Ödendi) durumundaki faturalar düzenlenemez
       if (invoice && invoice.status === 'PAID') {
         const message = getStageMessage(invoice.status, 'invoice', 'immutable')
-        toast.warning(message.title, message.description)
+        toast.warning(message.title, { description: message.description })
         onClose() // Modal'ı kapat
         return
       }
@@ -271,7 +306,7 @@ export default function InvoiceForm({
         return
       }
 
-      // ÖNEMLİ: RECEIVED (Mal Kabul Edildi) durumundaki faturalar düzenlenemez
+      // ÖNEMLİ: RECEIVED (Satın Alma Onaylandı) durumundaki faturalar düzenlenemez
       if (invoice && invoice.status === 'RECEIVED') {
         const statusName = translateStage(invoice.status, 'invoice')
         toast.warning(
@@ -284,7 +319,7 @@ export default function InvoiceForm({
 
       // ÖNEMLİ: Quote'tan oluşturulan faturalar düzenlenemez
       if (invoice && invoice.quoteId) {
-        toast.warning(t('cannotEditFromQuote'), t('cannotEditFromQuoteMessage'))
+        toast.warning(t('cannotEditFromQuote'), { description: t('cannotEditFromQuoteMessage') })
         onClose() // Modal'ı kapat
         return
       }
@@ -356,15 +391,59 @@ export default function InvoiceForm({
         } else {
           setServiceSubtotal(0)
         }
+      } else if (quoteIdProp && quoteData) {
+        // Yeni kayıt modu - quoteIdProp varsa ve quote bilgileri yüklendiyse forma yansıt
+        const quote = quoteData
+        const dueDate = new Date()
+        dueDate.setDate(dueDate.getDate() + 30) // 30 gün sonra
+        
+        reset({
+          title: quote.title ? `Fatura - ${quote.title}` : '',
+          status: 'DRAFT',
+          total: typeof quote.total === 'string' ? parseFloat(quote.total) || 0 : (quote.total || 0),
+          invoiceType: 'SALES',
+          customerId: quote.customerId || customerIdProp || '',
+          quoteId: quoteIdProp,
+          vendorId: quote.vendorId || '',
+          invoiceNumber: '',
+          dueDate: dueDate.toISOString().split('T')[0],
+          paymentDate: '',
+          taxRate: quote.taxRate || 18,
+          billingAddress: '',
+          billingCity: '',
+          billingTaxNumber: '',
+          paymentMethod: undefined,
+          paymentNotes: '',
+          description: quote.description || '',
+          serviceDescription: '',
+          customerCompanyId: quote.customerCompanyId || customerCompanyId || '',
+        })
+        
+        // Quote items'ları invoice items'a çevir
+        if (quote.QuoteItem && Array.isArray(quote.QuoteItem)) {
+          setInvoiceItems(
+            quote.QuoteItem.map((item: any) => ({
+              id: `temp-${Date.now()}-${Math.random()}`,
+              productId: item.productId || '',
+              productName: item.Product?.name || item.productName || '',
+              quantity: item.quantity || 0,
+              unitPrice: item.unitPrice || 0,
+              total: (item.quantity || 0) * (item.unitPrice || 0),
+            }))
+          )
+        } else {
+          setInvoiceItems([])
+        }
+        setServiceSubtotal(0)
       } else {
         // Yeni kayıt modu - form'u temizle
         reset({
           title: '',
           status: 'DRAFT',
           total: 0,
-          invoiceType: 'SALES', // Varsayılan: Satış faturası
+          invoiceType: defaultInvoiceType || 'SALES', // Varsayılan: defaultInvoiceType varsa onu kullan, yoksa Satış faturası
           customerId: customerIdProp || '',
-          quoteId: '',
+          quoteId: quoteIdProp || '',
           vendorId: '',
           invoiceNumber: '',
           dueDate: '',
@@ -384,9 +463,12 @@ export default function InvoiceForm({
         if (customerIdProp) {
           setValue('customerId', customerIdProp)
         }
+        if (quoteIdProp) {
+          setValue('quoteId', quoteIdProp)
+        }
       }
     }
-  }, [invoice, open, reset, customerCompanyId, customerIdProp, setValue]) // onClose dependency'den çıkarıldı - stable değil
+  }, [invoice, open, reset, customerCompanyId, customerIdProp, quoteIdProp, quoteData, setValue]) // onClose dependency'den çıkarıldı - stable değil
 
   // InvoiceItem ekleme/düzenleme fonksiyonları
   const handleAddItem = (item: InvoiceItem) => {
@@ -547,12 +629,13 @@ export default function InvoiceForm({
     onSuccess: async (result) => {
       // Toast mesajı göster
       if (invoice) {
-        toast.success(t('invoiceUpdated'), t('invoiceUpdatedMessage', { title: result.title }))
+        toast.success(t('invoiceUpdated'), { description: t('invoiceUpdatedMessage', { title: result.title }) })
       } else {
         const message = customerCompanyName 
           ? t('invoiceCreatedMessageWithCompany', { company: customerCompanyName, title: result.title })
           : t('invoiceCreatedMessage', { title: result.title })
-        toast.success(t('invoiceCreated'), message)
+        // Yeni invoice oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
+        navigateToDetailToast('invoice', result.id, result.title)
       }
       
       // Dashboard güncellemeleri - invoice-kanban ve kpis query'lerini invalidate et
@@ -579,6 +662,72 @@ export default function InvoiceForm({
       if (onSuccess) {
         await onSuccess(result)
       }
+      
+      // ✅ Otomasyon: Invoice oluşturulduğunda email gönder (kullanıcı tercihine göre)
+      if (!invoice && result.customerId) {
+        try {
+          // Customer bilgisini çek
+          const customerRes = await fetch(`/api/customers/${result.customerId}`)
+          if (customerRes.ok) {
+            const customer = await customerRes.json()
+            if (customer?.email) {
+              // Automation API'yi kontrol et
+              const automationRes = await fetch('/api/automations/invoice-created-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ invoice: result }),
+              })
+              
+              if (automationRes.ok) {
+                const automationData = await automationRes.json()
+                if (automationData.shouldAsk) {
+                  // Kullanıcıya sor (modal aç)
+                  setAutomationModalType('email')
+                  setAutomationModalOptions({
+                    entityType: 'INVOICE',
+                    entityId: result.id,
+                    entityTitle: result.title,
+                    customerEmail: customer.email,
+                    customerPhone: customer.phone,
+                    customerName: customer.name,
+                    defaultSubject: `Fatura: ${result.title}`,
+                    defaultMessage: `Merhaba ${customer.name},\n\nYeni fatura oluşturuldu: ${result.title}\n\nTutar: ${result.total ? `₺${result.total.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}\nDurum: ${result.status || 'DRAFT'}\n\nDetayları görüntülemek için lütfen bizimle iletişime geçin.`,
+                    defaultHtml: `<p>Merhaba ${customer.name},</p><p>Yeni fatura oluşturuldu: <strong>${result.title}</strong></p><p>Tutar: ${result.total ? `₺${result.total.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}</p><p>Durum: ${result.status || 'DRAFT'}</p>`,
+                    onSent: () => {
+                      toast.success('E-posta gönderildi', { description: 'Müşteriye invoice bilgisi gönderildi' })
+                    },
+                    onAlwaysSend: async () => {
+                      await fetch('/api/automations/preferences', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          automationType: 'emailOnInvoiceCreated',
+                          preference: 'ALWAYS',
+                        }),
+                      })
+                    },
+                    onNeverSend: async () => {
+                      await fetch('/api/automations/preferences', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          automationType: 'emailOnInvoiceCreated',
+                          preference: 'NEVER',
+                        }),
+                      })
+                    },
+                  })
+                  setAutomationModalOpen(true)
+                }
+              }
+            }
+          }
+        } catch (error) {
+          // Automation hatası ana işlemi engellemez
+          console.error('Invoice automation error:', error)
+        }
+      }
+      
       reset()
       setInvoiceItems([]) // InvoiceItem'ları temizle
       // Form'u kapat - onSuccess callback'inden SONRA (sonsuz döngü önleme)
@@ -594,7 +743,7 @@ export default function InvoiceForm({
   const onSubmit = async (data: InvoiceFormData) => {
     // ÖNEMLİ: SHIPPED durumundaki faturalar düzenlenemez
     if (invoice && invoice.status === 'SHIPPED') {
-      toast.warning('Bu fatura gönderildiği için düzenleyemezsiniz', 'Sevkiyat onaylandıktan sonra fatura değiştirilemez.')
+      toast.warning('Bu fatura gönderildiği için düzenleyemezsiniz', { description: 'Sevkiyat onaylandıktan sonra fatura değiştirilemez.' })
       return
     }
     
@@ -647,9 +796,9 @@ export default function InvoiceForm({
     }
   }
 
-  return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+  const formContent = (
+    <div className="space-y-4">
+      {!skipDialog && (
         <DialogHeader>
           <DialogTitle>
             {invoice ? t('editTitle') : t('newTitle')}
@@ -658,8 +807,9 @@ export default function InvoiceForm({
             {invoice ? t('editDescription') : t('newDescription')}
           </DialogDescription>
         </DialogHeader>
+      )}
 
-        <form ref={formRef} onSubmit={handleSubmit(onSubmit, onError)} className="space-y-4">
+      <form ref={formRef} onSubmit={handleSubmit(onSubmit, onError)} className="space-y-4">
           {customerCompanyId && (
             <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 p-3 text-sm text-indigo-700">
               <p className="font-semibold">
@@ -741,7 +891,7 @@ export default function InvoiceForm({
 
             {/* Invoice Type */}
             <div className="space-y-2">
-              <label className="text-sm font-medium">{t('invoiceTypeLabel')} *</label>
+              <label className="text-sm font-medium">{t('invoiceTypeLabel')}</label>
               <Select
                 value={watch('invoiceType') || 'SALES'}
                 onValueChange={(value) => {
@@ -1278,8 +1428,40 @@ export default function InvoiceForm({
             onSuccess={handleAddItem}
           />
         )}
-      </DialogContent>
-    </Dialog>
+    </div>
+  )
+
+  // Automation Modal ve InvoiceItem Dialog - skipDialog durumunda render etme
+  const dialogs = (
+    <>
+      {/* Automation Confirmation Modal */}
+      {automationModalOpen && automationModalOptions && (
+        <AutomationConfirmationModal
+          type={automationModalType}
+          options={automationModalOptions}
+          open={automationModalOpen}
+          onClose={() => {
+            setAutomationModalOpen(false)
+            setAutomationModalOptions(null)
+          }}
+        />
+      )}
+    </>
+  )
+
+  if (skipDialog) {
+    return formContent
+  }
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onClose}>
+        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+          {formContent}
+        </DialogContent>
+      </Dialog>
+      {dialogs}
+    </>
   )
 }
 

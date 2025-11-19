@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { createRecord } from '@/lib/crud'
 
 // Dengeli cache - 60 saniye revalidate (performans + veri güncelliği dengesi)
 export const revalidate = 60
@@ -193,8 +194,9 @@ export async function POST(request: Request) {
 
     // Zorunlu alanları kontrol et
     if (!body.title || body.title.trim() === '') {
+      const { getErrorMessage } = await import('@/lib/api-locale')
       return NextResponse.json(
-        { error: 'Teklif başlığı gereklidir' },
+        { error: getErrorMessage('errors.api.quoteTitleRequired', request) },
         { status: 400 }
       )
     }
@@ -242,28 +244,43 @@ export async function POST(request: Request) {
     if (body.dealId) quoteData.dealId = body.dealId
     if (body.customerCompanyId) quoteData.customerCompanyId = body.customerCompanyId
     // NOT: description, vendorId, validUntil, discount, taxRate schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
+    // NOT: companyId ve createdBy createRecord fonksiyonunda otomatik ekleniyor
 
-    // @ts-ignore - Supabase type inference issue with Quote table
-    const { data, error } = await supabase
-      .from('Quote')
-      // @ts-ignore - Supabase database type tanımları eksik, insert metodu dinamik tip bekliyor
-      .insert([quoteData])
-      .select()
-      .single()
+    // createRecord kullanarak audit trail desteği (createdBy otomatik eklenir)
+    const { getActivityMessage, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const locale = getLocaleFromRequest(request)
+    const data = await createRecord(
+      'Quote',
+      quoteData,
+      getActivityMessage(locale, 'quoteCreated', { title: quoteTitle })
+    )
 
-    if (error) {
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Quotes POST API insert error:', error)
+    // ActivityLog - Kritik modül için CREATE log'u (async, hata olsa bile devam et)
+    if (data?.id) {
+      try {
+        const { logAction } = await import('@/lib/logger')
+        // Async olarak logla - ana işlemi engellemez
+        logAction({
+          entity: 'Quote',
+          action: 'CREATE',
+          description: getActivityMessage(locale, 'quoteCreated', { title: (data as any)?.title || getActivityMessage(locale, 'defaultQuoteTitle') }),
+          meta: { 
+            entity: 'Quote', 
+            action: 'create', 
+            id: (data as any).id,
+            title: (data as any)?.title,
+            status: (data as any)?.status,
+            totalAmount: (data as any)?.totalAmount,
+          },
+          userId: session.user.id,
+          companyId: session.user.companyId,
+        }).catch(() => {
+          // ActivityLog hatası ana işlemi engellemez
+        })
+      } catch (activityError) {
+        // ActivityLog hatası ana işlemi engellemez
       }
-      return NextResponse.json(
-        { error: error.message || 'Failed to create quote' },
-        { status: 500 }
-      )
     }
-
-    // ActivityLog KALDIRILDI - Sadece kritik işlemler için ActivityLog tutulacak
-    // (Performans optimizasyonu: Gereksiz log'lar veritabanını yavaşlatıyor)
-    // Quote ACCEPTED/REJECTED durumlarında ActivityLog tutulacak (quotes/[id]/route.ts'de)
 
     // Deal stage'ini PROPOSAL'a taşı (eğer dealId varsa ve deal CONTACTED veya LEAD aşamasındaysa)
     let dealStageUpdated = false
@@ -332,7 +349,7 @@ export async function POST(request: Request) {
                   {
                     entity: 'Deal',
                     action: 'UPDATE',
-                    description: `Fırsat aşaması güncellendi: ${currentStage} → PROPOSAL (Teklif oluşturuldu)`,
+                    description: getActivityMessage(locale, 'dealStageUpdatedToProposal', { currentStage }),
                     meta: { 
                       entity: 'Deal', 
                       action: 'stage_change', 
@@ -356,13 +373,16 @@ export async function POST(request: Request) {
                   const { createNotificationForRole } = await import('@/lib/notification-helper')
                   
                   // Deal başlığını kullan (zaten dealById'den var)
-                  const dealTitle = deal.title || 'Fırsat'
+                  const { getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
+                  const locale = getLocaleFromRequest(request)
+                  const msgs = getMessages(locale)
+                  const dealTitle = deal.title || msgs.activity.deal
                   
                   await createNotificationForRole({
                     companyId: session.user.companyId,
                     role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-                    title: '📄 Fırsat Aşaması Güncellendi',
-                    message: `${dealTitle} fırsatı "Teklif" aşamasına taşındı. Teklif oluşturuldu.`,
+                    title: msgs.activity.dealStageUpdatedTitle,
+                    message: getActivityMessage(locale, 'dealStageUpdatedMessage', { dealTitle }),
                     type: 'success',
                     relatedTo: 'Deal',
                     relatedId: body.dealId,
@@ -421,12 +441,15 @@ export async function POST(request: Request) {
     // AutoTaskFromQuote: Teklif oluşturulduğunda otomatik görev aç
     // Görev: "Bu teklif için 3 gün içinde müşteriyi ara"
     try {
+      const { getMessages, getLocaleFromRequest, getActivityMessage } = await import('@/lib/api-locale')
+      const taskLocale = getLocaleFromRequest(request)
+      const taskMsgs = getMessages(taskLocale)
       const taskData = {
-        title: `Bu teklif için 3 gün içinde müşteriyi ara: ${body.title}`,
+        title: getActivityMessage(taskLocale, 'autoTaskCreated', { quoteTitle: body.title }),
         status: 'TODO',
         assignedTo: session.user.id, // Teklif sahibine atanır
         companyId: session.user.companyId,
-        description: `Teklif: ${body.title} - Müşteri ile 3 gün içinde görüşme yapılmalı`,
+        description: getActivityMessage(taskLocale, 'autoTaskDescription', { quoteTitle: body.title }),
         dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 3 gün sonra
         priority: 'MEDIUM',
       }
@@ -440,8 +463,8 @@ export async function POST(request: Request) {
         await createNotification({
           userId: session.user.id,
           companyId: session.user.companyId,
-          title: 'Yeni Görev Oluşturuldu',
-          message: `Teklif için otomatik görev oluşturuldu. Görevi görmek ister misiniz?`,
+          title: taskMsgs.activity.taskCreatedTitle,
+          message: taskMsgs.activity.taskCreatedMessage,
           type: 'info',
           relatedTo: 'Task',
           relatedId: (task as any).id,
@@ -549,6 +572,28 @@ export async function POST(request: Request) {
         }
       } catch (finalDealError) {
         console.error('Final deal fetch exception:', finalDealError)
+      }
+    }
+
+    // ✅ Otomasyon: Quote oluşturulduğunda email gönder (kullanıcı tercihine göre)
+    try {
+      const automationRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/automations/quote-sent-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quote: data,
+        }),
+      })
+      // Automation hatası ana işlemi engellemez (sadece log)
+      if (!automationRes.ok) {
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[Quote Automation] Email gönderimi başarısız veya kullanıcı tercihi ASK')
+        }
+      }
+    } catch (automationError) {
+      // Automation hatası ana işlemi engellemez
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[Quote Automation] Error:', automationError)
       }
     }
 

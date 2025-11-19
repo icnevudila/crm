@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from '@/lib/toast'
+import { useNavigateToDetailToast } from '@/lib/quick-action-helper'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useForm } from 'react-hook-form'
@@ -33,6 +34,8 @@ interface FinanceFormProps {
   onClose: () => void
   onSuccess?: (savedFinance: any) => void | Promise<void>
   customerCompanyId?: string
+  relatedTo?: string // Meeting, Deal, Quote, Invoice, etc.
+  relatedId?: string // İlişkili kayıt ID'si
 }
 
 interface CustomerCompany {
@@ -46,11 +49,14 @@ export default function FinanceForm({
   onClose,
   onSuccess,
   customerCompanyId: customerCompanyIdProp,
+  relatedTo: relatedToProp,
+  relatedId: relatedIdProp,
 }: FinanceFormProps) {
   const t = useTranslations('finance.form')
   const tCommon = useTranslations('common.form')
   const router = useRouter()
   const queryClient = useQueryClient()
+  const navigateToDetailToast = useNavigateToDetailToast()
   const searchParams = useSearchParams()
   const urlCustomerCompanyId = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
   const customerCompanyId = customerCompanyIdProp || urlCustomerCompanyId
@@ -59,7 +65,9 @@ export default function FinanceForm({
   // Schema'yı component içinde oluştur - locale desteği için
   const financeSchema = z.object({
     type: z.enum(['INCOME', 'EXPENSE']).default('INCOME'),
-    amount: z.number().min(0.01, t('amountMin')).max(999999999, t('amountMax')),
+    amount: z.number().min(0.01, t('amountMin')).max(999999999, t('amountMax')).refine((val) => val > 0, {
+      message: 'Finans kaydı tutarı 0 olamaz. Lütfen geçerli bir tutar girin.',
+    }),
     category: z.string().optional(),
     description: z.string().max(1000, t('descriptionMaxLength')).optional(),
     relatedTo: z.string().optional(), // Eski format (backward compatibility)
@@ -143,11 +151,12 @@ export default function FinanceForm({
   } = useForm<FinanceFormData>({
     resolver: zodResolver(financeSchema),
     defaultValues: finance || {
-      type: 'INCOME',
+      type: relatedToProp ? 'EXPENSE' : 'INCOME', // Meeting için varsayılan EXPENSE
       amount: 0,
       category: '',
       description: '',
-      relatedTo: '',
+      relatedTo: relatedToProp || '',
+      relatedEntityId: relatedIdProp || '',
       customerCompanyId,
     },
   })
@@ -168,9 +177,9 @@ export default function FinanceForm({
           amount: finance.amount || 0,
           category: finance.category || '',
           description: finance.description || '',
-          relatedTo: finance.relatedTo || '',
+          relatedTo: finance.relatedTo || relatedToProp || '',
           relatedEntityType: finance.relatedEntityType || '',
-          relatedEntityId: finance.relatedEntityId || '',
+          relatedEntityId: finance.relatedEntityId || relatedIdProp || '',
           customerCompanyId: finance.customerCompanyId || customerCompanyId || undefined,
           paymentMethod: finance.paymentMethod || '',
           paymentDate: finance.paymentDate ? new Date(finance.paymentDate).toISOString().split('T')[0] : '',
@@ -178,14 +187,15 @@ export default function FinanceForm({
         })
       } else {
         // Yeni kayıt modu - form'u temizle
+        // relatedTo ve relatedId prop'ları varsa kullan (Meeting için)
         reset({
-          type: 'INCOME',
+          type: 'EXPENSE', // Meeting gideri için varsayılan olarak EXPENSE
           amount: 0,
           category: '',
           description: '',
-          relatedTo: '',
+          relatedTo: relatedToProp || '',
           relatedEntityType: '',
-          relatedEntityId: '',
+          relatedEntityId: relatedIdProp || '',
           customerCompanyId: customerCompanyId || undefined,
           paymentMethod: '',
           paymentDate: new Date().toISOString().split('T')[0],
@@ -244,9 +254,11 @@ export default function FinanceForm({
     onSuccess: async (savedFinance) => {
       // Toast mesajı göster
       if (finance) {
-        toast.success(t('financeUpdated'), t('financeUpdatedMessage', { title: savedFinance.title || savedFinance.description || t('financeCreatedMessage') }))
+        toast.success(t('financeUpdated'), { description: t('financeUpdatedMessage', { title: savedFinance.title || savedFinance.description || t('financeCreatedMessage') }) })
       } else {
-        toast.success(t('financeCreated'), t('financeCreatedMessage'))
+        // Yeni finance kaydı oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
+        const financeTitle = savedFinance.title || savedFinance.description || t('financeCreatedMessage')
+        navigateToDetailToast('finance', savedFinance.id, financeTitle)
       }
       
       // onSuccess callback'i çağır - optimistic update için
@@ -273,13 +285,15 @@ export default function FinanceForm({
           : (customerCompanyId && customerCompanyId.trim() !== '' ? customerCompanyId : null),
         relatedEntityId: data.relatedEntityId && data.relatedEntityId.trim() !== '' && data.relatedEntityId !== 'none'
           ? data.relatedEntityId
-          : null,
+          : (relatedIdProp || null), // Prop'tan gelen relatedId'yi kullan
         relatedEntityType: data.relatedEntityType && data.relatedEntityType !== 'NONE'
           ? data.relatedEntityType
           : null,
         // Opsiyonel string alanları temizle
         description: data.description && data.description.trim() !== '' ? data.description : undefined,
-        relatedTo: data.relatedTo && data.relatedTo.trim() !== '' ? data.relatedTo : undefined,
+        relatedTo: data.relatedTo && data.relatedTo.trim() !== ''
+          ? data.relatedTo
+          : (relatedToProp || undefined), // Prop'tan gelen relatedTo'yu kullan
         category: data.category && data.category.trim() !== '' ? data.category : undefined,
         paymentMethod: data.paymentMethod && data.paymentMethod.trim() !== '' ? data.paymentMethod : undefined,
         paymentDate: data.paymentDate && data.paymentDate.trim() !== '' ? data.paymentDate : undefined,
@@ -288,7 +302,7 @@ export default function FinanceForm({
       await mutation.mutateAsync(cleanData)
     } catch (error: any) {
       console.error('Error:', error)
-      toast.error(t('saveFailed'), error?.message)
+      toast.error(t('saveFailed'), { description: error?.message || 'Bir hata oluştu' })
     } finally {
       setLoading(false)
     }
@@ -309,7 +323,7 @@ export default function FinanceForm({
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pb-4">
           {/* Type */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">{t('typeLabel')} *</label>
+            <label className="text-sm font-medium">{t('typeLabel')}</label>
             <Select
               value={type}
               onValueChange={(value) =>

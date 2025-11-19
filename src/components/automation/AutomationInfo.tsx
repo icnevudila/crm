@@ -24,7 +24,7 @@ export function AutomationInfo({ title, automations, className }: AutomationInfo
 
   return (
     <Card className={cn('border-indigo-200/70 bg-indigo-50/40 backdrop-blur-sm shadow-sm shadow-indigo-100/40', className)}>
-      <Accordion type="single" collapsible>
+      <Accordion type="single" collapsible defaultValue={undefined}>
         <AccordionItem value="automation-info" className="border-none">
           <AccordionTrigger className="px-4 py-3 transition hover:no-underline data-[state=closed]:bg-indigo-100/40 data-[state=open]:bg-white/80">
             <div className="flex items-center gap-3 text-left">

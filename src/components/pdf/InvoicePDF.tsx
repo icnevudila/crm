@@ -1,5 +1,22 @@
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
 
+// Türkçe sayı formatlaması için helper fonksiyon
+function formatNumber(num: number): string {
+  return new Intl.NumberFormat('tr-TR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(num)
+}
+
+function formatCurrency(num: number): string {
+  return new Intl.NumberFormat('tr-TR', {
+    style: 'currency',
+    currency: 'TRY',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(num)
+}
+
 const styles = StyleSheet.create({
   page: {
     padding: 40,
@@ -325,10 +342,10 @@ export default function InvoicePDF({ invoice }: InvoicePDFProps) {
               </Text>
               <Text style={[styles.tableCell, styles.col2]}>1</Text>
               <Text style={[styles.tableCell, styles.col3]}>
-                {subtotal.toFixed(2)} ₺
+                {formatNumber(subtotal)}
               </Text>
               <Text style={[styles.tableCell, styles.col4]}>
-                {subtotal.toFixed(2)} ₺
+                {formatNumber(subtotal)}
               </Text>
             </View>
           </View>
@@ -338,20 +355,20 @@ export default function InvoicePDF({ invoice }: InvoicePDFProps) {
         <View style={styles.totalSection}>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>KDV Hariç Toplam:</Text>
-            <Text style={styles.totalValue}>{subtotal.toFixed(2)} ₺</Text>
+            <Text style={styles.totalValue}>{formatCurrency(subtotal)}</Text>
           </View>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>KDV Matrahı:</Text>
-            <Text style={styles.totalValue}>{subtotal.toFixed(2)} ₺</Text>
+            <Text style={styles.totalValue}>{formatCurrency(subtotal)}</Text>
           </View>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>KDV Oranı (%{String(taxRate)}):</Text>
-            <Text style={styles.totalValue}>{kdv.toFixed(2)} ₺</Text>
+            <Text style={styles.totalValue}>{formatCurrency(kdv)}</Text>
           </View>
           <View style={[styles.totalRow, { marginTop: 10, borderTop: '1 solid #ddd', paddingTop: 10 }]}>
             <Text style={[styles.totalLabel, { fontSize: 14 }]}>KDV Dahil Toplam:</Text>
             <Text style={[styles.totalValue, { fontSize: 16 }]}>
-              {total.toFixed(2)} ₺
+              {formatCurrency(total)}
             </Text>
           </View>
         </View>

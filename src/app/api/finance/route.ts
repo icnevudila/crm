@@ -57,6 +57,10 @@ export async function GET(request: Request) {
     const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
     const search = searchParams.get('search') || '' // Arama (description, amount, category)
 
+    // Pagination parametreleri
+    const page = parseInt(searchParams.get('page') || '1', 10)
+    const pageSize = parseInt(searchParams.get('pageSize') || '20', 10) // Default 20 kayıt/sayfa
+
     const supabase = getSupabaseWithServiceRole()
     
     // Tüm kolonlar (033 migration çalıştırıldıysa hepsi mevcut)
@@ -68,9 +72,8 @@ export async function GET(request: Request) {
     // Query oluştur
     let query = supabase
       .from('Finance')
-      .select(selectFields)
+      .select(selectFields, { count: 'exact' })
       .order('createdAt', { ascending: false })
-      .limit(1000)
     
     // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
@@ -117,7 +120,12 @@ export async function GET(request: Request) {
       }
     }
 
-    const { data, error } = await query
+    // Pagination uygula - EN SON (filtrelerden sonra)
+    query = query.range((page - 1) * pageSize, page * pageSize - 1)
+
+    const { data, error, count } = await query
+    
+    const totalPages = Math.ceil((count || 0) / pageSize)
 
     // Eğer hata varsa, direkt hata döndür
     if (error) {
@@ -131,7 +139,15 @@ export async function GET(request: Request) {
     }
 
     // ULTRA AGRESİF cache headers - 30 dakika cache (tek tıkla açılmalı)
-    return NextResponse.json(data || [], {
+    return NextResponse.json({
+      data: data || [],
+      pagination: {
+        page,
+        pageSize,
+        totalItems: count || 0,
+        totalPages,
+      },
+    }, {
       headers: {
         'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200, max-age=1800',
         'CDN-Cache-Control': 'public, s-maxage=3600',

@@ -29,6 +29,76 @@ export async function GET(request: NextRequest) {
     const isSuperAdmin = session.user.role === 'SUPER_ADMIN'
     const companyId = session.user.companyId
 
+    // ✅ FIX: Contract tablosu yoksa boş array döndür (cache sorunu olabilir)
+    try {
+      const { error: tableCheckError } = await supabase
+        .from('Contract')
+        .select('id')
+        .limit(0)
+      
+      if (tableCheckError) {
+        const errorMessage = tableCheckError.message || ''
+        const errorCode = tableCheckError.code || ''
+        
+        if (errorMessage.includes('Could not find the table') || 
+            errorMessage.includes('relation') ||
+            errorMessage.includes('does not exist') ||
+            errorCode === 'PGRST204' ||
+            errorCode === '42P01') {
+          console.warn('Contract tablosu bulunamadı (cache sorunu olabilir). Boş array döndürülüyor.', {
+            message: errorMessage,
+            code: errorCode
+          })
+          return NextResponse.json({
+            data: [],
+            pagination: {
+              page: 1,
+              pageSize: 20,
+              totalItems: 0,
+              totalPages: 0,
+            },
+          }, {
+            headers: {
+              'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0',
+            }
+          })
+        }
+        throw tableCheckError
+      }
+    } catch (tableError: any) {
+      const errorMessage = tableError?.message || ''
+      const errorCode = tableError?.code || ''
+      
+      if (errorMessage.includes('Could not find the table') || 
+          errorMessage.includes('relation') ||
+          errorMessage.includes('does not exist') ||
+          errorCode === 'PGRST204' ||
+          errorCode === '42P01') {
+        console.warn('Contract tablosu bulunamadı. Boş array döndürülüyor.', {
+          message: errorMessage,
+          code: errorCode
+        })
+        return NextResponse.json({
+          data: [],
+          pagination: {
+            page: 1,
+            pageSize: 20,
+            totalItems: 0,
+            totalPages: 0,
+          },
+        }, {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          }
+        })
+      }
+      throw tableError
+    }
+
     // Filters
     const search = searchParams.get('search') || ''
     const status = searchParams.get('status') || ''
@@ -36,7 +106,8 @@ export async function GET(request: NextRequest) {
     const customerId = searchParams.get('customerId') || ''
     const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
     const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '20')
+    const pageSize = parseInt(searchParams.get('pageSize') || searchParams.get('limit') || '20')
+    const limit = pageSize
     const offset = (page - 1) * limit
 
     // Base query
@@ -81,6 +152,36 @@ export async function GET(request: NextRequest) {
     const { data, error, count } = await query
 
     if (error) {
+      // Tablo bulunamadı hatası - cache sorunu olabilir, boş array döndür
+      const errorMessage = error.message || ''
+      const errorCode = error.code || ''
+      
+      if (errorMessage.includes('Could not find the table') || 
+          errorMessage.includes('relation') ||
+          errorMessage.includes('does not exist') ||
+          errorCode === 'PGRST204' ||
+          errorCode === '42P01') {
+        console.warn('Contract tablosu bulunamadı (query sırasında). Boş array döndürülüyor.', {
+          message: errorMessage,
+          code: errorCode
+        })
+        return NextResponse.json({
+          data: [],
+          pagination: {
+            page,
+            pageSize: limit,
+            totalItems: 0,
+            totalPages: 0,
+          },
+        }, {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          }
+        })
+      }
+      
       console.error('Contract list error:', error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
@@ -90,8 +191,8 @@ export async function GET(request: NextRequest) {
         data,
         pagination: {
           page,
-          limit,
-          total: count || 0,
+          pageSize: limit,
+          totalItems: count || 0,
           totalPages: Math.ceil((count || 0) / limit),
         },
       },

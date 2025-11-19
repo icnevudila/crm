@@ -11,6 +11,16 @@ import {
   Mail,
   HelpCircle,
   ArrowRight,
+  Zap,
+  Link as LinkIcon,
+  Calendar,
+  Phone,
+  Keyboard,
+  Lightbulb,
+  Rocket,
+  AlertTriangle,
+  CheckCircle2,
+  PlayCircle,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -23,9 +33,13 @@ export default function HelpPage() {
       id: 'getting-started',
       title: 'Başlangıç Rehberi',
       description: 'Sisteme ilk kez giriş yapan kullanıcılar için temel bilgiler',
-      icon: BookOpen,
+      icon: Rocket,
       color: 'from-indigo-500 to-purple-500',
       items: [
+        {
+          title: 'Hızlı Başlangıç (5 Dakikada Başlayın)',
+          link: '/help/getting-started/quick-start',
+        },
         {
           title: 'İlk Giriş ve Hesap Kurulumu',
           link: '/help/getting-started/login',
@@ -70,10 +84,106 @@ export default function HelpPage() {
       ],
     },
     {
+      id: 'integrations',
+      title: 'Entegrasyonlar',
+      description: 'Video toplantılar, e-posta, SMS ve WhatsApp entegrasyonları',
+      icon: LinkIcon,
+      color: 'from-blue-500 to-cyan-500',
+      items: [
+        {
+          title: 'Video Toplantı Entegrasyonları (Zoom, Google Meet, Teams)',
+          link: '/help/integrations/video-meetings',
+        },
+        {
+          title: 'E-posta Entegrasyonu (Resend)',
+          link: '/help/integrations/email',
+        },
+        {
+          title: 'SMS ve WhatsApp Entegrasyonu (Twilio)',
+          link: '/help/integrations/messaging',
+        },
+        {
+          title: 'Google Calendar Entegrasyonu',
+          link: '/help/integrations/calendar',
+        },
+      ],
+    },
+    {
+      id: 'automations',
+      title: 'Otomasyonlar ve İş Akışları',
+      description: 'Otomatik işlemler ve sistem otomasyonları hakkında bilgiler',
+      icon: Zap,
+      color: 'from-yellow-500 to-orange-500',
+      items: [
+        {
+          title: 'Otomatik İş Akışları (Deal, Quote, Invoice)',
+          link: '/help/automations/workflows',
+        },
+        {
+          title: 'Otomatik Bildirimler ve Yönlendirmeler',
+          link: '/help/automations/notifications',
+        },
+        {
+          title: 'Modül İlişkileri ve Otomatik Bağlantılar',
+          link: '/help/automations/relationships',
+        },
+      ],
+    },
+    {
+      id: 'tips',
+      title: 'İpuçları ve Püf Noktaları',
+      description: 'Sistemi daha verimli kullanmak için ipuçları ve best practices',
+      icon: Lightbulb,
+      color: 'from-yellow-500 to-amber-500',
+      items: [
+        {
+          title: 'Hızlı İşlemler ve Klavye Kısayolları',
+          link: '/help/tips/shortcuts',
+        },
+        {
+          title: 'Sık Yapılan Hatalar ve Çözümleri',
+          link: '/help/tips/common-mistakes',
+        },
+        {
+          title: 'Verimlilik İpuçları',
+          link: '/help/tips/productivity',
+        },
+        {
+          title: 'Best Practices (En İyi Uygulamalar)',
+          link: '/help/tips/best-practices',
+        },
+      ],
+    },
+    {
+      id: 'examples',
+      title: 'Örnek Senaryolar',
+      description: 'Gerçek hayat senaryoları ve adım adım çözümler',
+      icon: PlayCircle,
+      color: 'from-green-500 to-emerald-500',
+      items: [
+        {
+          title: 'Yeni Müşteri → Satış Süreci',
+          link: '/help/examples/customer-to-sale',
+        },
+        {
+          title: 'Teklif Hazırlama ve Gönderme',
+          link: '/help/examples/quote-process',
+        },
+        {
+          title: 'Toplantı Planlama ve Takip',
+          link: '/help/examples/meeting-workflow',
+        },
+        {
+          title: 'Fatura ve Ödeme Takibi',
+          link: '/help/examples/invoice-tracking',
+        },
+      ],
+    },
+    {
       id: 'troubleshooting',
       title: 'Sorun Giderme',
       description: 'Yaygın sorunlar ve çözümleri',
-      icon: HelpCircle,
+      icon: AlertTriangle,
       color: 'from-pink-500 to-red-500',
       items: [
         {
@@ -88,16 +198,31 @@ export default function HelpPage() {
           title: 'Performans Sorunları',
           link: '/help/troubleshooting/performance',
         },
+        {
+          title: 'Entegrasyon Sorunları',
+          link: '/help/troubleshooting/integrations',
+        },
+        {
+          title: 'Sık Karşılaşılan Hatalar',
+          link: '/help/troubleshooting/common-errors',
+        },
       ],
     },
   ]
 
   const quickLinks = [
     {
-      title: 'Müşteri Kılavuzu',
-      description: 'Detaylı kullanım kılavuzu (PDF)',
-      icon: FileText,
-      link: '/docs/CUSTOMER_GUIDE_TR.pdf',
+      title: 'Hızlı Başlangıç',
+      description: '5 dakikada sistemi öğrenin',
+      icon: Rocket,
+      link: '/help/getting-started/quick-start',
+      external: false,
+    },
+    {
+      title: 'Kullanım Kılavuzu',
+      description: 'Detaylı sistem kullanım kılavuzu',
+      icon: BookOpen,
+      link: '/kullanim-kilavuzu',
       external: false,
     },
     {
@@ -105,6 +230,20 @@ export default function HelpPage() {
       description: 'SSS sayfasına git',
       icon: HelpCircle,
       link: '/faq',
+      external: false,
+    },
+    {
+      title: 'Entegrasyon Kurulum Rehberi',
+      description: 'Zoom, Google Meet, Teams ve diğer entegrasyonlar',
+      icon: LinkIcon,
+      link: '/help/integrations/setup',
+      external: false,
+    },
+    {
+      title: 'Klavye Kısayolları',
+      description: 'Hızlı işlemler için kısayollar',
+      icon: Keyboard,
+      link: '/help/tips/shortcuts',
       external: false,
     },
     {

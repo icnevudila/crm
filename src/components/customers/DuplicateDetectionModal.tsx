@@ -82,7 +82,7 @@ export default function DuplicateDetectionModal({
       }
 
       const result = await res.json()
-      toast.success('Başarılı', result.message || 'Müşteriler başarıyla birleştirildi')
+      toast.success('Başarılı', { description: result.message || 'Müşteriler başarıyla birleştirildi' })
 
       // Duplicate listesini yenile
       await mutateDuplicates(undefined, { revalidate: true })
@@ -99,7 +99,7 @@ export default function DuplicateDetectionModal({
       }
     } catch (error: any) {
       console.error('Merge error:', error)
-      toast.error('Hata', error?.message || 'Birleştirme işlemi başarısız oldu')
+      toast.error('Hata', { description: error?.message || 'Birleştirme işlemi başarısız oldu' })
     } finally {
       setMerging(null)
     }

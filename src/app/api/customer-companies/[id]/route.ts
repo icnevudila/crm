@@ -99,21 +99,32 @@ export async function GET(
           .eq('customerCompanyId', id)
           .order('meetingDate', { ascending: false })
           .limit(10),
-        // Customers
+        // Customers (İletişim Kişileri)
         supabase
           .from('Customer')
           .select('id, name, email, phone, status, createdAt')
           .eq('customerCompanyId', id)
           .order('createdAt', { ascending: false })
-          .limit(10),
+          .limit(100), // Limit artırıldı - tüm iletişim kişilerini göster
       ])
 
       // Promise.allSettled sonuçlarını parse et
       const [dealsResult, quotesResult, invoicesResult, shipmentsResult, financeResult, meetingsResult, customersResult] = results.map((result) => {
         if (result.status === 'fulfilled') {
-          return result.value
+          const value = result.value
+          // Hata kontrolü - Supabase error varsa boş array döndür
+          if (value.error) {
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('Related data fetch error:', value.error)
+            }
+            return { data: [], error: null }
+          }
+          return value
         } else {
           // Hata durumunda boş array döndür
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Related data fetch failed:', result.reason)
+          }
           return { data: [], error: null }
         }
       })

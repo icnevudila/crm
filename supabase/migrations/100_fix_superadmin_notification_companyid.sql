@@ -241,3 +241,7 @@ COMMENT ON FUNCTION notify_meeting_assigned() IS 'Görüşme atandığında bild
 
 
 
+
+
+
+

@@ -37,6 +37,10 @@ export async function GET(request: Request) {
     const customerCompanyId = searchParams.get('customerCompanyId') || '' // Firma bazlı filtreleme
     const filterCompanyId = searchParams.get('filterCompanyId') || '' // SuperAdmin için firma filtresi
 
+    // Pagination parametreleri
+    const page = parseInt(searchParams.get('page') || '1', 10)
+    const pageSize = parseInt(searchParams.get('pageSize') || '20', 10) // Default 20 kayıt/sayfa
+
     // YENİ: Shipment'ları çek (Invoice'ı ayrı query ile çekeceğiz - ilişki hatası nedeniyle)
     // estimatedDelivery kolonunu dinamik kontrol et
     // SuperAdmin için Company bilgisi ekle
@@ -55,9 +59,8 @@ export async function GET(request: Request) {
     
     let query = supabase
       .from('Shipment')
-      .select(selectColumns)
+      .select(selectColumns, { count: 'exact' })
       .order('createdAt', { ascending: false })
-      .limit(50) // Agresif limit - sadece 50 kayıt (performans için)
     
     // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
     if (!isSuperAdmin) {
@@ -89,11 +92,16 @@ export async function GET(request: Request) {
       query = query.eq('customerCompanyId', customerCompanyId)
     }
 
-    const { data: shipments, error } = await query
+    // Pagination uygula - EN SON (filtrelerden sonra)
+    query = query.range((page - 1) * pageSize, page * pageSize - 1)
+
+    const { data: shipments, error, count } = await query
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
+    
+    const totalPages = Math.ceil((count || 0) / pageSize)
 
     // OPTİMİZE: N+1 query problemini çöz - tüm invoice'ları tek seferde çek
     // Önceki: Her shipment için ayrı invoice query (N+1 problem - çok yavaş!)
@@ -177,7 +185,15 @@ export async function GET(request: Request) {
     })
 
     // Cache'i kapat - Status güncellemeleri için fresh data gerekli
-    return NextResponse.json(shipmentsWithInvoices || [], {
+    return NextResponse.json({
+      data: shipmentsWithInvoices || [],
+      pagination: {
+        page,
+        pageSize,
+        totalItems: count || 0,
+        totalPages,
+      },
+    }, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
         'CDN-Cache-Control': 'no-store',

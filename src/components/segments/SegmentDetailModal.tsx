@@ -60,7 +60,7 @@ export default function SegmentDetailModal({
 
       await mutate('/api/segments')
       toast.dismiss(toastId)
-      toast.success('Silindi', 'Segment başarıyla silindi.')
+      toast.success('Silindi', { description: 'Segment başarıyla silindi.' })
       onClose()
     } catch (error: any) {
       console.error('Delete error:', error)
@@ -87,7 +87,7 @@ export default function SegmentDetailModal({
 
       await mutateSegment()
       toast.dismiss(toastId)
-      toast.success('Çıkarıldı', 'Üye segmentten çıkarıldı.')
+      toast.success('Çıkarıldı', { description: 'Üye segmentten çıkarıldı.' })
     } catch (error: any) {
       console.error('Remove member error:', error)
       toast.dismiss(toastId)

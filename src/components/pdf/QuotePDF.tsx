@@ -1,5 +1,22 @@
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer'
 
+// Türkçe sayı formatlaması için helper fonksiyon
+function formatNumber(num: number): string {
+  return new Intl.NumberFormat('tr-TR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(num)
+}
+
+function formatCurrency(num: number): string {
+  return new Intl.NumberFormat('tr-TR', {
+    style: 'currency',
+    currency: 'TRY',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(num)
+}
+
 // Font register (opsiyonel - daha iyi görünüm için)
 // Font.register({
 //   family: 'Roboto',
@@ -251,10 +268,10 @@ export default function QuotePDF({ quote }: QuotePDFProps) {
               <Text style={[styles.tableCell, styles.col1]}>{quote.title}</Text>
               <Text style={[styles.tableCell, styles.col2]}>1</Text>
               <Text style={[styles.tableCell, styles.col3]}>
-                {subtotal.toFixed(2)} ₺
+                {formatNumber(subtotal)}
               </Text>
               <Text style={[styles.tableCell, styles.col4]}>
-                {subtotal.toFixed(2)} ₺
+                {formatNumber(subtotal)}
               </Text>
             </View>
           </View>
@@ -264,16 +281,16 @@ export default function QuotePDF({ quote }: QuotePDFProps) {
         <View style={styles.totalSection}>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Ara Toplam:</Text>
-            <Text style={styles.totalValue}>{subtotal.toFixed(2)} ₺</Text>
+            <Text style={styles.totalValue}>{formatCurrency(subtotal)}</Text>
           </View>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>KDV (%18):</Text>
-            <Text style={styles.totalValue}>{kdv.toFixed(2)} ₺</Text>
+            <Text style={styles.totalValue}>{formatCurrency(kdv)}</Text>
           </View>
           <View style={[styles.totalRow, { marginTop: 10 }]}>
             <Text style={[styles.totalLabel, { fontSize: 14 }]}>GENEL TOPLAM:</Text>
             <Text style={[styles.totalValue, { fontSize: 16 }]}>
-              {total.toFixed(2)} ₺
+              {formatCurrency(total)}
             </Text>
           </View>
         </View>

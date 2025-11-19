@@ -3,15 +3,23 @@
 import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
+import { motion } from 'framer-motion'
 import { useData } from '@/hooks/useData'
-import { ArrowLeft, Edit, FileText, FileText as QuoteIcon, Truck, Trash2, Users, Plus, Package, AlertTriangle, Phone } from 'lucide-react'
+import { ArrowLeft, Edit, FileText, FileText as QuoteIcon, Truck, Trash2, Users, Plus, Package, AlertTriangle, Phone, Mail, Zap, Receipt, DollarSign, Calendar, Briefcase } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
+import GradientCard from '@/components/ui/GradientCard'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { formatCurrency } from '@/lib/utils'
+<<<<<<< HEAD
 import { toast, confirm } from '@/lib/toast'
+=======
+import { toast, toastError, toastWarning } from '@/lib/toast'
+import { getStatusBadgeClass } from '@/lib/crm-colors'
+import { mutate } from 'swr'
+>>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import dynamic from 'next/dynamic'
@@ -21,6 +29,11 @@ import StatusInfoNote from '@/components/workflow/StatusInfoNote'
 import NextStepButtons from '@/components/workflow/NextStepButtons'
 import RelatedRecordsSuggestions from '@/components/workflow/RelatedRecordsSuggestions'
 import SendEmailButton from '@/components/integrations/SendEmailButton'
+import SendSmsButton from '@/components/integrations/SendSmsButton'
+import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
+import AddToCalendarButton from '@/components/integrations/AddToCalendarButton'
+import ContextualActionsBar from '@/components/ui/ContextualActionsBar'
+import DocumentList from '@/components/documents/DocumentList'
 import {
   Table,
   TableBody,
@@ -42,15 +55,13 @@ const InvoiceItemForm = dynamic(() => import('@/components/invoices/InvoiceItemF
   loading: () => null,
 })
 
-const statusColors: Record<string, string> = {
-  DRAFT: 'bg-gray-100 text-gray-800',
-  SENT: 'bg-blue-100 text-blue-800',
-  SHIPPED: 'bg-green-100 text-green-800',
-  RECEIVED: 'bg-teal-100 text-teal-800',
-  PAID: 'bg-emerald-100 text-emerald-800',
-  OVERDUE: 'bg-red-100 text-red-800',
-  CANCELLED: 'bg-yellow-100 text-yellow-800',
-}
+// Lazy load ShipmentForm - performans için
+const ShipmentForm = dynamic(() => import('@/components/shipments/ShipmentForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
+// Status colors - merkezi renk sistemi kullanılıyor (getStatusBadgeClass)
 
 const statusLabels: Record<string, string> = {
   DRAFT: 'Taslak',
@@ -69,13 +80,14 @@ export default function InvoiceDetailPage() {
   const id = params.id as string
   const [formOpen, setFormOpen] = useState(false)
   const [itemFormOpen, setItemFormOpen] = useState(false)
+  const [shipmentFormOpen, setShipmentFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
-  const { data: invoice, isLoading, error, mutate: refetch } = useData<any>(
+  const { data: invoice, isLoading, error, mutate: mutateInvoice } = useData<any>(
     id ? `/api/invoices/${id}` : null,
     {
-      dedupingInterval: 5000,
-      revalidateOnFocus: false,
+      dedupingInterval: 30000, // 30 saniye cache (detay sayfası için optimal)
+      revalidateOnFocus: false, // Focus'ta revalidate yapma (instant navigation)
     }
   )
 
@@ -104,105 +116,257 @@ export default function InvoiceDetailPage() {
     )
   }
 
+  // Invoice status'leri için available statuses
+  const availableStatuses = [
+    { value: 'DRAFT', label: 'Taslak' },
+    { value: 'SENT', label: 'Gönderildi' },
+    { value: 'SHIPPED', label: 'Sevkiyatı Yapıldı' },
+    { value: 'RECEIVED', label: 'Mal Kabul Edildi' },
+    { value: 'PAID', label: 'Ödendi' },
+    { value: 'OVERDUE', label: 'Vadesi Geçmiş' },
+    { value: 'CANCELLED', label: 'İptal' },
+  ]
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            onClick={() => router.push(`/${locale}/invoices`)}
-          >
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Geri Dön
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">{invoice.title}</h1>
-            <p className="mt-1 text-gray-600">
-              Oluşturulma: {new Date(invoice.createdAt).toLocaleDateString('tr-TR')}
-            </p>
+      {/* Contextual Actions Bar */}
+      <ContextualActionsBar
+        entityType="invoice"
+        entityId={id}
+        currentStatus={invoice.status}
+        availableStatuses={availableStatuses}
+        onStatusChange={async (newStatus) => {
+          const res = await fetch(`/api/invoices/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: newStatus }),
+          })
+          if (!res.ok) {
+            const error = await res.json().catch(() => ({}))
+            throw new Error(error.error || 'Durum değiştirilemedi')
+          }
+          const updatedInvoice = await res.json()
+          await mutateInvoice(updatedInvoice, { revalidate: false })
+          await Promise.all([
+            mutate('/api/invoices', undefined, { revalidate: true }),
+            mutate('/api/invoices?', undefined, { revalidate: true }),
+          ])
+        }}
+        onEdit={() => setFormOpen(true)}
+        onDelete={async () => {
+          if (!confirm(`${invoice.title} faturasını silmek istediğinize emin misiniz?`)) {
+            return
+          }
+          setDeleteLoading(true)
+          try {
+            const res = await fetch(`/api/invoices/${id}`, {
+              method: 'DELETE',
+            })
+            if (!res.ok) {
+              const errorData = await res.json().catch(() => ({}))
+              throw new Error(errorData.error || 'Silme işlemi başarısız')
+            }
+            router.push(`/${locale}/invoices`)
+          } catch (error: any) {
+            toastError('Silme işlemi başarısız oldu', error?.message || 'Fatura silinirken bir hata oluştu')
+            throw error
+          } finally {
+            setDeleteLoading(false)
+          }
+        }}
+        onDuplicate={async () => {
+          try {
+            const res = await fetch(`/api/invoices/${id}/duplicate`, {
+              method: 'POST',
+            })
+            if (!res.ok) {
+              const errorData = await res.json().catch(() => ({}))
+              throw new Error(errorData.error || 'Kopyalama işlemi başarısız')
+            }
+            const duplicatedInvoice = await res.json()
+            toast.success('Fatura kopyalandı', { description: 'Fatura başarıyla kopyalandı' })
+            router.push(`/${locale}/invoices/${duplicatedInvoice.id}`)
+          } catch (error: any) {
+            toastError('Kopyalama işlemi başarısız oldu', error?.message || 'Fatura kopyalanırken bir hata oluştu')
+          }
+        }}
+        onCreateRelated={(type) => {
+          if (type === 'shipment') {
+            setShipmentFormOpen(true)
+          }
+        }}
+        onSendEmail={invoice.Customer?.email ? () => {
+          // Email gönderme işlemi SendEmailButton ile yapılıyor
+        } : undefined}
+        onSendSms={invoice.Customer?.phone ? () => {
+          // SMS gönderme işlemi SendSmsButton ile yapılıyor
+        } : undefined}
+        onSendWhatsApp={invoice.Customer?.phone ? () => {
+          // WhatsApp gönderme işlemi SendWhatsAppButton ile yapılıyor
+        } : undefined}
+        onAddToCalendar={() => {
+          // Takvime ekleme işlemi AddToCalendarButton ile yapılıyor
+        }}
+        onDownloadPDF={() => {
+          window.open(`/api/pdf/invoice/${id}`, '_blank')
+        }}
+        canEdit={!invoice.quoteId && invoice.status !== 'SHIPPED' && invoice.status !== 'RECEIVED'}
+        canDelete={!invoice.quoteId && invoice.status !== 'SHIPPED' && invoice.status !== 'RECEIVED'}
+      />
+
+      {/* Header - Premium Tasarım */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-emerald-50 via-green-50 to-teal-50 border border-emerald-100 p-6 shadow-lg"
+      >
+        {/* Arka plan pattern */}
+        <div className="absolute inset-0 opacity-5">
+          <div className="absolute inset-0" style={{
+            backgroundImage: `radial-gradient(circle at 2px 2px, rgb(16, 185, 129) 1px, transparent 0)`,
+            backgroundSize: '40px 40px'
+          }} />
+        </div>
+        
+        <div className="relative flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => router.push(`/${locale}/invoices`)}
+                className="bg-white/80 hover:bg-white shadow-sm"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </motion.div>
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="w-20 h-20 rounded-xl bg-gradient-to-br from-emerald-500 via-green-500 to-teal-500 flex items-center justify-center shadow-lg ring-4 ring-emerald-100/50"
+            >
+              <Receipt className="h-10 w-10 text-white" />
+            </motion.div>
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 bg-clip-text text-transparent">
+                {invoice.title}
+              </h1>
+              <div className="flex items-center gap-3 mt-2">
+                <Badge className={getStatusBadgeClass(invoice.status)}>
+                  {statusLabels[invoice.status] || invoice.status}
+                </Badge>
+                {invoice.invoiceNumber && (
+                  <p className="text-gray-600 font-medium">
+                    {invoice.invoiceNumber}
+                  </p>
+                )}
+                {invoice.totalAmount && (
+                  <p className="text-gray-600 font-semibold">
+                    {formatCurrency(invoice.totalAmount || invoice.total || 0)}
+                  </p>
+                )}
+                {invoice.dueDate && (
+                  <div className="flex items-center gap-1 text-gray-600">
+                    <Calendar className="h-4 w-4" />
+                    <span className="text-sm">
+                      {new Date(invoice.dueDate).toLocaleDateString('tr-TR')}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
-        <div className="flex gap-2">
-          {/* Quote'tan oluşturulan, SHIPPED ve RECEIVED durumundaki faturalar düzenlenemez ve silinemez */}
-          {!invoice.quoteId && invoice.status !== 'SHIPPED' && invoice.status !== 'RECEIVED' && (
-            <Button variant="outline" onClick={() => setFormOpen(true)}>
-              <Edit className="mr-2 h-4 w-4" />
-              Düzenle
-            </Button>
-          )}
-          {invoice.Customer?.email && (
-            <SendEmailButton
-              to={invoice.Customer.email}
-              subject={`Fatura: ${invoice.title}`}
-              html={`
-                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                  <h2 style="color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px;">
-                    Fatura Bilgileri
-                  </h2>
-                  <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px;">
-                    <p><strong>Fatura:</strong> ${invoice.title}</p>
-                    ${invoice.invoiceNumber ? `<p><strong>Fatura No:</strong> ${invoice.invoiceNumber}</p>` : ''}
-                    <p><strong>Durum:</strong> ${statusLabels[invoice.status] || invoice.status}</p>
-                    ${invoice.total ? `<p><strong>Toplam:</strong> ${formatCurrency(invoice.total)}</p>` : ''}
-                    ${invoice.Quote?.title ? `<p><strong>İlgili Teklif:</strong> ${invoice.Quote.title}</p>` : ''}
-                    ${invoice.notes ? `<p><strong>Notlar:</strong><br>${invoice.notes.replace(/\n/g, '<br>')}</p>` : ''}
+      </motion.div>
+
+      {/* Quick Actions - Premium Tasarım */}
+      {invoice.Customer && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <Card className="p-6 bg-gradient-to-br from-white to-gray-50 border-emerald-100 shadow-lg hover:shadow-xl transition-shadow">
+            <div className="flex items-center gap-2 mb-6">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-500 to-green-600 shadow-md">
+                <Zap className="h-5 w-5 text-white" />
+              </div>
+              <h2 className="text-xl font-bold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent">
+                Hızlı İşlemler
+              </h2>
+            </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            {invoice.Customer.email && (
+              <SendEmailButton
+                to={invoice.Customer.email}
+                subject={`Fatura: ${invoice.title}`}
+                html={`
+                  <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px;">
+                      Fatura Bilgileri
+                    </h2>
+                    <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin-top: 20px;">
+                      <p><strong>Fatura:</strong> ${invoice.title}</p>
+                      ${invoice.invoiceNumber ? `<p><strong>Fatura No:</strong> ${invoice.invoiceNumber}</p>` : ''}
+                      <p><strong>Durum:</strong> ${statusLabels[invoice.status] || invoice.status}</p>
+                      ${invoice.total ? `<p><strong>Toplam:</strong> ${formatCurrency(invoice.total)}</p>` : ''}
+                      ${invoice.Quote?.title ? `<p><strong>İlgili Teklif:</strong> ${invoice.Quote.title}</p>` : ''}
+                      ${invoice.notes ? `<p><strong>Notlar:</strong><br>${invoice.notes.replace(/\n/g, '<br>')}</p>` : ''}
+                    </div>
                   </div>
-                  <p style="color: #6b7280; font-size: 12px; margin-top: 20px;">
-                    Bu e-posta CRM Enterprise V3 sisteminden gönderilmiştir.
-                  </p>
-                </div>
-              `}
+                `}
+                category="INVOICE"
+                entityData={invoice}
+              />
+            )}
+            {invoice.Customer.phone && (
+              <>
+                <SendSmsButton
+                  to={invoice.Customer.phone.startsWith('+') 
+                    ? invoice.Customer.phone 
+                    : `+${invoice.Customer.phone.replace(/\D/g, '')}`}
+                  message={`Merhaba, ${invoice.title} faturası hazır. Detaylar için lütfen iletişime geçin.`}
+                />
+                <SendWhatsAppButton
+                  to={invoice.Customer.phone.startsWith('+') 
+                    ? invoice.Customer.phone 
+                    : `+${invoice.Customer.phone.replace(/\D/g, '')}`}
+                  message={`Merhaba, ${invoice.title} faturası hazır. Detaylar için lütfen iletişime geçin.`}
+                />
+              </>
+            )}
+            <AddToCalendarButton
+              recordType="invoice"
+              record={invoice}
+              startTime={invoice.createdAt}
+              endTime={invoice.createdAt}
+              location={invoice.Customer?.address}
             />
-          )}
-          <Button
-            className="bg-gradient-primary text-white"
-            onClick={() => {
-              window.open(`/api/pdf/invoice/${id}`, '_blank')
-            }}
-          >
-            <FileText className="mr-2 h-4 w-4" />
-            PDF İndir
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => {
-              window.open(`/api/invoices/${id}/export`, '_blank')
-            }}
-          >
-            <FileText className="mr-2 h-4 w-4" />
-            XML Export (E-Fatura)
-          </Button>
-          {/* Quote'tan oluşturulan, SHIPPED ve RECEIVED durumundaki faturalar silinemez */}
-          {!invoice.quoteId && invoice.status !== 'ACCEPTED' && invoice.status !== 'SHIPPED' && invoice.status !== 'RECEIVED' && (
             <Button
               variant="outline"
-              className="text-red-600 hover:text-red-700 hover:bg-red-50"
-              onClick={async () => {
-                if (!confirm(`${invoice.title} faturasını silmek istediğinize emin misiniz?`)) {
-                  return
-                }
-                setDeleteLoading(true)
-                try {
-                  const res = await fetch(`/api/invoices/${id}`, {
-                    method: 'DELETE',
-                  })
-                  if (!res.ok) throw new Error('Silme işlemi başarısız')
-                  router.push(`/${locale}/invoices`)
-                } catch (error: any) {
-                  alert(error?.message || 'Silme işlemi başarısız oldu')
-                } finally {
-                  setDeleteLoading(false)
-                }
+              className="w-full"
+              onClick={() => {
+                window.open(`/api/pdf/invoice/${id}`, '_blank')
               }}
-              disabled={deleteLoading}
             >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Sil
+              <FileText className="mr-2 h-4 w-4" />
+              PDF İndir
             </Button>
-          )}
-        </div>
-      </div>
+            {invoice.quoteId && (
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => {
+                  window.open(`/${locale}/quotes/${invoice.quoteId}`, '_blank')
+                }}
+              >
+                <QuoteIcon className="mr-2 h-4 w-4" />
+                Teklifi Görüntüle
+              </Button>
+            )}
+          </div>
+        </Card>
+      </motion.div>
+      )}
 
       {/* Uyarı Mesajları */}
       {invoice.status === 'SHIPPED' && (
@@ -227,16 +391,53 @@ export default function InvoiceDetailPage() {
         </div>
       )}
 
-      {/* Info Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg shadow-card p-6">
+      {/* Genel Bilgiler */}
+      <Card className="p-6">
+        <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+          <FileText className="h-5 w-5 text-indigo-600" />
+          Genel Bilgiler
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div>
+            <p className="text-sm text-gray-600 mb-1">Kayıt No</p>
+            <p className="font-medium text-gray-900">
+              {invoice.invoiceNumber || invoice.id.substring(0, 8)}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-600 mb-1">Oluşturulma Tarihi</p>
+            <p className="font-medium text-gray-900">
+              {new Date(invoice.createdAt).toLocaleDateString('tr-TR', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </p>
+          </div>
+          {invoice.updatedAt && (
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Son Güncelleme</p>
+              <p className="font-medium text-gray-900">
+                {new Date(invoice.updatedAt).toLocaleDateString('tr-TR', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </p>
+            </div>
+          )}
+          <div>
           <p className="text-sm text-gray-600 mb-1">Durum</p>
-          <Badge className={statusColors[invoice.status] || 'bg-gray-100'}>
+          <Badge className={getStatusBadgeClass(invoice.status)}>
             {statusLabels[invoice.status] || invoice.status}
           </Badge>
         </div>
-        <div className="bg-white rounded-lg shadow-card p-6">
-          <p className="text-sm text-gray-600 mb-1">Fatura Tipi</p>
+          <div>
+            <p className="text-sm text-gray-600 mb-1">İşlem Tipi</p>
           <Badge className={
             invoice.invoiceType === 'SALES' 
               ? 'bg-blue-100 text-blue-800'
@@ -249,18 +450,111 @@ export default function InvoiceDetailPage() {
               : 'bg-gray-100 text-gray-800'
           }>
             {invoice.invoiceType === 'SALES' 
-              ? 'Satış Faturası'
+                ? 'Satış'
               : invoice.invoiceType === 'PURCHASE'
-              ? 'Alış Faturası'
+                ? 'Alış'
               : invoice.invoiceType === 'SERVICE_SALES'
-              ? 'Hizmet Satış Faturası'
+                ? 'Hizmet Satış'
               : invoice.invoiceType === 'SERVICE_PURCHASE'
-              ? 'Hizmet Alım Faturası'
+                ? 'Hizmet Alım'
               : 'Bilinmeyen'}
           </Badge>
         </div>
-        <div className="bg-white rounded-lg shadow-card p-6">
-          <p className="text-sm text-gray-600 mb-1">Toplam</p>
+          {invoice.dueDate && (
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Vade Tarihi</p>
+              <p className="font-medium text-gray-900">
+                {new Date(invoice.dueDate).toLocaleDateString('tr-TR', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </p>
+            </div>
+          )}
+          {invoice.paymentDate && (
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Ödeme Tarihi</p>
+              <p className="font-medium text-green-600">
+                {new Date(invoice.paymentDate).toLocaleDateString('tr-TR', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </p>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* Müşteri Bilgileri */}
+      {(invoice.Customer || invoice.Quote?.Deal?.Customer) && (
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+            <Users className="h-5 w-5 text-indigo-600" />
+            Müşteri Bilgileri
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {(() => {
+              const customer = invoice.Customer || invoice.Quote?.Deal?.Customer
+              const customerCompany = customer?.CustomerCompany
+              return (
+                <>
+                  <div>
+                    <p className="text-sm text-gray-600 mb-1">Müşteri Adı</p>
+                    <p className="font-medium text-gray-900">
+                      {customerCompany?.name || customer?.name || '-'}
+                    </p>
+                  </div>
+                  {customer?.email && (
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">E-posta</p>
+                      <a 
+                        href={`mailto:${customer.email}`}
+                        className="font-medium text-indigo-600 hover:underline"
+                      >
+                        {customer.email}
+                      </a>
+                    </div>
+                  )}
+                  {customer?.phone && (
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Telefon</p>
+                      <a 
+                        href={`tel:${customer.phone}`}
+                        className="font-medium text-indigo-600 hover:underline"
+                      >
+                        {customer.phone}
+                      </a>
+                    </div>
+                  )}
+                  {(customerCompany?.address || customer?.address) && (
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Adres</p>
+                      <p className="font-medium text-gray-900">
+                        {customerCompany?.address || customer?.address}
+                      </p>
+                    </div>
+                  )}
+                  {(customerCompany?.city || customer?.city) && (
+                    <div>
+                      <p className="text-sm text-gray-600 mb-1">Şehir</p>
+                      <p className="font-medium text-gray-900">
+                        {customerCompany?.city || customer?.city}
+                      </p>
+                    </div>
+                  )}
+                </>
+              )
+            })()}
+          </div>
+        </Card>
+      )}
+
+      {/* Finansal Bilgiler */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="p-6">
+          <p className="text-sm text-gray-600 mb-1">Toplam Tutar</p>
           <p className="text-2xl font-bold text-gray-900">
             {formatCurrency(invoice.totalAmount || invoice.total || 0)}
           </p>
@@ -323,14 +617,42 @@ export default function InvoiceDetailPage() {
               </div>
             )
           })()}
-        </div>
-        <div className="bg-white rounded-lg shadow-card p-6">
+        </Card>
+        <Card className="p-6">
           <p className="text-sm text-gray-600 mb-1">Teklif</p>
           <p className="text-lg font-semibold text-gray-900">
             {invoice.Quote?.title || '-'}
           </p>
-        </div>
+        </Card>
+        {/* Ödeme Bilgileri */}
+        {invoice.paidAmount !== undefined && invoice.paidAmount !== null && (
+          <>
+            <div className="bg-white rounded-lg shadow-card p-6">
+              <p className="text-sm text-gray-600 mb-1">Ödenen Tutar</p>
+              <p className="text-2xl font-bold text-green-600">
+                {formatCurrency(invoice.paidAmount || 0)}
+              </p>
+            </div>
+            <div className="bg-white rounded-lg shadow-card p-6">
+              <p className="text-sm text-gray-600 mb-1">Kalan Tutar</p>
+              <p className={`text-2xl font-bold ${((invoice.totalAmount || invoice.total || 0) - (invoice.paidAmount || 0)) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                {formatCurrency((invoice.totalAmount || invoice.total || 0) - (invoice.paidAmount || 0))}
+              </p>
+              {((invoice.totalAmount || invoice.total || 0) - (invoice.paidAmount || 0)) === 0 && (
+                <p className="text-xs text-green-600 mt-1">✓ Tamamı ödendi</p>
+              )}
+            </div>
+          </>
+        )}
       </div>
+
+      {/* Notes Card */}
+      {invoice.notes && (
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Notlar</h2>
+          <p className="text-gray-700 whitespace-pre-wrap">{invoice.notes}</p>
+        </Card>
+      )}
 
       {/* OVERDUE Uyarısı ve Öneriler */}
       {invoice.status === 'OVERDUE' && (
@@ -358,7 +680,7 @@ export default function InvoiceDetailPage() {
                   } else if (customer?.email) {
                     window.open(`mailto:${customer.email}?subject=Ödeme Hatırlatması: ${invoice.title}`, '_blank')
                   } else {
-                    alert('Müşteri iletişim bilgisi bulunamadı')
+                    toastWarning('Müşteri iletişim bilgisi bulunamadı')
                   }
                 }}
                 className="border-red-300 text-red-700 hover:bg-red-100"
@@ -373,7 +695,7 @@ export default function InvoiceDetailPage() {
                   if (customer?.email) {
                     window.open(`mailto:${customer.email}?subject=Ödeme Hatırlatması: ${invoice.title}&body=Sayın ${customer.name},%0D%0A%0D%0A${invoice.title} faturası vadesi geçmiştir. Lütfen ödemeyi gerçekleştiriniz.`, '_blank')
                   } else {
-                    alert('Müşteri e-posta adresi bulunamadı')
+                    toastWarning('Müşteri e-posta adresi bulunamadı')
                   }
                 }}
                 className="border-red-300 text-red-700 hover:bg-red-100"
@@ -470,20 +792,27 @@ export default function InvoiceDetailPage() {
             const feedback = statusMessages[actionId]
             if (feedback) {
               if (feedback.variant === 'success') {
-                toast.success(feedback.title, feedback.description)
+                toast.success(feedback.title, { description: feedback.description } as any)
               } else if (feedback.variant === 'warning') {
-                toast.warning(feedback.title, feedback.description)
-              } else if (typeof toast.info === 'function') {
-                toast.info(feedback.title, feedback.description)
+                toast.warning(feedback.title, { description: feedback.description } as any)
               } else {
-                toast.success(feedback.title, feedback.description)
+                toast.success(feedback.title, { description: feedback.description } as any)
               }
             } else {
-              toast.success('Durum değiştirildi')
+              toast.success('Durum değiştirildi', { description: 'Fatura durumu başarıyla güncellendi' })
             }
-            refetch()
+            
+            // Optimistic update - cache'i güncelle (sayfa reload yok)
+            await mutateInvoice(undefined, { revalidate: true })
+            
+            // Tüm ilgili cache'leri güncelle
+            await Promise.all([
+              mutate('/api/invoices', undefined, { revalidate: true }),
+              mutate('/api/invoices?', undefined, { revalidate: true }),
+              mutate((key: string) => typeof key === 'string' && key.startsWith('/api/invoices'), undefined, { revalidate: true }),
+            ])
           } catch (error: any) {
-            toast.error('Durum değiştirilemedi', error.message || 'Bir hata oluştu.')
+            toast.error('Durum değiştirilemedi', { description: error.message || 'Bir hata oluştu.' })
           }
         }}
         onCreateRelated={(type) => {
@@ -631,7 +960,16 @@ export default function InvoiceDetailPage() {
                     <TableCell>
                       <div>
                         <div className="font-medium">
-                          {item.Product?.name || 'Ürün bulunamadı'}
+                          {item.productId && item.Product?.id ? (
+                            <Link
+                              href={`/${locale}/products/${item.Product.id}`}
+                              className="text-indigo-600 hover:underline"
+                            >
+                              {item.Product.name || 'Ürün bulunamadı'}
+                            </Link>
+                          ) : (
+                            item.Product?.name || 'Ürün bulunamadı'
+                          )}
                         </div>
                         {item.Product?.sku && (
                           <div className="text-xs text-gray-500">SKU: {item.Product.sku}</div>
@@ -831,7 +1169,7 @@ export default function InvoiceDetailPage() {
               >
                 <p className="font-medium text-gray-900">{invoice.Quote.title}</p>
                 <div className="flex items-center gap-2 mt-1">
-                  <Badge className={statusColors[invoice.Quote.status] || 'bg-gray-100'}>
+                  <Badge className={getStatusBadgeClass(invoice.Quote.status)}>
                     {statusLabels[invoice.Quote.status] || invoice.Quote.status}
                   </Badge>
                 </div>
@@ -895,19 +1233,32 @@ export default function InvoiceDetailPage() {
         )}
       </div>
 
+      {/* Document List */}
+      <DocumentList relatedTo="Invoice" relatedId={id} />
+
       {/* Activity Timeline */}
-      {invoice.activities && invoice.activities.length > 0 && (
-        <ActivityTimeline activities={invoice.activities} />
-      )}
+      <Card className="p-6">
+        <h2 className="text-xl font-semibold mb-4">İşlem Geçmişi</h2>
+        <ActivityTimeline entityType="Invoice" entityId={id} />
+      </Card>
 
       {/* Form Modal */}
       <InvoiceForm
         invoice={invoice}
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        onSuccess={async () => {
+        onSuccess={async (savedInvoice: any) => {
+          // Form başarılı olduğunda cache'i güncelle (sayfa reload yok)
+          // Optimistic update - güncellenmiş invoice'u cache'e ekle
+          await mutateInvoice(savedInvoice, { revalidate: false })
+          
+          // Tüm ilgili cache'leri güncelle
+          await Promise.all([
+            mutate('/api/invoices', undefined, { revalidate: true }),
+            mutate('/api/invoices?', undefined, { revalidate: true }),
+            mutate((key: string) => typeof key === 'string' && key.startsWith('/api/invoices'), undefined, { revalidate: true }),
+          ])
           setFormOpen(false)
-          await refetch()
         }}
       />
 
@@ -918,7 +1269,30 @@ export default function InvoiceDetailPage() {
         onClose={() => setItemFormOpen(false)}
         onSuccess={async () => {
           setItemFormOpen(false)
-          await refetch()
+          // Cache'i güncelle - optimistic update
+          await mutateInvoice(undefined, { revalidate: true })
+          
+          // Tüm ilgili cache'leri güncelle
+          await Promise.all([
+            mutate('/api/invoices', undefined, { revalidate: true }),
+            mutate('/api/invoices?', undefined, { revalidate: true }),
+            mutate(`/api/invoices/${id}`, undefined, { revalidate: true }),
+          ])
+        }}
+      />
+
+      {/* Shipment Form Modal */}
+      <ShipmentForm
+        shipment={undefined}
+        open={shipmentFormOpen}
+        onClose={() => setShipmentFormOpen(false)}
+        invoiceId={id}
+        onSuccess={async (savedShipment: any) => {
+          // Cache'i güncelle - optimistic update
+          await mutateInvoice(undefined, { revalidate: true })
+          setShipmentFormOpen(false)
+          // Başarılı kayıt sonrası sevkiyat detay sayfasına yönlendir
+          router.push(`/${locale}/shipments/${savedShipment.id}`)
         }}
       />
     </div>

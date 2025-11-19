@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { toast, confirm } from '@/lib/toast'
@@ -46,16 +46,28 @@ export default function SegmentList({ isOpen = true }: SegmentListProps) {
   const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null)
   const [selectedSegmentData, setSelectedSegmentData] = useState<Segment | null>(null)
 
+  // Debounced search
+  const [debouncedSearch, setDebouncedSearch] = useState(search)
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
+
   const apiUrl = useMemo(() => {
     if (!isOpen) return null
-    return `/api/segments${search ? `?search=${search}` : ''}`
-  }, [isOpen, search])
+    const params = new URLSearchParams()
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    return `/api/segments${params.toString() ? `?${params.toString()}` : ''}`
+  }, [isOpen, debouncedSearch])
 
-  const { data: segments = [], isLoading, mutate: mutateSegments } = useData<Segment[]>(
+  const { data: segments = [], isLoading, error, mutate: mutateSegments } = useData<Segment[]>(
     apiUrl,
     {
       dedupingInterval: 5000,
-      revalidateOnFocus: true,
+      revalidateOnFocus: false,
     }
   )
 
@@ -82,8 +94,8 @@ export default function SegmentList({ isOpen = true }: SegmentListProps) {
       if (apiUrl) {
         await mutate(apiUrl, updated, { revalidate: false })
       }
-    } catch (error) {
-      toast.warning(t('deleteFailed'))
+    } catch (error: any) {
+      toast.error(t('deleteFailed'), { description: error?.message || 'Silme işlemi başarısız oldu' })
     }
   }
 
@@ -92,6 +104,15 @@ export default function SegmentList({ isOpen = true }: SegmentListProps) {
   }
 
   if (isLoading) return <SkeletonList />
+
+  if (error) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-red-600 mb-4">Segmentler yüklenirken bir hata oluştu.</p>
+        <Button onClick={() => mutateSegments()}>Yeniden Dene</Button>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

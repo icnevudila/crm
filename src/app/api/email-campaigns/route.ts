@@ -13,7 +13,10 @@ export async function GET(request: NextRequest) {
     if (sessionError) {
       return sessionError
     }
-    if (!session?.user?.companyId) {
+    
+    // SuperAdmin için companyId kontrolünü bypass et
+    const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+    if (!isSuperAdmin && !session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -27,6 +30,61 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseWithServiceRole()
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
+    const filterCompanyId = searchParams.get('filterCompanyId') || ''
+
+    // ✅ FIX: EmailCampaign tablosu yoksa boş array döndür (cache sorunu olabilir)
+    try {
+      const { error: tableCheckError } = await supabase
+        .from('EmailCampaign')
+        .select('id')
+        .limit(0)
+      
+      if (tableCheckError) {
+        const errorMessage = tableCheckError.message || ''
+        const errorCode = tableCheckError.code || ''
+        
+        if (errorMessage.includes('Could not find the table') || 
+            errorMessage.includes('relation') ||
+            errorMessage.includes('does not exist') ||
+            errorCode === 'PGRST204' ||
+            errorCode === '42P01') {
+          console.warn('EmailCampaign tablosu bulunamadı (cache sorunu olabilir). Boş array döndürülüyor.', {
+            message: errorMessage,
+            code: errorCode
+          })
+          return NextResponse.json([], {
+            headers: {
+              'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+              'Pragma': 'no-cache',
+              'Expires': '0',
+            }
+          })
+        }
+        throw tableCheckError
+      }
+    } catch (tableError: any) {
+      const errorMessage = tableError?.message || ''
+      const errorCode = tableError?.code || ''
+      
+      if (errorMessage.includes('Could not find the table') || 
+          errorMessage.includes('relation') ||
+          errorMessage.includes('does not exist') ||
+          errorCode === 'PGRST204' ||
+          errorCode === '42P01') {
+        console.warn('EmailCampaign tablosu bulunamadı. Boş array döndürülüyor.', {
+          message: errorMessage,
+          code: errorCode
+        })
+        return NextResponse.json([], {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          }
+        })
+      }
+      throw tableError
+    }
 
     let query = supabase
       .from('EmailCampaign')
@@ -36,16 +94,47 @@ export async function GET(request: NextRequest) {
         createdAt,
         createdBy:User!EmailCampaign_createdBy_fkey(id, name, email)
       `)
-      .eq('companyId', session.user.companyId)
       .order('createdAt', { ascending: false })
+    
+    // SuperAdmin için companyId filtresi
+    if (!isSuperAdmin) {
+      query = query.eq('companyId', session.user.companyId)
+    } else if (filterCompanyId) {
+      // SuperAdmin firma filtresi seçtiyse sadece o firmayı göster
+      query = query.eq('companyId', filterCompanyId)
+    }
+    // SuperAdmin ve firma filtresi yoksa tüm firmaları göster
 
     if (status) query = query.eq('status', status)
 
     const { data, error } = await query
 
-    if (error) throw error
+    if (error) {
+      // Tablo bulunamadı hatası - cache sorunu olabilir, boş array döndür
+      const errorMessage = error.message || ''
+      const errorCode = error.code || ''
+      
+      if (errorMessage.includes('Could not find the table') || 
+          errorMessage.includes('relation') ||
+          errorMessage.includes('does not exist') ||
+          errorCode === 'PGRST204' ||
+          errorCode === '42P01') {
+        console.warn('EmailCampaign tablosu bulunamadı (query sırasında). Boş array döndürülüyor.', {
+          message: errorMessage,
+          code: errorCode
+        })
+        return NextResponse.json([], {
+          headers: {
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+          }
+        })
+      }
+      throw error
+    }
 
-    return NextResponse.json(data)
+    return NextResponse.json(data || [])
   } catch (error: any) {
     console.error('Email campaigns fetch error:', error)
     return NextResponse.json(
@@ -61,7 +150,10 @@ export async function POST(request: NextRequest) {
     if (sessionError) {
       return sessionError
     }
-    if (!session?.user?.companyId) {
+    
+    // SuperAdmin için companyId kontrolünü bypass et
+    const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
+    if (!isSuperAdmin && !session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -89,6 +181,15 @@ export async function POST(request: NextRequest) {
 
     const validatedData = validationResult.data
 
+    // SuperAdmin için companyId body'den alınabilir, yoksa session'dan
+    const companyId = isSuperAdmin && body.companyId 
+      ? body.companyId 
+      : session.user.companyId
+
+    if (!companyId) {
+      return NextResponse.json({ error: 'Company ID is required' }, { status: 400 })
+    }
+
     // scheduledAt varsa SCHEDULED, yoksa DRAFT
     const status = validatedData.scheduledAt && new Date(validatedData.scheduledAt) > new Date()
       ? 'SCHEDULED'
@@ -99,7 +200,7 @@ export async function POST(request: NextRequest) {
       .insert({
         ...validatedData,
         createdBy: session.user.id,
-        companyId: session.user.companyId,
+        companyId: companyId,
         status, // scheduledAt varsa SCHEDULED, yoksa DRAFT
       })
       .select()
