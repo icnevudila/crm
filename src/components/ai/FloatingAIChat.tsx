@@ -102,6 +102,104 @@ export default function FloatingAIChat() {
     }
   }, [messages, isOpen])
 
+  // Custom event listener - Form'lardan AI chat açma
+  useEffect(() => {
+    const handleOpenAIChat = (event: CustomEvent) => {
+      setIsOpen(true)
+      setIsMinimized(false)
+      if (event.detail?.initialMessage) {
+        // Input'u set et ve otomatik gönder
+        const messageText = event.detail.initialMessage
+        setInput(messageText)
+        
+        // Küçük bir gecikme ile mesajı gönder
+        setTimeout(() => {
+          // Mesajı direkt gönder (handleSend logic'ini kullan)
+          if (messageText.trim()) {
+            const userMessage: Message = { role: 'user', content: messageText }
+            setMessages((prev) => [...prev, userMessage])
+            setInput('')
+            setLoading(true)
+
+            // Komut mu kontrol et
+            const commandKeywords = isTurkish
+              ? ['oluştur', 'ekle', 'yeni', 'özetle', 'sil', 'güncelle', 'göster', 'listele']
+              : ['create', 'add', 'new', 'summarize', 'delete', 'update', 'show', 'list']
+            const isCmd = commandKeywords.some((keyword) => messageText.toLowerCase().includes(keyword))
+
+            if (isCmd) {
+              // Komut - preview al
+              fetch('/api/ai/command/preview', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  command: messageText,
+                  locale,
+                }),
+              })
+                .then((res) => res.json())
+                .then((previewData) => {
+                  if (previewData.success) {
+                    setCommandPreview(previewData.preview)
+                    setPendingCommand({ input: messageText, parsed: previewData.command })
+                    setApprovalDialogOpen(true)
+                    setLoading(false)
+                  } else {
+                    throw new Error(previewData.message || 'Preview oluşturulamadı')
+                  }
+                })
+                .catch((error: any) => {
+                  console.error('AI Chat Error:', error)
+                  setMessages((prev) => [
+                    ...prev,
+                    {
+                      role: 'assistant',
+                      content: `❌ ${error?.message || (isTurkish ? 'Bir hata oluştu' : 'An error occurred')}`,
+                    },
+                  ])
+                  toast.error('Hata', { description: error?.message || 'AI yanıtı alınamadı' })
+                  setLoading(false)
+                })
+            } else {
+              // Normal chat
+              fetch('/api/ai/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  prompt: messageText,
+                  messages: [...messages, userMessage].map((m) => ({ role: m.role, content: m.content })),
+                  locale,
+                }),
+              })
+                .then((res) => res.json())
+                .then((data) => {
+                  setMessages((prev) => [...prev, { role: 'assistant', content: data.response }])
+                  setLoading(false)
+                })
+                .catch((error: any) => {
+                  console.error('AI Chat Error:', error)
+                  setMessages((prev) => [
+                    ...prev,
+                    {
+                      role: 'assistant',
+                      content: `❌ ${error?.message || (isTurkish ? 'Bir hata oluştu' : 'An error occurred')}`,
+                    },
+                  ])
+                  toast.error('Hata', { description: error?.message || 'AI yanıtı alınamadı' })
+                  setLoading(false)
+                })
+            }
+          }
+        }, 500)
+      }
+    }
+
+    window.addEventListener('open-ai-chat', handleOpenAIChat as EventListener)
+    return () => {
+      window.removeEventListener('open-ai-chat', handleOpenAIChat as EventListener)
+    }
+  }, [locale, isTurkish]) // Sadece locale ve isTurkish dependency - messages ve loading closure içinde kullanılacak
+
   // Komut mu yoksa normal mesaj mı kontrol et
   const isCommand = (text: string): boolean => {
     const commandKeywords = isTurkish
@@ -476,6 +574,7 @@ export default function FloatingAIChat() {
                     </Button>
                   )}
                   <Input
+                    data-ai-chat-input
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyPress={handleKeyPress}

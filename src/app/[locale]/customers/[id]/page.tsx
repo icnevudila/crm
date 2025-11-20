@@ -54,8 +54,14 @@ const TicketForm = dynamic(() => import('@/components/tickets/TicketForm'), {
   loading: () => null,
 })
 
+// Lazy load InvoiceForm - performans için
+const InvoiceForm = dynamic(() => import('@/components/invoices/InvoiceForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
 import SendEmailButton from '@/components/integrations/SendEmailButton'
-import { toastError, toastSuccess, toastWithUndo } from '@/lib/toast'
+import { toast, toastError, toastSuccess, toastWithUndo } from '@/lib/toast'
 import ContextualActionsBar from '@/components/ui/ContextualActionsBar'
 import DetailPageLayout from '@/components/layout/DetailPageLayout'
 import OverviewCard from '@/components/layout/OverviewCard'
@@ -69,6 +75,7 @@ export default function CustomerDetailPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [dealFormOpen, setDealFormOpen] = useState(false)
   const [quoteFormOpen, setQuoteFormOpen] = useState(false)
+  const [invoiceFormOpen, setInvoiceFormOpen] = useState(false)
   const [meetingFormOpen, setMeetingFormOpen] = useState(false)
   const [taskFormOpen, setTaskFormOpen] = useState(false)
   const [ticketFormOpen, setTicketFormOpen] = useState(false)
@@ -342,7 +349,10 @@ export default function CustomerDetailPage() {
                 title="Fırsatlar"
                 icon={Briefcase}
                 records={dealsRecords}
-                onCreateNew={() => setDealFormOpen(true)}
+                onCreateNew={() => {
+                  setDealFormOpen(true)
+                  toast.info('Yeni Fırsat', { description: `${customer.name} için yeni fırsat oluşturuluyor...` })
+                }}
                 onCreateLabel="Yeni Fırsat"
                 viewAllUrl={`/${locale}/deals?customerId=${id}`}
               />
@@ -362,6 +372,11 @@ export default function CustomerDetailPage() {
                 title="Faturalar"
                 icon={Receipt}
                 records={invoicesRecords}
+                onCreateNew={() => {
+                  setInvoiceFormOpen(true)
+                  toast.info('Yeni Fatura', { description: `${customer.name} için yeni fatura oluşturuluyor...` })
+                }}
+                onCreateLabel="Yeni Fatura"
                 viewAllUrl={`/${locale}/invoices?customerId=${id}`}
               />
             )}
@@ -507,7 +522,13 @@ export default function CustomerDetailPage() {
         onSuccess={async (savedDeal) => {
           // Cache'i güncelle - optimistic update
           await mutateCustomer(undefined, { revalidate: true })
-          // Toast zaten DealForm içinde gösteriliyor (navigateToDetailToast)
+          toast.success('Fırsat Oluşturuldu', {
+            description: `"${savedDeal.title || 'Fırsat'}" başarıyla oluşturuldu. Müşteri: ${customer.name}`,
+            action: {
+              label: 'Görüntüle',
+              onClick: () => router.push(`/${locale}/deals/${savedDeal.id}`)
+            }
+          })
         }}
         customerId={id}
       />
@@ -518,7 +539,30 @@ export default function CustomerDetailPage() {
         onSuccess={async (savedQuote) => {
           // Cache'i güncelle - optimistic update
           await mutateCustomer(undefined, { revalidate: true })
-          // Toast zaten QuoteForm içinde gösteriliyor (navigateToDetailToast)
+          toast.success('Teklif Oluşturuldu', {
+            description: `"${savedQuote.title || 'Teklif'}" başarıyla oluşturuldu. Müşteri: ${customer.name}`,
+            action: {
+              label: 'Görüntüle',
+              onClick: () => router.push(`/${locale}/quotes/${savedQuote.id}`)
+            }
+          })
+        }}
+        customerId={id}
+      />
+
+      <InvoiceForm
+        open={invoiceFormOpen}
+        onClose={() => setInvoiceFormOpen(false)}
+        onSuccess={async (savedInvoice) => {
+          // Cache'i güncelle - optimistic update
+          await mutateCustomer(undefined, { revalidate: true })
+          toast.success('Fatura Oluşturuldu', {
+            description: `"${savedInvoice.title || savedInvoice.invoiceNumber || 'Fatura'}" başarıyla oluşturuldu. Müşteri: ${customer.name}`,
+            action: {
+              label: 'Görüntüle',
+              onClick: () => router.push(`/${locale}/invoices/${savedInvoice.id}`)
+            }
+          })
         }}
         customerId={id}
       />

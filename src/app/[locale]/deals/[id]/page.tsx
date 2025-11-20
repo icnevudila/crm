@@ -3,7 +3,7 @@
 import { useParams, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Calendar, DollarSign, User, TrendingUp, Clock, FileText, AlertTriangle, Edit, Trash2, Briefcase, FileText as FileTextIcon, Zap, Target, Percent } from 'lucide-react'
+import { ArrowLeft, Calendar, DollarSign, User, TrendingUp, Clock, FileText, AlertTriangle, Edit, Trash2, Briefcase, FileText as FileTextIcon, Zap, Target, Percent, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
 import { Button } from '@/components/ui/button'
@@ -239,9 +239,11 @@ export default function DealDetailPage() {
         }}
         onCreateRelated={(type) => {
           if (type === 'quote') {
-            setQuoteFormOpen(true) // Modal form aç
+            setQuoteFormOpen(true)
+            toast.info('Yeni Teklif', { description: `"${deal.title}" fırsatı için yeni teklif oluşturuluyor...` })
           } else if (type === 'meeting') {
-            setMeetingFormOpen(true) // Modal form aç
+            setMeetingFormOpen(true)
+            toast.info('Yeni Görüşme', { description: `"${deal.title}" fırsatı için yeni görüşme oluşturuluyor...` })
           }
         }}
         onSendEmail={deal.Customer?.email ? () => {
@@ -1132,6 +1134,13 @@ export default function DealDetailPage() {
           // Cache'i güncelle - optimistic update
           await mutateDeal(undefined, { revalidate: true })
           setQuoteFormOpen(false)
+          toast.success('Teklif Oluşturuldu', {
+            description: `"${savedQuote.title || 'Teklif'}" başarıyla oluşturuldu. Fırsat: ${deal.title}`,
+            action: {
+              label: 'Görüntüle',
+              onClick: () => router.push(`/${locale}/quotes/${savedQuote.id}`)
+            }
+          })
           // Başarılı kayıt sonrası teklif detay sayfasına yönlendir
           router.push(`/${locale}/quotes/${savedQuote.id}`)
         }}

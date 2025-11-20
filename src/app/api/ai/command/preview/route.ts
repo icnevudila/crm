@@ -10,6 +10,7 @@ export const runtime = 'edge'
  * Komut preview endpoint - Ne yapacağını gösterir ama işlem yapmaz
  */
 export async function POST(request: Request) {
+  let locale = 'tr' // Default locale
   try {
     // Session kontrolü
     const { session, error: sessionError } = await getSafeSession(request)
@@ -22,7 +23,9 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
-    const { command, locale = 'tr' } = body
+    const { command, locale: bodyLocale = 'tr' } = body
+    locale = bodyLocale
+    const isTurkish = locale === 'tr'
 
     if (!command || typeof command !== 'string') {
       return NextResponse.json({ error: 'Command is required' }, { status: 400 })
@@ -30,7 +33,7 @@ export async function POST(request: Request) {
 
     // 1. Komutu parse et (AI ile)
     const parsePrompt = parseCommandPrompt(command, locale as 'tr' | 'en')
-    const systemPrompt = locale === 'tr' ? SYSTEM_PROMPT_TR : SYSTEM_PROMPT_EN
+    const systemPrompt = isTurkish ? SYSTEM_PROMPT_TR : SYSTEM_PROMPT_EN
 
     let parsedCommand: any
     try {
@@ -51,7 +54,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           success: false,
-          message: locale === 'tr' ? 'Komut anlaşılamadı' : 'Command not understood',
+          message: isTurkish ? 'Komut anlaşılamadı' : 'Command not understood',
           error: error.message,
         },
         { status: 400 }
@@ -68,10 +71,11 @@ export async function POST(request: Request) {
     })
   } catch (error: any) {
     console.error('[AI Command Preview Error]:', error)
+    const isTurkish = locale === 'tr'
     return NextResponse.json(
       {
         success: false,
-        message: error.message || (locale === 'tr' ? 'Preview oluşturulamadı' : 'Failed to generate preview'),
+        message: error.message || (isTurkish ? 'Preview oluşturulamadı' : 'Failed to generate preview'),
       },
       { status: 500 }
     )

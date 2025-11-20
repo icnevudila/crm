@@ -107,6 +107,12 @@ export async function GET(request: Request) {
       { data: monthlyQuotesData, error: monthlyQuotesError },
       { data: monthlyInvoicesData, error: monthlyInvoicesError },
       { data: monthlyDealsData, error: monthlyDealsError },
+      // Yeni modüller
+      { data: returnOrdersData, error: returnOrdersError },
+      { data: creditNotesData, error: creditNotesError },
+      { data: paymentPlansData, error: paymentPlansError },
+      { data: salesQuotasData, error: salesQuotasError },
+      { data: productBundlesData, error: productBundlesError },
     ] = await Promise.all([
       // Toplam Satış (PAID Invoice'ların toplamı) - totalAmount kullan (050 migration ile total → totalAmount)
       (() => {
@@ -282,6 +288,46 @@ export async function GET(request: Request) {
           .from('Deal')
           .select('id, createdAt, status, value')
           .gte('createdAt', threeMonthsAgo.toISOString())
+        if (!isSuperAdmin) {
+          query = query.eq('companyId', companyId)
+        }
+        return query
+      })(),
+      // Return Orders - Toplam iade sayısı ve tutarı
+      (() => {
+        let query = supabase.from('ReturnOrder').select('id, totalAmount, status, createdAt')
+        if (!isSuperAdmin) {
+          query = query.eq('companyId', companyId)
+        }
+        return query
+      })(),
+      // Credit Notes - Toplam iade fatura sayısı ve tutarı
+      (() => {
+        let query = supabase.from('CreditNote').select('id, amount, status, createdAt')
+        if (!isSuperAdmin) {
+          query = query.eq('companyId', companyId)
+        }
+        return query
+      })(),
+      // Payment Plans - Toplam taksit planı sayısı ve tutarı
+      (() => {
+        let query = supabase.from('PaymentPlan').select('id, totalAmount, status, createdAt')
+        if (!isSuperAdmin) {
+          query = query.eq('companyId', companyId)
+        }
+        return query
+      })(),
+      // Sales Quotas - Aktif kotalar ve performans
+      (() => {
+        let query = supabase.from('SalesQuota').select('id, targetRevenue, actualRevenue, period, status')
+        if (!isSuperAdmin) {
+          query = query.eq('companyId', companyId)
+        }
+        return query
+      })(),
+      // Product Bundles - Aktif paket sayısı
+      (() => {
+        let query = supabase.from('ProductBundle').select('id, status, finalPrice').eq('status', 'ACTIVE')
         if (!isSuperAdmin) {
           query = query.eq('companyId', companyId)
         }
@@ -862,6 +908,58 @@ export async function GET(request: Request) {
       })
     }
 
+    // Yeni modüller için hesaplamalar
+    // Return Orders
+    const totalReturnOrders = Array.isArray(returnOrdersData) ? returnOrdersData.length : 0
+    const totalReturnOrdersValue = Array.isArray(returnOrdersData)
+      ? returnOrdersData.reduce((sum: number, ro: any) => sum + (ro?.totalAmount || 0), 0)
+      : 0
+    const pendingReturnOrders = Array.isArray(returnOrdersData)
+      ? returnOrdersData.filter((ro: any) => ro?.status === 'PENDING' || ro?.status === 'APPROVED').length
+      : 0
+
+    // Credit Notes
+    const totalCreditNotes = Array.isArray(creditNotesData) ? creditNotesData.length : 0
+    const totalCreditNotesValue = Array.isArray(creditNotesData)
+      ? creditNotesData.reduce((sum: number, cn: any) => sum + (cn?.amount || 0), 0)
+      : 0
+    const appliedCreditNotes = Array.isArray(creditNotesData)
+      ? creditNotesData.filter((cn: any) => cn?.status === 'APPLIED').length
+      : 0
+
+    // Payment Plans
+    const totalPaymentPlans = Array.isArray(paymentPlansData) ? paymentPlansData.length : 0
+    const totalPaymentPlansValue = Array.isArray(paymentPlansData)
+      ? paymentPlansData.reduce((sum: number, pp: any) => sum + (pp?.totalAmount || 0), 0)
+      : 0
+    const activePaymentPlans = Array.isArray(paymentPlansData)
+      ? paymentPlansData.filter((pp: any) => pp?.status === 'ACTIVE').length
+      : 0
+    const overduePaymentPlans = Array.isArray(paymentPlansData)
+      ? paymentPlansData.filter((pp: any) => pp?.status === 'OVERDUE').length
+      : 0
+
+    // Sales Quotas
+    const totalSalesQuotas = Array.isArray(salesQuotasData) ? salesQuotasData.length : 0
+    const activeSalesQuotas = Array.isArray(salesQuotasData)
+      ? salesQuotasData.filter((sq: any) => sq?.status === 'ACTIVE').length
+      : 0
+    const totalTargetRevenue = Array.isArray(salesQuotasData)
+      ? salesQuotasData.reduce((sum: number, sq: any) => sum + (sq?.targetRevenue || 0), 0)
+      : 0
+    const totalActualRevenue = Array.isArray(salesQuotasData)
+      ? salesQuotasData.reduce((sum: number, sq: any) => sum + (sq?.actualRevenue || 0), 0)
+      : 0
+    const quotaAchievementRate = totalTargetRevenue > 0
+      ? Math.round((totalActualRevenue / totalTargetRevenue) * 100)
+      : 0
+
+    // Product Bundles
+    const totalProductBundles = Array.isArray(productBundlesData) ? productBundlesData.length : 0
+    const totalProductBundlesValue = Array.isArray(productBundlesData)
+      ? productBundlesData.reduce((sum: number, pb: any) => sum + (pb?.finalPrice || pb?.totalPrice || 0), 0)
+      : 0
+
     const payload = {
       // Genel KPI'lar
       totalSales,
@@ -876,6 +974,24 @@ export async function GET(request: Request) {
       pendingInvoices: pendingInvoicesTotal,
       pendingShipments: pendingShipmentsCount,
       pendingPurchaseShipments: pendingPurchaseShipmentsCount,
+      // Yeni modüller KPI'ları
+      totalReturnOrders,
+      totalReturnOrdersValue,
+      pendingReturnOrders,
+      totalCreditNotes,
+      totalCreditNotesValue,
+      appliedCreditNotes,
+      totalPaymentPlans,
+      totalPaymentPlansValue,
+      activePaymentPlans,
+      overduePaymentPlans,
+      totalSalesQuotas,
+      activeSalesQuotas,
+      totalTargetRevenue,
+      totalActualRevenue,
+      quotaAchievementRate,
+      totalProductBundles,
+      totalProductBundlesValue,
       // Aylık KPI'lar (son 3 ay)
       monthlyKPIs: monthlyData,
     }

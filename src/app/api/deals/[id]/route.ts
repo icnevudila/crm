@@ -536,7 +536,7 @@ export async function PUT(
     // Otomasyon bilgilerini sakla (response'a eklemek için)
     const automationInfo: any = {}
     
-    // ÖNEMLİ: Deal WON olduğunda otomatik Quote ve Contract oluştur
+    // ÖNEMLİ: Deal WON olduğunda otomatik Quote ve Contract oluştur + UserPerformanceMetrics güncelle
     if (cleanBody.stage === 'WON' && (existingDeal as any)?.stage !== 'WON') {
       let newQuote: any = null
       let newContract: any = null
@@ -732,6 +732,56 @@ export async function PUT(
           automationInfo.contractId = existingContract.id
           automationInfo.contractCreated = true
           automationInfo.contractNumber = existingContract.contractNumber
+        }
+        
+        // ✅ UserPerformanceMetrics güncelle - Deal WON olduğunda
+        try {
+          const dealUserId = (deal as any)?.createdBy || session.user.id
+          const dealValue = dealValue || 0
+          const now = new Date()
+          const periodDate = new Date(now.getFullYear(), now.getMonth(), 1) // Ayın ilk günü
+          const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}` // YYYY-MM formatı
+          
+          // Mevcut UserPerformanceMetrics kaydını kontrol et
+          const { data: existingMetrics } = await supabase
+            .from('UserPerformanceMetrics')
+            .select('id, dealsWon, totalRevenue')
+            .eq('userId', dealUserId)
+            .eq('period', period)
+            .eq('periodDate', periodDate.toISOString().split('T')[0])
+            .eq('companyId', session.user.companyId)
+            .maybeSingle()
+          
+          if (existingMetrics) {
+            // Mevcut kaydı güncelle
+            await supabase
+              .from('UserPerformanceMetrics')
+              .update({
+                dealsWon: (existingMetrics.dealsWon || 0) + 1,
+                totalRevenue: (existingMetrics.totalRevenue || 0) + dealValueForMetrics,
+                updatedAt: new Date().toISOString(),
+              })
+              .eq('id', existingMetrics.id)
+          } else {
+            // Yeni kayıt oluştur
+            await supabase
+              .from('UserPerformanceMetrics')
+              .insert({
+                userId: dealUserId,
+                period,
+                periodDate: periodDate.toISOString().split('T')[0],
+                dealsWon: 1,
+                dealsLost: 0,
+                totalRevenue: dealValueForMetrics,
+                quotaAchievement: 0, // SalesQuota ile hesaplanacak
+                companyId: session.user.companyId,
+              })
+          }
+        } catch (metricsError) {
+          // UserPerformanceMetrics hatası ana işlemi engellemez
+          if (process.env.NODE_ENV === 'development') {
+            console.error('Deal WON → UserPerformanceMetrics update error:', metricsError)
+          }
         }
         
         // ✅ Email otomasyonu: Deal WON → Müşteriye email gönder

@@ -1287,26 +1287,26 @@ export async function PUT(
 
         // Shipment varsa ve APPROVED veya PENDING ise IN_TRANSIT yap
         if (currentShipment && (currentShipment.status === 'APPROVED' || currentShipment.status === 'PENDING')) {
-          const { error: updateError } = await supabase
-            .from('Shipment')
-            .update({
+        const { error: updateError } = await supabase
+          .from('Shipment')
+          .update({
               status: 'IN_TRANSIT',
-              updatedAt: new Date().toISOString(),
-            })
-            .eq('id', shipmentIdForAutomation)
-            .eq('companyId', companyId)
-          
-          if (updateError) {
+            updatedAt: new Date().toISOString(),
+          })
+          .eq('id', shipmentIdForAutomation)
+          .eq('companyId', companyId)
+        
+        if (updateError) {
             console.error('Shipment status update error:', updateError)
-            const { getErrorMessage } = await import('@/lib/api-locale')
-            return NextResponse.json(
-              { 
+          const { getErrorMessage } = await import('@/lib/api-locale')
+          return NextResponse.json(
+            { 
                 error: getErrorMessage('errors.api.shipmentCannotBeUpdated', request),
                 message: getErrorMessage('errors.api.shipmentCannotBeUpdatedMessage', request),
-                details: updateError.message
-              },
-              { status: 500 }
-            )
+              details: updateError.message
+            },
+            { status: 500 }
+          )
           }
 
           // Shipment IN_TRANSIT olduğunda ActivityLog kaydı

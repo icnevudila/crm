@@ -142,6 +142,50 @@ export async function GET(
       }
     }
 
+    // İlişkili modülleri çek (relatedTo/relatedId ile)
+    if (task.relatedTo && task.relatedId) {
+      try {
+        if (task.relatedTo === 'Deal') {
+          const { data: deal } = await supabase
+            .from('Deal')
+            .select('id, title')
+            .eq('id', task.relatedId)
+            .eq('companyId', companyId)
+            .single()
+          if (deal) task.Deal = deal
+        } else if (task.relatedTo === 'Quote') {
+          const { data: quote } = await supabase
+            .from('Quote')
+            .select('id, title')
+            .eq('id', task.relatedId)
+            .eq('companyId', companyId)
+            .single()
+          if (quote) task.Quote = quote
+        } else if (task.relatedTo === 'Invoice') {
+          const { data: invoice } = await supabase
+            .from('Invoice')
+            .select('id, title, invoiceNumber')
+            .eq('id', task.relatedId)
+            .eq('companyId', companyId)
+            .single()
+          if (invoice) task.Invoice = invoice
+        } else if (task.relatedTo === 'Customer') {
+          const { data: customer } = await supabase
+            .from('Customer')
+            .select('id, name')
+            .eq('id', task.relatedId)
+            .eq('companyId', companyId)
+            .single()
+          if (customer) task.Customer = customer
+        }
+      } catch (relatedError) {
+        // İlişkili modül çekme hatası ana işlemi engellemez
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Task API - İlişkili modül çekilemedi:', relatedError)
+        }
+      }
+    }
+    
     // ActivityLog'lar KALDIRILDI - Lazy load için ayrı endpoint kullanılacak (/api/activity?entity=Task&id=...)
     // (Performans optimizasyonu: Detay sayfası daha hızlı açılır, ActivityLog'lar gerektiğinde yüklenir)
     

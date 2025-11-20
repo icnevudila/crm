@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { motion } from 'framer-motion'
 import { useData } from '@/hooks/useData'
-import { ArrowLeft, Edit, FileText, FileText as QuoteIcon, Truck, Trash2, Users, Plus, Package, AlertTriangle, Phone, Mail, Zap, Receipt, DollarSign, Calendar, Briefcase } from 'lucide-react'
+import { ArrowLeft, Edit, FileText, FileText as QuoteIcon, Truck, Trash2, Users, Plus, Package, AlertTriangle, Phone, Mail, Zap, Receipt, DollarSign, Calendar, Briefcase, RotateCcw, CreditCard } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -57,6 +57,18 @@ const ShipmentForm = dynamic(() => import('@/components/shipments/ShipmentForm')
   loading: () => null,
 })
 
+// Lazy load ReturnOrderForm - performans için
+const ReturnOrderForm = dynamic(() => import('@/components/return-orders/ReturnOrderForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
+// Lazy load PaymentPlanForm - performans için
+const PaymentPlanForm = dynamic(() => import('@/components/payment-plans/PaymentPlanForm'), {
+  ssr: false,
+  loading: () => null,
+})
+
 // Status colors - merkezi renk sistemi kullanılıyor (getStatusBadgeClass)
 
 const statusLabels: Record<string, string> = {
@@ -77,6 +89,8 @@ export default function InvoiceDetailPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [itemFormOpen, setItemFormOpen] = useState(false)
   const [shipmentFormOpen, setShipmentFormOpen] = useState(false)
+  const [returnOrderFormOpen, setReturnOrderFormOpen] = useState(false)
+  const [paymentPlanFormOpen, setPaymentPlanFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
   const { data: invoice, isLoading, error, mutate: mutateInvoice } = useData<any>(
@@ -84,6 +98,15 @@ export default function InvoiceDetailPage() {
     {
       dedupingInterval: 30000, // 30 saniye cache (detay sayfası için optimal)
       revalidateOnFocus: false, // Focus'ta revalidate yapma (instant navigation)
+    }
+  )
+
+  // Payment Plans - Invoice'a bağlı taksit planları
+  const { data: paymentPlans = [] } = useData<any[]>(
+    id ? `/api/payment-plans?invoiceId=${id}` : null,
+    {
+      dedupingInterval: 30000,
+      revalidateOnFocus: false,
     }
   )
 
@@ -189,6 +212,7 @@ export default function InvoiceDetailPage() {
         onCreateRelated={(type) => {
           if (type === 'shipment') {
             setShipmentFormOpen(true)
+            toast.info('Yeni Sevkiyat', { description: `"${invoice.title || invoice.invoiceNumber || 'Fatura'}" faturası için yeni sevkiyat oluşturuluyor...` })
           }
         }}
         onSendEmail={invoice.Customer?.email ? () => {
@@ -323,10 +347,12 @@ export default function InvoiceDetailPage() {
                   message={`Merhaba, ${invoice.title} faturası hazır. Detaylar için lütfen iletişime geçin.`}
                 />
                 <SendWhatsAppButton
-                  to={invoice.Customer.phone.startsWith('+') 
+                  phoneNumber={invoice.Customer.phone.startsWith('+') 
                     ? invoice.Customer.phone 
                     : `+${invoice.Customer.phone.replace(/\D/g, '')}`}
-                  message={`Merhaba, ${invoice.title} faturası hazır. Detaylar için lütfen iletişime geçin.`}
+                  entityType="Invoice"
+                  entityId={invoice.id}
+                  customerName={invoice.Customer.name}
                 />
               </>
             )}
@@ -359,9 +385,83 @@ export default function InvoiceDetailPage() {
                 Teklifi Görüntüle
               </Button>
             )}
+            {/* İade Oluştur - Sadece satış faturaları için */}
+            {invoice.invoiceType === 'SALES' && invoice.status !== 'CANCELLED' && (
+              <Button
+                variant="outline"
+                className="w-full border-orange-300 text-orange-700 hover:bg-orange-50"
+                onClick={() => {
+                  setReturnOrderFormOpen(true)
+                  toast.info('Yeni İade', { description: `"${invoice.title || invoice.invoiceNumber || 'Fatura'}" faturası için iade siparişi oluşturuluyor...` })
+                }}
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                İade Oluştur
+              </Button>
+            )}
+            {/* Taksit Planı Oluştur */}
+            {invoice.status !== 'CANCELLED' && invoice.status !== 'PAID' && (
+              <Button
+                variant="outline"
+                className="w-full border-blue-300 text-blue-700 hover:bg-blue-50"
+                onClick={() => {
+                  setPaymentPlanFormOpen(true)
+                  toast.info('Yeni Ödeme Planı', { description: `"${invoice.title || invoice.invoiceNumber || 'Fatura'}" faturası için ödeme planı oluşturuluyor...` })
+                }}
+              >
+                <CreditCard className="mr-2 h-4 w-4" />
+                Taksit Planı Oluştur
+              </Button>
+            )}
           </div>
         </Card>
       </motion.div>
+      )}
+
+      {/* Return Order Form Modal */}
+      {returnOrderFormOpen && (
+        <ReturnOrderForm
+          open={returnOrderFormOpen}
+          onClose={() => setReturnOrderFormOpen(false)}
+          invoiceId={id}
+          onSuccess={async (savedReturnOrder) => {
+            toast.success('İade Siparişi Oluşturuldu', {
+              description: `"${savedReturnOrder.returnNumber || savedReturnOrder.id?.substring(0, 8) || 'İade Siparişi'}" başarıyla oluşturuldu. Fatura: ${invoice.title || invoice.invoiceNumber || 'Fatura'}`,
+              action: {
+                label: 'Görüntüle',
+                onClick: () => router.push(`/${locale}/return-orders/${savedReturnOrder.id}`)
+              }
+            })
+            setReturnOrderFormOpen(false)
+            // Return orders listesini güncelle
+            await mutate(`/api/return-orders?invoiceId=${id}`)
+            // Invoice detail'i yenile
+            await mutateInvoice()
+          }}
+        />
+      )}
+
+      {/* Payment Plan Form Modal */}
+      {paymentPlanFormOpen && (
+        <PaymentPlanForm
+          open={paymentPlanFormOpen}
+          onClose={() => setPaymentPlanFormOpen(false)}
+          invoiceId={id}
+          onSuccess={async (savedPlan) => {
+            toast.success('Ödeme Planı Oluşturuldu', {
+              description: `"${savedPlan.name || savedPlan.id?.substring(0, 8) || 'Ödeme Planı'}" başarıyla oluşturuldu. Fatura: ${invoice.title || invoice.invoiceNumber || 'Fatura'}`,
+              action: {
+                label: 'Görüntüle',
+                onClick: () => router.push(`/${locale}/payment-plans/${savedPlan.id}`)
+              }
+            })
+            setPaymentPlanFormOpen(false)
+            // Payment plans listesini güncelle
+            await mutate(`/api/payment-plans?invoiceId=${id}`)
+            // Invoice detail'i yenile
+            await mutateInvoice()
+          }}
+        />
       )}
 
       {/* Uyarı Mesajları */}
@@ -1232,6 +1332,72 @@ export default function InvoiceDetailPage() {
       {/* Document List */}
       <DocumentList relatedTo="Invoice" relatedId={id} />
 
+      {/* Payment Plans */}
+      {paymentPlans && paymentPlans.length > 0 && (
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <CreditCard className="h-5 w-5 text-indigo-600" />
+              Taksit Planları ({paymentPlans.length})
+            </h2>
+          </div>
+          <div className="space-y-4">
+            {paymentPlans.map((plan: any) => (
+              <div
+                key={plan.id}
+                className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Link
+                        href={`/${locale}/payment-plans/${plan.id}`}
+                        className="font-semibold text-indigo-600 hover:underline"
+                      >
+                        {plan.name}
+                      </Link>
+                      <Badge variant="outline" className={getStatusBadgeClass(plan.status)}>
+                        {plan.status === 'ACTIVE' ? 'Aktif' : plan.status === 'COMPLETED' ? 'Tamamlandı' : plan.status === 'OVERDUE' ? 'Vadesi Geçti' : plan.status === 'CANCELLED' ? 'İptal' : plan.status}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <p className="text-gray-600">Toplam Tutar</p>
+                        <p className="font-medium">{formatCurrency(plan.totalAmount || 0)}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Taksit Sayısı</p>
+                        <p className="font-medium">{plan.installmentCount || 0}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Sıklık</p>
+                        <p className="font-medium">
+                          {plan.installmentFrequency === 'WEEKLY' ? 'Haftalık' : 
+                           plan.installmentFrequency === 'MONTHLY' ? 'Aylık' : 
+                           plan.installmentFrequency === 'QUARTERLY' ? 'Çeyreklik' : 
+                           plan.installmentFrequency}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Oluşturulma</p>
+                        <p className="font-medium">
+                          {new Date(plan.createdAt).toLocaleDateString('tr-TR')}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <Link href={`/${locale}/payment-plans/${plan.id}`}>
+                    <Button variant="outline" size="sm">
+                      Detaylar
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* Activity Timeline */}
       <Card className="p-6">
         <h2 className="text-xl font-semibold mb-4">İşlem Geçmişi</h2>
@@ -1287,6 +1453,13 @@ export default function InvoiceDetailPage() {
           // Cache'i güncelle - optimistic update
           await mutateInvoice(undefined, { revalidate: true })
           setShipmentFormOpen(false)
+          toast.success('Sevkiyat Oluşturuldu', {
+            description: `"${savedShipment.tracking || savedShipment.id?.substring(0, 8) || 'Sevkiyat'}" başarıyla oluşturuldu. Fatura: ${invoice.title || invoice.invoiceNumber || 'Fatura'}`,
+            action: {
+              label: 'Görüntüle',
+              onClick: () => router.push(`/${locale}/shipments/${savedShipment.id}`)
+            }
+          })
           // Başarılı kayıt sonrası sevkiyat detay sayfasına yönlendir
           router.push(`/${locale}/shipments/${savedShipment.id}`)
         }}

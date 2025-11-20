@@ -5,14 +5,14 @@ import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { mutate } from 'swr'
 import Image from 'next/image'
-import { ArrowLeft, Edit, Package, ShoppingCart, FileText, TrendingUp, TrendingDown, Minus, Plus, RotateCcw, History, Trash2 } from 'lucide-react'
+import { ArrowLeft, Edit, Package, ShoppingCart, FileText, TrendingUp, TrendingDown, Minus, Plus, RotateCcw, History, Trash2, Zap, Receipt } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { formatCurrency } from '@/lib/utils'
-import { toast, toastError } from '@/lib/toast'
+import { toast, toastError, toastInfo } from '@/lib/toast'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import StockMovementForm from '@/components/stock/StockMovementForm'
@@ -330,6 +330,72 @@ export default function ProductDetailPage() {
           {getStatusBadge(product.status)}
         </div>
       </div>
+
+      {/* Quick Actions - Hızlı İşlemler */}
+      <Card className="p-6 bg-gradient-to-br from-white to-gray-50 border-indigo-100 shadow-lg">
+        <div className="flex items-center gap-2 mb-6">
+          <div className="p-2 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 shadow-md">
+            <Zap className="h-5 w-5 text-white" />
+          </div>
+          <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            Hızlı İşlemler
+          </h2>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Button
+            variant="outline"
+            className="w-full border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+            onClick={() => {
+              toast.info('Yeni Teklif', { description: `"${product.name}" ürününü içeren yeni teklif oluşturuluyor...` })
+              router.push(`/${locale}/quotes/new?productId=${id}`)
+            }}
+          >
+            <FileText className="mr-2 h-4 w-4" />
+            Teklife Ekle
+          </Button>
+          <Button
+            variant="outline"
+            className="w-full border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+            onClick={() => {
+              toast.info('Yeni Fatura', { description: `"${product.name}" ürününü içeren yeni fatura oluşturuluyor...` })
+              router.push(`/${locale}/invoices/new?productId=${id}`)
+            }}
+          >
+            <Receipt className="mr-2 h-4 w-4" />
+            Faturaya Ekle
+          </Button>
+          {(relatedQuotes.length > 0 || relatedInvoices.length > 0) && (
+            <>
+              {relatedQuotes.length > 0 && (
+                <Button
+                  variant="outline"
+                  className="w-full border-purple-300 text-purple-700 hover:bg-purple-50"
+                  onClick={() => {
+                    toast.info('Teklifler', { description: `${relatedQuotes.length} teklifte bu ürün kullanılıyor.` })
+                    router.push(`/${locale}/quotes?productId=${id}`)
+                  }}
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Teklifleri Gör ({relatedQuotes.length})
+                </Button>
+              )}
+              {relatedInvoices.length > 0 && (
+                <Button
+                  variant="outline"
+                  className="w-full border-green-300 text-green-700 hover:bg-green-50"
+                  onClick={() => {
+                    toast.info('Faturalar', { description: `${relatedInvoices.length} faturada bu ürün kullanılıyor.` })
+                    router.push(`/${locale}/invoices?productId=${id}`)
+                  }}
+                >
+                  <Receipt className="mr-2 h-4 w-4" />
+                  Faturaları Gör ({relatedInvoices.length})
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      </Card>
 
       {/* Product Details */}
       {(product.category || product.sku || product.barcode || product.weight || product.dimensions || product.description) && (

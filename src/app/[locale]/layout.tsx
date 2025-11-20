@@ -10,6 +10,7 @@ import ConditionalLayout from '@/components/layout/ConditionalLayout'
 import { ConfirmProvider } from '@/hooks/useConfirm'
 import { Toaster } from 'sonner'
 import FloatingAIChat from '@/components/ai/FloatingAIChat'
+import KeyboardShortcutsProvider from '@/components/providers/KeyboardShortcutsProvider'
 
 // CRITICAL FIX: force-dynamic cache'i tamamen kapatıyor - performans için kaldırıldı
 // Session kontrolü için sadece gerekli yerlerde dynamic yapılacak
@@ -57,11 +58,13 @@ export default async function LocaleLayout({
         <QueryProvider>
           <UndoStackProvider>
             <NavigationProvider>
-              <ConditionalLayout>
-                <ConfirmProvider>
-                  {children}
-                </ConfirmProvider>
-              </ConditionalLayout>
+              <KeyboardShortcutsProvider>
+                <ConditionalLayout>
+                  <ConfirmProvider>
+                    {children}
+                  </ConfirmProvider>
+                </ConditionalLayout>
+              </KeyboardShortcutsProvider>
               <Toaster
                 position="top-right"
                 expand={false}

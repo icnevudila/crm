@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
 import { useSession } from '@/hooks/useSession'
-import { Plus, Search, Edit, Trash2, Eye, FileText, LayoutGrid, Table as TableIcon, Sparkles, Calendar, CheckSquare, Receipt, Mail, MessageSquare, MessageCircle } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Eye, FileText, LayoutGrid, Table as TableIcon, Sparkles, Calendar, CheckSquare, Receipt, Mail, MessageSquare, MessageCircle, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useData } from '@/hooks/useData'
@@ -56,6 +56,8 @@ import { AutomationInfo } from '@/components/automation/AutomationInfo'
 import RefreshButton from '@/components/ui/RefreshButton'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
 import InlineEditBadge from '@/components/ui/InlineEditBadge'
+import BulkActions from '@/components/ui/BulkActions'
+import { Checkbox } from '@/components/ui/checkbox'
 
 // Lazy load büyük componentler - performans için
 const QuoteForm = dynamic(() => import('./QuoteForm'), {
@@ -175,6 +177,9 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
   const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false)
   const [selectedQuoteForCommunication, setSelectedQuoteForCommunication] = useState<Quote | null>(null)
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
+  // Bulk operations state
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [selectAll, setSelectAll] = useState(false)
 
   // Debounced search - performans için
   const [debouncedSearch, setDebouncedSearch] = useState(search)
@@ -394,6 +399,84 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
     setSelectedQuote(null)
   }, [])
 
+  // Bulk operations handlers
+  const handleSelectAll = useCallback((checked: boolean) => {
+    setSelectAll(checked)
+    if (checked) {
+      // ACCEPTED quote'ları seçme - immutable oldukları için
+      const selectableQuotes = quotes.filter((q) => q.status !== 'ACCEPTED')
+      setSelectedIds(selectableQuotes.map((q) => q.id))
+    } else {
+      setSelectedIds([])
+    }
+  }, [quotes])
+
+  const handleSelectItem = useCallback((id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedIds((prev) => [...prev, id])
+    } else {
+      setSelectedIds((prev) => prev.filter((itemId) => itemId !== id))
+      setSelectAll(false)
+    }
+  }, [])
+
+  const handleBulkDelete = useCallback(async (ids: string[]) => {
+    try {
+      const res = await fetch('/api/quotes/bulk', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to bulk delete quotes')
+      }
+
+      // Optimistic update - silinen kayıtları listeden kaldır
+      const updatedQuotes = quotes.filter((q) => !ids.includes(q.id))
+      
+      // Cache'i güncelle
+      await mutateQuotes(updatedQuotes, { revalidate: false })
+      
+      // Tüm diğer quote URL'lerini de güncelle
+      await Promise.all([
+        mutate('/api/quotes', updatedQuotes, { revalidate: false }),
+        mutate('/api/quotes?', updatedQuotes, { revalidate: false }),
+        mutate(apiUrl || '/api/quotes', updatedQuotes, { revalidate: false }),
+      ])
+
+      // Kanban cache'ini de güncelle
+      queryClient.invalidateQueries({ queryKey: ['kanban-quotes'] })
+
+      toast.success(tCommon('bulkDeleteSuccess', { count: ids.length, item: tCommon('quotes') }), {
+        description: tCommon('bulkDeleteSuccessMessage', { count: ids.length, item: tCommon('quotes') }),
+      })
+
+      // Seçimi temizle
+      setSelectedIds([])
+      setSelectAll(false)
+    } catch (error: any) {
+      console.error('Bulk delete error:', error)
+      toast.error(tCommon('error'), { description: error?.message || 'Toplu silme işlemi başarısız oldu' })
+    }
+  }, [quotes, mutateQuotes, apiUrl, queryClient, tCommon])
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedIds([])
+    setSelectAll(false)
+  }, [])
+
+  // selectAll'u güncelle - tüm seçilebilir quote'lar seçiliyse true
+  useEffect(() => {
+    const selectableQuotes = quotes.filter((q) => q.status !== 'ACCEPTED')
+    if (selectableQuotes.length > 0 && selectedIds.length === selectableQuotes.length) {
+      setSelectAll(true)
+    } else {
+      setSelectAll(false)
+    }
+  }, [selectedIds, quotes])
+
   // Stats verisini çek - toplam sayı için
   const { data: stats } = useData<any>(isOpen ? '/api/stats/quotes' : null, {
     dedupingInterval: 5000,
@@ -469,6 +552,86 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
               >
                 <LayoutGrid className="h-4 w-4" />
               </Button>
+              {/* ✅ Export Butonu */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="icon" title="Dışa Aktar">
+                    <Download className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Dışa Aktar</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={async () => {
+                      try {
+                        const params = new URLSearchParams()
+                        if (debouncedSearch) params.append('search', debouncedSearch)
+                        if (status) params.append('status', status)
+                        params.append('format', 'excel')
+                        
+                        const res = await fetch(`/api/quotes/export?${params.toString()}`)
+                        if (!res.ok) throw new Error('Export failed')
+                        
+                        const blob = await res.blob()
+                        const url = window.URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `teklifler-${new Date().toISOString().split('T')[0]}.xlsx`
+                        document.body.appendChild(a)
+                        a.click()
+                        document.body.removeChild(a)
+                        window.URL.revokeObjectURL(url)
+                        
+                        toast.success('Dışa aktarma başarılı', {
+                          description: 'Teklifler Excel formatında indirildi.',
+                        })
+                      } catch (error: any) {
+                        toast.error('Dışa aktarma başarısız', {
+                          description: error?.message || 'Bir hata oluştu',
+                        })
+                      }
+                    }}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Excel (.xlsx)
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={async () => {
+                      try {
+                        const params = new URLSearchParams()
+                        if (debouncedSearch) params.append('search', debouncedSearch)
+                        if (status) params.append('status', status)
+                        params.append('format', 'csv')
+                        
+                        const res = await fetch(`/api/quotes/export?${params.toString()}`)
+                        if (!res.ok) throw new Error('Export failed')
+                        
+                        const blob = await res.blob()
+                        const url = window.URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `teklifler-${new Date().toISOString().split('T')[0]}.csv`
+                        document.body.appendChild(a)
+                        a.click()
+                        document.body.removeChild(a)
+                        window.URL.revokeObjectURL(url)
+                        
+                        toast.success('Dışa aktarma başarılı', {
+                          description: 'Teklifler CSV formatında indirildi.',
+                        })
+                      } catch (error: any) {
+                        toast.error('Dışa aktarma başarısız', {
+                          description: error?.message || 'Bir hata oluştu',
+                        })
+                      }
+                    }}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    CSV (.csv)
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
             <Button
               onClick={() => {
@@ -581,10 +744,10 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                       }
                       
                       // Onay verildikten sonra sebep dialog'unu aç
-                      setRejectingQuoteId(quoteId)
-                      setRejectDialogOpen(true)
-                      return // Dialog açıldı, işlem dialog'dan devam edecek
-                    }
+                    setRejectingQuoteId(quoteId)
+                    setRejectDialogOpen(true)
+                    return // Dialog açıldı, işlem dialog'dan devam edecek
+                  }
                   }
 
                   // ✅ ACCEPTED durumuna geçerken onay iste
@@ -721,9 +884,23 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                         toastDescription = `"${quoteTitle}" teklifi kabul edildi.`
 
                         if (automation.invoiceCreated && automation.invoiceId) {
-                          toastDescription += `\n\nOtomatik işlemler:\n• Fatura oluşturuldu (ID: ${automation.invoiceId.substring(0, 8)}...)\n• Fatura numarası: ${automation.invoiceNumber || automation.invoiceTitle || 'Oluşturuluyor...'}\n• Fatura kalemleri kopyalandı\n• Ürünler rezerve edildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                          const invoiceId = automation.invoiceId
+                          toastDescription += `\n\n✅ Otomatik işlemler:\n• Fatura oluşturuldu (ID: ${invoiceId.substring(0, 8)}...)\n• Fatura numarası: ${automation.invoiceNumber || automation.invoiceTitle || 'Oluşturuluyor...'}\n• Fatura kalemleri kopyalandı\n• Ürünler rezerve edildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi\n\n💡 Öneri: Faturayı göndermek için fatura detay sayfasına gidin.`
+                          
+                          // Toast'a action button ekle (fatura detay sayfasına git)
+                          toast.success(toastTitle, {
+                            description: toastDescription,
+                            action: {
+                              label: 'Faturayı Görüntüle',
+                              onClick: () => {
+                                window.location.href = `/${locale}/invoices/${invoiceId}`
+                              },
+                            },
+                            duration: 8000, // 8 saniye göster (kullanıcı action'ı görebilsin)
+                          })
                         } else {
                           toastDescription += `\n\nOtomatik işlemler:\n• Fatura oluşturuluyor...\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                          toast.success(toastTitle, { description: toastDescription })
                         }
                         break
 
@@ -885,13 +1062,28 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                   <TableBody>
                     {quotes.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={isSuperAdmin ? 7 : 6} className="text-center py-8 text-gray-500">
+                        <TableCell colSpan={isSuperAdmin ? 8 : 7} className="text-center py-8 text-gray-500">
                           {tCommon('noData')}
                         </TableCell>
                       </TableRow>
                     ) : (
-                      quotes.map((quote) => (
+                      quotes.map((quote) => {
+                        const isSelected = selectedIds.includes(quote.id)
+                        const isImmutable = quote.status === 'ACCEPTED'
+                        return (
                         <TableRow key={quote.id}>
+                          <TableCell>
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={(checked) => {
+                                if (!isImmutable) {
+                                  handleSelectItem(quote.id, checked as boolean)
+                                }
+                              }}
+                              disabled={isImmutable}
+                              aria-label={`${quote.title} seç`}
+                            />
+                          </TableCell>
                           <TableCell className="font-medium">{quote.title}</TableCell>
                           {isSuperAdmin && (
                             <TableCell>
@@ -955,7 +1147,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                                       description: `"${quote.title || 'Teklif'}" teklifi kabul edildi.\n\nOtomatik işlemler:\n${automation.invoiceCreated ? `• Fatura oluşturuldu (ID: ${automation.invoiceId?.substring(0, 8)}...)\n• Fatura numarası: ${automation.invoiceNumber || automation.invoiceTitle || 'Oluşturuluyor...'}\n• Fatura kalemleri kopyalandı\n• Ürünler rezerve edildi\n` : ''}• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
                                     })
                                   } else {
-                                    toast.success('Durum güncellendi', { description: `Teklif "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
+                                  toast.success('Durum güncellendi', { description: `Teklif "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
                                   }
                                 } catch (error: any) {
                                   toast.error('Durum güncellenemedi', { description: error?.message || 'Bir hata oluştu.' })
@@ -1171,7 +1363,8 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))
+                        )
+                      })
                     )}
                   </TableBody>
                 </Table>
@@ -1245,7 +1438,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                                     description: `"${quote.title || 'Teklif'}" teklifi kabul edildi.\n\nOtomatik işlemler:\n${automation.invoiceCreated ? `• Fatura oluşturuldu (ID: ${automation.invoiceId?.substring(0, 8)}...)\n• Fatura numarası: ${automation.invoiceNumber || automation.invoiceTitle || 'Oluşturuluyor...'}\n• Fatura kalemleri kopyalandı\n• Ürünler rezerve edildi\n` : ''}• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
                                   })
                                 } else {
-                                  toast.success('Durum güncellendi', { description: `Teklif "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
+                                toast.success('Durum güncellendi', { description: `Teklif "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
                                 }
                               } catch (error: any) {
                                 toast.error('Durum güncellenemedi', { description: error?.message || 'Bir hata oluştu.' })

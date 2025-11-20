@@ -341,6 +341,17 @@ export default function ProductForm({ product, open, onClose, onSuccess }: Produ
   const onSubmit = async (data: ProductFormData) => {
     setLoading(true)
     try {
+      // ✅ AKILLI OTOMASYON: Stok düşükse uyarı göster (kaydetmeden önce)
+      if (data.stock !== undefined && data.minStock !== undefined && data.minStock > 0) {
+        if (data.stock <= data.minStock) {
+          // Uyarı göster ama kaydetmeye devam et (kullanıcı bilgilendirilmiş olur)
+          toast.warning('⚠️ Düşük Stok Uyarısı', {
+            description: `"${data.name}" ürününde stok kritik seviyede (${data.stock}). Minimum stok: ${data.minStock}. Kaydetme işleminden sonra satın alma görevi oluşturulacak.`,
+            duration: 6000,
+          })
+        }
+      }
+      
       await mutation.mutateAsync(data)
     } catch (error: any) {
       console.error('Error:', error)

@@ -120,11 +120,16 @@
       "meetings": "Görüşmeler",
       "quotes": "Teklifler",
       "contracts": "Sözleşmeler",
+      "salesQuotas": "Satış Kotaları",
       "approvals": "Onaylar",
       "invoices": "Fatura Takip",
       "products": "Ürünler",
+      "productBundles": "Ürün Paketleri",
       "shipments": "Sevkiyatlar",
       "purchaseShipments": "Satın Alma",
+      "returnOrders": "İade Siparişleri",
+      "creditNotes": "İade Faturaları",
+      "paymentPlans": "Taksit Planları",
       "finance": "Finans",
       "tickets": "Destek Talepleri",
       "tasks": "Görevler",
@@ -268,6 +273,12 @@
     "invoiceStatusDescription": "Faturaların durum bazlı dağılımı",
     "invoiceStatusDistribution": "Fatura Durum Dağılımı",
     "invoiceStatusDistributionDescription": "Status bazlı fatura sayısı",
+    "totalReturnOrders": "İade Siparişleri",
+    "totalReturnOrdersTooltip": "Toplam iade siparişi sayısı ve bekleyen iadeler",
+    "totalPaymentPlans": "Taksit Planları",
+    "totalPaymentPlansTooltip": "Toplam taksit planı sayısı ve aktif planlar",
+    "quotaAchievementRate": "Kota Başarı Oranı",
+    "quotaAchievementRateTooltip": "Satış kotalarının gerçekleşme oranı (Gerçekleşen / Hedef)",
     "dealsInStage": "Durumundaki Fırsatlar",
     "dealDetails": "Fırsat Detayları",
     "dealsFound": "fırsat bulundu",
@@ -657,7 +668,13 @@
     "draftPurchaseCreatedMessage": "Bu alış faturası için taslak mal kabul oluşturuldu (#{id})",
     "draftShipmentCreated": "Fatura için taslak sevkiyat oluşturuldu",
     "draftShipmentCreatedMessage": "Bu fatura için taslak sevkiyat oluşturuldu (#{id})",
-    "defaultInvoiceTitle": "Fatura"
+    "defaultInvoiceTitle": "Fatura",
+    "productBundleCreated": "Ürün paketi oluşturuldu: {name}",
+    "productBundleUpdated": "Ürün paketi güncellendi: {name}",
+    "productBundleDeleted": "Ürün paketi silindi: {name}",
+    "paymentPlanCreated": "Ödeme planı oluşturuldu: {name}",
+    "paymentPlanUpdated": "Ödeme planı güncellendi: {name}",
+    "paymentPlanDeleted": "Ödeme planı silindi: {name}"
   },
   "status": {
     "status": "Durum",
@@ -2281,6 +2298,49 @@
       "actions": "İşlemler"
     }
   },
+  "productBundles": {
+    "title": "Ürün Paketleri",
+    "description": "Ürün paketlerini yönetin ve teklif/fatura oluştururken kullanın",
+    "searchPlaceholder": "Paket adı ara...",
+    "allStatuses": "Tüm Durumlar",
+    "newBundle": "Yeni Paket",
+    "selectStatus": "Durum",
+    "deleteConfirm": "Bu paketi silmek istediğinize emin misiniz?",
+    "deleteFailed": "Silinemedi",
+    "noBundlesFound": "Paket bulunamadı",
+    "tableHeaders": {
+      "name": "Paket Adı",
+      "description": "Açıklama",
+      "items": "Ürünler",
+      "totalPrice": "Toplam Fiyat",
+      "discount": "İndirim",
+      "finalPrice": "Final Fiyat",
+      "status": "Durum",
+      "actions": "İşlemler"
+    }
+  },
+  "paymentPlans": {
+    "title": "Ödeme Planları",
+    "description": "Faturalar için taksit planları oluşturun ve yönetin",
+    "searchPlaceholder": "Plan adı ara...",
+    "allStatuses": "Tüm Durumlar",
+    "newPlan": "Yeni Plan",
+    "selectStatus": "Durum",
+    "deleteConfirm": "{name} ödeme planını silmek istediğinize emin misiniz?",
+    "deleteFailed": "Silinemedi",
+    "noPlansFound": "Ödeme planı bulunamadı",
+    "tableHeaders": {
+      "name": "Plan Adı",
+      "invoice": "Fatura",
+      "customer": "Müşteri",
+      "totalAmount": "Toplam Tutar",
+      "paidAmount": "Ödenen",
+      "remainingAmount": "Kalan",
+      "installmentCount": "Taksit Sayısı",
+      "status": "Durum",
+      "actions": "İşlemler"
+    }
+  },
   "login": {
     "description": "Hesabınıza giriş yapın ve işinizi yönetmeye başlayın",
     "email": "E-posta",
@@ -2309,5 +2369,16 @@
     "description": "Aradığınız sayfa mevcut değil veya taşınmış olabilir.",
     "backToDashboard": "Dashboard'a Dön",
     "goBack": "Geri Git"
+  },
+  "activity": {
+    "quotesBulkDeleted": "{count} teklif toplu olarak silindi",
+    "invoicesBulkDeleted": "{count} fatura toplu olarak silindi",
+    "dealsBulkDeleted": "{count} fırsat toplu olarak silindi",
+    "quoteDeleted": "Teklif silindi: {title}",
+    "invoiceDeleted": "Fatura silindi: {title}",
+    "dealDeleted": "Fırsat silindi: {title}",
+    "defaultQuoteTitle": "Teklif",
+    "defaultInvoiceTitle": "Fatura",
+    "defaultDealTitle": "Fırsat"
   }
 }

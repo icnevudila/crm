@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
+import { getActivityMessage } from '@/lib/api-locale'
 
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export async function GET(request: NextRequest) {
   try {
@@ -14,31 +13,54 @@ export async function GET(request: NextRequest) {
     if (sessionError) {
       return sessionError
     }
-    if (!session?.user) {
+    if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data, error } = await supabase
+    const { searchParams } = new URL(request.url)
+    const status = searchParams.get('status')
+    const search = searchParams.get('search')
+
+    const supabase = getSupabaseWithServiceRole()
+
+    let query = supabase
       .from('ProductBundle')
       .select(`
-        id, name, description, bundlePrice, regularPrice, discountPercent,
-        isActive, validFrom, validUntil, createdAt,
+        *,
         items:ProductBundleItem(
-          id, quantity,
-          product:Product(id, name, price)
+          id,
+          quantity,
+          product:Product!ProductBundleItem_productId_fkey(
+            id,
+            name,
+            sku,
+            price,
+            stock
+          )
         )
       `)
       .eq('companyId', session.user.companyId)
-      .order('name')
+      .order('createdAt', { ascending: false })
 
-    if (error) throw error
-    return NextResponse.json(data)
+    if (status) {
+      query = query.eq('status', status)
+    }
+
+    if (search) {
+      query = query.or(`name.ilike.%${search}%,description.ilike.%${search}%`)
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+      console.error('ProductBundle fetch error:', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json(data || [])
   } catch (error: any) {
-    console.error('Product bundles fetch error:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to fetch product bundles' },
-      { status: 500 }
-    )
+    console.error('ProductBundle GET error:', error)
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -48,57 +70,107 @@ export async function POST(request: NextRequest) {
     if (sessionError) {
       return sessionError
     }
-    if (!session?.user) {
+    if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await request.json()
+    const { name, description, totalPrice, discount, finalPrice, status, items } = body
 
-    if (!body.name || !body.bundlePrice) {
+    if (!name || !totalPrice || !items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
-        { error: 'Name and bundlePrice are required' },
+        { error: 'Name, totalPrice, and items are required' },
         { status: 400 }
       )
     }
 
-    const { data, error } = await supabase
+    const supabase = getSupabaseWithServiceRole()
+    const locale = request.headers.get('x-locale') || 'tr'
+
+    // Bundle oluştur
+    const { data: bundle, error: bundleError } = await supabase
       .from('ProductBundle')
       .insert({
-        name: body.name,
-        description: body.description,
-        bundlePrice: body.bundlePrice,
-        regularPrice: body.regularPrice,
-        discountPercent: body.discountPercent,
-        isActive: body.isActive ?? true,
-        validFrom: body.validFrom,
-        validUntil: body.validUntil,
+        name,
+        description: description || null,
+        totalPrice: parseFloat(totalPrice) || 0,
+        discount: parseFloat(discount) || 0,
+        finalPrice: parseFloat(finalPrice) || totalPrice,
+        status: status || 'ACTIVE',
         companyId: session.user.companyId,
       })
       .select()
       .single()
 
-    if (error) throw error
-
-    // Add bundle items
-    if (body.items && body.items.length > 0) {
-      const itemsToInsert = body.items.map((item: any) => ({
-        bundleId: data.id,
-        productId: item.productId,
-        quantity: item.quantity || 1,
-        companyId: session.user.companyId,
-      }))
-
-      await supabase.from('ProductBundleItem').insert(itemsToInsert)
+    if (bundleError) {
+      console.error('ProductBundle creation error:', bundleError)
+      return NextResponse.json({ error: bundleError.message }, { status: 500 })
     }
 
-    return NextResponse.json(data, { status: 201 })
+    // Bundle items oluştur
+    const bundleItems = items.map((item: any) => ({
+      bundleId: bundle.id,
+      productId: item.productId,
+      quantity: parseInt(item.quantity) || 1,
+      companyId: session.user.companyId,
+    }))
+
+    const { error: itemsError } = await supabase
+      .from('ProductBundleItem')
+      .insert(bundleItems)
+
+    if (itemsError) {
+      // Bundle'ı sil (rollback)
+      await supabase.from('ProductBundle').delete().eq('id', bundle.id)
+      console.error('ProductBundleItem creation error:', itemsError)
+      return NextResponse.json({ error: itemsError.message }, { status: 500 })
+    }
+
+    // ActivityLog
+    try {
+      await supabase.from('ActivityLog').insert([
+        {
+          entity: 'ProductBundle',
+          action: 'CREATE',
+          description: getActivityMessage(locale as 'tr' | 'en', 'productBundleCreated', { name }),
+          meta: {
+            entity: 'ProductBundle',
+            action: 'create',
+            bundleId: bundle.id,
+            name,
+          },
+          userId: session.user.id,
+          companyId: session.user.companyId,
+        },
+      ])
+    } catch (activityError) {
+      // ActivityLog hatası ana işlemi engellemez
+      console.error('ActivityLog creation error:', activityError)
+    }
+
+    // Bundle'ı items ile birlikte döndür
+    const { data: bundleWithItems } = await supabase
+      .from('ProductBundle')
+      .select(`
+        *,
+        items:ProductBundleItem(
+          id,
+          quantity,
+          product:Product!ProductBundleItem_productId_fkey(
+            id,
+            name,
+            sku,
+            price,
+            stock
+          )
+        )
+      `)
+      .eq('id', bundle.id)
+      .single()
+
+    return NextResponse.json(bundleWithItems, { status: 201 })
   } catch (error: any) {
-    console.error('Product bundle create error:', error)
-    return NextResponse.json(
-      { error: error.message || 'Failed to create product bundle' },
-      { status: 500 }
-    )
+    console.error('ProductBundle POST error:', error)
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 })
   }
 }
-
-

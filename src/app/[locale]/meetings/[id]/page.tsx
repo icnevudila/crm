@@ -15,7 +15,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { formatCurrency } from '@/lib/utils'
-import { toastError, confirm } from '@/lib/toast'
+import { toast, toastError, confirm } from '@/lib/toast'
 import SendEmailButton from '@/components/integrations/SendEmailButton'
 import SendSmsButton from '@/components/integrations/SendSmsButton'
 import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
@@ -315,16 +315,32 @@ export default function MeetingDetailPage() {
               />
             )}
             {meeting.dealId && (
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => {
-                  window.open(`/${locale}/deals/${meeting.dealId}`, '_blank')
-                }}
-              >
-                <DollarSign className="mr-2 h-4 w-4" />
-                Fırsatı Görüntüle
-              </Button>
+              <Link href={`/${locale}/deals/${meeting.dealId}`} prefetch={true}>
+                <Button
+                  variant="outline"
+                  className="w-full border-blue-300 text-blue-700 hover:bg-blue-50"
+                  onClick={() => {
+                    toast.info('Fırsata Yönlendiriliyor', { description: `"${meeting.Deal?.title || 'Fırsat'}" fırsatına yönlendiriliyor...` })
+                  }}
+                >
+                  <DollarSign className="mr-2 h-4 w-4" />
+                  Fırsatı Görüntüle
+                </Button>
+              </Link>
+            )}
+            {meeting.customerId && (
+              <Link href={`/${locale}/customers/${meeting.customerId}`} prefetch={true}>
+                <Button
+                  variant="outline"
+                  className="w-full border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                  onClick={() => {
+                    toast.info('Müşteriye Yönlendiriliyor', { description: `"${meeting.Customer?.name || 'Müşteri'}" müşterisine yönlendiriliyor...` })
+                  }}
+                >
+                  <User className="mr-2 h-4 w-4" />
+                  Müşteriyi Görüntüle
+                </Button>
+              </Link>
             )}
           </div>
         </Card>

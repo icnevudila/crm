@@ -12,6 +12,11 @@ import {
   Users,
   Briefcase,
   Clock,
+  RotateCcw,
+  FileCheck,
+  CreditCard,
+  Layers,
+  TrendingDown,
 } from 'lucide-react'
 
 import { Card } from '@/components/ui/card'
@@ -46,6 +51,23 @@ const DEFAULT_KPIS: KPIData = {
   pendingInvoices: 0,
   pendingShipments: 0,
   pendingPurchaseShipments: 0,
+  totalReturnOrders: 0,
+  totalReturnOrdersValue: 0,
+  pendingReturnOrders: 0,
+  totalCreditNotes: 0,
+  totalCreditNotesValue: 0,
+  appliedCreditNotes: 0,
+  totalPaymentPlans: 0,
+  totalPaymentPlansValue: 0,
+  activePaymentPlans: 0,
+  overduePaymentPlans: 0,
+  totalSalesQuotas: 0,
+  activeSalesQuotas: 0,
+  totalTargetRevenue: 0,
+  totalActualRevenue: 0,
+  quotaAchievementRate: 0,
+  totalProductBundles: 0,
+  totalProductBundlesValue: 0,
   monthlyKPIs: [],
 }
 
@@ -104,7 +126,7 @@ const KPICards = ({
   const memoizedCards = useMemo(
     () => (
       <TooltipProvider delayDuration={300}>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <Tooltip>
             <TooltipTrigger asChild>
               <div>

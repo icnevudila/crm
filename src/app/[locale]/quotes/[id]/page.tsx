@@ -21,6 +21,7 @@ import StatusInfoNote from '@/components/workflow/StatusInfoNote'
 import NextStepButtons from '@/components/workflow/NextStepButtons'
 import RelatedRecordsSuggestions from '@/components/workflow/RelatedRecordsSuggestions'
 import QuoteForm from '@/components/quotes/QuoteForm'
+import QuoteItemForm from '@/components/quotes/QuoteItemForm'
 import InvoiceForm from '@/components/invoices/InvoiceForm'
 import ContractForm from '@/components/contracts/ContractForm'
 import MeetingForm from '@/components/meetings/MeetingForm'
@@ -115,6 +116,7 @@ export default function QuoteDetailPage() {
   const quoteId = params.id as string
   const [creatingRevision, setCreatingRevision] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
+  const [itemFormOpen, setItemFormOpen] = useState(false)
   const [newQuoteFormOpen, setNewQuoteFormOpen] = useState(false) // Yeni teklif için modal
   const [invoiceFormOpen, setInvoiceFormOpen] = useState(false)
   const [contractFormOpen, setContractFormOpen] = useState(false)
@@ -273,11 +275,14 @@ export default function QuoteDetailPage() {
         }}
         onCreateRelated={(type) => {
           if (type === 'invoice') {
-            setInvoiceFormOpen(true) // Modal form aç
+            setInvoiceFormOpen(true)
+            toast.info('Yeni Fatura', { description: `"${quote.title || 'Teklif'}" teklifinden yeni fatura oluşturuluyor...` })
           } else if (type === 'contract') {
-            setContractFormOpen(true) // Modal form aç
+            setContractFormOpen(true)
+            toast.info('Yeni Sözleşme', { description: `"${quote.title || 'Teklif'}" teklifinden yeni sözleşme oluşturuluyor...` })
           } else if (type === 'meeting') {
-            setMeetingFormOpen(true) // Modal form aç
+            setMeetingFormOpen(true)
+            toast.info('Yeni Görüşme', { description: `"${quote.title || 'Teklif'}" teklifi için yeni görüşme oluşturuluyor...` })
           }
         }}
         onSendEmail={(quote.customer?.email || quote.Deal?.Customer?.email) ? () => {
@@ -542,12 +547,27 @@ export default function QuoteDetailPage() {
       />
 
       {/* Quote Items */}
-      {quote.quoteItems && quote.quoteItems.length > 0 && (
-        <Card className="p-6">
-          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+      <Card className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold flex items-center gap-2">
             <FileText className="h-5 w-5" />
             Teklif Kalemleri
+            {quote.quoteItems && quote.quoteItems.length > 0 && (
+              <Badge variant="outline">({quote.quoteItems.length})</Badge>
+            )}
           </h2>
+          {quote.status !== 'ACCEPTED' && quote.status !== 'DECLINED' && (
+            <Button
+              onClick={() => setItemFormOpen(true)}
+              className="bg-gradient-primary text-white"
+              size="sm"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Ürün Ekle
+            </Button>
+          )}
+        </div>
+        {quote.quoteItems && quote.quoteItems.length > 0 ? (
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
@@ -598,8 +618,24 @@ export default function QuoteDetailPage() {
               </TableBody>
             </Table>
           </div>
-        </Card>
-      )}
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            <FileText className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+            <p>Henüz ürün eklenmemiş</p>
+            {quote.status !== 'ACCEPTED' && quote.status !== 'DECLINED' && (
+              <Button
+                onClick={() => setItemFormOpen(true)}
+                variant="outline"
+                className="mt-4"
+                size="sm"
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                İlk Ürünü Ekle
+              </Button>
+            )}
+          </div>
+        )}
+      </Card>
 
       {/* Related Records Suggestions */}
       <RelatedRecordsSuggestions
@@ -1015,7 +1051,29 @@ export default function QuoteDetailPage() {
             mutate(`/api/quotes/${quoteId}`, undefined, { revalidate: true }),
           ])
           await mutateQuote(undefined, { revalidate: true })
-          // Toast zaten InvoiceForm içinde gösteriliyor (navigateToDetailToast)
+          toast.success('Fatura Oluşturuldu', {
+            description: `"${savedInvoice.title || savedInvoice.invoiceNumber || 'Fatura'}" başarıyla oluşturuldu. Teklif: ${quote.title || 'Teklif'}`,
+            action: {
+              label: 'Görüntüle',
+              onClick: () => router.push(`/${locale}/invoices/${savedInvoice.id}`)
+            }
+          })
+        }}
+      />
+
+      {/* QuoteItem Form Modal */}
+      <QuoteItemForm
+        quoteId={quoteId}
+        open={itemFormOpen}
+        onClose={() => setItemFormOpen(false)}
+        onSuccess={async (quoteItem: any) => {
+          // Cache'i güncelle - optimistic update
+          await Promise.all([
+            mutate(`/api/quote-items?quoteId=${quoteId}`, undefined, { revalidate: true }),
+            mutate(`/api/quotes/${quoteId}`, undefined, { revalidate: true }),
+          ])
+          await mutateQuote(undefined, { revalidate: true })
+          setItemFormOpen(false)
         }}
       />
 

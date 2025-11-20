@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
+import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
-import { createClient } from '@supabase/supabase-js'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+export const runtime = 'edge'
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 export async function GET(
   request: NextRequest,
@@ -17,27 +15,34 @@ export async function GET(
     if (sessionError) {
       return sessionError
     }
-    if (!session?.user) {
+    if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
+    const supabase = getSupabaseWithServiceRole()
+
     const { data, error } = await supabase
       .from('SalesQuota')
-      .select('*, user:User(id, name, email)')
+      .select(`
+        *,
+        user:User!SalesQuota_userId_fkey(id, name, email, role)
+      `)
       .eq('id', params.id)
       .eq('companyId', session.user.companyId)
       .single()
 
-    if (error) throw error
-    if (!data) {
-      return NextResponse.json({ error: 'Quota not found' }, { status: 404 })
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return NextResponse.json({ error: 'Sales quota not found' }, { status: 404 })
+      }
+      throw error
     }
 
     return NextResponse.json(data)
   } catch (error: any) {
-    console.error('Quota fetch error:', error)
+    console.error('Sales quota fetch error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch quota' },
+      { error: error.message || 'Failed to fetch sales quota' },
       { status: 500 }
     )
   }
@@ -52,20 +57,30 @@ export async function PUT(
     if (sessionError) {
       return sessionError
     }
-    if (!session?.user) {
+    if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const body = await request.json()
+    const supabase = getSupabaseWithServiceRole()
+
+    // Check if quota exists
+    const { data: existing } = await supabase
+      .from('SalesQuota')
+      .select('id')
+      .eq('id', params.id)
+      .eq('companyId', session.user.companyId)
+      .single()
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Sales quota not found' }, { status: 404 })
+    }
 
     const { data, error } = await supabase
       .from('SalesQuota')
       .update({
-        userId: body.userId,
-        targetRevenue: body.targetRevenue,
-        period: body.period,
-        startDate: body.startDate,
-        endDate: body.endDate,
+        ...body,
+        updatedAt: new Date().toISOString(),
       })
       .eq('id', params.id)
       .eq('companyId', session.user.companyId)
@@ -74,20 +89,22 @@ export async function PUT(
 
     if (error) throw error
 
+    // Activity Log
     await supabase.from('ActivityLog').insert({
       action: 'UPDATE',
       entityType: 'SalesQuota',
-      entityId: params.id,
+      entityId: data.id,
       userId: session.user.id,
       companyId: session.user.companyId,
-      description: `Updated sales quota`,
+      description: `Updated sales quota for ${data.period} ${data.year}`,
+      meta: { quotaId: data.id, changes: body },
     })
 
     return NextResponse.json(data)
   } catch (error: any) {
-    console.error('Quota update error:', error)
+    console.error('Sales quota update error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to update quota' },
+      { error: error.message || 'Failed to update sales quota' },
       { status: 500 }
     )
   }
@@ -102,8 +119,22 @@ export async function DELETE(
     if (sessionError) {
       return sessionError
     }
-    if (!session?.user) {
+    if (!session?.user?.companyId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const supabase = getSupabaseWithServiceRole()
+
+    // Check if quota exists
+    const { data: existing } = await supabase
+      .from('SalesQuota')
+      .select('id, period, year')
+      .eq('id', params.id)
+      .eq('companyId', session.user.companyId)
+      .single()
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Sales quota not found' }, { status: 404 })
     }
 
     const { error } = await supabase
@@ -114,23 +145,23 @@ export async function DELETE(
 
     if (error) throw error
 
+    // Activity Log
     await supabase.from('ActivityLog').insert({
       action: 'DELETE',
       entityType: 'SalesQuota',
       entityId: params.id,
       userId: session.user.id,
       companyId: session.user.companyId,
-      description: `Deleted sales quota`,
+      description: `Deleted sales quota for ${existing.period} ${existing.year}`,
+      meta: { quotaId: params.id },
     })
 
     return NextResponse.json({ success: true })
   } catch (error: any) {
-    console.error('Quota delete error:', error)
+    console.error('Sales quota delete error:', error)
     return NextResponse.json(
-      { error: error.message || 'Failed to delete quota' },
+      { error: error.message || 'Failed to delete sales quota' },
       { status: 500 }
     )
   }
 }
-
-

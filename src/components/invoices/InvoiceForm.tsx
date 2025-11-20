@@ -270,6 +270,27 @@ export default function InvoiceForm({
   const invoiceType = watch('invoiceType') || 'SALES'
   const selectedCustomer = customers.find((c: any) => c.id === customerId)
   
+  // ✅ AKILLI OTOMASYON: Müşteri seçildiğinde otomatik adres bilgilerini doldur
+  useEffect(() => {
+    if (selectedCustomer && !invoice && open) {
+      // Sadece yeni kayıt modunda ve müşteri seçildiğinde otomatik doldur
+      // Eğer alanlar zaten doluysa üzerine yazma (kullanıcı manuel girmiş olabilir)
+      const currentBillingAddress = watch('billingAddress')
+      const currentBillingCity = watch('billingCity')
+      const currentBillingTaxNumber = watch('billingTaxNumber')
+      
+      if (!currentBillingAddress && selectedCustomer.address) {
+        setValue('billingAddress', selectedCustomer.address, { shouldDirty: false })
+      }
+      if (!currentBillingCity && selectedCustomer.city) {
+        setValue('billingCity', selectedCustomer.city, { shouldDirty: false })
+      }
+      if (!currentBillingTaxNumber && selectedCustomer.taxNumber) {
+        setValue('billingTaxNumber', selectedCustomer.taxNumber, { shouldDirty: false })
+      }
+    }
+  }, [selectedCustomer, invoice, open, setValue, watch])
+  
   // ✅ ÇÖZÜM: quoteProp varsa onun id'sini kullan, yoksa quoteIdProp
   const effectiveQuoteId = quoteProp?.id || quoteIdProp
   

@@ -105,11 +105,16 @@
       "meetings": "Meetings",
       "quotes": "Quotes",
       "contracts": "Contracts",
+      "salesQuotas": "Sales Quotas",
       "approvals": "Approvals",
       "invoices": "Invoice Tracking",
       "products": "Products",
+      "productBundles": "Product Bundles",
       "shipments": "Shipments",
       "purchaseShipments": "Purchase Acceptance",
+      "returnOrders": "Return Orders",
+      "creditNotes": "Credit Notes",
+      "paymentPlans": "Payment Plans",
       "finance": "Finance",
       "tickets": "Support Tickets",
       "tasks": "Tasks",
@@ -248,6 +253,12 @@
     "invoiceStatusDescription": "Status-based distribution of invoices",
     "invoiceStatusDistribution": "Invoice Status Distribution",
     "invoiceStatusDistributionDescription": "Number of invoices by status",
+    "totalReturnOrders": "Return Orders",
+    "totalReturnOrdersTooltip": "Total number of return orders and pending returns",
+    "totalPaymentPlans": "Payment Plans",
+    "totalPaymentPlansTooltip": "Total number of payment plans and active plans",
+    "quotaAchievementRate": "Quota Achievement Rate",
+    "quotaAchievementRateTooltip": "Sales quota achievement rate (Actual / Target)",
     "dealsInStage": "Deals in Status",
     "dealDetails": "Deal Details",
     "dealsFound": "deals found",
@@ -632,7 +643,13 @@
     "draftPurchaseCreatedMessage": "Draft purchase acceptance created for this purchase invoice (#{id})",
     "draftShipmentCreated": "Draft shipment created for invoice",
     "draftShipmentCreatedMessage": "Draft shipment created for this invoice (#{id})",
-    "defaultInvoiceTitle": "Invoice"
+    "defaultInvoiceTitle": "Invoice",
+    "productBundleCreated": "Product bundle created: {name}",
+    "productBundleUpdated": "Product bundle updated: {name}",
+    "productBundleDeleted": "Product bundle deleted: {name}",
+    "paymentPlanCreated": "Payment plan created: {name}",
+    "paymentPlanUpdated": "Payment plan updated: {name}",
+    "paymentPlanDeleted": "Payment plan deleted: {name}"
   },
   "status": {
     "draft": "Draft",
@@ -2141,6 +2158,49 @@
       "actions": "Actions"
     }
   },
+  "productBundles": {
+    "title": "Product Bundles",
+    "description": "Manage product bundles and use them when creating quotes/invoices",
+    "searchPlaceholder": "Search bundle name...",
+    "allStatuses": "All Statuses",
+    "newBundle": "New Bundle",
+    "selectStatus": "Status",
+    "deleteConfirm": "Are you sure you want to delete bundle {name}?",
+    "deleteFailed": "Failed to delete",
+    "noBundlesFound": "No bundles found",
+    "tableHeaders": {
+      "name": "Bundle Name",
+      "description": "Description",
+      "items": "Products",
+      "totalPrice": "Total Price",
+      "discount": "Discount",
+      "finalPrice": "Final Price",
+      "status": "Status",
+      "actions": "Actions"
+    }
+  },
+  "paymentPlans": {
+    "title": "Payment Plans",
+    "description": "Create and manage installment plans for invoices",
+    "searchPlaceholder": "Search plan name...",
+    "allStatuses": "All Statuses",
+    "newPlan": "New Plan",
+    "selectStatus": "Status",
+    "deleteConfirm": "Are you sure you want to delete payment plan {name}?",
+    "deleteFailed": "Failed to delete",
+    "noPlansFound": "No payment plans found",
+    "tableHeaders": {
+      "name": "Plan Name",
+      "invoice": "Invoice",
+      "customer": "Customer",
+      "totalAmount": "Total Amount",
+      "paidAmount": "Paid",
+      "remainingAmount": "Remaining",
+      "installmentCount": "Installments",
+      "status": "Status",
+      "actions": "Actions"
+    }
+  },
   "login": {
     "description": "Sign in to your account and start managing your business",
     "email": "Email",
@@ -2169,5 +2229,16 @@
     "description": "The page you are looking for does not exist or may have been moved.",
     "backToDashboard": "Back to Dashboard",
     "goBack": "Go Back"
+  },
+  "activity": {
+    "quotesBulkDeleted": "{count} quotes deleted in bulk",
+    "invoicesBulkDeleted": "{count} invoices deleted in bulk",
+    "dealsBulkDeleted": "{count} deals deleted in bulk",
+    "quoteDeleted": "Quote deleted: {title}",
+    "invoiceDeleted": "Invoice deleted: {title}",
+    "dealDeleted": "Deal deleted: {title}",
+    "defaultQuoteTitle": "Quote",
+    "defaultInvoiceTitle": "Invoice",
+    "defaultDealTitle": "Deal"
   }
 }

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
 import { useSession } from '@/hooks/useSession'
-import { Plus, Search, Edit, Trash2, Eye, FileText, LayoutGrid, Table as TableIcon, Sparkles, Calendar, CheckSquare, Package, Mail, MessageSquare, MessageCircle } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Eye, FileText, LayoutGrid, Table as TableIcon, Sparkles, Calendar, CheckSquare, Package, Mail, MessageSquare, MessageCircle, Download, Truck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useData } from '@/hooks/useData'
@@ -52,6 +52,8 @@ import { formatCurrency } from '@/lib/utils'
 import dynamic from 'next/dynamic'
 import InlineEditBadge from '@/components/ui/InlineEditBadge'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
+import BulkActions from '@/components/ui/BulkActions'
+import { Checkbox } from '@/components/ui/checkbox'
 
 // Lazy load büyük componentler - performans için
 const InvoiceForm = dynamic(() => import('./InvoiceForm'), {
@@ -164,6 +166,9 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
   const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false)
   const [selectedInvoiceForCommunication, setSelectedInvoiceForCommunication] = useState<Invoice | null>(null)
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
+  // Bulk operations state
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [selectAll, setSelectAll] = useState(false)
 
   // Debounced search - performans için
   const [debouncedSearch, setDebouncedSearch] = useState(search)
@@ -386,6 +391,84 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
     setSelectedInvoice(null)
   }, [])
 
+  // Bulk operations handlers
+  const handleSelectAll = useCallback((checked: boolean) => {
+    setSelectAll(checked)
+    if (checked) {
+      // SHIPPED, RECEIVED, PAID invoice'ları seçme - immutable oldukları için
+      const selectableInvoices = invoices.filter((i) => !['SHIPPED', 'RECEIVED', 'PAID'].includes(i.status))
+      setSelectedIds(selectableInvoices.map((i) => i.id))
+    } else {
+      setSelectedIds([])
+    }
+  }, [invoices])
+
+  const handleSelectItem = useCallback((id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedIds((prev) => [...prev, id])
+    } else {
+      setSelectedIds((prev) => prev.filter((itemId) => itemId !== id))
+      setSelectAll(false)
+    }
+  }, [])
+
+  const handleBulkDelete = useCallback(async (ids: string[]) => {
+    try {
+      const res = await fetch('/api/invoices/bulk', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to bulk delete invoices')
+      }
+
+      // Optimistic update - silinen kayıtları listeden kaldır
+      const updatedInvoices = invoices.filter((i) => !ids.includes(i.id))
+      
+      // Cache'i güncelle
+      await mutateInvoices(updatedInvoices, { revalidate: false })
+      
+      // Tüm diğer invoice URL'lerini de güncelle
+      await Promise.all([
+        mutate('/api/invoices', updatedInvoices, { revalidate: false }),
+        mutate('/api/invoices?', updatedInvoices, { revalidate: false }),
+        mutate(apiUrl || '/api/invoices', updatedInvoices, { revalidate: false }),
+      ])
+
+      // Kanban cache'ini de güncelle
+      queryClient.invalidateQueries({ queryKey: ['kanban-invoices'] })
+
+      toast.success(tCommon('bulkDeleteSuccess', { count: ids.length, item: tCommon('invoices') }), {
+        description: tCommon('bulkDeleteSuccessMessage', { count: ids.length, item: tCommon('invoices') }),
+      })
+
+      // Seçimi temizle
+      setSelectedIds([])
+      setSelectAll(false)
+    } catch (error: any) {
+      console.error('Bulk delete error:', error)
+      toast.error(tCommon('error'), { description: error?.message || 'Toplu silme işlemi başarısız oldu' })
+    }
+  }, [invoices, mutateInvoices, apiUrl, queryClient, tCommon])
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedIds([])
+    setSelectAll(false)
+  }, [])
+
+  // selectAll'u güncelle - tüm seçilebilir invoice'lar seçiliyse true
+  useEffect(() => {
+    const selectableInvoices = invoices.filter((i) => !['SHIPPED', 'RECEIVED', 'PAID'].includes(i.status))
+    if (selectableInvoices.length > 0 && selectedIds.length === selectableInvoices.length) {
+      setSelectAll(true)
+    } else {
+      setSelectAll(false)
+    }
+  }, [selectedIds, invoices])
+
   // Stats verisini çek - toplam sayı için
   const { data: stats } = useData<any>(
     isOpen ? `/api/stats/invoices?invoiceType=${invoiceType}` : null,
@@ -486,6 +569,88 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
             >
               <LayoutGrid className="h-4 w-4" />
             </Button>
+            {/* ✅ Export Butonu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" title="Dışa Aktar">
+                  <Download className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Dışa Aktar</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={async () => {
+                    try {
+                      const params = new URLSearchParams()
+                      if (debouncedSearch) params.append('search', debouncedSearch)
+                      if (status) params.append('status', status)
+                      if (invoiceType && invoiceType !== 'ALL') params.append('type', invoiceType)
+                      params.append('format', 'excel')
+                      
+                      const res = await fetch(`/api/invoices/export?${params.toString()}`)
+                      if (!res.ok) throw new Error('Export failed')
+                      
+                      const blob = await res.blob()
+                      const url = window.URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `faturalar-${new Date().toISOString().split('T')[0]}.xlsx`
+                      document.body.appendChild(a)
+                      a.click()
+                      document.body.removeChild(a)
+                      window.URL.revokeObjectURL(url)
+                      
+                      toast.success('Dışa aktarma başarılı', {
+                        description: 'Faturalar Excel formatında indirildi.',
+                      })
+                    } catch (error: any) {
+                      toast.error('Dışa aktarma başarısız', {
+                        description: error?.message || 'Bir hata oluştu',
+                      })
+                    }
+                  }}
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Excel (.xlsx)
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={async () => {
+                    try {
+                      const params = new URLSearchParams()
+                      if (debouncedSearch) params.append('search', debouncedSearch)
+                      if (status) params.append('status', status)
+                      if (invoiceType && invoiceType !== 'ALL') params.append('type', invoiceType)
+                      params.append('format', 'csv')
+                      
+                      const res = await fetch(`/api/invoices/export?${params.toString()}`)
+                      if (!res.ok) throw new Error('Export failed')
+                      
+                      const blob = await res.blob()
+                      const url = window.URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = `faturalar-${new Date().toISOString().split('T')[0]}.csv`
+                      document.body.appendChild(a)
+                      a.click()
+                      document.body.removeChild(a)
+                      window.URL.revokeObjectURL(url)
+                      
+                      toast.success('Dışa aktarma başarılı', {
+                        description: 'Faturalar CSV formatında indirildi.',
+                      })
+                    } catch (error: any) {
+                      toast.error('Dışa aktarma başarısız', {
+                        description: error?.message || 'Bir hata oluştu',
+                      })
+                    }
+                  }}
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  CSV (.csv)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           <Button
             onClick={handleAdd}
@@ -828,7 +993,15 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
 
                       if (automation.financeCreated && automation.financeId) {
                         const invoiceAmount = responseData?.totalAmount || 0
-                        toastDescription += `\n\nOtomatik işlemler:\n• Finance kaydı oluşturuldu (ID: ${automation.financeId.substring(0, 8)}...)\n• Gelir kaydı eklendi (${formatCurrency(invoiceAmount)})\n• Finans raporları güncellendi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                        const invoiceType = responseData?.invoiceType || 'SALES'
+                        const hasProducts = responseData?.invoiceItems?.length > 0 || responseData?.items?.length > 0
+                        
+                        toastDescription += `\n\n✅ Otomatik işlemler:\n• Finance kaydı oluşturuldu (ID: ${automation.financeId.substring(0, 8)}...)\n• Gelir kaydı eklendi (${formatCurrency(invoiceAmount)})\n• Finans raporları güncellendi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                        
+                        // Satış faturaları için sevkiyat önerisi
+                        if (invoiceType === 'SALES' && hasProducts && responseData?.status !== 'SHIPPED') {
+                          toastDescription += `\n\n💡 Öneri: Ürünler sevk edilmediyse, sevkiyat oluşturmak için fatura detay sayfasına gidin.`
+                        }
                       } else {
                         toastDescription += `\n\nOtomatik işlemler:\n• Finance kaydı oluşturuluyor...\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
                       }
@@ -913,12 +1086,29 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
         </>
       ) : (
         <>
+          {/* Bulk Actions Bar */}
+          {selectedIds.length > 0 && (
+            <BulkActions
+              selectedIds={selectedIds}
+              onBulkDelete={handleBulkDelete}
+              onClearSelection={handleClearSelection}
+              itemName={t('title').toLowerCase()}
+            />
+          )}
+
           {/* Desktop Table View */}
           <div className="hidden md:block bg-white rounded-lg shadow-card overflow-hidden">
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">
+                      <Checkbox
+                        checked={selectAll}
+                        onCheckedChange={handleSelectAll}
+                        aria-label={tCommon('selectAll')}
+                      />
+                    </TableHead>
                     <TableHead>{t('tableHeaders.title')}</TableHead>
                     {isSuperAdmin && <TableHead>{t('tableHeaders.company')}</TableHead>}
                     <TableHead>{t('tableHeaders.status')}</TableHead>
@@ -931,7 +1121,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                 <TableBody>
                   {invoices.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={isSuperAdmin ? 7 : 6} className="text-center py-8 text-gray-500">
+                      <TableCell colSpan={isSuperAdmin ? 8 : 7} className="text-center py-8 text-gray-500">
                         {t('noInvoicesFound')}
                       </TableCell>
                     </TableRow>
@@ -940,7 +1130,10 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                       const isFromQuote = !!invoice.quoteId
                       const isShipped = invoice.status === 'SHIPPED'
                       const isReceived = invoice.status === 'RECEIVED'
-                      const isLocked = isFromQuote || isShipped || isReceived
+                      const isPaid = invoice.status === 'PAID'
+                      const isLocked = isFromQuote || isShipped || isReceived || isPaid
+                      const isSelected = selectedIds.includes(invoice.id)
+                      const isImmutable = ['SHIPPED', 'RECEIVED', 'PAID'].includes(invoice.status)
 
                       return (
                         <TableRow
@@ -951,10 +1144,24 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                                 ? 'bg-indigo-50/50 hover:bg-indigo-50'
                                 : isShipped
                                   ? 'bg-green-50/50 hover:bg-green-50'
-                                  : 'bg-teal-50/50 hover:bg-teal-50'
+                                  : isReceived
+                                    ? 'bg-teal-50/50 hover:bg-teal-50'
+                                    : 'bg-emerald-50/50 hover:bg-emerald-50'
                               : ''
                           }
                         >
+                          <TableCell>
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={(checked) => {
+                                if (!isImmutable) {
+                                  handleSelectItem(invoice.id, checked as boolean)
+                                }
+                              }}
+                              disabled={isImmutable}
+                              aria-label={`${invoice.title} seç`}
+                            />
+                          </TableCell>
                           <TableCell className="font-medium">
                             {invoice.title}
                             {isLocked && (
@@ -1045,8 +1252,17 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
 
                                   // ✅ Detaylı toast mesajı
                                   if (newStatus === 'SENT') {
+                                    const toastDescription = `"${invoice.title || invoice.invoiceNumber || 'Fatura'}" faturası gönderildi.\n\nOtomatik işlemler:\n${automation.shipmentCreated && automation.shipmentId ? `• Sevkiyat kaydı oluşturuldu (ID: ${automation.shipmentId.substring(0, 8)}...)\n• Sevkiyat numarası atandı\n• Müşteri adresi sevkiyat adresi olarak ayarlandı\n• Teslimat tarihi belirlendi\n` : ''}• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
                                     toast.success('📤 Fatura Gönderildi!', {
-                                      description: `"${invoice.title || invoice.invoiceNumber || 'Fatura'}" faturası gönderildi.\n\nOtomatik işlemler:\n${automation.shipmentCreated && automation.shipmentId ? `• Sevkiyat kaydı oluşturuldu (ID: ${automation.shipmentId.substring(0, 8)}...)\n• Sevkiyat numarası atandı\n• Müşteri adresi sevkiyat adresi olarak ayarlandı\n• Teslimat tarihi belirlendi\n` : ''}• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                                      description: toastDescription,
+                                      ...(automation.shipmentCreated && automation.shipmentId ? {
+                                        action: {
+                                          label: 'Sevkiyatı Görüntüle',
+                                          onClick: () => {
+                                            window.location.href = `/${locale}/shipments/${automation.shipmentId}`
+                                          }
+                                        }
+                                      } : {})
                                     })
                                   } else if (newStatus === 'PAID') {
                                     const invoiceAmount = updatedInvoice?.totalAmount || 0
@@ -1054,7 +1270,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                                       description: `"${invoice.title || invoice.invoiceNumber || 'Fatura'}" faturası ödendi olarak işaretlendi.\n\nOtomatik işlemler:\n${automation.financeCreated ? `• Finance kaydı oluşturuldu (ID: ${automation.financeId?.substring(0, 8)}...)\n• Gelir kaydı eklendi (${formatCurrency(invoiceAmount)})\n• Finans raporları güncellendi\n` : ''}• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
                                     })
                                   } else {
-                                    toast.success('Durum güncellendi', { description: `Fatura "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
+                                  toast.success('Durum güncellendi', { description: `Fatura "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
                                   }
                                 } catch (error: any) {
                                   toast.error('Durum güncellenemedi', { description: error?.message || 'Bir hata oluştu.' })
@@ -1097,9 +1313,21 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-56">
                                   <DropdownMenuLabel>{t('quickActions.title')}</DropdownMenuLabel>
+                                  {/* SHIPPED invoice'lar için Sevkiyatı Görüntüle */}
+                                  {(invoice.status === 'SHIPPED' || invoice.status === 'SENT') && invoice.shipmentId && (
+                                    <DropdownMenuItem
+                                      onSelect={() => {
+                                        toast.info('Sevkiyata Yönlendiriliyor', { description: 'Sevkiyat detay sayfasına yönlendiriliyor...' })
+                                        window.location.href = `/${locale}/shipments/${invoice.shipmentId}`
+                                      }}
+                                    >
+                                      <Truck className="h-4 w-4" />
+                                      Sevkiyatı Görüntüle
+                                    </DropdownMenuItem>
+                                  )}
                                   <DropdownMenuItem
                                     onSelect={() => setQuickAction({ type: 'shipment', invoice })}
-                                    disabled={invoice.status !== 'PAID'}
+                                    disabled={invoice.status !== 'PAID' || invoice.status === 'SHIPPED'}
                                   >
                                     <Package className="h-4 w-4" />
                                     {t('quickActions.createShipment')}
@@ -1432,7 +1660,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                                     description: `"${invoice.title || invoice.invoiceNumber || 'Fatura'}" faturası ödendi olarak işaretlendi.\n\nOtomatik işlemler:\n${automation.financeCreated ? `• Finance kaydı oluşturuldu (ID: ${automation.financeId?.substring(0, 8)}...)\n• Gelir kaydı eklendi (${formatCurrency(invoiceAmount)})\n• Finans raporları güncellendi\n` : ''}• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
                                   })
                                 } else {
-                                  toast.success('Durum güncellendi', { description: `Fatura "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
+                                toast.success('Durum güncellendi', { description: `Fatura "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
                                 }
                               } catch (error: any) {
                                 toast.error('Durum güncellenemedi', { description: error?.message || 'Bir hata oluştu.' })

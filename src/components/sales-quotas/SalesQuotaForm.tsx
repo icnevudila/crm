@@ -10,6 +10,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from '@/lib/toast'
+import { Sparkles } from 'lucide-react'
+import { useLocale } from 'next-intl'
 
 const quotaSchema = z.object({
   userId: z.string().min(1, 'Kullanıcı seçmelisiniz'),
@@ -34,6 +36,7 @@ export default function SalesQuotaForm({
   onClose,
   onSuccess,
 }: SalesQuotaFormProps) {
+  const locale = useLocale()
   const [loading, setLoading] = useState(false)
   const [users, setUsers] = useState<Array<{ id: string; name: string }>>([])
 
@@ -112,7 +115,9 @@ export default function SalesQuotaForm({
       const userName = user?.name || 'Kullanıcı'
       toast.success(
         quota ? 'Satış kotası güncellendi' : 'Satış kotası kaydedildi',
-        quota ? `${userName} için kota başarıyla güncellendi.` : `${userName} için kota başarıyla eklendi.`
+        {
+          description: quota ? `${userName} için kota başarıyla güncellendi.` : `${userName} için kota başarıyla eklendi.`
+        }
       )
 
       if (onSuccess) {
@@ -138,9 +143,42 @@ export default function SalesQuotaForm({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>
-            {quota ? 'Satış Kotasını Düzenle' : 'Yeni Satış Kotası'}
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle>
+              {quota ? 'Satış Kotasını Düzenle' : 'Yeni Satış Kotası'}
+            </DialogTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                // FloatingAIChat'i aç ve context-aware prompt gönder
+                const event = new CustomEvent('open-ai-chat', {
+                  detail: {
+                    initialMessage: quota
+                      ? `Satış kotasını düzenle: ${quota.user?.name || 'Kullanıcı'} için ${quota.period} ${quota.year} - Hedef: ${quota.revenueTarget} TL`
+                      : 'Yeni satış kotası oluştur',
+                    context: {
+                      type: 'sales-quota',
+                      quota: quota ? {
+                        id: quota.id,
+                        userId: quota.userId,
+                        period: quota.period,
+                        year: quota.year,
+                        revenueTarget: quota.revenueTarget,
+                      } : null,
+                    },
+                  },
+                })
+                window.dispatchEvent(event)
+                toast.info('784 AI açılıyor...', { description: 'AI asistanı ile satış kotası oluşturabilir veya düzenleyebilirsiniz' })
+              }}
+              className="gap-2"
+            >
+              <Sparkles className="h-4 w-4" />
+              {quota ? 'AI ile Düzenle' : 'AI ile Oluştur'}
+            </Button>
+          </div>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

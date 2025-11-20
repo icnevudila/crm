@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Edit, CheckSquare, User, Trash2, Clock, Calendar, AlertCircle, Zap } from 'lucide-react'
+import { ArrowLeft, Edit, CheckSquare, User, Trash2, Clock, Calendar, AlertCircle, Zap, Briefcase, FileText, Receipt } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -12,7 +12,8 @@ import GradientCard from '@/components/ui/GradientCard'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import TaskForm from '@/components/tasks/TaskForm'
-import { toastError, confirm } from '@/lib/toast'
+import { toast, toastError, confirm } from '@/lib/toast'
+import Link from 'next/link'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
 import { useData } from '@/hooks/useData'
 import ContextualActionsBar from '@/components/ui/ContextualActionsBar'
@@ -25,9 +26,28 @@ interface Task {
   priority?: string
   dueDate?: string
   assignedTo?: string
+  relatedTo?: string
+  relatedId?: string
   User?: {
     name: string
     email: string
+  }
+  Deal?: {
+    id: string
+    title: string
+  }
+  Quote?: {
+    id: string
+    title: string
+  }
+  Invoice?: {
+    id: string
+    title: string
+    invoiceNumber?: string
+  }
+  Customer?: {
+    id: string
+    name: string
   }
   createdAt: string
   updatedAt?: string
@@ -283,6 +303,84 @@ export default function TaskDetailPage() {
           </GradientCard>
         </motion.div>
       </div>
+
+      {/* Quick Actions - Hızlı İşlemler */}
+      {(task.relatedTo && task.relatedId) && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <Card className="p-6 bg-gradient-to-br from-white to-gray-50 border-emerald-100 shadow-lg">
+            <div className="flex items-center gap-2 mb-6">
+              <div className="p-2 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 shadow-md">
+                <Zap className="h-5 w-5 text-white" />
+              </div>
+              <h2 className="text-xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent">
+                İlgili Kayıt
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {task.relatedTo === 'Deal' && task.Deal && (
+                <Link href={`/${locale}/deals/${task.relatedId}`} prefetch={true}>
+                  <Button
+                    variant="outline"
+                    className="w-full border-blue-300 text-blue-700 hover:bg-blue-50"
+                    onClick={() => {
+                      toast.info('Fırsata Yönlendiriliyor', { description: `"${task.Deal?.title || 'Fırsat'}" fırsatına yönlendiriliyor...` })
+                    }}
+                  >
+                    <Briefcase className="mr-2 h-4 w-4" />
+                    Fırsatı Görüntüle: {task.Deal.title}
+                  </Button>
+                </Link>
+              )}
+              {task.relatedTo === 'Quote' && task.Quote && (
+                <Link href={`/${locale}/quotes/${task.relatedId}`} prefetch={true}>
+                  <Button
+                    variant="outline"
+                    className="w-full border-purple-300 text-purple-700 hover:bg-purple-50"
+                    onClick={() => {
+                      toast.info('Teklife Yönlendiriliyor', { description: `"${task.Quote?.title || 'Teklif'}" teklifine yönlendiriliyor...` })
+                    }}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Teklifi Görüntüle: {task.Quote.title}
+                  </Button>
+                </Link>
+              )}
+              {task.relatedTo === 'Invoice' && task.Invoice && (
+                <Link href={`/${locale}/invoices/${task.relatedId}`} prefetch={true}>
+                  <Button
+                    variant="outline"
+                    className="w-full border-green-300 text-green-700 hover:bg-green-50"
+                    onClick={() => {
+                      toast.info('Faturaya Yönlendiriliyor', { description: `"${task.Invoice?.title || task.Invoice?.invoiceNumber || 'Fatura'}" faturasına yönlendiriliyor...` })
+                    }}
+                  >
+                    <Receipt className="mr-2 h-4 w-4" />
+                    Faturayı Görüntüle: {task.Invoice.title || task.Invoice.invoiceNumber}
+                  </Button>
+                </Link>
+              )}
+              {task.relatedTo === 'Customer' && task.Customer && (
+                <Link href={`/${locale}/customers/${task.relatedId}`} prefetch={true}>
+                  <Button
+                    variant="outline"
+                    className="w-full border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                    onClick={() => {
+                      toast.info('Müşteriye Yönlendiriliyor', { description: `"${task.Customer?.name || 'Müşteri'}" müşterisine yönlendiriliyor...` })
+                    }}
+                  >
+                    <User className="mr-2 h-4 w-4" />
+                    Müşteriyi Görüntüle: {task.Customer.name}
+                  </Button>
+                </Link>
+              )}
+            </div>
+          </Card>
+        </motion.div>
+      )}
 
       {/* Activity Timeline */}
       {task.activities && task.activities.length > 0 && (

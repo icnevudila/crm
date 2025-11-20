@@ -48,7 +48,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatCurrency } from '@/lib/utils'
-import { toastSuccess, toastError } from '@/lib/toast'
+import { toast, toastSuccess, toastError } from '@/lib/toast'
 import { motion } from 'framer-motion'
 import SendEmailButton from '@/components/integrations/SendEmailButton'
 import SendSmsButton from '@/components/integrations/SendSmsButton'
@@ -360,11 +360,27 @@ export default function ShipmentDetailPage() {
       </div>
 
       {/* Quick Actions */}
-      {customer && (customer.email || customer.phone) && (
-        <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Hızlı İşlemler</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {customer.email && (
+      <Card className="p-6">
+        <h2 className="text-xl font-semibold mb-4">Hızlı İşlemler</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          {/* Faturayı Görüntüle */}
+          {shipment.invoiceId && (
+            <Link href={`/${locale}/invoices/${shipment.invoiceId}`} prefetch={true}>
+              <Button
+                variant="outline"
+                className="w-full border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                onClick={() => {
+                  toast.info('Faturaya Yönlendiriliyor', { description: `"${shipment.Invoice?.title || shipment.Invoice?.invoiceNumber || 'Fatura'}" faturasına yönlendiriliyor...` })
+                }}
+              >
+                <Receipt className="mr-2 h-4 w-4" />
+                Faturayı Görüntüle
+              </Button>
+            </Link>
+          )}
+          {customer && (customer.email || customer.phone) && (
+            <>
+              {customer.email && (
               <SendEmailButton
                 to={customer.email}
                 subject={`Sevkiyat Takip: ${shipment.tracking || shipment.id.substring(0, 8)}`}
@@ -393,24 +409,25 @@ export default function ShipmentDetailPage() {
                   entityId: shipment.id,
                 })}
               />
-            )}
-            {customer.phone && (
-              <>
-                <SendSmsButton
-                  to={customer.phone}
-                  message={`Merhaba ${customer.name}, sevkiyatınız hakkında bilgi vermek istiyoruz. Takip No: ${shipment.tracking || shipment.id.substring(0, 8)}`}
-                />
-                <SendWhatsAppButton
-                  phoneNumber={customer.phone}
-                  entityType="shipment"
-                  entityId={shipment.id}
-                  customerName={customer.name}
-                />
-              </>
-            )}
-          </div>
-        </Card>
-      )}
+              )}
+              {customer.phone && (
+                <>
+                  <SendSmsButton
+                    to={customer.phone}
+                    message={`Merhaba ${customer.name}, sevkiyatınız hakkında bilgi vermek istiyoruz. Takip No: ${shipment.tracking || shipment.id.substring(0, 8)}`}
+                  />
+                  <SendWhatsAppButton
+                    phoneNumber={customer.phone}
+                    entityType="shipment"
+                    entityId={shipment.id}
+                    customerName={customer.name}
+                  />
+                </>
+              )}
+            </>
+          )}
+        </div>
+      </Card>
 
       {/* Tabs: Detaylı Bilgiler */}
       <Tabs defaultValue="overview" className="w-full">

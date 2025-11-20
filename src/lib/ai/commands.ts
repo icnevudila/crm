@@ -5,7 +5,7 @@
 
 export interface AICommand {
   type: 'create' | 'read' | 'update' | 'delete' | 'summarize' | 'generate' | 'help' | 'list' | 'show' | 'filter' | 'check' | 'analyze' | 'monitor' | 'trigger'
-  entity: 'customer' | 'deal' | 'quote' | 'invoice' | 'task' | 'ticket' | 'note' | 'email' | 'product' | 'finance' | 'shipment' | 'meeting' | 'document' | 'contract' | 'automation' | 'activity' | 'notification' | 'analytics' | 'system' | 'report'
+  entity: 'customer' | 'deal' | 'quote' | 'invoice' | 'task' | 'ticket' | 'note' | 'email' | 'product' | 'finance' | 'shipment' | 'meeting' | 'document' | 'contract' | 'sales-quota' | 'product-bundle' | 'return-order' | 'credit-note' | 'payment-plan' | 'survey' | 'territory' | 'partner' | 'tax-rate' | 'marketing-campaign' | 'automation' | 'activity' | 'notification' | 'analytics' | 'system' | 'report'
   action?: string
   params?: Record<string, any>
   rawCommand: string
@@ -34,6 +34,8 @@ export const COMMAND_EXAMPLES = {
     { command: 'Teklifleri listele', description: 'Tüm teklifleri göster' },
     { command: 'Sevkiyatları listele', description: 'Tüm sevkiyatları göster' },
     { command: 'Finans kayıtlarını listele', description: 'Tüm finans kayıtlarını göster' },
+    { command: 'Satış kotası oluştur: Ahmet için 100000 TL', description: 'Satış kotası oluştur' },
+    { command: 'Satış kotalarını listele', description: 'Tüm satış kotalarını göster' },
     // UPDATE
     { command: 'Fırsat durumunu değiştir: WON', description: 'Fırsat stage güncelle' },
     { command: 'Görev tamamlandı olarak işaretle', description: 'Görev status güncelle' },
@@ -66,6 +68,8 @@ export const COMMAND_EXAMPLES = {
     { command: 'List quotes', description: 'Show all quotes' },
     { command: 'List shipments', description: 'Show all shipments' },
     { command: 'List finance records', description: 'Show all finance records' },
+    { command: 'Create sales quota: 100000 TL for John', description: 'Create sales quota' },
+    { command: 'List sales quotas', description: 'Show all sales quotas' },
     // UPDATE
     { command: 'Change deal status: WON', description: 'Update deal stage' },
     { command: 'Mark task as completed', description: 'Update task status' },
@@ -182,6 +186,16 @@ export async function generateCommandPreview(
     meeting: isTurkish ? 'Görüşme' : 'Meeting',
     document: isTurkish ? 'Doküman' : 'Document',
     contract: isTurkish ? 'Sözleşme' : 'Contract',
+    'sales-quota': isTurkish ? 'Satış Kotası' : 'Sales Quota',
+    'product-bundle': isTurkish ? 'Ürün Paketi' : 'Product Bundle',
+    'return-order': isTurkish ? 'İade Siparişi' : 'Return Order',
+    'credit-note': isTurkish ? 'Alacak Dekontu' : 'Credit Note',
+    'payment-plan': isTurkish ? 'Ödeme Planı' : 'Payment Plan',
+    survey: isTurkish ? 'Anket' : 'Survey',
+    territory: isTurkish ? 'Bölge' : 'Territory',
+    partner: isTurkish ? 'Partner' : 'Partner',
+    'tax-rate': isTurkish ? 'Vergi Oranı' : 'Tax Rate',
+    'marketing-campaign': isTurkish ? 'Pazarlama Kampanyası' : 'Marketing Campaign',
   }
 
   const actionNames: Record<string, string> = {
@@ -284,6 +298,16 @@ async function logAICommand(
       meeting: 'Meeting',
       document: 'Document',
       contract: 'Contract',
+      'sales-quota': 'SalesQuota',
+      'product-bundle': 'ProductBundle',
+      'return-order': 'ReturnOrder',
+      'credit-note': 'CreditNote',
+      'payment-plan': 'PaymentPlan',
+      survey: 'Survey',
+      territory: 'Territory',
+      partner: 'Partner',
+      'tax-rate': 'TaxRate',
+      'marketing-campaign': 'MarketingCampaign',
     }
 
     const entity = entityMap[command.entity] || command.entity
@@ -620,6 +644,46 @@ async function handleCreateCommand(
         message: isTurkish ? 'Doküman için lütfen doküman yükleme formunu kullanın' : 'Please use the document upload form',
       }
     }
+    case 'sales-quota': {
+      const userId = command.params?.userId || command.params?.user
+      const period = command.params?.period || 'MONTHLY'
+      const year = command.params?.year || new Date().getFullYear()
+      const revenueTarget = command.params?.revenueTarget || command.params?.target || command.params?.amount || 0
+      const numericTarget = typeof revenueTarget === 'string' ? parseFloat(revenueTarget.replace(/[^\d.,]/g, '').replace(',', '.')) : revenueTarget
+      const month = command.params?.month
+      const quarter = command.params?.quarter
+
+      if (!userId) {
+        return { success: false, message: isTurkish ? 'Kullanıcı ID gerekli' : 'User ID required' }
+      }
+
+      const { data, error } = await supabase
+        .from('SalesQuota')
+        .insert({
+          userId,
+          period,
+          year,
+          month,
+          quarter,
+          revenueTarget: numericTarget,
+          dealsTarget: command.params?.dealsTarget,
+          newCustomersTarget: command.params?.newCustomersTarget,
+          companyId: session?.user?.companyId,
+        })
+        .select()
+        .single()
+
+      if (error) {
+        throw new Error(error.message || (isTurkish ? 'Satış kotası oluşturulamadı' : 'Failed to create sales quota'))
+      }
+
+      return {
+        success: true,
+        message: isTurkish ? `✅ Satış kotası oluşturuldu` : `✅ Sales quota created`,
+        data,
+        link: `/${locale}/sales-quotas/${data.id}`,
+      }
+    }
     case 'ticket': {
       const title = command.params?.title || command.params?.name || 'Yeni Destek Talebi'
 
@@ -644,6 +708,18 @@ async function handleCreateCommand(
         message: isTurkish ? `✅ Destek talebi "${title}" oluşturuldu` : `✅ Ticket "${title}" created`,
         data,
         link: `/${locale}/tickets/${data.id}`,
+      }
+    }
+    case 'return-order': {
+      return {
+        success: false,
+        message: isTurkish ? 'İade siparişi için lütfen fatura detay sayfasından "İade Oluştur" butonunu kullanın' : 'Please use the "Create Return" button from invoice detail page',
+      }
+    }
+    case 'credit-note': {
+      return {
+        success: false,
+        message: isTurkish ? 'Alacak dekontu için lütfen iade siparişi detay sayfasından "Alacak Dekontu Oluştur" butonunu kullanın' : 'Please use the "Create Credit Note" button from return order detail page',
       }
     }
     default:
@@ -837,6 +913,51 @@ async function handleReadCommand(
       return {
         success: true,
         message: isTurkish ? `✅ ${data?.length || 0} doküman bulundu` : `✅ Found ${data?.length || 0} documents`,
+        data: { items: data, count: data?.length || 0 },
+      }
+    }
+    case 'sales-quota': {
+      let query = supabase.from('SalesQuota').select('id, period, year, month, quarter, revenueTarget, revenueActual, achievementPercent, user:User!SalesQuota_userId_fkey(id, name)').eq('companyId', session?.user?.companyId)
+      if (command.params?.period) query = query.eq('period', command.params.period)
+      if (command.params?.year) query = query.eq('year', command.params.year)
+      if (command.params?.userId) query = query.eq('userId', command.params.userId)
+      
+      const { data, error } = await query.order('year', { ascending: false }).order('month', { ascending: false }).limit(20)
+      if (error) throw new Error(error.message || (isTurkish ? 'Satış kotaları alınamadı' : 'Failed to fetch sales quotas'))
+      
+      return {
+        success: true,
+        message: isTurkish ? `✅ ${data?.length || 0} satış kotası bulundu` : `✅ Found ${data?.length || 0} sales quotas`,
+        data: { items: data, count: data?.length || 0 },
+      }
+    }
+    case 'return-order': {
+      let query = supabase.from('ReturnOrder').select('id, returnNumber, status, totalAmount, returnDate, invoice:Invoice!ReturnOrder_invoiceId_fkey(id, invoiceNumber)').eq('companyId', session?.user?.companyId)
+      if (filters.status) query = query.eq('status', filters.status)
+      if (command.params?.invoiceId) query = query.eq('invoiceId', command.params.invoiceId)
+      if (command.params?.search) query = query.ilike('returnNumber', `%${command.params.search}%`)
+      
+      const { data, error } = await query.order('createdAt', { ascending: false }).limit(20)
+      if (error) throw new Error(error.message || (isTurkish ? 'İade siparişleri alınamadı' : 'Failed to fetch return orders'))
+      
+      return {
+        success: true,
+        message: isTurkish ? `✅ ${data?.length || 0} iade siparişi bulundu` : `✅ Found ${data?.length || 0} return orders`,
+        data: { items: data, count: data?.length || 0 },
+      }
+    }
+    case 'credit-note': {
+      let query = supabase.from('CreditNote').select('id, creditNoteNumber, status, amount, returnOrder:ReturnOrder!CreditNote_returnOrderId_fkey(id, returnNumber)').eq('companyId', session?.user?.companyId)
+      if (filters.status) query = query.eq('status', filters.status)
+      if (command.params?.returnOrderId) query = query.eq('returnOrderId', command.params.returnOrderId)
+      if (command.params?.search) query = query.ilike('creditNoteNumber', `%${command.params.search}%`)
+      
+      const { data, error } = await query.order('createdAt', { ascending: false }).limit(20)
+      if (error) throw new Error(error.message || (isTurkish ? 'Alacak dekontları alınamadı' : 'Failed to fetch credit notes'))
+      
+      return {
+        success: true,
+        message: isTurkish ? `✅ ${data?.length || 0} alacak dekontu bulundu` : `✅ Found ${data?.length || 0} credit notes`,
         data: { items: data, count: data?.length || 0 },
       }
     }
@@ -1261,6 +1382,90 @@ async function handleUpdateCommand(
         link: `/${locale}/documents/${data.id}`,
       }
     }
+    case 'sales-quota': {
+      const id = command.params?.id
+      if (!id) {
+        return { success: false, message: isTurkish ? 'Satış kotası ID gerekli' : 'Sales quota ID required' }
+      }
+
+      if (command.params?.revenueTarget) updateData.revenueTarget = command.params.revenueTarget
+      if (command.params?.dealsTarget) updateData.dealsTarget = command.params.dealsTarget
+      if (command.params?.newCustomersTarget) updateData.newCustomersTarget = command.params.newCustomersTarget
+      if (command.params?.period) updateData.period = command.params.period
+      if (command.params?.year) updateData.year = command.params.year
+      if (command.params?.month !== undefined) updateData.month = command.params.month
+      if (command.params?.quarter !== undefined) updateData.quarter = command.params.quarter
+
+      const { data, error } = await supabase
+        .from('SalesQuota')
+        .update(updateData)
+        .eq('id', id)
+        .eq('companyId', session?.user?.companyId)
+        .select()
+        .single()
+
+      if (error) throw new Error(error.message || (isTurkish ? 'Satış kotası güncellenemedi' : 'Failed to update sales quota'))
+
+      return {
+        success: true,
+        message: isTurkish ? `✅ Satış kotası güncellendi` : `✅ Sales quota updated`,
+        data,
+        link: `/${locale}/sales-quotas/${data.id}`,
+      }
+    }
+    case 'return-order': {
+      const id = command.params?.id
+      if (!id) {
+        return { success: false, message: isTurkish ? 'İade siparişi ID gerekli' : 'Return order ID required' }
+      }
+
+      if (command.params?.status) updateData.status = command.params.status
+      if (command.params?.reason) updateData.reason = command.params.reason
+
+      const { data, error } = await supabase
+        .from('ReturnOrder')
+        .update(updateData)
+        .eq('id', id)
+        .eq('companyId', session?.user?.companyId)
+        .select()
+        .single()
+
+      if (error) throw new Error(error.message || (isTurkish ? 'İade siparişi güncellenemedi' : 'Failed to update return order'))
+
+      return {
+        success: true,
+        message: isTurkish ? `✅ İade siparişi güncellendi` : `✅ Return order updated`,
+        data,
+        link: `/${locale}/return-orders/${data.id}`,
+      }
+    }
+    case 'credit-note': {
+      const id = command.params?.id
+      if (!id) {
+        return { success: false, message: isTurkish ? 'Alacak dekontu ID gerekli' : 'Credit note ID required' }
+      }
+
+      if (command.params?.status) updateData.status = command.params.status
+      if (command.params?.amount) updateData.amount = command.params.amount
+      if (command.params?.reason) updateData.reason = command.params.reason
+
+      const { data, error } = await supabase
+        .from('CreditNote')
+        .update(updateData)
+        .eq('id', id)
+        .eq('companyId', session?.user?.companyId)
+        .select()
+        .single()
+
+      if (error) throw new Error(error.message || (isTurkish ? 'Alacak dekontu güncellenemedi' : 'Failed to update credit note'))
+
+      return {
+        success: true,
+        message: isTurkish ? `✅ Alacak dekontu güncellendi` : `✅ Credit note updated`,
+        data,
+        link: `/${locale}/credit-notes/${data.id}`,
+      }
+    }
     default:
       return {
         success: false,
@@ -1582,6 +1787,63 @@ async function handleDeleteCommand(
       return {
         success: true,
         message: isTurkish ? `✅ Doküman silindi` : `✅ Document deleted`,
+      }
+    }
+    case 'sales-quota': {
+      const id = command.params?.id
+      if (!id) {
+        return { success: false, message: isTurkish ? 'Satış kotası ID gerekli' : 'Sales quota ID required' }
+      }
+
+      const { error } = await supabase
+        .from('SalesQuota')
+        .delete()
+        .eq('id', id)
+        .eq('companyId', session?.user?.companyId)
+
+      if (error) throw new Error(error.message || (isTurkish ? 'Satış kotası silinemedi' : 'Failed to delete sales quota'))
+
+      return {
+        success: true,
+        message: isTurkish ? `✅ Satış kotası silindi` : `✅ Sales quota deleted`,
+      }
+    }
+    case 'return-order': {
+      const id = command.params?.id
+      if (!id) {
+        return { success: false, message: isTurkish ? 'İade siparişi ID gerekli' : 'Return order ID required' }
+      }
+
+      const { error } = await supabase
+        .from('ReturnOrder')
+        .delete()
+        .eq('id', id)
+        .eq('companyId', session?.user?.companyId)
+
+      if (error) throw new Error(error.message || (isTurkish ? 'İade siparişi silinemedi' : 'Failed to delete return order'))
+
+      return {
+        success: true,
+        message: isTurkish ? `✅ İade siparişi silindi` : `✅ Return order deleted`,
+      }
+    }
+    case 'credit-note': {
+      const id = command.params?.id
+      if (!id) {
+        return { success: false, message: isTurkish ? 'Alacak dekontu ID gerekli' : 'Credit note ID required' }
+      }
+
+      const { error } = await supabase
+        .from('CreditNote')
+        .delete()
+        .eq('id', id)
+        .eq('companyId', session?.user?.companyId)
+
+      if (error) throw new Error(error.message || (isTurkish ? 'Alacak dekontu silinemedi' : 'Failed to delete credit note'))
+
+      return {
+        success: true,
+        message: isTurkish ? `✅ Alacak dekontu silindi` : `✅ Credit note deleted`,
       }
     }
     default:

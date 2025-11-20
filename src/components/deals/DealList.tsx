@@ -19,7 +19,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { useSession } from '@/hooks/useSession'
 
 
-import { Plus, Search, Edit, Trash2, Eye, LayoutGrid, Table as TableIcon, Filter, Sparkles, FileText, Calendar, CheckSquare, Receipt, Mail, MessageSquare, MessageCircle } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Eye, LayoutGrid, Table as TableIcon, Filter, Sparkles, FileText, Calendar, CheckSquare, Receipt, Mail, MessageSquare, MessageCircle, Download } from 'lucide-react'
 
 
 import { useData } from '@/hooks/useData'
@@ -27,6 +27,8 @@ import RefreshButton from '@/components/ui/RefreshButton'
 import InlineEditBadge from '@/components/ui/InlineEditBadge'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
 import { mutate } from 'swr'
+import BulkActions from '@/components/ui/BulkActions'
+import { Checkbox } from '@/components/ui/checkbox'
 
 import { Button } from '@/components/ui/button'
 
@@ -1177,6 +1179,10 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
 
+  // Bulk operations state
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [selectAll, setSelectAll] = useState(false)
+
   const handleDelete = async (id: string, title: string) => {
 
 
@@ -1259,6 +1265,83 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
   }
+
+  // Bulk operations handlers
+  const handleSelectAll = useCallback((checked: boolean) => {
+    setSelectAll(checked)
+    if (checked) {
+      // WON, LOST deal'ları seçme - immutable oldukları için
+      const selectableDeals = dealsQuery.data?.filter((d) => !['WON', 'LOST'].includes(d.stage)) || []
+      setSelectedIds(selectableDeals.map((d) => d.id))
+    } else {
+      setSelectedIds([])
+    }
+  }, [dealsQuery.data])
+
+  const handleSelectItem = useCallback((id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedIds((prev) => [...prev, id])
+    } else {
+      setSelectedIds((prev) => prev.filter((itemId) => itemId !== id))
+      setSelectAll(false)
+    }
+  }, [])
+
+  const handleBulkDelete = useCallback(async (ids: string[]) => {
+    try {
+      const res = await fetch('/api/deals/bulk', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to bulk delete deals')
+      }
+
+      // Optimistic update - silinen kayıtları listeden kaldır
+      const updatedDeals = (dealsQuery.data || []).filter((d) => !ids.includes(d.id))
+      
+      // Cache'i güncelle
+      queryClient.setQueryData(['deals', { search, stage, dealType, customerId, filterCompanyId }], updatedDeals)
+      
+      // Tüm diğer deal URL'lerini de güncelle
+      await Promise.all([
+        mutate('/api/deals', updatedDeals, { revalidate: false }),
+        mutate('/api/deals?', updatedDeals, { revalidate: false }),
+      ])
+
+      // Kanban cache'ini de güncelle
+      queryClient.invalidateQueries({ queryKey: ['kanban-deals'] })
+
+      toast.success(tCommon('bulkDeleteSuccess', { count: ids.length, item: tCommon('deals') }), {
+        description: tCommon('bulkDeleteSuccessMessage', { count: ids.length, item: tCommon('deals') }),
+      })
+
+      // Seçimi temizle
+      setSelectedIds([])
+      setSelectAll(false)
+    } catch (error: any) {
+      console.error('Bulk delete error:', error)
+      toast.error(tCommon('error'), { description: error?.message || 'Toplu silme işlemi başarısız oldu' })
+    }
+  }, [dealsQuery.data, search, stage, dealType, customerId, filterCompanyId, queryClient, tCommon])
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedIds([])
+    setSelectAll(false)
+  }, [])
+
+  // selectAll'u güncelle - tüm seçilebilir deal'lar seçiliyse true
+  useEffect(() => {
+    const selectableDeals = dealsQuery.data?.filter((d) => !['WON', 'LOST'].includes(d.stage)) || []
+    if (selectableDeals.length > 0 && selectedIds.length === selectableDeals.length) {
+      setSelectAll(true)
+    } else {
+      setSelectAll(false)
+    }
+  }, [selectedIds, dealsQuery.data])
 
 
 
@@ -1488,29 +1571,13 @@ export default function DealList({ isOpen = true }: DealListProps) {
           <div className="flex gap-2 flex-1 sm:flex-initial">
             <RefreshButton onRefresh={handleRefresh} />
           <Button
-
-
             variant={viewMode === 'table' ? 'default' : 'outline'}
-
-
             size="icon"
-
-
             onClick={() => {
-
-
               setViewMode('table')
-
-
-                // Table view'a geçildiğinde veri çek
-
-
+              // Table view'a geçildiğinde veri çek
               queryClient.refetchQueries({ queryKey: ['deals'] })
-
-
             }}
-
-
           >
 
 
@@ -1548,37 +1615,97 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
             <LayoutGrid className="h-4 w-4" />
-
-
           </Button>
+          {/* ✅ Export Butonu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" title="Dışa Aktar">
+                <Download className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Dışa Aktar</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={async () => {
+                  try {
+                    const params = new URLSearchParams()
+                    if (debouncedSearch) params.append('search', debouncedSearch)
+                    if (stage) params.append('stage', stage)
+                    params.append('format', 'excel')
+                    
+                    const res = await fetch(`/api/deals/export?${params.toString()}`)
+                    if (!res.ok) throw new Error('Export failed')
+                    
+                    const blob = await res.blob()
+                    const url = window.URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `firsatlar-${new Date().toISOString().split('T')[0]}.xlsx`
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                    window.URL.revokeObjectURL(url)
+                    
+                    toast.success('Dışa aktarma başarılı', {
+                      description: 'Fırsatlar Excel formatında indirildi.',
+                    })
+                  } catch (error: any) {
+                    toast.error('Dışa aktarma başarısız', {
+                      description: error?.message || 'Bir hata oluştu',
+                    })
+                  }
+                }}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                Excel (.xlsx)
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={async () => {
+                  try {
+                    const params = new URLSearchParams()
+                    if (debouncedSearch) params.append('search', debouncedSearch)
+                    if (stage) params.append('stage', stage)
+                    params.append('format', 'csv')
+                    
+                    const res = await fetch(`/api/deals/export?${params.toString()}`)
+                    if (!res.ok) throw new Error('Export failed')
+                    
+                    const blob = await res.blob()
+                    const url = window.URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `firsatlar-${new Date().toISOString().split('T')[0]}.csv`
+                    document.body.appendChild(a)
+                    a.click()
+                    document.body.removeChild(a)
+                    window.URL.revokeObjectURL(url)
+                    
+                    toast.success('Dışa aktarma başarılı', {
+                      description: 'Fırsatlar CSV formatında indirildi.',
+                    })
+                  } catch (error: any) {
+                    toast.error('Dışa aktarma başarısız', {
+                      description: error?.message || 'Bir hata oluştu',
+                    })
+                  }
+                }}
+              >
+                <FileText className="mr-2 h-4 w-4" />
+                CSV (.csv)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           </div>
           <Button
-
-
             onClick={() => {
-
-
               setSelectedDeal(null)
-
-
               setFormOpen(true)
-
-
             }}
-
-
             className="bg-gradient-primary text-white w-full sm:w-auto"
-
-
           >
-
-
             <Plus className="mr-2 h-4 w-4" />
-
-
             {t('newDeal')}
-
-
           </Button>
 
 
@@ -2402,9 +2529,23 @@ export default function DealList({ isOpen = true }: DealListProps) {
                   toastDescription = `"${dealTitle}" fırsatı kazanıldı olarak işaretlendi.`
 
                   if (automation.contractCreated && automation.contractId) {
-                    toastDescription += `\n\nOtomatik işlemler:\n• Sözleşme oluşturuldu (ID: ${automation.contractId.substring(0, 8)}...)\n• Sözleşme başlığı: ${automation.contractTitle || 'Otomatik oluşturuldu'}\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                    const contractId = automation.contractId
+                    toastDescription += `\n\n✅ Otomatik işlemler:\n• Sözleşme oluşturuldu (ID: ${contractId.substring(0, 8)}...)\n• Sözleşme başlığı: ${automation.contractTitle || 'Otomatik oluşturuldu'}\n• Teklif oluşturuldu\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi\n\n💡 Öneri: Müşteriye teşekkür e-postası göndermek için müşteri detay sayfasına gidin.`
+                    
+                    // Toast'a action button ekle (sözleşme detay sayfasına git)
+                    toast.success(toastTitle, {
+                      description: toastDescription,
+                      action: {
+                        label: 'Sözleşmeyi Görüntüle',
+                        onClick: () => {
+                          window.location.href = `/${locale}/contracts/${contractId}`
+                        },
+                      },
+                      duration: 8000, // 8 saniye göster
+                    })
                   } else {
                     toastDescription += `\n\nOtomatik işlemler:\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                    toast.success(toastTitle, { description: toastDescription })
                   }
                   break
                   
@@ -2544,9 +2685,18 @@ export default function DealList({ isOpen = true }: DealListProps) {
         </>
 
       ) : (
+        <>
+          {/* Bulk Actions Bar */}
+          {selectedIds.length > 0 && (
+            <BulkActions
+              selectedIds={selectedIds}
+              onBulkDelete={handleBulkDelete}
+              onClearSelection={handleClearSelection}
+              itemName={t('title').toLowerCase()}
+            />
+          )}
 
-
-        <div className="bg-white rounded-lg shadow-card overflow-hidden">
+          <div className="bg-white rounded-lg shadow-card overflow-hidden">
 
 
           {/* Desktop Table View */}
@@ -2556,8 +2706,13 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
             <TableRow>
-
-
+              <TableHead className="w-12">
+                <Checkbox
+                  checked={selectAll}
+                  onCheckedChange={handleSelectAll}
+                  aria-label={tCommon('selectAll')}
+                />
+              </TableHead>
               <TableHead>{t('tableHeaders.title')}</TableHead>
 
 
@@ -2606,7 +2761,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
               <TableRow>
 
 
-                <TableCell colSpan={isSuperAdmin ? 11 : 10} className="text-center py-8 text-gray-500">
+                <TableCell colSpan={isSuperAdmin ? 12 : 11} className="text-center py-8 text-gray-500">
 
 
                   {t('noDealsFound')}
@@ -2620,10 +2775,23 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
             ) : (
               Array.isArray(tableDeals) && tableDeals.length > 0 ? (
-                tableDeals.map((deal) => (
+                tableDeals.map((deal) => {
+                  const isSelected = selectedIds.includes(deal.id)
+                  const isImmutable = ['WON', 'LOST'].includes(deal.stage)
+                  return (
                   <TableRow key={deal.id}>
-
-
+                    <TableCell>
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={(checked) => {
+                          if (!isImmutable) {
+                            handleSelectItem(deal.id, checked as boolean)
+                          }
+                        }}
+                        disabled={isImmutable}
+                        aria-label={`${deal.title} seç`}
+                      />
+                    </TableCell>
                   <TableCell className="font-medium">{deal.title}</TableCell>
 
 
@@ -3246,7 +3414,8 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
                 </TableRow>
-                ))
+                  )
+                })
               ) : (
                 <TableRow>
                   <TableCell colSpan={isSuperAdmin ? 11 : 10} className="text-center py-8 text-gray-500">
@@ -3390,8 +3559,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
         </div>
-
-
+        </>
       )}
 
 

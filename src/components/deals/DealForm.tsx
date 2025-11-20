@@ -161,12 +161,37 @@ export default function DealForm({
   const status = watch('status')
   const customerId = watch('customerId')
   const winProbability = watch('winProbability') || 50
+  const selectedCustomer = customers.find((c: any) => c.id === customerId)
   
   // Durum bazlı koruma kontrolü - form alanlarını devre dışı bırakmak için
   const isProtected = deal && (
     deal.stage === 'WON' || 
     deal.status === 'CLOSED'
   )
+  
+  // ✅ AKILLI OTOMASYON: Müşteri seçildiğinde otomatik winProbability ayarla (müşteri tipine göre)
+  useEffect(() => {
+    if (selectedCustomer && !deal && open && customerId) {
+      // Müşteri tipine göre winProbability ayarla
+      // VIP müşteriler için daha yüksek, yeni müşteriler için daha düşük
+      const customerType = selectedCustomer.type || selectedCustomer.customerType
+      let suggestedWinProbability = 50 // Varsayılan
+      
+      if (customerType === 'VIP' || customerType === 'PREMIUM') {
+        suggestedWinProbability = 70 // VIP müşteriler için daha yüksek
+      } else if (customerType === 'REGULAR') {
+        suggestedWinProbability = 50 // Normal müşteriler için orta
+      } else {
+        suggestedWinProbability = 30 // Yeni müşteriler için düşük
+      }
+      
+      // Sadece winProbability boşsa veya 50 ise (varsayılan) güncelle
+      const currentWinProbability = watch('winProbability') || 50
+      if (currentWinProbability === 50) {
+        setValue('winProbability', suggestedWinProbability, { shouldDirty: false })
+      }
+    }
+  }, [selectedCustomer, deal, open, customerId, setValue, watch])
 
   // customerIdProp geldiğinde müşteri bilgilerini çek (wizard'larda kullanım için)
   const { data: customerData } = useQuery({

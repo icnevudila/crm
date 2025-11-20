@@ -35,6 +35,11 @@ import {
   Target,
   Send,
   Plug,
+  CreditCard,
+  RotateCcw,
+  FileCheck,
+  Layers,
+  TrendingUp,
 } from 'lucide-react'
 import { useSession } from '@/hooks/useSession'
 import { useData } from '@/hooks/useData'
@@ -67,6 +72,11 @@ const MODULE_MAP: Record<string, string> = {
   '/email-campaigns': 'email-campaign',
   '/segments': 'segment',
   '/competitors': 'competitor',
+  '/sales-quotas': 'sales-quota',
+  '/product-bundles': 'product-bundle',
+  '/return-orders': 'return-order',
+  '/credit-notes': 'credit-note',
+  '/payment-plans': 'payment-plan',
 }
 
 interface SidebarItem {
@@ -153,6 +163,7 @@ function Sidebar() {
         { href: '/meetings', label: t('items.meetings'), icon: Calendar, module: 'meeting' },
         { href: '/quotes', label: t('items.quotes'), icon: FileText, module: 'quote' },
         { href: '/contracts', label: t('items.contracts'), icon: ScrollText, module: 'contract' },
+        { href: '/sales-quotas', label: t('items.salesQuotas'), icon: TrendingUp, module: 'sales-quota' },
         { href: '/approvals', label: t('items.approvals'), icon: CheckCircle, module: 'approval' },
       ],
     },
@@ -162,8 +173,12 @@ function Sidebar() {
       items: [
         { href: '/invoices', label: t('items.invoices'), icon: Receipt, module: 'invoice' },
         { href: '/products', label: t('items.products'), icon: Package, module: 'product' },
+        { href: '/product-bundles', label: t('items.productBundles'), icon: Layers, module: 'product-bundle' },
         { href: '/shipments', label: t('items.shipments'), icon: Truck, module: 'shipment' },
         { href: '/purchase-shipments', label: t('items.purchaseShipments'), icon: PackageCheck, module: 'purchase-shipment' },
+        { href: '/return-orders', label: t('items.returnOrders'), icon: RotateCcw, module: 'return-order' },
+        { href: '/credit-notes', label: t('items.creditNotes'), icon: FileCheck, module: 'credit-note' },
+        { href: '/payment-plans', label: t('items.paymentPlans'), icon: CreditCard, module: 'payment-plan' },
       ],
     },
     {

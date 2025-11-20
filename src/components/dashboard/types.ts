@@ -20,6 +20,24 @@ export interface KPIData {
   pendingInvoices: number
   pendingShipments: number
   pendingPurchaseShipments: number
+  // Yeni modüller
+  totalReturnOrders?: number
+  totalReturnOrdersValue?: number
+  pendingReturnOrders?: number
+  totalCreditNotes?: number
+  totalCreditNotesValue?: number
+  appliedCreditNotes?: number
+  totalPaymentPlans?: number
+  totalPaymentPlansValue?: number
+  activePaymentPlans?: number
+  overduePaymentPlans?: number
+  totalSalesQuotas?: number
+  activeSalesQuotas?: number
+  totalTargetRevenue?: number
+  totalActualRevenue?: number
+  quotaAchievementRate?: number
+  totalProductBundles?: number
+  totalProductBundlesValue?: number
   monthlyKPIs: MonthlyKPI[]
 }
 
