@@ -15,6 +15,7 @@ import { toast } from '@/lib/toast'
 import { handleFormValidationErrors } from '@/lib/form-validation'
 import { useNavigateToDetailToast } from '@/lib/quick-action-helper'
 import { AutomationConfirmationModal } from '@/lib/automations/toast-confirmation'
+import { Sparkles } from 'lucide-react'
 import {
   Dialog,
   DialogContent,

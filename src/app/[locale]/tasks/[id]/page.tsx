@@ -12,14 +12,10 @@ import GradientCard from '@/components/ui/GradientCard'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import TaskForm from '@/components/tasks/TaskForm'
-<<<<<<< HEAD
-import { confirm } from '@/lib/toast'
-=======
-import { toastError } from '@/lib/toast'
+import { toastError, confirm } from '@/lib/toast'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
 import { useData } from '@/hooks/useData'
 import ContextualActionsBar from '@/components/ui/ContextualActionsBar'
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
 
 interface Task {
   id: string

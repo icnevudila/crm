@@ -66,14 +66,6 @@ const WorkflowShortcuts = dynamic(
   }
 )
 
-const SmartSuggestions = dynamic(
-  () => import('@/components/dashboard/SmartSuggestions'),
-  {
-    ssr: false,
-    loading: () => null,
-  }
-)
-
 const QuickStartWizard = dynamic(
   () => import('@/components/dashboard/QuickStartWizard'),
   {
@@ -279,22 +271,7 @@ export default function DashboardPage() {
 
         <DashboardSpotlight />
 
-<<<<<<< HEAD
-        {/* Next Best Action - Akıllı Öneriler */}
-        <NextBestAction />
-
-        {/* Smart Suggestions - Gelişmiş Akıllı Öneriler */}
-        <SmartSuggestions />
-
-        {/* Quick Start Wizard */}
-        <QuickStartWizard open={wizardOpen} onClose={() => setWizardOpen(false)} />
-
-        {/* Onboarding Modal - Detaylı Rehber */}
-        <OnboardingModal open={onboardingOpen} onClose={() => setOnboardingOpen(false)} />
-
-=======
         {/* Accordion - useState ile mount kontrolü hydration mismatch'i önler */}
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
         <Accordion
           type="multiple"
           value={openSections}
@@ -346,6 +323,12 @@ export default function DashboardPage() {
             }
           )}
         </Accordion>
+
+        {/* Quick Start Wizard */}
+        <QuickStartWizard open={wizardOpen} onClose={() => setWizardOpen(false)} />
+
+        {/* Onboarding Modal - Detaylı Rehber */}
+        <OnboardingModal open={onboardingOpen} onClose={() => setOnboardingOpen(false)} />
       </div>
     </div>
   )

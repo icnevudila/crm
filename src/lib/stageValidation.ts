@@ -87,8 +87,8 @@ const invoiceTransitions: Record<InvoiceStatus, InvoiceStatus[]> = {
   CANCELLED: [], // CANCELLED immutable
 }
 
-const immutableInvoiceStatuses: InvoiceStatus[] = ['PAID', 'CANCELLED']
-const undeletableInvoiceStatuses: InvoiceStatus[] = ['PAID', 'CANCELLED']
+const immutableInvoiceStatuses: InvoiceStatus[] = ['PAID', 'SHIPPED', 'RECEIVED', 'CANCELLED']
+const undeletableInvoiceStatuses: InvoiceStatus[] = ['PAID', 'SHIPPED', 'RECEIVED', 'CANCELLED']
 
 // ============================================
 // CONTRACT STATUS TRANSITIONS
@@ -413,6 +413,44 @@ export function canDeleteContract(status: string): { canDelete: boolean; error?:
     return {
       canDelete: false,
       error: `${status} durumundaki sözleşmeler silinemez. Fatura oluşturulmuştur.`,
+    }
+  }
+  return { canDelete: true }
+}
+
+// ============================================
+// SHIPMENT STATUS VALIDATION
+// ============================================
+
+export const SHIPMENT_STATUSES = {
+  DRAFT: 'DRAFT',
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  IN_TRANSIT: 'IN_TRANSIT',
+  DELIVERED: 'DELIVERED',
+  CANCELLED: 'CANCELLED',
+} as const
+
+export type ShipmentStatus = keyof typeof SHIPMENT_STATUSES
+
+const immutableShipmentStatuses: ShipmentStatus[] = ['DELIVERED', 'CANCELLED']
+const undeletableShipmentStatuses: ShipmentStatus[] = ['APPROVED', 'DELIVERED', 'CANCELLED']
+
+/**
+ * Shipment'ın immutable olup olmadığını kontrol eder
+ */
+export function isShipmentImmutable(status: string): boolean {
+  return immutableShipmentStatuses.includes(status as ShipmentStatus)
+}
+
+/**
+ * Shipment'ın silinip silinemeyeceğini kontrol eder
+ */
+export function canDeleteShipment(status: string): { canDelete: boolean; error?: string } {
+  if (undeletableShipmentStatuses.includes(status as ShipmentStatus)) {
+    return {
+      canDelete: false,
+      error: `${status} durumundaki sevkiyatlar silinemez. Stok işlemi yapılmıştır veya teslim edilmiştir.`,
     }
   }
   return { canDelete: true }

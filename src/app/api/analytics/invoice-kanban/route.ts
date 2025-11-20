@@ -44,9 +44,17 @@ export async function GET(request: Request) {
     // Tüm invoice'ları çek - limit yok (tüm verileri çek)
     // ÖNEMLİ: totalAmount kolonunu çek (050 migration ile total → totalAmount olarak değiştirildi)
     // serviceDescription kolonu migration 065 ile eklendi
+    // Company bilgisi eklendi (InvoiceKanbanChart için) - opsiyonel (hata verirse null döner)
+    // NOT: Company join'i foreign key gerektirir, yoksa hata verebilir - bu durumda basit query kullan
     let query = supabase
       .from('Invoice')
-      .select('id, title, status, totalAmount, quoteId, createdAt, invoiceType, serviceDescription')
+      .select(`
+        id, title, status, totalAmount, quoteId, createdAt, invoiceType, serviceDescription, companyId,
+        Company:companyId (
+          id,
+          name
+        )
+      `)
       .order('createdAt', { ascending: false })
     
     // ÖNCE companyId filtresi (SuperAdmin değilse veya SuperAdmin firma filtresi seçtiyse)
@@ -72,17 +80,73 @@ export async function GET(request: Request) {
       query = query.eq('invoiceType', invoiceType)
     }
 
-    const { data: invoices, error } = await query
+    let { data: invoices, error } = await query
+
+    // Company join hatası olabilir - basit query ile tekrar dene
+    if (error) {
+      const errorMessage = error.message || ''
+      const isCompanyJoinError = errorMessage.toLowerCase().includes('company') || 
+                                  errorMessage.toLowerCase().includes('relation') ||
+                                  errorMessage.toLowerCase().includes('foreign key')
+      
+      if (isCompanyJoinError) {
+        // Company join hatası - basit query ile tekrar dene (Company join olmadan)
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Company join failed, retrying without Company join:', errorMessage)
+        }
+        
+        const simpleQuery = supabase
+          .from('Invoice')
+          .select(`
+            id, title, status, totalAmount, quoteId, createdAt, invoiceType, serviceDescription, companyId
+          `)
+          .order('createdAt', { ascending: false })
+        
+        // Aynı filtreleri uygula
+        if (!isSuperAdmin) {
+          simpleQuery.eq('companyId', companyId)
+        } else if (filterCompanyId) {
+          simpleQuery.eq('companyId', filterCompanyId)
+        }
+        if (quoteId) {
+          simpleQuery.eq('quoteId', quoteId)
+        }
+        if (search) {
+          simpleQuery.or(`title.ilike.%${search}%`)
+        }
+        if (invoiceType && (invoiceType === 'SALES' || invoiceType === 'PURCHASE')) {
+          simpleQuery.eq('invoiceType', invoiceType)
+        }
+        
+        const simpleResult = await simpleQuery
+        invoices = simpleResult.data
+        error = simpleResult.error
+        
+        if (error) {
+          console.error('Invoice kanban error (simple query):', error)
+          return NextResponse.json(
+            { 
+              error: error.message || 'Failed to fetch invoice kanban',
+            },
+            { status: 500 }
+          )
+        }
+      } else {
+        // Company join hatası değil - normal hata
+        console.error('Invoice kanban error:', error)
+        return NextResponse.json(
+          { 
+            error: error.message || 'Failed to fetch invoice kanban',
+          },
+          { status: 500 }
+        )
+      }
+    }
 
     // Debug: Invoices verisini logla
     if (process.env.NODE_ENV === 'development') {
       console.log('Invoice Kanban API - Invoices count:', invoices?.length || 0)
       console.log('Invoice Kanban API - Invoices sample:', invoices?.slice(0, 3)) // İlk 3 invoice'i göster
-    }
-
-    if (error) {
-      console.error('Invoice kanban error:', error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
     if (!invoices) {
@@ -123,6 +187,7 @@ export async function GET(request: Request) {
           createdAt: invoice.createdAt,
           invoiceType: invoice.invoiceType, // Fatura tipi eklendi
           serviceDescription: invoice.serviceDescription, // Hizmet açıklaması eklendi
+          Company: invoice.Company || null, // Company bilgisi eklendi
         })),
       }
     })

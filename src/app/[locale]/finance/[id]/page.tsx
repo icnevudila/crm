@@ -12,11 +12,7 @@ import { Card } from '@/components/ui/card'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import FinanceForm from '@/components/finance/FinanceForm'
-<<<<<<< HEAD
-import { confirm } from '@/lib/toast'
-=======
-import { toastError } from '@/lib/toast'
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
+import { toastError, confirm } from '@/lib/toast'
 
 interface Finance {
   id: string

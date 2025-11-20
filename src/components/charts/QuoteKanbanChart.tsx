@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react'
-import { toast } from '@/lib/toast'
+import { toast, toastConfirm } from '@/lib/toast'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { FileText, Edit, Trash2, Eye, Send, CheckCircle, XCircle, GripVertical, RefreshCw, Mail, Clock, History, ChevronLeft, ChevronRight, StickyNote, Sparkles } from 'lucide-react'
@@ -133,13 +133,14 @@ function DroppableColumn({ status, children }: { status: string; children: React
 }
 
 // Sortable Quote Card Component
-function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, onView }: { 
+function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, onView, onQuickAction }: { 
   quote: any
   status: string
   onEdit?: (quote: any) => void
   onDelete?: (id: string, title: string) => void
   onStatusChange?: (quoteId: string, newStatus: string) => void | Promise<void>
   onView?: (quoteId: string) => void // ✅ ÇÖZÜM: Modal açmak için callback
+  onQuickAction?: (type: string, quote: any) => void // ✅ ÇÖZÜM: Quick action için callback
 }) {
   const locale = useLocale()
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)
@@ -444,6 +445,19 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                     e.preventDefault()
                     e.stopPropagation()
                     if (isDragging) return
+                    
+                    // ✅ ÇÖZÜM: ACCEPTED durumuna geçerken toast confirmation
+                    const confirmed = await toastConfirm(
+                      `"${quote.title}" teklifini kabul edildi olarak işaretlemek istediğinize emin misiniz?`,
+                      `Bu işlem sonrası otomatik olarak fatura ve sözleşme oluşturulacaktır. Faturalar ve Sözleşmeler sayfalarından kontrol edebilirsiniz. Bu aşamadaki teklifler değiştirilemez.`,
+                      {
+                        confirmLabel: 'Kabul Et',
+                        cancelLabel: 'Vazgeç',
+                      }
+                    )
+                    if (!confirmed) {
+                      return
+                    }
                     
                     // Sadece onStatusChange callback'ini çağır - parent component API çağrısını yapacak
                     if (onStatusChange) {
@@ -829,10 +843,11 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
                       onClick={(e) => {
                         e.preventDefault()
                         e.stopPropagation()
-                        // Invoice oluştur - parent component'e bildir
-                        if (onStatusChange) {
-                          // Bu durumda invoice zaten oluşturulmuş olmalı
-                          toast.info('Fatura zaten oluşturulmuş', { description: 'Bu teklif için fatura mevcut.' })
+                        // ✅ ÇÖZÜM: Invoice formunu aç
+                        if (onQuickAction) {
+                          onQuickAction('invoice', quote)
+                        } else {
+                          toast.info('Fatura oluşturma özelliği aktif değil', { description: 'Lütfen ilgili formu kullanın.' })
                         }
                       }}
                     >
@@ -1046,7 +1061,7 @@ const MemoizedSortableQuoteCard = memo(SortableQuoteCard, (prevProps, nextProps)
   )
 })
 
-export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChange, onView }: QuoteKanbanChartProps) {
+export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChange, onView, onQuickAction }: QuoteKanbanChartProps) {
   const locale = useLocale()
   const [activeId, setActiveId] = useState<string | null>(null)
   const [dragLocalData, setDragLocalData] = useState<any[] | null>(null) // Drag & drop için local state
@@ -1442,6 +1457,7 @@ export default function QuoteKanbanChart({ data, onEdit, onDelete, onStatusChang
                     ) : (
                       column.quotes.map((quote) => (
                         <MemoizedSortableQuoteCard
+                          onQuickAction={onQuickAction}
                           key={quote.id}
                           quote={quote}
                           status={column.status}

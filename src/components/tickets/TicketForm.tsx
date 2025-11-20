@@ -26,22 +26,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Ticket, Customer, User } from '@/types/crm'
 
 interface TicketFormProps {
-  ticket?: any
+  ticket?: Ticket
   open: boolean
   onClose: () => void
-  onSuccess?: (savedTicket: any) => void | Promise<void>
+  onSuccess?: (savedTicket: Ticket) => void | Promise<void>
 }
 
-async function fetchCustomers() {
+async function fetchCustomers(): Promise<Customer[]> {
   const res = await fetch('/api/customers?pageSize=1000')
   if (!res.ok) throw new Error('Failed to fetch customers')
   const data = await res.json()
   return Array.isArray(data) ? data : (data.data || data.customers || [])
 }
 
-async function fetchUsers() {
+async function fetchUsers(): Promise<User[]> {
   const res = await fetch('/api/users')
   if (!res.ok) throw new Error('Failed to fetch users')
   return res.json()
@@ -90,7 +91,7 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
     reset,
   } = useForm<TicketFormData>({
     resolver: zodResolver(ticketSchema),
-      defaultValues: ticket || {
+    defaultValues: {
       subject: '',
       status: 'OPEN',
       priority: 'MEDIUM',
@@ -158,7 +159,7 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
         // Yeni ticket oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
         navigateToDetailToast('ticket', savedTicket.id, savedTicket.subject)
       }
-      
+
       // onSuccess callback'i çağır - optimistic update için
       if (onSuccess) {
         onSuccess(savedTicket)
@@ -219,7 +220,7 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
                   <SelectValue placeholder={t('customerPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  {customers.map((customer: any) => (
+                  {customers.map((customer) => (
                     <SelectItem key={customer.id} value={customer.id}>
                       {customer.name}
                     </SelectItem>
@@ -244,7 +245,7 @@ export default function TicketForm({ ticket, open, onClose, onSuccess }: TicketF
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">{t('assignedToNone')}</SelectItem>
-                  {users.map((user: any) => (
+                  {users.map((user) => (
                     <SelectItem key={user.id} value={user.id}>
                       {user.name}
                     </SelectItem>

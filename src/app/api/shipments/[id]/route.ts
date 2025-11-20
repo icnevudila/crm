@@ -290,13 +290,16 @@ export async function PUT(
       )
     }
 
-    // ÖNEMLİ: Shipment DELIVERED olduğunda değiştirilemez (Teslim edildiği için)
-    if (currentShipment?.status?.toUpperCase() === 'DELIVERED') {
+    // ÖNEMLİ: Immutability kontrol - stageValidation kullan
+    const { isShipmentImmutable } = await import('@/lib/stageValidation')
+    const currentStatus = currentShipment?.status
+    if (currentStatus && isShipmentImmutable(currentStatus)) {
       return NextResponse.json(
         { 
-          error: 'Teslim edilmiş sevkiyatlar değiştirilemez',
-          message: 'Bu sevkiyat teslim edildi. Sevkiyat bilgilerini değiştirmek mümkün değildir.',
-          reason: 'DELIVERED_SHIPMENT_CANNOT_BE_UPDATED'
+          error: 'Bu sevkiyat artık değiştirilemez',
+          message: `${currentStatus} durumundaki sevkiyatlar değiştirilemez (immutable). Teslim edilmiş veya iptal edilmiş sevkiyatlar düzenlenemez.`,
+          reason: 'IMMUTABLE_SHIPMENT',
+          status: currentStatus
         },
         { status: 403 }
       )
@@ -502,26 +505,16 @@ export async function DELETE(
       return NextResponse.json({ error: 'Sevkiyat bulunamadı' }, { status: 404 })
     }
 
-    // ÖNEMLİ: Shipment DELIVERED olduğunda silinemez (Teslim edildiği için)
-    if (currentShipment.status?.toUpperCase() === 'DELIVERED') {
+    // ÖNEMLİ: Delete validation - Status kontrolü
+    const { canDeleteShipment } = await import('@/lib/stageValidation')
+    const deleteCheck = canDeleteShipment(currentShipment?.status || '')
+    if (!deleteCheck.canDelete) {
       return NextResponse.json(
         { 
-          error: 'Teslim edilmiş sevkiyatlar silinemez',
-          message: 'Bu sevkiyat teslim edildi. Sevkiyatı silmek mümkün değildir.',
-          reason: 'DELIVERED_SHIPMENT_CANNOT_BE_DELETED'
-        },
-        { status: 403 }
-      )
-    }
-
-    // Onaylı sevkiyatlar silinemez
-    if (currentShipment.status?.toUpperCase() === 'APPROVED') {
-      return NextResponse.json(
-        { 
-          error: 'Onaylı sevkiyatlar silinemez',
-          message: 'Bu sevkiyat onaylandı ve stok işlemi yapıldı. Sevkiyatı silmek için önce sevkiyatı iptal etmeniz ve stok işlemini geri almanız gerekir.',
-          reason: 'APPROVED_SHIPMENT_CANNOT_BE_DELETED',
-          action: 'Sevkiyatı iptal edip stok işlemini geri alın'
+          error: 'Bu sevkiyat silinemez',
+          message: deleteCheck.error,
+          reason: 'CANNOT_DELETE_SHIPMENT',
+          status: currentShipment?.status
         },
         { status: 403 }
       )

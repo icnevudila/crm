@@ -10,7 +10,8 @@ import { Input } from '@/components/ui/input'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { toast, confirm } from '@/lib/toast'
+import { toast, toastConfirm } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import {
   Table,
   TableBody,
@@ -125,7 +126,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
   const tCommon = useTranslations('common')
   const searchParams = useSearchParams()
   const { data: session } = useSession()
-  
+
   const statusLabels: Record<string, string> = {
     DRAFT: tStatus('draft'),
     SENT: tStatus('sent'),
@@ -134,13 +135,13 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
     DECLINED: tStatus('declined'),
     WAITING: t('statusWaiting'),
   }
-  
+
   // SuperAdmin kontrolü
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
-  
+
   // URL parametrelerinden filtreleri oku
   const statusFromUrl = searchParams.get('status') || ''
-  
+
   const [viewMode, setViewMode] = useState<'table' | 'kanban'>('kanban') // Kanban default
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState(statusFromUrl)
@@ -149,7 +150,8 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
   const [rejectingQuoteId, setRejectingQuoteId] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
-  
+  const { confirm } = useConfirm()
+
   // URL'den gelen status parametresini state'e set et
   useEffect(() => {
     if (statusFromUrl && statusFromUrl !== status) {
@@ -176,12 +178,12 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
 
   // Debounced search - performans için
   const [debouncedSearch, setDebouncedSearch] = useState(search)
-  
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
     }, 300)
-    
+
     return () => clearTimeout(timer)
   }, [search])
 
@@ -191,10 +193,10 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
     { dedupingInterval: 60000, revalidateOnFocus: false }
   )
   // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
-  const companies = (companiesData?.companies || []).filter((company, index, self) => 
+  const companies = (companiesData?.companies || []).filter((company, index, self) =>
     index === self.findIndex((c) => c.id === company.id)
   )
-  
+
   // SWR ile veri çekme (CustomerList pattern'i) - Table view için
   // DÜZELTME: Status filtresi yoksa tüm status'ler gösterilmeli (kanban ile aynı)
   const apiUrl = useMemo(() => {
@@ -260,7 +262,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
   // ÖNEMLİ: State-based optimistic update - React Query cache'inden bağımsız
   const [kanbanData, setKanbanData] = useState<any[]>(kanbanDataFromQuery)
   const [isInitialLoad, setIsInitialLoad] = useState(true) // ✅ ÇÖZÜM: Initial load kontrolü
-  
+
   // useQuery'den gelen data değiştiğinde state'i güncelle (sadece initial load'da)
   // ÖNEMLİ: Bu useEffect sadece initial load'da çalışır - optimistic update'ler bu useEffect'i bypass eder
   // ÖNEMLİ: Refresh sonrası API'den eski data gelirse state'i override etmemek için initial load kontrolü var
@@ -291,10 +293,13 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
       return
     }
 
-    const confirmed = await confirm(
-      `${t('deleteConfirm', { title })} ${t('deleteConfirmMessage')}`
-    )
-    if (!confirmed) {
+    if (!(await confirm({
+      title: t('deleteConfirmTitle', { title }),
+      description: t('deleteConfirmMessage'),
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
+      variant: 'destructive'
+    }))) {
       return
     }
 
@@ -310,7 +315,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
         mutate('/api/quotes?', updatedQuotes, { revalidate: false })
         mutate(apiUrl, updatedQuotes, { revalidate: false })
       }
-      
+
       // Kanban view için optimistic update - silinen kaydı kanban data'dan kaldır
       if (Array.isArray(kanbanData) && kanbanData.length > 0) {
         const updatedKanbanData = kanbanData.map((col: any) => {
@@ -335,12 +340,12 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
         // ÖNEMLİ: setQueryData ile cache'i güncelle, böylece kanbanData prop'u otomatik güncellenir
         queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId], updatedKanbanData)
       }
-      
+
       // SONRA API'ye DELETE isteği gönder
       const res = await fetch(`/api/quotes/${id}`, {
         method: 'DELETE',
       })
-      
+
       if (!res.ok) {
         // Hata durumunda optimistic update'i geri al - eski veriyi geri getir
         mutateQuotes(undefined, { revalidate: true })
@@ -349,12 +354,12 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
         const errorData = await res.json().catch(() => ({}))
         throw new Error(errorData.error || 'Failed to delete quote')
       }
-      
+
       // Başarı bildirimi
       toast.success(t('quoteDeleted'), {
         description: t('quoteDeletedMessage', { title })
       })
-      
+
       // ✅ ÇÖZÜM: Sadece dashboard'daki diğer query'leri invalidate et (background'da, refetch olmadan)
       // ÖNEMLİ: kanban-quotes query'sini invalidate ETME - optimistic update'i koru
       // ÖNEMLİ: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
@@ -365,7 +370,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
         queryClient.invalidateQueries({ queryKey: ['quote-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
         queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle
       ])
-      
+
       // ✅ ÇÖZÜM: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
       // Optimistic update zaten yapıldı, invalidate yeterli - query'ler kendi staleTime'larına göre refetch olur
     } catch (error: any) {
@@ -403,897 +408,988 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
   }
 
   // ModuleStats'ten gelen total değerini kullan - dashboard ile tutarlı olması için
-  const totalQuotes = stats?.total || (viewMode === 'table' 
-    ? quotes.length 
+  const totalQuotes = stats?.total || (viewMode === 'table'
+    ? quotes.length
     : kanbanData.reduce((sum: number, col: any) => sum + col.count, 0))
 
   return (
     <>
-    <div className="space-y-6">
-      {/* İstatistikler */}
-      <ModuleStats module="quotes" statsUrl="/api/stats/quotes" />
+      <div className="space-y-6">
+        {/* İstatistikler */}
+        <ModuleStats module="quotes" statsUrl="/api/stats/quotes" />
 
-      <AutomationInfo
-        title={t('automationTitle')}
-        automations={[
-          {
-            action: t('automationAccepted'),
-            result: t('automationAcceptedResult'),
-            details: [
-              t('automationAcceptedDetails'),
-              t('automationAcceptedDetails2'),
-            ],
-          },
-          {
-            action: t('automationRejected'),
-            result: t('automationRejectedResult'),
-            details: [
-              t('automationRejectedDetails'),
-            ],
-          },
-          {
-            action: t('automationWaiting'),
-            result: t('automationWaitingResult'),
-            details: [
-              t('automationWaitingDetails'),
-            ],
-          },
-        ]}
-      />
+        <AutomationInfo
+          title={t('automationTitle')}
+          automations={[
+            {
+              action: t('automationAccepted'),
+              result: t('automationAcceptedResult'),
+              details: [
+                t('automationAcceptedDetails'),
+                t('automationAcceptedDetails2'),
+              ],
+            },
+            {
+              action: t('automationRejected'),
+              result: t('automationRejectedResult'),
+              details: [
+                t('automationRejectedDetails'),
+              ],
+            },
+            {
+              action: t('automationWaiting'),
+              result: t('automationWaitingResult'),
+              details: [
+                t('automationWaitingDetails'),
+              ],
+            },
+          ]}
+        />
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{t('title')}</h1>
-          <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600">{t('totalQuotes', { count: totalQuotes })}</p>
-        </div>
-        <div className="flex gap-2 w-full sm:w-auto">
-          <div className="flex gap-2 flex-1 sm:flex-initial">
-            <RefreshButton onRefresh={handleRefresh} />
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">{t('title')}</h1>
+            <p className="mt-1 sm:mt-2 text-sm sm:text-base text-gray-600">{t('totalQuotes', { count: totalQuotes })}</p>
+          </div>
+          <div className="flex gap-2 w-full sm:w-auto">
+            <div className="flex gap-2 flex-1 sm:flex-initial">
+              <RefreshButton onRefresh={handleRefresh} />
+              <Button
+                variant={viewMode === 'table' ? 'default' : 'outline'}
+                size="icon"
+                onClick={() => setViewMode('table')}
+              >
+                <TableIcon className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={viewMode === 'kanban' ? 'default' : 'outline'}
+                size="icon"
+                onClick={() => setViewMode('kanban')}
+              >
+                <LayoutGrid className="h-4 w-4" />
+              </Button>
+            </div>
             <Button
-              variant={viewMode === 'table' ? 'default' : 'outline'}
-              size="icon"
-              onClick={() => setViewMode('table')}
+              onClick={() => {
+                setSelectedQuote(null)
+                setFormOpen(true)
+              }}
+              className="bg-gradient-primary text-white w-full sm:w-auto"
             >
-              <TableIcon className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={viewMode === 'kanban' ? 'default' : 'outline'}
-              size="icon"
-              onClick={() => setViewMode('kanban')}
-            >
-              <LayoutGrid className="h-4 w-4" />
+              <Plus className="mr-2 h-4 w-4" />
+              {t('newQuote')}
             </Button>
           </div>
-          <Button
-            onClick={() => {
-              setSelectedQuote(null)
-              setFormOpen(true)
-            }}
-            className="bg-gradient-primary text-white w-full sm:w-auto"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            {t('newQuote')}
-          </Button>
         </div>
-      </div>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-        <div className="flex-1 relative w-full sm:min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <Input
-            type="search"
-            placeholder={t('searchPlaceholder')}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 w-full"
-          />
-        </div>
-        {isSuperAdmin && (
-          <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
-            <SelectTrigger className="w-full sm:w-48">
-              <SelectValue placeholder={tCommon('select')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{tCommon('filters.all')}</SelectItem>
-              {companies.map((company) => (
-                <SelectItem key={company.id} value={company.id}>
-                  {company.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        {viewMode === 'table' && (
-          <Select value={status || 'all'} onValueChange={(v) => setStatus(v === 'all' ? '' : v)}>
-            <SelectTrigger className="w-full sm:w-48">
-              <SelectValue placeholder={tStatus('status')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t('allStatuses')}</SelectItem>
-              <SelectItem value="DRAFT">{statusLabels.DRAFT}</SelectItem>
-              <SelectItem value="SENT">{statusLabels.SENT}</SelectItem>
-              <SelectItem value="ACCEPTED">{statusLabels.ACCEPTED}</SelectItem>
-              <SelectItem value="DECLINED">{statusLabels.DECLINED}</SelectItem>
-              <SelectItem value="WAITING">{statusLabels.WAITING}</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
-      </div>
-
-      {/* Content */}
-      {viewMode === 'kanban' ? (
-        <>
-          {isLoadingKanban && (
-            <div className="flex items-center justify-center h-[400px]">
-              <div className="text-center">
-                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent"></div>
-                <p className="mt-4 text-sm text-gray-600">Kanban yükleniyor...</p>
-              </div>
-            </div>
-          )}
-          {isErrorKanban && (
-            <div className="flex items-center justify-center h-[400px]">
-              <div className="text-center">
-                <p className="text-sm text-red-600">Kanban yüklenirken bir hata oluştu.</p>
-                <Button onClick={() => refetchKanban()} className="mt-4">
-                  Tekrar Dene
-                </Button>
-              </div>
-            </div>
-          )}
-          {!isLoadingKanban && !isErrorKanban && (
-            <QuoteKanbanChart
-              onView={(quoteId) => {
-                setSelectedQuoteId(quoteId)
-                setDetailModalOpen(true)
-              }} // ✅ ÇÖZÜM: Modal açmak için callback
-          data={kanbanData}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onStatusChange={async (quoteId: string, newStatus: string) => {
-            // ✅ ÇÖZÜM: REJECTED durumuna geçerken sebep sor
-            if (newStatus === 'REJECTED' || newStatus === 'DECLINED') {
-              // Reddet dialog'unu aç
-              setRejectingQuoteId(quoteId)
-              setRejectDialogOpen(true)
-              return // Dialog açıldı, işlem dialog'dan devam edecek
-            }
-            
-            // ✅ ÇÖZÜM: Kullanıcıya onay sor - backend'de güncelleme yapılmadan önce
-            const statusLabel = statusLabels[newStatus] || newStatus
-            const quote = kanbanData
-              .flatMap((c: any) => c.quotes || [])
-              .find((q: any) => q.id === quoteId)
-            const quoteTitle = quote?.title || t('defaultQuoteTitle')
-            
-            const confirmed = await confirm(
-              `${t('rejectDialog.statusChangeConfirm', { quoteTitle, statusLabel })} ${t('rejectDialog.statusChangeMessage')}`
-            )
-            if (!confirmed) {
-              return // Kullanıcı iptal etti, işlemi durdur
-            }
-            
-            // ✅ ÇÖZÜM: Kullanıcı onayladı, şimdi optimistic update yap
-            // ÖNEMLİ: Optimistic update yap - kart anında taşınır
-            const previousKanbanData = kanbanData
-            
-            // ✅ ÇÖZÜM: Debug - Status update başladı
-            if (process.env.NODE_ENV === 'development') {
-              console.log('Status Update Started:', {
-                quoteId,
-                newStatus,
-                kanbanDataStatuses: kanbanData.map((col: any) => col.status),
-                quoteFound: kanbanData.flatMap((c: any) => c.quotes || []).find((q: any) => q.id === quoteId),
-              })
-            }
-            
-            // ÇÖZÜM: Optimistic update - kart anında taşınır
-            const optimisticKanbanData = kanbanData.map((col: any) => {
-              // Eski status'den quote'u bul ve kaldır
-              const quoteIndex = (col.quotes || []).findIndex((q: any) => q.id === quoteId)
-              if (quoteIndex !== -1) {
-                const updatedQuotes = (col.quotes || []).filter((q: any) => q.id !== quoteId)
-                const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
-                  const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
-                  return sum + quoteValue
-                }, 0)
-                return {
-                  ...col,
-                  quotes: updatedQuotes,
-                  count: Math.max(0, (col.count || 0) - 1),
-                  totalValue: updatedTotalValue,
-                }
-              }
-              
-              // Yeni status'e quote'u ekle - REJECTED ve DECLINED ikisini de destekle
-              if (col.status === newStatus || (newStatus === 'REJECTED' && col.status === 'DECLINED') || (newStatus === 'DECLINED' && col.status === 'REJECTED')) {
-                const quote = previousKanbanData
-                  .flatMap((c: any) => c.quotes || [])
-                  .find((q: any) => q.id === quoteId)
-                
-                if (quote) {
-                  const updatedQuote = { 
-                    ...quote, 
-                    status: newStatus,
-                    updatedAt: new Date().toISOString(),
-                  }
-                  const updatedQuotes = [updatedQuote, ...(col.quotes || [])]
-                  const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
-                    const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
-                    return sum + quoteValue
-                  }, 0)
-                  return {
-                    ...col,
-                    quotes: updatedQuotes,
-                    count: (col.count || 0) + 1,
-                    totalValue: updatedTotalValue,
-                  }
-                }
-              }
-              
-              return col
-            })
-            
-            // ÇÖZÜM: Optimistic update'i state'e set et - kart anında taşınır
-            const optimisticKanbanDataWithNewRef = JSON.parse(JSON.stringify(optimisticKanbanData))
-            setKanbanData(optimisticKanbanDataWithNewRef)
-            
-            // ÇÖZÜM: API çağrısı yap - backend'de güncelleme yapılsın
-            try {
-              const res = await fetch(`/api/quotes/${quoteId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ status: newStatus }),
-              })
-              
-              if (!res.ok) {
-                // Hata durumunda optimistic update'i geri al
-                setKanbanData(previousKanbanData)
-                const errorData = await res.json().catch(() => ({}))
-                
-                // Güvenli hata mesajı oluştur
-                let errorMessage: string = 'Teklif durumu güncellenemedi'
-                
-                if (errorData?.message && typeof errorData.message === 'string') {
-                  errorMessage = errorData.message
-                } else if (errorData?.error && typeof errorData.error === 'string') {
-                  errorMessage = errorData.error
-                }
-                
-                // Toast ile hata göster - doğru format
-                toast.error('Teklif Güncellenemedi', {
-                  description: errorMessage,
-                })
-                
-                throw new Error(errorMessage)
-              }
-
-              // %100 KESİN ÇÖZÜM: API'den dönen güncellenmiş quote'u al
-              // ÖNEMLİ: Backend'den dönen gerçek data'yı kullan - updatedAt ve diğer alanlar güncel olacak
-              const updatedQuote = await res.json()
-              const automation = updatedQuote?.automation || {}
-              
-              // Teklif başlığını al
-              const quoteTitle = updatedQuote?.title || 'Teklif'
-              
-              // Detaylı toast mesajları oluştur
-              let toastTitle = ''
-              let toastDescription = ''
-              let toastType: 'success' | 'warning' | 'info' = 'success'
-              
-              switch (newStatus) {
-                case 'ACCEPTED':
-                  toastTitle = `Teklif kabul edildi: "${quoteTitle}"`
-                  toastDescription = `Teklif "Kabul Edildi" durumuna taşındı.`
-                  
-                  if (automation.invoiceCreated && automation.invoiceId) {
-                    toastDescription += `\n\nOtomatik işlemler:\n• Fatura oluşturuldu (ID: ${automation.invoiceId.substring(0, 8)}...)\n• Fatura başlığı: ${automation.invoiceTitle || 'Otomatik oluşturuldu'}\n• E-posta gönderildi\n• Bildirim gönderildi`
-                  }
-                  break
-                  
-                case 'REJECTED':
-                case 'DECLINED':
-                  toastTitle = `Teklif reddedildi: "${quoteTitle}"`
-                  toastDescription = `Teklif "${newStatus === 'REJECTED' ? 'Reddedildi' : 'İptal Edildi'}" durumuna taşındı.`
-                  
-                  if (automation.taskCreated && automation.taskId) {
-                    toastDescription += `\n\nOtomatik işlemler:\n• Revizyon görevi oluşturuldu (ID: ${automation.taskId.substring(0, 8)}...)\n• Bildirim gönderildi`
-                  } else {
-                    toastDescription += `\n\nBildirim gönderildi`
-                  }
-                  
-                  toastType = 'warning'
-                  break
-                  
-                case 'SENT':
-                  toastTitle = `Teklif gönderildi: "${quoteTitle}"`
-                  toastDescription = `Teklif "Gönderildi" durumuna taşındı.\n\nOtomatik işlemler:\n• E-posta gönderildi\n• Bildirim gönderildi`
-                  break
-                  
-                default:
-                  const statusName = statusLabels[newStatus] || newStatus
-                  toastTitle = `Teklif durumu güncellendi: "${quoteTitle}"`
-                  toastDescription = `Teklif "${statusName}" durumuna taşındı.`
-              }
-
-              if (toastType === 'success') {
-                toast.success(toastTitle, { description: toastDescription })
-              } else if (toastType === 'warning') {
-                toast.warning(toastTitle, { description: toastDescription })
-              } else {
-                toast.success(toastTitle, { description: toastDescription })
-              }
-              
-              // %100 KESİN ÇÖZÜM: Backend'den dönen güncellenmiş quote ile kanban data'yı güncelle
-              // ÖNEMLİ: Backend'den dönen gerçek data'yı kullan - updatedAt güncel olacak
-              const updatedKanbanDataWithBackendData = previousKanbanData.map((col: any) => {
-                // Eski kolondan quote'u kaldır
-                if (col.quotes?.some((q: any) => q.id === quoteId)) {
-                  const filteredQuotes = col.quotes.filter((q: any) => q.id !== quoteId)
-                  const updatedTotalValue = filteredQuotes.reduce((sum: number, q: any) => {
-                    const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
-                    return sum + quoteValue
-                  }, 0)
-                  return {
-                    ...col,
-                    quotes: filteredQuotes,
-                    count: filteredQuotes.length,
-                    totalValue: updatedTotalValue,
-                  }
-                }
-                return col
-              }).map((col: any) => {
-                // Yeni kolona güncellenmiş quote'u ekle - REJECTED ve DECLINED ikisini de destekle
-                if (col.status === newStatus || (newStatus === 'REJECTED' && col.status === 'DECLINED') || (newStatus === 'DECLINED' && col.status === 'REJECTED')) {
-                  // ÇÖZÜM: Backend'den dönen güncellenmiş quote'u kullan
-                  const updatedQuoteForKanban = {
-                    id: updatedQuote.id,
-                    title: updatedQuote.title,
-                    totalAmount: updatedQuote.totalAmount || 0,
-                    dealId: updatedQuote.dealId,
-                    createdAt: updatedQuote.createdAt,
-                    updatedAt: updatedQuote.updatedAt, // ÇÖZÜM: Backend'den dönen güncel updatedAt
-                  }
-                  const updatedQuotes = [updatedQuoteForKanban, ...(col.quotes || [])]
-                  const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
-                    const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
-                    return sum + quoteValue
-                  }, 0)
-                  return {
-                    ...col,
-                    quotes: updatedQuotes,
-                    count: updatedQuotes.length,
-                    totalValue: updatedTotalValue,
-                  }
-                }
-                return col
-              })
-              
-              // %100 KESİN ÇÖZÜM: Backend'den dönen güncellenmiş data ile cache'i güncelle
-              const updatedKanbanDataWithNewRef = JSON.parse(JSON.stringify(updatedKanbanDataWithBackendData))
-              
-              // %100 KESİN ÇÖZÜM: Backend'den dönen gerçek data ile cache'i güncelle
-              // ÖNEMLİ: Backend'den dönen gerçek data ile cache güncelleniyor - refresh sonrası güncel data görünecek
-              queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId], updatedKanbanDataWithNewRef)
-              
-              // %100 KESİN ÇÖZÜM: State'i de güncelle - backend'den dönen gerçek data ile
-              setKanbanData(updatedKanbanDataWithNewRef)
-              
-              // %100 KESİN ÇÖZÜM: Cache'i tamamen temizle - refresh sonrası kesinlikle yeni data çekilsin
-              // ÖNEMLİ: removeQueries ile cache'i tamamen temizle - refresh sonrası kesinlikle API'den yeni data çekilecek
-              queryClient.removeQueries({ 
-                queryKey: ['kanban-quotes'],
-              })
-              
-              // %100 KESİN ÇÖZÜM: Cache'i backend'den dönen gerçek data ile tekrar set et
-              // ÖNEMLİ: removeQueries sonrası cache'i tekrar set et - refresh sonrası cache'den güncel data gelsin
-              queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId], updatedKanbanDataWithNewRef)
-              
-              // %100 KESİN ÇÖZÜM: Query'yi invalidate et ve manuel refetch yap - refresh sonrası API'den yeni data çekilsin
-              // ÖNEMLİ: staleTime: 0 ve gcTime: 0 nedeniyle refresh sonrası kesinlikle yeni data çekilecek
-              await queryClient.invalidateQueries({ 
-                queryKey: ['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId],
-                exact: true,
-              })
-              
-              // %100 KESİN ÇÖZÜM: Manuel refetch yap - kesinlikle fresh data çek
-              // ÖNEMLİ: invalidateQueries sonrası manuel refetch yap - kesinlikle API'den yeni data çekilsin
-              await queryClient.refetchQueries({ 
-                queryKey: ['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId],
-                exact: true,
-              })
-              
-              // %100 KESİN ÇÖZÜM: isInitialLoad'i false yap - useEffect'in state'i override etmesini engelle
-              setIsInitialLoad(false)
-
-              // ÇÖZÜM: Sadece dashboard'daki diğer query'leri invalidate et (background'da, refetch olmadan)
-              // ÖNEMLİ: kanban-quotes query'sini invalidate ETME - optimistic update'i koru
-              // ÖNEMLİ: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
-              // Sadece dashboard'daki diğer query'leri invalidate et - onlar kendi staleTime'larına göre refetch olur
-              await Promise.all([
-                queryClient.invalidateQueries({ queryKey: ['quotes'] }), // Table view için
-                queryClient.invalidateQueries({ queryKey: ['stats-quotes'] }), // Stats için
-                queryClient.invalidateQueries({ queryKey: ['quote-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
-                queryClient.invalidateQueries({ queryKey: ['quote-analysis'] }), // Dashboard'daki quote analiz grafiğini güncelle
-                queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle
-              ])
-              
-              // ✅ ÇÖZÜM: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
-              // Optimistic update zaten yapıldı, invalidate yeterli - query'ler kendi staleTime'larına göre refetch olur
-            } catch (error: any) {
-              console.error('Status update error:', error)
-              toast.error(t('rejectDialog.statusUpdateError'), { description: error?.message || 'Bir hata oluştu' })
-              throw error
-            }
-          }}
+        {/* Filters */}
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+          <div className="flex-1 relative w-full sm:min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Input
+              type="search"
+              placeholder={t('searchPlaceholder')}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10 w-full"
             />
+          </div>
+          {isSuperAdmin && (
+            <Select value={filterCompanyId || 'all'} onValueChange={(v) => setFilterCompanyId(v === 'all' ? '' : v)}>
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue placeholder={tCommon('select')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{tCommon('filters.all')}</SelectItem>
+                {companies.map((company) => (
+                  <SelectItem key={company.id} value={company.id}>
+                    {company.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           )}
-        </>
-      ) : (
-        <>
-          {/* Desktop Table View */}
-          <div className="hidden md:block bg-white rounded-lg shadow-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('tableHeaders.title')}</TableHead>
-                {isSuperAdmin && <TableHead>{t('tableHeaders.company')}</TableHead>}
-                <TableHead>{t('tableHeaders.status')}</TableHead>
-                <TableHead>{t('tableHeaders.total')}</TableHead>
-                <TableHead>{t('tableHeaders.deal')}</TableHead>
-                <TableHead>{t('tableHeaders.date')}</TableHead>
-                <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          {viewMode === 'table' && (
+            <Select value={status || 'all'} onValueChange={(v) => setStatus(v === 'all' ? '' : v)}>
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue placeholder={tStatus('status')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t('allStatuses')}</SelectItem>
+                <SelectItem value="DRAFT">{statusLabels.DRAFT}</SelectItem>
+                <SelectItem value="SENT">{statusLabels.SENT}</SelectItem>
+                <SelectItem value="ACCEPTED">{statusLabels.ACCEPTED}</SelectItem>
+                <SelectItem value="DECLINED">{statusLabels.DECLINED}</SelectItem>
+                <SelectItem value="WAITING">{statusLabels.WAITING}</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+
+        {/* Content */}
+        {viewMode === 'kanban' ? (
+          <>
+            {isLoadingKanban && (
+              <div className="flex items-center justify-center h-[400px]">
+                <div className="text-center">
+                  <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent"></div>
+                  <p className="mt-4 text-sm text-gray-600">Kanban yükleniyor...</p>
+                </div>
+              </div>
+            )}
+            {isErrorKanban && (
+              <div className="flex items-center justify-center h-[400px]">
+                <div className="text-center">
+                  <p className="text-sm text-red-600">Kanban yüklenirken bir hata oluştu.</p>
+                  <Button onClick={() => refetchKanban()} className="mt-4">
+                    Tekrar Dene
+                  </Button>
+                </div>
+              </div>
+            )}
+            {!isLoadingKanban && !isErrorKanban && (
+              <QuoteKanbanChart
+                onView={(quoteId) => {
+                  setSelectedQuoteId(quoteId)
+                  setDetailModalOpen(true)
+                }} // ✅ ÇÖZÜM: Modal açmak için callback
+                onQuickAction={(type, quote) => {
+                  setQuickAction({ type, quote })
+                }} // ✅ ÇÖZÜM: Quick action için callback (invoice, task, meeting)
+                data={kanbanData}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+                onStatusChange={async (quoteId: string, newStatus: string) => {
+                  // ✅ REJECTED durumuna geçerken önce onay iste, sonra sebep sor
+                  if (newStatus === 'REJECTED' || newStatus === 'DECLINED') {
+                    const quote = kanbanData
+                      .flatMap((col: any) => col.quotes || [])
+                      .find((q: any) => q.id === quoteId)
+                    
+                    if (quote) {
+                      const confirmed = await confirm({
+                        title: 'Teklifi Reddetmek İstediğinize Emin Misiniz?',
+                        description: `"${quote.title || 'Teklif'}" teklifini reddettiğinizde otomatik olarak şu işlemler yapılacak:\n\n• Revizyon görevi oluşturulacak\n• Reddetme sebebi not olarak kaydedilecek\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
+                        confirmLabel: 'Evet, Reddet',
+                        cancelLabel: 'İptal',
+                        variant: 'destructive'
+                      })
+                      
+                      if (!confirmed) {
+                        return // İşlemi iptal et
+                      }
+                      
+                      // Onay verildikten sonra sebep dialog'unu aç
+                      setRejectingQuoteId(quoteId)
+                      setRejectDialogOpen(true)
+                      return // Dialog açıldı, işlem dialog'dan devam edecek
+                    }
+                  }
+
+                  // ✅ ACCEPTED durumuna geçerken onay iste
+                  if (newStatus === 'ACCEPTED') {
+                    const quote = kanbanData
+                      .flatMap((col: any) => col.quotes || [])
+                      .find((q: any) => q.id === quoteId)
+                    
+                    if (quote) {
+                      const confirmed = await confirm({
+                        title: 'Teklifi Kabul Etmek İstediğinize Emin Misiniz?',
+                        description: `"${quote.title || 'Teklif'}" teklifini kabul ettiğinizde otomatik olarak şu işlemler yapılacak:\n\n• Fatura oluşturulacak (DRAFT durumunda)\n• Fatura kalemleri kopyalanacak (QuoteItem → InvoiceItem)\n• Ürünler rezerve edilecek (reservedQuantity artacak)\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
+                        confirmLabel: 'Evet, Kabul Et',
+                        cancelLabel: 'İptal',
+                        variant: 'default'
+                      })
+                      
+                      if (!confirmed) {
+                        return // İşlemi iptal et
+                      }
+                    }
+                  }
+
+                  // ÖNEMLİ: Optimistic update yap - kart anında taşınır
+                  const previousKanbanData = kanbanData
+
+                  // ✅ ÇÖZÜM: Debug - Status update başladı
+                  if (process.env.NODE_ENV === 'development') {
+                    console.log('Status Update Started:', {
+                      quoteId,
+                      newStatus,
+                      kanbanDataStatuses: kanbanData.map((col: any) => col.status),
+                      quoteFound: kanbanData.flatMap((c: any) => c.quotes || []).find((q: any) => q.id === quoteId),
+                    })
+                  }
+
+                  // ÇÖZÜM: Optimistic update - kart anında taşınır
+                  const optimisticKanbanData = kanbanData.map((col: any) => {
+                    // Eski status'den quote'u bul ve kaldır
+                    const quoteIndex = (col.quotes || []).findIndex((q: any) => q.id === quoteId)
+                    if (quoteIndex !== -1) {
+                      const updatedQuotes = (col.quotes || []).filter((q: any) => q.id !== quoteId)
+                      const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
+                        const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
+                        return sum + quoteValue
+                      }, 0)
+                      return {
+                        ...col,
+                        quotes: updatedQuotes,
+                        count: Math.max(0, (col.count || 0) - 1),
+                        totalValue: updatedTotalValue,
+                      }
+                    }
+
+                    // Yeni status'e quote'u ekle - REJECTED ve DECLINED ikisini de destekle
+                    if (col.status === newStatus || (newStatus === 'REJECTED' && col.status === 'DECLINED') || (newStatus === 'DECLINED' && col.status === 'REJECTED')) {
+                      const quote = previousKanbanData
+                        .flatMap((c: any) => c.quotes || [])
+                        .find((q: any) => q.id === quoteId)
+
+                      if (quote) {
+                        const updatedQuote = {
+                          ...quote,
+                          status: newStatus,
+                          updatedAt: new Date().toISOString(),
+                        }
+                        const updatedQuotes = [updatedQuote, ...(col.quotes || [])]
+                        const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
+                          const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
+                          return sum + quoteValue
+                        }, 0)
+                        return {
+                          ...col,
+                          quotes: updatedQuotes,
+                          count: (col.count || 0) + 1,
+                          totalValue: updatedTotalValue,
+                        }
+                      }
+                    }
+
+                    return col
+                  })
+
+                  // ÇÖZÜM: Optimistic update'i state'e set et - kart anında taşınır
+                  const optimisticKanbanDataWithNewRef = JSON.parse(JSON.stringify(optimisticKanbanData))
+                  setKanbanData(optimisticKanbanDataWithNewRef)
+
+                  // ÇÖZÜM: API çağrısı yap - backend'de güncelleme yapılsın
+                  try {
+                    const res = await fetch(`/api/quotes/${quoteId}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ status: newStatus }),
+                    })
+
+                    if (!res.ok) {
+                      // Hata durumunda optimistic update'i geri al
+                      setKanbanData(previousKanbanData)
+                      const errorData = await res.json().catch(() => ({}))
+
+                      // Güvenli hata mesajı oluştur
+                      let errorMessage: string = 'Teklif durumu güncellenemedi'
+
+                      if (errorData?.message && typeof errorData.message === 'string') {
+                        errorMessage = errorData.message
+                      } else if (errorData?.error && typeof errorData.error === 'string') {
+                        errorMessage = errorData.error
+                      }
+
+                      // Toast ile hata göster - doğru format
+                      toast.error('Teklif Güncellenemedi', {
+                        description: errorMessage,
+                      })
+
+                      throw new Error(errorMessage)
+                    }
+
+                    // %100 KESİN ÇÖZÜM: API'den dönen güncellenmiş quote'u al
+                    // ÖNEMLİ: Backend'den dönen gerçek data'yı kullan - updatedAt ve diğer alanlar güncel olacak
+                    const updatedQuote = await res.json()
+                    const automation = updatedQuote?.automation || {}
+
+                    // Teklif başlığını al
+                    const quoteTitle = updatedQuote?.title || 'Teklif'
+
+                    // Detaylı toast mesajları oluştur
+                    let toastTitle = ''
+                    let toastDescription = ''
+                    let toastType: 'success' | 'warning' | 'info' = 'success'
+
+                    switch (newStatus) {
+                      case 'ACCEPTED':
+                        toastTitle = `🎉 Teklif Kabul Edildi!`
+                        toastDescription = `"${quoteTitle}" teklifi kabul edildi.`
+
+                        if (automation.invoiceCreated && automation.invoiceId) {
+                          toastDescription += `\n\nOtomatik işlemler:\n• Fatura oluşturuldu (ID: ${automation.invoiceId.substring(0, 8)}...)\n• Fatura numarası: ${automation.invoiceNumber || automation.invoiceTitle || 'Oluşturuluyor...'}\n• Fatura kalemleri kopyalandı\n• Ürünler rezerve edildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                        } else {
+                          toastDescription += `\n\nOtomatik işlemler:\n• Fatura oluşturuluyor...\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                        }
+                        break
+
+                      case 'REJECTED':
+                      case 'DECLINED':
+                        toastTitle = `⚠️ Teklif Reddedildi: "${quoteTitle}"`
+                        toastDescription = `Teklif "${newStatus === 'REJECTED' ? 'Reddedildi' : 'İptal Edildi'}" durumuna taşındı.`
+
+                        if (automation.taskCreated && automation.taskId) {
+                          toastDescription += `\n\nOtomatik işlemler:\n• Revizyon görevi oluşturuldu (ID: ${automation.taskId.substring(0, 8)}...)\n• Reddetme sebebi not olarak kaydedildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                        } else {
+                          toastDescription += `\n\nOtomatik işlemler:\n• Reddetme sebebi not olarak kaydedildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                        }
+
+                        toastType = 'warning'
+                        break
+
+                      case 'SENT':
+                        toastTitle = `Teklif gönderildi: "${quoteTitle}"`
+                        toastDescription = `Teklif "Gönderildi" durumuna taşındı.\n\nOtomatik işlemler:\n• E-posta gönderildi\n• Bildirim gönderildi`
+                        break
+
+                      default:
+                        const statusName = statusLabels[newStatus] || newStatus
+                        toastTitle = `Teklif durumu güncellendi: "${quoteTitle}"`
+                        toastDescription = `Teklif "${statusName}" durumuna taşındı.`
+                    }
+
+                    if (toastType === 'success') {
+                      toast.success(toastTitle, { description: toastDescription })
+                    } else if (toastType === 'warning') {
+                      toast.warning(toastTitle, { description: toastDescription })
+                    } else {
+                      toast.success(toastTitle, { description: toastDescription })
+                    }
+
+                    // %100 KESİN ÇÖZÜM: Backend'den dönen güncellenmiş quote ile kanban data'yı güncelle
+                    // ÖNEMLİ: Backend'den dönen gerçek data'yı kullan - updatedAt güncel olacak
+                    const updatedKanbanDataWithBackendData = previousKanbanData.map((col: any) => {
+                      // Eski kolondan quote'u kaldır
+                      if (col.quotes?.some((q: any) => q.id === quoteId)) {
+                        const filteredQuotes = col.quotes.filter((q: any) => q.id !== quoteId)
+                        const updatedTotalValue = filteredQuotes.reduce((sum: number, q: any) => {
+                          const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
+                          return sum + quoteValue
+                        }, 0)
+                        return {
+                          ...col,
+                          quotes: filteredQuotes,
+                          count: filteredQuotes.length,
+                          totalValue: updatedTotalValue,
+                        }
+                      }
+                      return col
+                    }).map((col: any) => {
+                      // Yeni kolona güncellenmiş quote'u ekle - REJECTED ve DECLINED ikisini de destekle
+                      if (col.status === newStatus || (newStatus === 'REJECTED' && col.status === 'DECLINED') || (newStatus === 'DECLINED' && col.status === 'REJECTED')) {
+                        // ÇÖZÜM: Backend'den dönen güncellenmiş quote'u kullan
+                        const updatedQuoteForKanban = {
+                          id: updatedQuote.id,
+                          title: updatedQuote.title,
+                          totalAmount: updatedQuote.totalAmount || 0,
+                          dealId: updatedQuote.dealId,
+                          createdAt: updatedQuote.createdAt,
+                          updatedAt: updatedQuote.updatedAt, // ÇÖZÜM: Backend'den dönen güncel updatedAt
+                        }
+                        const updatedQuotes = [updatedQuoteForKanban, ...(col.quotes || [])]
+                        const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
+                          const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
+                          return sum + quoteValue
+                        }, 0)
+                        return {
+                          ...col,
+                          quotes: updatedQuotes,
+                          count: updatedQuotes.length,
+                          totalValue: updatedTotalValue,
+                        }
+                      }
+                      return col
+                    })
+
+                    // %100 KESİN ÇÖZÜM: Backend'den dönen güncellenmiş data ile cache'i güncelle
+                    const updatedKanbanDataWithNewRef = JSON.parse(JSON.stringify(updatedKanbanDataWithBackendData))
+
+                    // %100 KESİN ÇÖZÜM: Backend'den dönen gerçek data ile cache'i güncelle
+                    // ÖNEMLİ: Backend'den dönen gerçek data ile cache güncelleniyor - refresh sonrası güncel data görünecek
+                    queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId], updatedKanbanDataWithNewRef)
+
+                    // %100 KESİN ÇÖZÜM: State'i de güncelle - backend'den dönen gerçek data ile
+                    setKanbanData(updatedKanbanDataWithNewRef)
+
+                    // %100 KESİN ÇÖZÜM: Cache'i tamamen temizle - refresh sonrası kesinlikle yeni data çekilsin
+                    // ÖNEMLİ: removeQueries ile cache'i tamamen temizle - refresh sonrası kesinlikle API'den yeni data çekilecek
+                    queryClient.removeQueries({
+                      queryKey: ['kanban-quotes'],
+                    })
+
+                    // %100 KESİN ÇÖZÜM: Cache'i backend'den dönen gerçek data ile tekrar set et
+                    // ÖNEMLİ: removeQueries sonrası cache'i tekrar set et - refresh sonrası cache'den güncel data gelsin
+                    queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId], updatedKanbanDataWithNewRef)
+
+                    // %100 KESİN ÇÖZÜM: Query'yi invalidate et ve manuel refetch yap - refresh sonrası API'den yeni data çekilsin
+                    // ÖNEMLİ: staleTime: 0 ve gcTime: 0 nedeniyle refresh sonrası kesinlikle yeni data çekilecek
+                    await queryClient.invalidateQueries({
+                      queryKey: ['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId],
+                      exact: true,
+                    })
+
+                    // %100 KESİN ÇÖZÜM: Manuel refetch yap - kesinlikle fresh data çek
+                    // ÖNEMLİ: invalidateQueries sonrası manuel refetch yap - kesinlikle API'den yeni data çekilsin
+                    await queryClient.refetchQueries({
+                      queryKey: ['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId],
+                      exact: true,
+                    })
+
+                    // %100 KESİN ÇÖZÜM: isInitialLoad'i false yap - useEffect'in state'i override etmesini engelle
+                    setIsInitialLoad(false)
+
+                    // ÇÖZÜM: Sadece dashboard'daki diğer query'leri invalidate et (background'da, refetch olmadan)
+                    // ÖNEMLİ: kanban-quotes query'sini invalidate ETME - optimistic update'i koru
+                    // ÖNEMLİ: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
+                    // Sadece dashboard'daki diğer query'leri invalidate et - onlar kendi staleTime'larına göre refetch olur
+                    await Promise.all([
+                      queryClient.invalidateQueries({ queryKey: ['quotes'] }), // Table view için
+                      queryClient.invalidateQueries({ queryKey: ['stats-quotes'] }), // Stats için
+                      queryClient.invalidateQueries({ queryKey: ['quote-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
+                      queryClient.invalidateQueries({ queryKey: ['quote-analysis'] }), // Dashboard'daki quote analiz grafiğini güncelle
+                      queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle
+                    ])
+
+                    // ✅ ÇÖZÜM: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
+                    // Optimistic update zaten yapıldı, invalidate yeterli - query'ler kendi staleTime'larına göre refetch olur
+                  } catch (error: any) {
+                    console.error('Status update error:', error)
+                    toast.error(t('rejectDialog.statusUpdateError'), { description: error?.message || 'Bir hata oluştu' })
+                    throw error
+                  }
+                }}
+              />
+            )}
+          </>
+        ) : (
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden md:block bg-white rounded-lg shadow-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>{t('tableHeaders.title')}</TableHead>
+                      {isSuperAdmin && <TableHead>{t('tableHeaders.company')}</TableHead>}
+                      <TableHead>{t('tableHeaders.status')}</TableHead>
+                      <TableHead>{t('tableHeaders.total')}</TableHead>
+                      <TableHead>{t('tableHeaders.deal')}</TableHead>
+                      <TableHead>{t('tableHeaders.date')}</TableHead>
+                      <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {quotes.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={isSuperAdmin ? 7 : 6} className="text-center py-8 text-gray-500">
+                          {tCommon('noData')}
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      quotes.map((quote) => (
+                        <TableRow key={quote.id}>
+                          <TableCell className="font-medium">{quote.title}</TableCell>
+                          {isSuperAdmin && (
+                            <TableCell>
+                              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                                {quote.Company?.name || '-'}
+                              </Badge>
+                            </TableCell>
+                          )}
+                          <TableCell>
+                            <InlineEditBadge
+                              value={quote.status}
+                              options={[
+                                { value: 'DRAFT', label: statusLabels['DRAFT'] || 'Taslak' },
+                                { value: 'SENT', label: statusLabels['SENT'] || 'Gönderildi' },
+                                { value: 'ACCEPTED', label: statusLabels['ACCEPTED'] || 'Kabul Edildi' },
+                                { value: 'REJECTED', label: statusLabels['REJECTED'] || 'Reddedildi' },
+                                { value: 'DECLINED', label: statusLabels['DECLINED'] || 'Reddedildi' },
+                                { value: 'WAITING', label: statusLabels['WAITING'] || 'Beklemede' },
+                                { value: 'EXPIRED', label: statusLabels['EXPIRED'] || 'Süresi Doldu' },
+                              ]}
+                              onSave={async (newStatus) => {
+                                // ✅ ACCEPTED durumuna geçerken onay iste
+                                if (newStatus === 'ACCEPTED') {
+                                  const confirmed = await confirm({
+                                    title: 'Teklifi Kabul Etmek İstediğinize Emin Misiniz?',
+                                    description: `"${quote.title || 'Teklif'}" teklifini kabul ettiğinizde otomatik olarak şu işlemler yapılacak:\n\n• Fatura oluşturulacak (DRAFT durumunda)\n• Fatura kalemleri kopyalanacak (QuoteItem → InvoiceItem)\n• Ürünler rezerve edilecek (reservedQuantity artacak)\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
+                                    confirmLabel: 'Evet, Kabul Et',
+                                    cancelLabel: 'İptal',
+                                    variant: 'default'
+                                  })
+                                  
+                                  if (!confirmed) {
+                                    return // İşlemi iptal et
+                                  }
+                                }
+
+                                // Table view için basit status change handler
+                                try {
+                                  const res = await fetch(`/api/quotes/${quote.id}`, {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ status: newStatus }),
+                                  })
+                                  if (!res.ok) {
+                                    const error = await res.json().catch(() => ({}))
+                                    throw new Error(error.error || 'Durum güncellenemedi')
+                                  }
+                                  const updatedQuote = await res.json()
+                                  const automation = updatedQuote?.automation || {}
+
+                                  // Cache'i güncelle
+                                  await Promise.all([
+                                    mutate('/api/quotes', undefined, { revalidate: true }),
+                                    mutate('/api/quotes?', undefined, { revalidate: true }),
+                                    mutate((key: string) => typeof key === 'string' && key.startsWith('/api/quotes'), undefined, { revalidate: true }),
+                                  ])
+
+                                  // ✅ Detaylı toast mesajı
+                                  if (newStatus === 'ACCEPTED') {
+                                    toast.success('🎉 Teklif Kabul Edildi!', {
+                                      description: `"${quote.title || 'Teklif'}" teklifi kabul edildi.\n\nOtomatik işlemler:\n${automation.invoiceCreated ? `• Fatura oluşturuldu (ID: ${automation.invoiceId?.substring(0, 8)}...)\n• Fatura numarası: ${automation.invoiceNumber || automation.invoiceTitle || 'Oluşturuluyor...'}\n• Fatura kalemleri kopyalandı\n• Ürünler rezerve edildi\n` : ''}• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                                    })
+                                  } else {
+                                    toast.success('Durum güncellendi', { description: `Teklif "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
+                                  }
+                                } catch (error: any) {
+                                  toast.error('Durum güncellenemedi', { description: error?.message || 'Bir hata oluştu.' })
+                                  throw error
+                                }
+                              }}
+                              disabled={quote.status === 'ACCEPTED'}
+                            />
+                          </TableCell>
+                          <TableCell className="font-semibold">
+                            {formatCurrency(quote.totalAmount || quote.total || 0)}
+                          </TableCell>
+                          <TableCell>
+                            {quote.dealId ? (
+                              <Link
+                                href={`/${locale}/deals/${quote.dealId}`}
+                                className="text-primary-600 hover:underline"
+                                prefetch={true}
+                              >
+                                Fırsat #{quote.dealId.substring(0, 8)}
+                              </Link>
+                            ) : (
+                              '-'
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {new Date(quote.createdAt).toLocaleDateString('tr-TR')}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label={t('quickActions.open', { name: quote.title })}
+                                  >
+                                    <Sparkles className="h-4 w-4 text-indigo-500" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-56">
+                                  <DropdownMenuLabel>{t('quickActions.title')}</DropdownMenuLabel>
+                                  <DropdownMenuItem
+                                    onSelect={() => setQuickAction({ type: 'invoice', quote })}
+                                    disabled={quote.status !== 'ACCEPTED'}
+                                  >
+                                    <Receipt className="h-4 w-4" />
+                                    {t('quickActions.createInvoice')}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onSelect={() => setQuickAction({ type: 'task', quote })}
+                                  >
+                                    <CheckSquare className="h-4 w-4" />
+                                    {t('quickActions.createTask')}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onSelect={() => setQuickAction({ type: 'meeting', quote })}
+                                  >
+                                    <Calendar className="h-4 w-4" />
+                                    {t('quickActions.scheduleMeeting')}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  {/* Email/SMS/WhatsApp Butonları */}
+                                  <DropdownMenuItem
+                                    onSelect={async () => {
+                                      // Deal ve Customer bilgisini çek
+                                      if (quote.dealId) {
+                                        try {
+                                          const dealRes = await fetch(`/api/deals/${quote.dealId}`)
+                                          if (dealRes.ok) {
+                                            const deal = await dealRes.json()
+                                            if (deal?.customerId) {
+                                              const customerRes = await fetch(`/api/customers/${deal.customerId}`)
+                                              if (customerRes.ok) {
+                                                const customer = await customerRes.json()
+                                                if (customer?.email) {
+                                                  setSelectedQuoteForCommunication(quote)
+                                                  setSelectedCustomer(customer)
+                                                  setEmailDialogOpen(true)
+                                                } else {
+                                                  toast.error('E-posta adresi yok', { description: 'Müşterinin e-posta adresi bulunamadı' })
+                                                }
+                                              }
+                                            }
+                                          }
+                                        } catch (error) {
+                                          console.error('Customer fetch error:', error)
+                                        }
+                                      } else {
+                                        toast.error('Fırsat yok', { description: 'Bu teklif için fırsat bilgisi bulunamadı' })
+                                      }
+                                    }}
+                                    disabled={!quote.dealId}
+                                  >
+                                    <Mail className="h-4 w-4" />
+                                    E-posta Gönder
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onSelect={async () => {
+                                      if (quote.dealId) {
+                                        try {
+                                          const dealRes = await fetch(`/api/deals/${quote.dealId}`)
+                                          if (dealRes.ok) {
+                                            const deal = await dealRes.json()
+                                            if (deal?.customerId) {
+                                              const customerRes = await fetch(`/api/customers/${deal.customerId}`)
+                                              if (customerRes.ok) {
+                                                const customer = await customerRes.json()
+                                                if (customer?.phone) {
+                                                  setSelectedQuoteForCommunication(quote)
+                                                  setSelectedCustomer(customer)
+                                                  setSmsDialogOpen(true)
+                                                } else {
+                                                  toast.error('Telefon numarası yok', { description: 'Müşterinin telefon numarası bulunamadı' })
+                                                }
+                                              }
+                                            }
+                                          }
+                                        } catch (error) {
+                                          console.error('Customer fetch error:', error)
+                                        }
+                                      } else {
+                                        toast.error('Fırsat yok', { description: 'Bu teklif için fırsat bilgisi bulunamadı' })
+                                      }
+                                    }}
+                                    disabled={!quote.dealId}
+                                  >
+                                    <MessageSquare className="h-4 w-4" />
+                                    SMS Gönder
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onSelect={async () => {
+                                      if (quote.dealId) {
+                                        try {
+                                          const dealRes = await fetch(`/api/deals/${quote.dealId}`)
+                                          if (dealRes.ok) {
+                                            const deal = await dealRes.json()
+                                            if (deal?.customerId) {
+                                              const customerRes = await fetch(`/api/customers/${deal.customerId}`)
+                                              if (customerRes.ok) {
+                                                const customer = await customerRes.json()
+                                                if (customer?.phone) {
+                                                  setSelectedQuoteForCommunication(quote)
+                                                  setSelectedCustomer(customer)
+                                                  setWhatsAppDialogOpen(true)
+                                                } else {
+                                                  toast.error('Telefon numarası yok', { description: 'Müşterinin telefon numarası bulunamadı' })
+                                                }
+                                              }
+                                            }
+                                          }
+                                        } catch (error) {
+                                          console.error('Customer fetch error:', error)
+                                        }
+                                      } else {
+                                        toast.error('Fırsat yok', { description: 'Bu teklif için fırsat bilgisi bulunamadı' })
+                                      }
+                                    }}
+                                    disabled={!quote.dealId}
+                                  >
+                                    <MessageCircle className="h-4 w-4" />
+                                    WhatsApp Gönder
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  setSelectedQuoteId(quote.id)
+                                  setSelectedQuoteData(quote)
+                                  setDetailModalOpen(true)
+                                }}
+                                aria-label={t('viewQuote', { title: quote.title })}
+                              >
+                                <Eye className="h-4 w-4 text-gray-600" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  if (quote.status === 'ACCEPTED') {
+                                    toast.warning(t('cannotEditAccepted'), { description: t('cannotEditAcceptedMessage') })
+                                    return
+                                  }
+                                  handleEdit(quote)
+                                }}
+                                disabled={quote.status === 'ACCEPTED'}
+                                aria-label={t('editQuote', { title: quote.title })}
+                                title={quote.status === 'ACCEPTED' ? t('cannotEditAccepted') : tCommon('edit')}
+                              >
+                                <Edit className="h-4 w-4 text-gray-600" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  if (quote.status === 'ACCEPTED') {
+                                    toast.warning(t('cannotDeleteAccepted'), { description: t('cannotDeleteAcceptedMessage') })
+                                    return
+                                  }
+                                  handleDelete(quote.id, quote.title)
+                                }}
+                                disabled={quote.status === 'ACCEPTED'}
+                                className="text-red-600 hover:text-red-700 disabled:opacity-50"
+                                aria-label={t('deleteQuote', { title: quote.title })}
+                                title={quote.status === 'ACCEPTED' ? t('cannotDeleteAccepted') : tCommon('delete')}
+                              >
+                                <Trash2 className="h-4 w-4 text-red-600" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-3">
               {quotes.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={isSuperAdmin ? 7 : 6} className="text-center py-8 text-gray-500">
-                    {tCommon('noData')}
-                  </TableCell>
-                </TableRow>
+                <div className="text-center py-8 text-gray-500">
+                  {tCommon('noData')}
+                </div>
               ) : (
                 quotes.map((quote) => (
-                  <TableRow key={quote.id}>
-                    <TableCell className="font-medium">{quote.title}</TableCell>
-                    {isSuperAdmin && (
-                      <TableCell>
-                        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-                          {quote.Company?.name || '-'}
-                        </Badge>
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      <InlineEditBadge
-                        value={quote.status}
-                        options={[
-                          { value: 'DRAFT', label: statusLabels['DRAFT'] || 'Taslak' },
-                          { value: 'SENT', label: statusLabels['SENT'] || 'Gönderildi' },
-                          { value: 'ACCEPTED', label: statusLabels['ACCEPTED'] || 'Kabul Edildi' },
-                          { value: 'REJECTED', label: statusLabels['REJECTED'] || 'Reddedildi' },
-                          { value: 'DECLINED', label: statusLabels['DECLINED'] || 'Reddedildi' },
-                          { value: 'WAITING', label: statusLabels['WAITING'] || 'Beklemede' },
-                          { value: 'EXPIRED', label: statusLabels['EXPIRED'] || 'Süresi Doldu' },
-                        ]}
-                        onSave={async (newStatus) => {
-                          // Table view için basit status change handler
-                          try {
-                            const res = await fetch(`/api/quotes/${quote.id}`, {
-                              method: 'PUT',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ status: newStatus }),
-                            })
-                            if (!res.ok) {
-                              const error = await res.json().catch(() => ({}))
-                              throw new Error(error.error || 'Durum güncellenemedi')
-                            }
-                            const updatedQuote = await res.json()
-                            
-                            // Cache'i güncelle
-                            await Promise.all([
-                              mutate('/api/quotes', undefined, { revalidate: true }),
-                              mutate('/api/quotes?', undefined, { revalidate: true }),
-                              mutate((key: string) => typeof key === 'string' && key.startsWith('/api/quotes'), undefined, { revalidate: true }),
-                            ])
-                            
-                            toast.success('Durum güncellendi', { description: `Teklif "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
-                          } catch (error: any) {
-                            toast.error('Durum güncellenemedi', { description: error?.message || 'Bir hata oluştu.' })
-                            throw error
-                          }
-                        }}
-                        disabled={quote.status === 'ACCEPTED'}
-                      />
-                    </TableCell>
-                    <TableCell className="font-semibold">
-                      {formatCurrency(quote.totalAmount || quote.total || 0)}
-                    </TableCell>
-                    <TableCell>
-                      {quote.dealId ? (
-                        <Link 
-                          href={`/${locale}/deals/${quote.dealId}`}
-                          className="text-primary-600 hover:underline"
-                          prefetch={true}
-                        >
-                          Fırsat #{quote.dealId.substring(0, 8)}
-                        </Link>
-                      ) : (
-                        '-'
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(quote.createdAt).toLocaleDateString('tr-TR')}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              aria-label={t('quickActions.open', { name: quote.title })}
-                            >
-                              <Sparkles className="h-4 w-4 text-indigo-500" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-56">
-                            <DropdownMenuLabel>{t('quickActions.title')}</DropdownMenuLabel>
-                            <DropdownMenuItem
-                              onSelect={() => setQuickAction({ type: 'invoice', quote })}
-                              disabled={quote.status !== 'ACCEPTED'}
-                            >
-                              <Receipt className="h-4 w-4" />
-                              {t('quickActions.createInvoice')}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onSelect={() => setQuickAction({ type: 'task', quote })}
-                            >
-                              <CheckSquare className="h-4 w-4" />
-                              {t('quickActions.createTask')}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={() => setQuickAction({ type: 'meeting', quote })}
-                            >
-                              <Calendar className="h-4 w-4" />
-                              {t('quickActions.scheduleMeeting')}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {/* Email/SMS/WhatsApp Butonları */}
-                            <DropdownMenuItem
-                              onSelect={async () => {
-                                // Deal ve Customer bilgisini çek
-                                if (quote.dealId) {
-                                  try {
-                                    const dealRes = await fetch(`/api/deals/${quote.dealId}`)
-                                    if (dealRes.ok) {
-                                      const deal = await dealRes.json()
-                                      if (deal?.customerId) {
-                                        const customerRes = await fetch(`/api/customers/${deal.customerId}`)
-                                        if (customerRes.ok) {
-                                          const customer = await customerRes.json()
-                                          if (customer?.email) {
-                                            setSelectedQuoteForCommunication(quote)
-                                            setSelectedCustomer(customer)
-                                            setEmailDialogOpen(true)
-                                          } else {
-                                            toast.error('E-posta adresi yok', { description: 'Müşterinin e-posta adresi bulunamadı' })
-                                          }
-                                        }
-                                      }
-                                    }
-                                  } catch (error) {
-                                    console.error('Customer fetch error:', error)
-                                  }
-                                } else {
-                                  toast.error('Fırsat yok', { description: 'Bu teklif için fırsat bilgisi bulunamadı' })
+                  <div
+                    key={quote.id}
+                    className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-semibold text-gray-900 truncate">{quote.title}</h3>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          <InlineEditBadge
+                            value={quote.status}
+                            options={[
+                              { value: 'DRAFT', label: statusLabels['DRAFT'] || 'Taslak' },
+                              { value: 'SENT', label: statusLabels['SENT'] || 'Gönderildi' },
+                              { value: 'ACCEPTED', label: statusLabels['ACCEPTED'] || 'Kabul Edildi' },
+                              { value: 'REJECTED', label: statusLabels['REJECTED'] || 'Reddedildi' },
+                              { value: 'DECLINED', label: statusLabels['DECLINED'] || 'Reddedildi' },
+                              { value: 'WAITING', label: statusLabels['WAITING'] || 'Beklemede' },
+                              { value: 'EXPIRED', label: statusLabels['EXPIRED'] || 'Süresi Doldu' },
+                            ]}
+                            onSave={async (newStatus) => {
+                              // ✅ ACCEPTED durumuna geçerken onay iste
+                              if (newStatus === 'ACCEPTED') {
+                                const confirmed = await confirm({
+                                  title: 'Teklifi Kabul Etmek İstediğinize Emin Misiniz?',
+                                  description: `"${quote.title || 'Teklif'}" teklifini kabul ettiğinizde otomatik olarak şu işlemler yapılacak:\n\n• Fatura oluşturulacak (DRAFT durumunda)\n• Fatura kalemleri kopyalanacak (QuoteItem → InvoiceItem)\n• Ürünler rezerve edilecek (reservedQuantity artacak)\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
+                                  confirmLabel: 'Evet, Kabul Et',
+                                  cancelLabel: 'İptal',
+                                  variant: 'default'
+                                })
+                                
+                                if (!confirmed) {
+                                  return // İşlemi iptal et
                                 }
-                              }}
-                              disabled={!quote.dealId}
-                            >
-                              <Mail className="h-4 w-4" />
-                              E-posta Gönder
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={async () => {
-                                if (quote.dealId) {
-                                  try {
-                                    const dealRes = await fetch(`/api/deals/${quote.dealId}`)
-                                    if (dealRes.ok) {
-                                      const deal = await dealRes.json()
-                                      if (deal?.customerId) {
-                                        const customerRes = await fetch(`/api/customers/${deal.customerId}`)
-                                        if (customerRes.ok) {
-                                          const customer = await customerRes.json()
-                                          if (customer?.phone) {
-                                            setSelectedQuoteForCommunication(quote)
-                                            setSelectedCustomer(customer)
-                                            setSmsDialogOpen(true)
-                                          } else {
-                                            toast.error('Telefon numarası yok', { description: 'Müşterinin telefon numarası bulunamadı' })
-                                          }
-                                        }
-                                      }
-                                    }
-                                  } catch (error) {
-                                    console.error('Customer fetch error:', error)
-                                  }
-                                } else {
-                                  toast.error('Fırsat yok', { description: 'Bu teklif için fırsat bilgisi bulunamadı' })
-                                }
-                              }}
-                              disabled={!quote.dealId}
-                            >
-                              <MessageSquare className="h-4 w-4" />
-                              SMS Gönder
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onSelect={async () => {
-                                if (quote.dealId) {
-                                  try {
-                                    const dealRes = await fetch(`/api/deals/${quote.dealId}`)
-                                    if (dealRes.ok) {
-                                      const deal = await dealRes.json()
-                                      if (deal?.customerId) {
-                                        const customerRes = await fetch(`/api/customers/${deal.customerId}`)
-                                        if (customerRes.ok) {
-                                          const customer = await customerRes.json()
-                                          if (customer?.phone) {
-                                            setSelectedQuoteForCommunication(quote)
-                                            setSelectedCustomer(customer)
-                                            setWhatsAppDialogOpen(true)
-                                          } else {
-                                            toast.error('Telefon numarası yok', { description: 'Müşterinin telefon numarası bulunamadı' })
-                                          }
-                                        }
-                                      }
-                                    }
-                                  } catch (error) {
-                                    console.error('Customer fetch error:', error)
-                                  }
-                                } else {
-                                  toast.error('Fırsat yok', { description: 'Bu teklif için fırsat bilgisi bulunamadı' })
-                                }
-                              }}
-                              disabled={!quote.dealId}
-                            >
-                              <MessageCircle className="h-4 w-4" />
-                              WhatsApp Gönder
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                              }
 
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setSelectedQuoteId(quote.id)
-                            setSelectedQuoteData(quote)
-                            setDetailModalOpen(true)
-                          }}
-                          aria-label={t('viewQuote', { title: quote.title })}
-                        >
-                          <Eye className="h-4 w-4 text-gray-600" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            if (quote.status === 'ACCEPTED') {
-                              toast.warning(t('cannotEditAccepted'), { description: t('cannotEditAcceptedMessage') })
-                              return
-                            }
-                            handleEdit(quote)
-                          }}
-                          disabled={quote.status === 'ACCEPTED'}
-                          aria-label={t('editQuote', { title: quote.title })}
-                          title={quote.status === 'ACCEPTED' ? t('cannotEditAccepted') : tCommon('edit')}
-                        >
-                          <Edit className="h-4 w-4 text-gray-600" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            if (quote.status === 'ACCEPTED') {
-                              toast.warning(t('cannotDeleteAccepted'), { description: t('cannotDeleteAcceptedMessage') })
-                              return
-                            }
-                            handleDelete(quote.id, quote.title)
-                          }}
-                          disabled={quote.status === 'ACCEPTED'}
-                          className="text-red-600 hover:text-red-700 disabled:opacity-50"
-                          aria-label={t('deleteQuote', { title: quote.title })}
-                          title={quote.status === 'ACCEPTED' ? t('cannotDeleteAccepted') : tCommon('delete')}
-                        >
-                          <Trash2 className="h-4 w-4 text-red-600" />
-                        </Button>
+                              try {
+                                const res = await fetch(`/api/quotes/${quote.id}`, {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ status: newStatus }),
+                                })
+                                if (!res.ok) {
+                                  const error = await res.json().catch(() => ({}))
+                                  throw new Error(error.error || 'Durum güncellenemedi')
+                                }
+                                const updatedQuote = await res.json()
+                                const automation = updatedQuote?.automation || {}
+
+                                await Promise.all([
+                                  mutate('/api/quotes', undefined, { revalidate: true }),
+                                  mutate('/api/quotes?', undefined, { revalidate: true }),
+                                ])
+
+                                // ✅ Detaylı toast mesajı
+                                if (newStatus === 'ACCEPTED') {
+                                  toast.success('🎉 Teklif Kabul Edildi!', {
+                                    description: `"${quote.title || 'Teklif'}" teklifi kabul edildi.\n\nOtomatik işlemler:\n${automation.invoiceCreated ? `• Fatura oluşturuldu (ID: ${automation.invoiceId?.substring(0, 8)}...)\n• Fatura numarası: ${automation.invoiceNumber || automation.invoiceTitle || 'Oluşturuluyor...'}\n• Fatura kalemleri kopyalandı\n• Ürünler rezerve edildi\n` : ''}• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                                  })
+                                } else {
+                                  toast.success('Durum güncellendi', { description: `Teklif "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
+                                }
+                              } catch (error: any) {
+                                toast.error('Durum güncellenemedi', { description: error?.message || 'Bir hata oluştu.' })
+                                throw error
+                              }
+                            }}
+                            disabled={quote.status === 'ACCEPTED'}
+                          />
+                          <Badge className="font-semibold text-xs">
+                            {formatCurrency(quote.total || quote.totalAmount || 0)}
+                          </Badge>
+                          {isSuperAdmin && quote.Company?.name && (
+                            <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                              {quote.Company.name}
+                            </Badge>
+                          )}
+                        </div>
+                        {quote.dealId && (
+                          <Link
+                            href={`/${locale}/deals/${quote.dealId}`}
+                            className="text-xs text-primary-600 hover:underline mt-1 block"
+                            prefetch={true}
+                          >
+                            Fırsat: {quote.dealId.substring(0, 8)}
+                          </Link>
+                        )}
+                        <p className="text-xs text-gray-500 mt-1">
+                          {new Date(quote.createdAt).toLocaleDateString('tr-TR')}
+                        </p>
                       </div>
-                    </TableCell>
-                  </TableRow>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
+                            <Sparkles className="h-4 w-4 text-indigo-500" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-56">
+                          <DropdownMenuItem
+                            onSelect={() => setQuickAction({ type: 'invoice', quote })}
+                            disabled={quote.status !== 'ACCEPTED'}
+                          >
+                            <Receipt className="h-4 w-4 mr-2" />
+                            {t('quickActions.createInvoice')}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              setSelectedQuoteId(quote.id)
+                              setSelectedQuoteData(quote)
+                              setDetailModalOpen(true)
+                            }}
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            {tCommon('view')}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              if (quote.status === 'ACCEPTED') {
+                                toast.warning(t('cannotEditAccepted'), { description: t('cannotEditAcceptedMessage') })
+                                return
+                              }
+                              handleEdit(quote)
+                            }}
+                            disabled={quote.status === 'ACCEPTED'}
+                          >
+                            <Edit className="h-4 w-4 mr-2" />
+                            {tCommon('edit')}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onSelect={() => {
+                              if (quote.status === 'ACCEPTED') {
+                                toast.warning(t('cannotDeleteAccepted'), { description: t('cannotDeleteAcceptedMessage') })
+                                return
+                              }
+                              handleDelete(quote.id, quote.title)
+                            }}
+                            disabled={quote.status === 'ACCEPTED'}
+                            className="text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            {tCommon('delete')}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
                 ))
               )}
-            </TableBody>
-              </Table>
             </div>
-          </div>
+          </>
+        )}
 
-          {/* Mobile Card View */}
-          <div className="md:hidden space-y-3">
-            {quotes.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                {tCommon('noData')}
-              </div>
-            ) : (
-              quotes.map((quote) => (
-                <div
-                  key={quote.id}
-                  className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-gray-900 truncate">{quote.title}</h3>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        <InlineEditBadge
-                          value={quote.status}
-                          options={[
-                            { value: 'DRAFT', label: statusLabels['DRAFT'] || 'Taslak' },
-                            { value: 'SENT', label: statusLabels['SENT'] || 'Gönderildi' },
-                            { value: 'ACCEPTED', label: statusLabels['ACCEPTED'] || 'Kabul Edildi' },
-                            { value: 'REJECTED', label: statusLabels['REJECTED'] || 'Reddedildi' },
-                            { value: 'DECLINED', label: statusLabels['DECLINED'] || 'Reddedildi' },
-                            { value: 'WAITING', label: statusLabels['WAITING'] || 'Beklemede' },
-                            { value: 'EXPIRED', label: statusLabels['EXPIRED'] || 'Süresi Doldu' },
-                          ]}
-                          onSave={async (newStatus) => {
-                            try {
-                              const res = await fetch(`/api/quotes/${quote.id}`, {
-                                method: 'PUT',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ status: newStatus }),
-                              })
-                              if (!res.ok) {
-                                const error = await res.json().catch(() => ({}))
-                                throw new Error(error.error || 'Durum güncellenemedi')
-                              }
-                              await Promise.all([
-                                mutate('/api/quotes', undefined, { revalidate: true }),
-                                mutate('/api/quotes?', undefined, { revalidate: true }),
-                              ])
-                              toast.success('Durum güncellendi', { description: `Teklif "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
-                            } catch (error: any) {
-                              toast.error('Durum güncellenemedi', { description: error?.message || 'Bir hata oluştu.' })
-                              throw error
-                            }
-                          }}
-                          disabled={quote.status === 'ACCEPTED'}
-                        />
-                        <Badge className="font-semibold text-xs">
-                          {formatCurrency(quote.total || quote.totalAmount || 0)}
-                        </Badge>
-                        {isSuperAdmin && quote.Company?.name && (
-                          <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
-                            {quote.Company.name}
-                          </Badge>
-                        )}
-                      </div>
-                      {quote.dealId && (
-                        <Link 
-                          href={`/${locale}/deals/${quote.dealId}`}
-                          className="text-xs text-primary-600 hover:underline mt-1 block"
-                          prefetch={true}
-                        >
-                          Fırsat: {quote.dealId.substring(0, 8)}
-                        </Link>
-                      )}
-                      <p className="text-xs text-gray-500 mt-1">
-                        {new Date(quote.createdAt).toLocaleDateString('tr-TR')}
-                      </p>
-                    </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
-                          <Sparkles className="h-4 w-4 text-indigo-500" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56">
-                        <DropdownMenuItem
-                          onSelect={() => setQuickAction({ type: 'invoice', quote })}
-                          disabled={quote.status !== 'ACCEPTED'}
-                        >
-                          <Receipt className="h-4 w-4 mr-2" />
-                          {t('quickActions.createInvoice')}
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            setSelectedQuoteId(quote.id)
-                            setSelectedQuoteData(quote)
-                            setDetailModalOpen(true)
-                          }}
-                        >
-                          <Eye className="h-4 w-4 mr-2" />
-                          {tCommon('view')}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            if (quote.status === 'ACCEPTED') {
-                              toast.warning(t('cannotEditAccepted'), { description: t('cannotEditAcceptedMessage') })
-                              return
-                            }
-                            handleEdit(quote)
-                          }}
-                          disabled={quote.status === 'ACCEPTED'}
-                        >
-                          <Edit className="h-4 w-4 mr-2" />
-                          {tCommon('edit')}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onSelect={() => {
-                            if (quote.status === 'ACCEPTED') {
-                              toast.warning(t('cannotDeleteAccepted'), { description: t('cannotDeleteAcceptedMessage') })
-                              return
-                            }
-                            handleDelete(quote.id, quote.title)
-                          }}
-                          disabled={quote.status === 'ACCEPTED'}
-                          className="text-red-600"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          {tCommon('delete')}
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </>
-      )}
+        {/* Detail Modal */}
+        <QuoteDetailModal
+          quoteId={selectedQuoteId}
+          open={detailModalOpen}
+          onClose={() => {
+            setDetailModalOpen(false)
+            setSelectedQuoteId(null)
+            setSelectedQuoteData(null)
+          }}
+          initialData={selectedQuoteData || undefined}
+        />
 
-      {/* Detail Modal */}
-      <QuoteDetailModal
-        quoteId={selectedQuoteId}
-        open={detailModalOpen}
-        onClose={() => {
-          setDetailModalOpen(false)
-          setSelectedQuoteId(null)
-          setSelectedQuoteData(null)
-        }}
-        initialData={selectedQuoteData || undefined}
-      />
-
-      {/* Form Modal */}
-      <QuoteForm
-        quote={selectedQuote || undefined}
-        open={formOpen}
-        onClose={handleFormClose}
-        onSuccess={async (savedQuote) => {
-          // Başarı bildirimi
-          toast.success(
-            selectedQuote ? t('rejectDialog.quoteUpdatedToast') : t('rejectDialog.quoteCreatedToast'),
-            {
-              description: selectedQuote
-                ? t('rejectDialog.quoteUpdatedMessage', { title: savedQuote.title })
-                : t('rejectDialog.quoteCreatedMessage', { title: savedQuote.title })
-            }
-          )
-          
-          // Optimistic update - yeni/güncellenmiş kaydı hemen cache'e ekle
-          // ÖNEMLİ: Hem table hem kanban view için optimistic update yap
-          
-          if (selectedQuote) {
-            // UPDATE: Mevcut kaydı güncelle
-            const updatedQuotes = quotes.map((q) =>
-              q.id === savedQuote.id ? savedQuote : q
+        {/* Form Modal */}
+        <QuoteForm
+          quote={selectedQuote || undefined}
+          open={formOpen}
+          onClose={handleFormClose}
+          onSuccess={async (savedQuote) => {
+            // Başarı bildirimi
+            toast.success(
+              selectedQuote ? t('rejectDialog.quoteUpdatedToast') : t('rejectDialog.quoteCreatedToast'),
+              {
+                description: selectedQuote
+                  ? t('rejectDialog.quoteUpdatedMessage', { title: savedQuote.title })
+                  : t('rejectDialog.quoteCreatedMessage', { title: savedQuote.title })
+              }
             )
-            
-            // Table view için SWR cache'i güncelle - optimistic update
-            if (viewMode === 'table') {
+
+            // Optimistic update - yeni/güncellenmiş kaydı hemen cache'e ekle
+            // ÖNEMLİ: Hem table hem kanban view için optimistic update yap
+
+            if (selectedQuote) {
+              // UPDATE: Mevcut kaydı güncelle
+              const updatedQuotes = quotes.map((q) =>
+                q.id === savedQuote.id ? savedQuote : q
+              )
+
+              // Table view için SWR cache'i güncelle - optimistic update
+              if (viewMode === 'table') {
+                await mutateQuotes(updatedQuotes, { revalidate: false })
+                await Promise.all([
+                  mutate('/api/quotes', updatedQuotes, { revalidate: false }),
+                  mutate('/api/quotes?', updatedQuotes, { revalidate: false }),
+                  mutate(apiUrl, updatedQuotes, { revalidate: false }),
+                ])
+              }
+            } else {
+              // CREATE: Yeni kaydı listenin başına ekle
+              const updatedQuotes = [savedQuote, ...quotes]
+
+              // Table view için SWR cache'i güncelle - optimistic update
+              // ÖNEMLİ: Her zaman table view cache'ini güncelle (viewMode ne olursa olsun)
               await mutateQuotes(updatedQuotes, { revalidate: false })
               await Promise.all([
                 mutate('/api/quotes', updatedQuotes, { revalidate: false }),
@@ -1301,384 +1397,384 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                 mutate(apiUrl, updatedQuotes, { revalidate: false }),
               ])
             }
-          } else {
-            // CREATE: Yeni kaydı listenin başına ekle
-            const updatedQuotes = [savedQuote, ...quotes]
-            
-            // Table view için SWR cache'i güncelle - optimistic update
-            // ÖNEMLİ: Her zaman table view cache'ini güncelle (viewMode ne olursa olsun)
-            await mutateQuotes(updatedQuotes, { revalidate: false })
-            await Promise.all([
-              mutate('/api/quotes', updatedQuotes, { revalidate: false }),
-              mutate('/api/quotes?', updatedQuotes, { revalidate: false }),
-              mutate(apiUrl, updatedQuotes, { revalidate: false }),
-            ])
-          }
-          
-          // Kanban view için optimistic update - yeni kaydı kanban data'ya ekle
-          // ÖNEMLİ: Her zaman kanban data'yı güncelle (viewMode ne olursa olsun)
-          if (Array.isArray(kanbanData)) {
-            const status = savedQuote.status || 'DRAFT'
-            const updatedKanbanData = kanbanData.map((col: any) => {
-              if (col.status === status) {
-                if (selectedQuote) {
-                  // UPDATE: Mevcut kaydı güncelle
-                  const updatedQuotes = (col.quotes || []).map((q: any) =>
-                    q.id === savedQuote.id ? savedQuote : q
-                  )
-                  const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
-                    const quoteValue = typeof q.total === 'string' ? parseFloat(q.total) || 0 : (q.total || 0)
-                    return sum + quoteValue
-                  }, 0)
-                  return {
-                    ...col,
-                    quotes: updatedQuotes,
-                    totalValue: updatedTotalValue, // Toplam tutarı güncelle
-                  }
-                } else {
-                  // CREATE: Yeni kaydı bu kolona ekle - totalValue'yu da güncelle
-                  const updatedQuotes = [savedQuote, ...(col.quotes || [])]
-                  const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
-                    const quoteValue = typeof q.total === 'string' ? parseFloat(q.total) || 0 : (q.total || 0)
-                    return sum + quoteValue
-                  }, 0)
-                  return {
-                    ...col,
-                    quotes: updatedQuotes,
-                    count: (col.count || 0) + 1,
-                    totalValue: updatedTotalValue, // Toplam tutarı güncelle
-                  }
-                }
-              }
-              return col
-            })
-            // Kanban query cache'ini güncelle
-            queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId], updatedKanbanData)
-          }
-          
-          // ✅ ÇÖZÜM: Sadece dashboard'daki diğer query'leri invalidate et (background'da, refetch olmadan)
-          // ÖNEMLİ: kanban-quotes query'sini invalidate ETME - optimistic update'i koru
-          // ÖNEMLİ: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
-          // Sadece dashboard'daki diğer query'leri invalidate et - onlar kendi staleTime'larına göre refetch olur
-          await Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['quotes'] }), // Table view için
-            queryClient.invalidateQueries({ queryKey: ['stats-quotes'] }), // Stats için
-            queryClient.invalidateQueries({ queryKey: ['quote-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
-            queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle
-          ])
-          
-          // ✅ ÇÖZÜM: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
-          // Optimistic update zaten yapıldı, invalidate yeterli - query'ler kendi staleTime'larına göre refetch olur
-        }}
-      />
 
-      {/* Reddet Dialog - Sebep Sor */}
-      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>{t('rejectDialog.title')}</DialogTitle>
-            <DialogDescription>
-              {t('rejectDialog.description')}
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="rejectReason">{t('rejectDialog.reasonLabel')} *</Label>
-              <Textarea
-                id="rejectReason"
-                placeholder={t('rejectDialog.reasonPlaceholder')}
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                rows={4}
-                className="resize-none"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setRejectDialogOpen(false)
-                setRejectReason('')
-                setRejectingQuoteId(null)
-              }}
-            >
-              {tCommon('cancel')}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={async () => {
-                if (!rejectReason.trim()) {
-                  toast.error(t('rejectDialog.reasonRequired'), { description: t('rejectDialog.reasonRequiredMessage') })
-                  return
-                }
-
-                if (!rejectingQuoteId) {
-                  toast.error(t('rejectDialog.error'), { description: t('rejectDialog.quoteIdNotFound') })
-                  setRejectDialogOpen(false)
-                  return
-                }
-
-                // Dialog'u kapat
-                setRejectDialogOpen(false)
-                const quoteId = rejectingQuoteId
-                const reason = rejectReason.trim()
-                setRejectReason('')
-                setRejectingQuoteId(null)
-
-                // Status güncelleme işlemini devam ettir - notes ile birlikte
-                const quote = kanbanData
-                  .flatMap((c: any) => c.quotes || [])
-                  .find((q: any) => q.id === quoteId)
-                const quoteTitle = quote?.title || 'Teklif'
-                
-                // Optimistic update
-                const previousKanbanData = kanbanData
-                
-                const optimisticKanbanData = kanbanData.map((col: any) => {
-                  // Eski status'den quote'u bul ve kaldır
-                  const quoteIndex = (col.quotes || []).findIndex((q: any) => q.id === quoteId)
-                  if (quoteIndex !== -1) {
-                    const updatedQuotes = (col.quotes || []).filter((q: any) => q.id !== quoteId)
+            // Kanban view için optimistic update - yeni kaydı kanban data'ya ekle
+            // ÖNEMLİ: Her zaman kanban data'yı güncelle (viewMode ne olursa olsun)
+            if (Array.isArray(kanbanData)) {
+              const status = savedQuote.status || 'DRAFT'
+              const updatedKanbanData = kanbanData.map((col: any) => {
+                if (col.status === status) {
+                  if (selectedQuote) {
+                    // UPDATE: Mevcut kaydı güncelle
+                    const updatedQuotes = (col.quotes || []).map((q: any) =>
+                      q.id === savedQuote.id ? savedQuote : q
+                    )
                     const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
-                      const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
+                      const quoteValue = typeof q.total === 'string' ? parseFloat(q.total) || 0 : (q.total || 0)
                       return sum + quoteValue
                     }, 0)
                     return {
                       ...col,
                       quotes: updatedQuotes,
-                      count: Math.max(0, (col.count || 0) - 1),
-                      totalValue: updatedTotalValue,
+                      totalValue: updatedTotalValue, // Toplam tutarı güncelle
+                    }
+                  } else {
+                    // CREATE: Yeni kaydı bu kolona ekle - totalValue'yu da güncelle
+                    const updatedQuotes = [savedQuote, ...(col.quotes || [])]
+                    const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
+                      const quoteValue = typeof q.total === 'string' ? parseFloat(q.total) || 0 : (q.total || 0)
+                      return sum + quoteValue
+                    }, 0)
+                    return {
+                      ...col,
+                      quotes: updatedQuotes,
+                      count: (col.count || 0) + 1,
+                      totalValue: updatedTotalValue, // Toplam tutarı güncelle
                     }
                   }
-                  
-                  // REJECTED kolonuna ekle
-                  if (col.status === 'REJECTED' || col.status === 'DECLINED') {
-                    const quote = previousKanbanData
-                      .flatMap((c: any) => c.quotes || [])
-                      .find((q: any) => q.id === quoteId)
-                    
-                    if (quote) {
-                      const updatedQuote = { 
-                        ...quote, 
-                        status: 'REJECTED',
-                        updatedAt: new Date().toISOString(),
-                      }
-                      const updatedQuotes = [updatedQuote, ...(col.quotes || [])]
-                      const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
-                        const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
-                        return sum + quoteValue
-                      }, 0)
-                      return {
-                        ...col,
-                        quotes: updatedQuotes,
-                        count: (col.count || 0) + 1,
-                        totalValue: updatedTotalValue,
-                      }
-                    }
-                  }
-                  
-                  return col
-                })
-                
-                // Optimistic update'i state'e set et
-                const optimisticKanbanDataWithNewRef = JSON.parse(JSON.stringify(optimisticKanbanData))
-                setKanbanData(optimisticKanbanDataWithNewRef)
-                
-                // API çağrısı yap - notes ile birlikte
-                try {
-                  const res = await fetch(`/api/quotes/${quoteId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                      status: 'REJECTED',
-                      notes: `❌ REDDEDİLDİ - ${new Date().toLocaleDateString('tr-TR')}\nSebep: ${reason}`,
-                    }),
-                  })
-                  
-                  if (!res.ok) {
-                    // Hata durumunda optimistic update'i geri al
-                    setKanbanData(previousKanbanData)
-                    const error = await res.json().catch(() => ({}))
-                    throw new Error(error.error || 'Failed to reject quote')
-                  }
-
-                  const updatedQuote = await res.json()
-                  
-                  // Backend'den dönen güncellenmiş quote ile kanban data'yı güncelle
-                  const updatedKanbanDataWithBackendData = previousKanbanData.map((col: any) => {
-                    // Eski kolondan quote'u kaldır
-                    if (col.quotes?.some((q: any) => q.id === quoteId)) {
-                      const filteredQuotes = col.quotes.filter((q: any) => q.id !== quoteId)
-                      const updatedTotalValue = filteredQuotes.reduce((sum: number, q: any) => {
-                        const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
-                        return sum + quoteValue
-                      }, 0)
-                      return {
-                        ...col,
-                        quotes: filteredQuotes,
-                        count: filteredQuotes.length,
-                        totalValue: updatedTotalValue,
-                      }
-                    }
-                    return col
-                  }).map((col: any) => {
-                    // REJECTED kolonuna güncellenmiş quote'u ekle
-                    if (col.status === 'REJECTED' || col.status === 'DECLINED') {
-                      const updatedQuoteForKanban = {
-                        id: updatedQuote.id,
-                        title: updatedQuote.title,
-                        totalAmount: updatedQuote.totalAmount || 0,
-                        dealId: updatedQuote.dealId,
-                        createdAt: updatedQuote.createdAt,
-                        updatedAt: updatedQuote.updatedAt,
-                      }
-                      const updatedQuotes = [updatedQuoteForKanban, ...(col.quotes || [])]
-                      const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
-                        const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
-                        return sum + quoteValue
-                      }, 0)
-                      return {
-                        ...col,
-                        quotes: updatedQuotes,
-                        count: updatedQuotes.length,
-                        totalValue: updatedTotalValue,
-                      }
-                    }
-                    return col
-                  })
-                  
-                  // Backend'den dönen güncellenmiş data ile cache'i güncelle
-                  queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId], updatedKanbanDataWithBackendData)
-                  
-                  // Diğer query'leri invalidate et
-                  await Promise.all([
-                    queryClient.invalidateQueries({ queryKey: ['quotes'] }),
-                    queryClient.invalidateQueries({ queryKey: ['stats-quotes'] }),
-                    queryClient.invalidateQueries({ queryKey: ['quote-kanban'] }),
-                    queryClient.invalidateQueries({ queryKey: ['kpis'] }),
-                  ])
-                  
-                  toast.success(t('quoteRejected'), { description: t('quoteRejectedMessage') })
-                } catch (error: any) {
-                  console.error('Reject error:', error)
-                  toast.error(t('rejectDialog.rejectFailed'), { description: error?.message || t('quoteRejected') })
                 }
-              }}
-              disabled={!rejectReason.trim()}
-            >
-              {t('rejectDialog.rejectButton')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                return col
+              })
+              // Kanban query cache'ini güncelle
+              queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId], updatedKanbanData)
+            }
 
-      {/* Quick Action Form Modals */}
-      <InvoiceForm
-        open={quickAction?.type === 'invoice'}
-        onClose={closeQuickAction}
-        onSuccess={async (savedInvoice) => {
-          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
-        }}
-        quoteId={quickAction?.quote.id}
-        customerCompanyId={quickAction?.quote.companyId}
-      />
-      <TaskForm
-        open={quickAction?.type === 'task'}
-        onClose={closeQuickAction}
-        onSuccess={async (savedTask) => {
-          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
-        }}
-        defaultTitle={quickAction?.quote.title}
-      />
-      <MeetingForm
-        open={quickAction?.type === 'meeting'}
-        onClose={closeQuickAction}
-        onSuccess={async (savedMeeting) => {
-          // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
-        }}
-        quoteId={quickAction?.quote.id}
-        customerCompanyId={quickAction?.quote.companyId}
-      />
+            // ✅ ÇÖZÜM: Sadece dashboard'daki diğer query'leri invalidate et (background'da, refetch olmadan)
+            // ÖNEMLİ: kanban-quotes query'sini invalidate ETME - optimistic update'i koru
+            // ÖNEMLİ: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
+            // Sadece dashboard'daki diğer query'leri invalidate et - onlar kendi staleTime'larına göre refetch olur
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: ['quotes'] }), // Table view için
+              queryClient.invalidateQueries({ queryKey: ['stats-quotes'] }), // Stats için
+              queryClient.invalidateQueries({ queryKey: ['quote-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
+              queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle
+            ])
 
-    </div>
-    
-    {/* Email/SMS/WhatsApp Dialog'ları */}
-    {emailDialogOpen && selectedQuoteForCommunication && selectedCustomer && (
-      <AutomationConfirmationModal
-        type="email"
-        options={{
-          entityType: 'QUOTE',
-          entityId: selectedQuoteForCommunication.id,
-          entityTitle: selectedQuoteForCommunication.title,
-          customerEmail: selectedCustomer.email,
-          customerPhone: selectedCustomer.phone,
-          customerName: selectedCustomer.name,
-          defaultSubject: `Teklif Bilgisi: ${selectedQuoteForCommunication.title}`,
-          defaultMessage: `Merhaba ${selectedCustomer.name},\n\nTeklif bilgisi: ${selectedQuoteForCommunication.title}\n\nTutar: ${selectedQuoteForCommunication.totalAmount ? `₺${selectedQuoteForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}\nDurum: ${selectedQuoteForCommunication.status || 'DRAFT'}`,
-          defaultHtml: `<p>Merhaba ${selectedCustomer.name},</p><p>Teklif bilgisi: <strong>${selectedQuoteForCommunication.title}</strong></p><p>Tutar: ${selectedQuoteForCommunication.totalAmount ? `₺${selectedQuoteForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}</p><p>Durum: ${selectedQuoteForCommunication.status || 'DRAFT'}</p>`,
-          onSent: () => {
-            toast.success('E-posta gönderildi', { description: 'Müşteriye quote bilgisi gönderildi' })
-          },
-        }}
-        open={emailDialogOpen}
-        onClose={() => {
-          setEmailDialogOpen(false)
-          setSelectedQuoteForCommunication(null)
-          setSelectedCustomer(null)
-        }}
-      />
-    )}
-    
-    {smsDialogOpen && selectedQuoteForCommunication && selectedCustomer && (
-      <AutomationConfirmationModal
-        type="sms"
-        options={{
-          entityType: 'QUOTE',
-          entityId: selectedQuoteForCommunication.id,
-          entityTitle: selectedQuoteForCommunication.title,
-          customerEmail: selectedCustomer.email,
-          customerPhone: selectedCustomer.phone,
-          customerName: selectedCustomer.name,
-          defaultMessage: `Merhaba ${selectedCustomer.name}, Teklif bilgisi: ${selectedQuoteForCommunication.title}. Tutar: ${selectedQuoteForCommunication.totalAmount ? `₺${selectedQuoteForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
-          onSent: () => {
-            toast.success('SMS gönderildi', { description: 'Müşteriye quote bilgisi gönderildi' })
-          },
-        }}
-        open={smsDialogOpen}
-        onClose={() => {
-          setSmsDialogOpen(false)
-          setSelectedQuoteForCommunication(null)
-          setSelectedCustomer(null)
-        }}
-      />
-    )}
-    
-    {whatsAppDialogOpen && selectedQuoteForCommunication && selectedCustomer && (
-      <AutomationConfirmationModal
-        type="whatsapp"
-        options={{
-          entityType: 'QUOTE',
-          entityId: selectedQuoteForCommunication.id,
-          entityTitle: selectedQuoteForCommunication.title,
-          customerEmail: selectedCustomer.email,
-          customerPhone: selectedCustomer.phone,
-          customerName: selectedCustomer.name,
-          defaultMessage: `Merhaba ${selectedCustomer.name}, Teklif bilgisi: ${selectedQuoteForCommunication.title}. Tutar: ${selectedQuoteForCommunication.totalAmount ? `₺${selectedQuoteForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
-          onSent: () => {
-            toast.success('WhatsApp mesajı gönderildi', { description: 'Müşteriye quote bilgisi gönderildi' })
-          },
-        }}
-        open={whatsAppDialogOpen}
-        onClose={() => {
-          setWhatsAppDialogOpen(false)
-          setSelectedQuoteForCommunication(null)
-          setSelectedCustomer(null)
-        }}
-      />
-    )}
+            // ✅ ÇÖZÜM: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
+            // Optimistic update zaten yapıldı, invalidate yeterli - query'ler kendi staleTime'larına göre refetch olur
+          }}
+        />
+
+        {/* Reddet Dialog - Sebep Sor */}
+        <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>{t('rejectDialog.title')}</DialogTitle>
+              <DialogDescription>
+                {t('rejectDialog.description')}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="rejectReason">{t('rejectDialog.reasonLabel')} *</Label>
+                <Textarea
+                  id="rejectReason"
+                  placeholder={t('rejectDialog.reasonPlaceholder')}
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  rows={4}
+                  className="resize-none"
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setRejectDialogOpen(false)
+                  setRejectReason('')
+                  setRejectingQuoteId(null)
+                }}
+              >
+                {tCommon('cancel')}
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={async () => {
+                  if (!rejectReason.trim()) {
+                    toast.error(t('rejectDialog.reasonRequired'), { description: t('rejectDialog.reasonRequiredMessage') })
+                    return
+                  }
+
+                  if (!rejectingQuoteId) {
+                    toast.error(t('rejectDialog.error'), { description: t('rejectDialog.quoteIdNotFound') })
+                    setRejectDialogOpen(false)
+                    return
+                  }
+
+                  // Dialog'u kapat
+                  setRejectDialogOpen(false)
+                  const quoteId = rejectingQuoteId
+                  const reason = rejectReason.trim()
+                  setRejectReason('')
+                  setRejectingQuoteId(null)
+
+                  // Status güncelleme işlemini devam ettir - notes ile birlikte
+                  const quote = kanbanData
+                    .flatMap((c: any) => c.quotes || [])
+                    .find((q: any) => q.id === quoteId)
+                  const quoteTitle = quote?.title || 'Teklif'
+
+                  // Optimistic update
+                  const previousKanbanData = kanbanData
+
+                  const optimisticKanbanData = kanbanData.map((col: any) => {
+                    // Eski status'den quote'u bul ve kaldır
+                    const quoteIndex = (col.quotes || []).findIndex((q: any) => q.id === quoteId)
+                    if (quoteIndex !== -1) {
+                      const updatedQuotes = (col.quotes || []).filter((q: any) => q.id !== quoteId)
+                      const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
+                        const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
+                        return sum + quoteValue
+                      }, 0)
+                      return {
+                        ...col,
+                        quotes: updatedQuotes,
+                        count: Math.max(0, (col.count || 0) - 1),
+                        totalValue: updatedTotalValue,
+                      }
+                    }
+
+                    // REJECTED kolonuna ekle
+                    if (col.status === 'REJECTED' || col.status === 'DECLINED') {
+                      const quote = previousKanbanData
+                        .flatMap((c: any) => c.quotes || [])
+                        .find((q: any) => q.id === quoteId)
+
+                      if (quote) {
+                        const updatedQuote = {
+                          ...quote,
+                          status: 'REJECTED',
+                          updatedAt: new Date().toISOString(),
+                        }
+                        const updatedQuotes = [updatedQuote, ...(col.quotes || [])]
+                        const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
+                          const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
+                          return sum + quoteValue
+                        }, 0)
+                        return {
+                          ...col,
+                          quotes: updatedQuotes,
+                          count: (col.count || 0) + 1,
+                          totalValue: updatedTotalValue,
+                        }
+                      }
+                    }
+
+                    return col
+                  })
+
+                  // Optimistic update'i state'e set et
+                  const optimisticKanbanDataWithNewRef = JSON.parse(JSON.stringify(optimisticKanbanData))
+                  setKanbanData(optimisticKanbanDataWithNewRef)
+
+                  // API çağrısı yap - notes ile birlikte
+                  try {
+                    const res = await fetch(`/api/quotes/${quoteId}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        status: 'REJECTED',
+                        notes: `❌ REDDEDİLDİ - ${new Date().toLocaleDateString('tr-TR')}\nSebep: ${reason}`,
+                      }),
+                    })
+
+                    if (!res.ok) {
+                      // Hata durumunda optimistic update'i geri al
+                      setKanbanData(previousKanbanData)
+                      const error = await res.json().catch(() => ({}))
+                      throw new Error(error.error || 'Failed to reject quote')
+                    }
+
+                    const updatedQuote = await res.json()
+                    const automation = updatedQuote?.automation || {}
+
+                    // Backend'den dönen güncellenmiş quote ile kanban data'yı güncelle
+                    const updatedKanbanDataWithBackendData = previousKanbanData.map((col: any) => {
+                      // Eski kolondan quote'u kaldır
+                      if (col.quotes?.some((q: any) => q.id === quoteId)) {
+                        const filteredQuotes = col.quotes.filter((q: any) => q.id !== quoteId)
+                        const updatedTotalValue = filteredQuotes.reduce((sum: number, q: any) => {
+                          const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
+                          return sum + quoteValue
+                        }, 0)
+                        return {
+                          ...col,
+                          quotes: filteredQuotes,
+                          count: filteredQuotes.length,
+                          totalValue: updatedTotalValue,
+                        }
+                      }
+                      return col
+                    }).map((col: any) => {
+                      // REJECTED kolonuna güncellenmiş quote'u ekle
+                      if (col.status === 'REJECTED' || col.status === 'DECLINED') {
+                        const updatedQuoteForKanban = {
+                          id: updatedQuote.id,
+                          title: updatedQuote.title,
+                          totalAmount: updatedQuote.totalAmount || 0,
+                          dealId: updatedQuote.dealId,
+                          createdAt: updatedQuote.createdAt,
+                          updatedAt: updatedQuote.updatedAt,
+                        }
+                        const updatedQuotes = [updatedQuoteForKanban, ...(col.quotes || [])]
+                        const updatedTotalValue = updatedQuotes.reduce((sum: number, q: any) => {
+                          const quoteValue = q.totalAmount || (typeof q.totalAmount === 'string' ? parseFloat(q.totalAmount) || 0 : 0)
+                          return sum + quoteValue
+                        }, 0)
+                        return {
+                          ...col,
+                          quotes: updatedQuotes,
+                          count: updatedQuotes.length,
+                          totalValue: updatedTotalValue,
+                        }
+                      }
+                      return col
+                    })
+
+                    // Backend'den dönen güncellenmiş data ile cache'i güncelle
+                    queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId], updatedKanbanDataWithBackendData)
+
+                    // Diğer query'leri invalidate et
+                    await Promise.all([
+                      queryClient.invalidateQueries({ queryKey: ['quotes'] }),
+                      queryClient.invalidateQueries({ queryKey: ['stats-quotes'] }),
+                      queryClient.invalidateQueries({ queryKey: ['quote-kanban'] }),
+                      queryClient.invalidateQueries({ queryKey: ['kpis'] }),
+                    ])
+
+                    // ✅ Detaylı toast mesajı - revizyon görevi ve bildirim bilgileri
+                    let toastDescription = `"${quoteTitle}" teklifi reddedildi.`
+                    
+                    if (automation.taskCreated && automation.taskId) {
+                      toastDescription += `\n\nOtomatik işlemler:\n• Revizyon görevi oluşturuldu (ID: ${automation.taskId.substring(0, 8)}...)\n• Reddetme sebebi not olarak kaydedildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                    } else {
+                      toastDescription += `\n\nOtomatik işlemler:\n• Reddetme sebebi not olarak kaydedildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                    }
+
+                    toast.warning('⚠️ Teklif Reddedildi', { description: toastDescription })
+                  } catch (error: any) {
+                    console.error('Reject error:', error)
+                    toast.error(t('rejectDialog.rejectFailed'), { description: error?.message || t('quoteRejected') })
+                  }
+                }}
+                disabled={!rejectReason.trim()}
+              >
+                {t('rejectDialog.rejectButton')}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Quick Action Form Modals */}
+        <InvoiceForm
+          open={quickAction?.type === 'invoice'}
+          onClose={closeQuickAction}
+          onSuccess={async (savedInvoice) => {
+            // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+          }}
+          quoteId={quickAction?.quote.id}
+          quote={quickAction?.quote} // ✅ ÇÖZÜM: Quote objesini direkt geç - API çağrısı yapmadan
+          customerCompanyId={quickAction?.quote.companyId}
+        />
+        <TaskForm
+          open={quickAction?.type === 'task'}
+          onClose={closeQuickAction}
+          onSuccess={async (savedTask) => {
+            // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+          }}
+          defaultTitle={quickAction?.quote.title}
+          quote={quickAction?.quote} // ✅ ÇÖZÜM: Quote objesini direkt geç - API çağrısı yapmadan
+        />
+        <MeetingForm
+          open={quickAction?.type === 'meeting'}
+          onClose={closeQuickAction}
+          onSuccess={async (savedMeeting) => {
+            // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
+          }}
+          quoteId={quickAction?.quote.id}
+          quote={quickAction?.quote} // ✅ ÇÖZÜM: Quote objesini direkt geç - API çağrısı yapmadan
+          customerCompanyId={quickAction?.quote.companyId}
+        />
+
+      </div>
+
+      {/* Email/SMS/WhatsApp Dialog'ları */}
+      {emailDialogOpen && selectedQuoteForCommunication && selectedCustomer && (
+        <AutomationConfirmationModal
+          type="email"
+          options={{
+            entityType: 'QUOTE',
+            entityId: selectedQuoteForCommunication.id,
+            entityTitle: selectedQuoteForCommunication.title,
+            customerEmail: selectedCustomer.email,
+            customerPhone: selectedCustomer.phone,
+            customerName: selectedCustomer.name,
+            defaultSubject: `Teklif Bilgisi: ${selectedQuoteForCommunication.title}`,
+            defaultMessage: `Merhaba ${selectedCustomer.name},\n\nTeklif bilgisi: ${selectedQuoteForCommunication.title}\n\nTutar: ${selectedQuoteForCommunication.totalAmount ? `₺${selectedQuoteForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}\nDurum: ${selectedQuoteForCommunication.status || 'DRAFT'}`,
+            defaultHtml: `<p>Merhaba ${selectedCustomer.name},</p><p>Teklif bilgisi: <strong>${selectedQuoteForCommunication.title}</strong></p><p>Tutar: ${selectedQuoteForCommunication.totalAmount ? `₺${selectedQuoteForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}</p><p>Durum: ${selectedQuoteForCommunication.status || 'DRAFT'}</p>`,
+            onSent: () => {
+              toast.success('E-posta gönderildi', { description: 'Müşteriye quote bilgisi gönderildi' })
+            },
+          }}
+          open={emailDialogOpen}
+          onClose={() => {
+            setEmailDialogOpen(false)
+            setSelectedQuoteForCommunication(null)
+            setSelectedCustomer(null)
+          }}
+        />
+      )}
+
+      {smsDialogOpen && selectedQuoteForCommunication && selectedCustomer && (
+        <AutomationConfirmationModal
+          type="sms"
+          options={{
+            entityType: 'QUOTE',
+            entityId: selectedQuoteForCommunication.id,
+            entityTitle: selectedQuoteForCommunication.title,
+            customerEmail: selectedCustomer.email,
+            customerPhone: selectedCustomer.phone,
+            customerName: selectedCustomer.name,
+            defaultMessage: `Merhaba ${selectedCustomer.name}, Teklif bilgisi: ${selectedQuoteForCommunication.title}. Tutar: ${selectedQuoteForCommunication.totalAmount ? `₺${selectedQuoteForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
+            onSent: () => {
+              toast.success('SMS gönderildi', { description: 'Müşteriye quote bilgisi gönderildi' })
+            },
+          }}
+          open={smsDialogOpen}
+          onClose={() => {
+            setSmsDialogOpen(false)
+            setSelectedQuoteForCommunication(null)
+            setSelectedCustomer(null)
+          }}
+        />
+      )}
+
+      {whatsAppDialogOpen && selectedQuoteForCommunication && selectedCustomer && (
+        <AutomationConfirmationModal
+          type="whatsapp"
+          options={{
+            entityType: 'QUOTE',
+            entityId: selectedQuoteForCommunication.id,
+            entityTitle: selectedQuoteForCommunication.title,
+            customerEmail: selectedCustomer.email,
+            customerPhone: selectedCustomer.phone,
+            customerName: selectedCustomer.name,
+            defaultMessage: `Merhaba ${selectedCustomer.name}, Teklif bilgisi: ${selectedQuoteForCommunication.title}. Tutar: ${selectedQuoteForCommunication.totalAmount ? `₺${selectedQuoteForCommunication.totalAmount.toLocaleString('tr-TR')}` : 'Belirtilmemiş'}`,
+            onSent: () => {
+              toast.success('WhatsApp mesajı gönderildi', { description: 'Müşteriye quote bilgisi gönderildi' })
+            },
+          }}
+          open={whatsAppDialogOpen}
+          onClose={() => {
+            setWhatsAppDialogOpen(false)
+            setSelectedQuoteForCommunication(null)
+            setSelectedCustomer(null)
+          }}
+        />
+      )}
     </>
   )
 }

@@ -116,7 +116,7 @@ async function ensureSalesShipmentForSentStatus({
   request: Request
 }) {
   try {
-    const { getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const { getMessages, getLocaleFromRequest, getActivityMessage } = await import('@/lib/api-locale')
     const locale = getLocaleFromRequest(request)
     const msgs = getMessages(locale)
     // Ürün varsa rezerve et
@@ -206,7 +206,7 @@ async function ensurePurchaseTransactionForSentStatus({
   request: Request
 }) {
   try {
-    const { getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const { getMessages, getLocaleFromRequest, getActivityMessage } = await import('@/lib/api-locale')
     const locale = getLocaleFromRequest(request)
     const msgs = getMessages(locale)
     // Ürün varsa bekleyen stok olarak işaretle
@@ -947,7 +947,7 @@ export async function PUT(
     }
 
     // ÖNEMLİ: Status transition validation
-    const { getMessages, getLocaleFromRequest } = await import('@/lib/api-locale')
+    const { getMessages, getLocaleFromRequest, getActivityMessage } = await import('@/lib/api-locale')
     const locale = getLocaleFromRequest(request)
     const msgs = getMessages(locale)
     if (body.status !== undefined && body.status !== currentStatus) {
@@ -1275,28 +1275,60 @@ export async function PUT(
         }
       }
 
-      // Sevkiyat kaydını onayla (APPROVED yap)
+      // ✅ Sevkiyat kaydını IN_TRANSIT yap (Invoice SHIPPED olduğunda)
       if (shipmentIdForAutomation) {
-        const { error: updateError } = await supabase
+        // Önce mevcut Shipment status'ünü kontrol et
+        const { data: currentShipment } = await supabase
           .from('Shipment')
-          .update({
-            status: 'APPROVED',
-            updatedAt: new Date().toISOString(),
-          })
+          .select('id, status')
           .eq('id', shipmentIdForAutomation)
           .eq('companyId', companyId)
-        
-        if (updateError) {
-          console.error('Shipment update error:', updateError)
-          const { getErrorMessage } = await import('@/lib/api-locale')
-          return NextResponse.json(
-            { 
-              error: getErrorMessage('errors.api.shipmentCannotBeApproved', request),
-              message: getErrorMessage('errors.api.shipmentCannotBeApprovedMessage', request),
-              details: updateError.message
+          .maybeSingle()
+
+        // Shipment varsa ve APPROVED veya PENDING ise IN_TRANSIT yap
+        if (currentShipment && (currentShipment.status === 'APPROVED' || currentShipment.status === 'PENDING')) {
+          const { error: updateError } = await supabase
+            .from('Shipment')
+            .update({
+              status: 'IN_TRANSIT',
+              updatedAt: new Date().toISOString(),
+            })
+            .eq('id', shipmentIdForAutomation)
+            .eq('companyId', companyId)
+          
+          if (updateError) {
+            console.error('Shipment status update error:', updateError)
+            const { getErrorMessage } = await import('@/lib/api-locale')
+            return NextResponse.json(
+              { 
+                error: getErrorMessage('errors.api.shipmentCannotBeUpdated', request),
+                message: getErrorMessage('errors.api.shipmentCannotBeUpdatedMessage', request),
+                details: updateError.message
+              },
+              { status: 500 }
+            )
+          }
+
+          // Shipment IN_TRANSIT olduğunda ActivityLog kaydı
+          await supabase.from('ActivityLog').insert([
+            {
+              entity: 'Shipment',
+              action: 'UPDATE',
+              description: getActivityMessage(locale, 'shipmentInTransitMessage', { 
+                invoiceNumber: (currentInvoice as any)?.invoiceNumber || currentInvoice?.title || getActivityMessage(locale, 'defaultInvoiceTitle')
+              }),
+              meta: {
+                entity: 'Shipment',
+                action: 'shipment_in_transit_from_invoice',
+                shipmentId: shipmentIdForAutomation,
+                invoiceId: id,
+                oldStatus: currentShipment.status,
+                newStatus: 'IN_TRANSIT',
+              },
+              userId: session.user.id,
+              companyId,
             },
-            { status: 500 }
-          )
+          ])
         }
       }
 
@@ -1885,6 +1917,12 @@ export async function PUT(
     if (shipmentIdForAutomation) {
       automationInfo.shipmentId = shipmentIdForAutomation
       automationInfo.shipmentCreated = shipmentCreated
+      
+      // ✅ Invoice SHIPPED olduğunda Shipment IN_TRANSIT yapıldı
+      if (requestedStatus === 'SHIPPED' && previousStatus !== 'SHIPPED') {
+        automationInfo.shipmentStatusUpdated = true
+        automationInfo.shipmentNewStatus = 'IN_TRANSIT'
+      }
     }
     
     if (purchaseTransactionIdForAutomation) {

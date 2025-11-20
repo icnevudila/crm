@@ -11,11 +11,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useData } from '@/hooks/useData'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import ContractForm from '@/components/contracts/ContractForm'
-<<<<<<< HEAD
-import { confirm } from '@/lib/toast'
-=======
 import InvoiceForm from '@/components/invoices/InvoiceForm'
-import { toastError } from '@/lib/toast'
+import { toastError, confirm } from '@/lib/toast'
 import SendEmailButton from '@/components/integrations/SendEmailButton'
 import SendSmsButton from '@/components/integrations/SendSmsButton'
 import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
@@ -24,7 +21,6 @@ import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import ContextualActionsBar from '@/components/ui/ContextualActionsBar'
 import { useQuickActionSuccess } from '@/lib/quick-action-helper'
 import { formatCurrency } from '@/lib/utils'
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
 
 interface Contract {
   id: string

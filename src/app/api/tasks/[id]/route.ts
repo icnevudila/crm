@@ -37,7 +37,7 @@ export async function GET(
     
     const supabase = getSupabaseWithServiceRole()
 
-    // Task'ı ilişkili verilerle çek - OPTİMİZE: User bilgisini çekerken SuperAdmin filtrele
+    // Task'ı ilişkili verilerle çek - User join'i optional (assignedTo null olabilir)
     // NOT: createdBy/updatedBy kolonları migration'da yoksa hata verir, bu yüzden kaldırıldı
     let taskQuery = supabase
       .from('Task')
@@ -52,18 +52,94 @@ export async function GET(
       taskQuery = taskQuery.eq('companyId', companyId)
     }
     
-    const { data: task, error } = await taskQuery.single()
+    let { data: task, error } = await taskQuery.single()
     
-    // OPTİMİZE: SuperAdmin'leri filtrele (User bilgisi varsa)
-    if (task && task.User) {
-      // SuperAdmin kontrolü + companyId kontrolü
-      if (task.User.role === 'SUPER_ADMIN' || task.User.companyId !== companyId) {
-        task.User = null // SuperAdmin'leri gizle
+    // Eğer User join hatası varsa, User olmadan tekrar dene
+    if (error && (error.message?.includes('foreign key') || error.message?.includes('relation') || error.code === '42703')) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Task API - User join hatası, User olmadan retry yapılıyor:', error.message)
+      }
+      
+      // User join'i olmadan tekrar dene
+      let retryQuery = supabase
+        .from('Task')
+        .select(`
+          id, title, description, status, priority, dueDate, assignedTo, relatedTo, relatedId, companyId, createdAt, updatedAt
+        `)
+        .eq('id', id)
+      
+      if (!isSuperAdmin) {
+        retryQuery = retryQuery.eq('companyId', companyId)
+      }
+      
+      const retryResult = await retryQuery.single()
+      task = retryResult.data
+      error = retryResult.error
+      
+      // Eğer assignedTo varsa, User bilgisini ayrı çek
+      if (task && task.assignedTo) {
+        try {
+          const { data: userData } = await supabase
+            .from('User')
+            .select('id, name, email, role, companyId')
+            .eq('id', task.assignedTo)
+            .single()
+          
+          if (userData && (!isSuperAdmin && userData.companyId === companyId || isSuperAdmin)) {
+            // SuperAdmin kontrolü - sadece aynı companyId'ye sahip kullanıcıları göster
+            if (!isSuperAdmin && userData.role !== 'SUPER_ADMIN' && userData.companyId === companyId) {
+              task.User = userData
+            } else if (isSuperAdmin) {
+              task.User = userData
+            }
+          }
+        } catch (userError) {
+          // User çekme hatası ana işlemi engellemez
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Task API - User bilgisi çekilemedi:', userError)
+          }
+        }
       }
     }
-
+    
+    // Görev bulunamadı hatası kontrolü
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      // Supabase'in "not found" hatalarını kontrol et
+      if (error.code === 'PGRST116' || error.message?.includes('No rows') || error.message?.includes('not found')) {
+        return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+      }
+      
+      // Detaylı error logging (development'ta)
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Task API GET error:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          taskId: id,
+        })
+      }
+      
+      return NextResponse.json(
+        { 
+          error: 'Failed to fetch task',
+          message: process.env.NODE_ENV === 'development' ? error.message : 'Görev yüklenirken bir hata oluştu'
+        },
+        { status: 500 }
+      )
+    }
+
+    // Task null ise 404 döndür
+    if (!task) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+    }
+    
+    // OPTİMİZE: SuperAdmin'leri filtrele (User bilgisi varsa)
+    if (task.User) {
+      // SuperAdmin kontrolü + companyId kontrolü
+      if (!isSuperAdmin && (task.User.role === 'SUPER_ADMIN' || task.User.companyId !== companyId)) {
+        task.User = null // SuperAdmin'leri gizle
+      }
     }
 
     // ActivityLog'lar KALDIRILDI - Lazy load için ayrı endpoint kullanılacak (/api/activity?entity=Task&id=...)
@@ -74,11 +150,24 @@ export async function GET(
       activities: [], // Boş array - lazy load için ayrı endpoint kullanılacak
     })
   } catch (error: any) {
-    if (error.message.includes('not found') || error.message.includes('No rows')) {
+    // Detaylı error logging (development'ta)
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Task API GET - Unexpected error:', {
+        message: error?.message,
+        stack: error?.stack,
+        name: error?.name,
+      })
+    }
+    
+    if (error?.message?.includes('not found') || error?.message?.includes('No rows')) {
       return NextResponse.json({ error: 'Task not found' }, { status: 404 })
     }
+    
     return NextResponse.json(
-      { error: error.message || 'Failed to fetch task' },
+      { 
+        error: 'Failed to fetch task',
+        message: process.env.NODE_ENV === 'development' ? error?.message : 'Görev yüklenirken bir hata oluştu'
+      },
       { status: 500 }
     )
   }

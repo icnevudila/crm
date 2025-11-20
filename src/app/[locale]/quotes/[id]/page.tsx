@@ -12,13 +12,9 @@ import GradientCard from '@/components/ui/GradientCard'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useData } from '@/hooks/useData'
-<<<<<<< HEAD
-import { toast, confirm } from '@/lib/toast'
-=======
 import { mutate } from 'swr'
-import { toast, toastError } from '@/lib/toast'
+import { toast, toastError, confirm } from '@/lib/toast'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
 import WorkflowStepper from '@/components/ui/WorkflowStepper'
 import { getQuoteWorkflowSteps } from '@/lib/workflowSteps'
 import StatusInfoNote from '@/components/workflow/StatusInfoNote'

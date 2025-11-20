@@ -20,7 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { User, LogOut, Settings, HelpCircle, BookOpen, MessageCircle, Command, Menu, Plus, StickyNote, Eye, EyeOff } from 'lucide-react'
+import { User, LogOut, Settings, HelpCircle, BookOpen, MessageCircle, Command, Menu, Plus, StickyNote, Eye, EyeOff, Sparkles } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import RecentItems from '@/components/layout/RecentItems'
 
@@ -59,6 +59,11 @@ const ProductForm = dynamic(() => import('@/components/products/ProductForm'), {
   loading: () => null,
 })
 
+const AIChat = dynamic(() => import('@/components/ai/AIChat'), {
+  ssr: false,
+  loading: () => null,
+})
+
 interface HeaderProps {
   onMenuClick?: () => void
 }
@@ -69,6 +74,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
   const router = useRouter()
 
   const [quickCreate, setQuickCreate] = useState<'customer' | 'deal' | 'quote' | 'invoice' | 'task' | 'product' | null>(null)
+  const [aiChatOpen, setAiChatOpen] = useState(false)
 
   const quickActions: {
     key: 'customer' | 'deal' | 'quote' | 'invoice' | 'task' | 'product'
@@ -176,6 +182,18 @@ export default function Header({ onMenuClick }: HeaderProps) {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* AI Asistan Butonu */}
+        <Button
+          variant="default"
+          size="sm"
+          className="hidden sm:flex items-center gap-2 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white shadow-md"
+          onClick={() => setAiChatOpen(true)}
+          title="AI Asistan - Komut ver, işlem yap"
+        >
+          <Sparkles className="h-4 w-4" />
+          <span className="hidden lg:inline">AI</span>
+        </Button>
 
         {/* Command Palette Trigger - Tek buton (hem Ctrl+K hem Ctrl+N ile açılır) */}
         <Button
@@ -315,6 +333,9 @@ export default function Header({ onMenuClick }: HeaderProps) {
         open={quickCreate === 'product'}
         onClose={() => setQuickCreate(null)}
       />
+
+      {/* AI Chat Modal */}
+      <AIChat open={aiChatOpen} onClose={() => setAiChatOpen(false)} />
       
       {/* Sticky Notes Container - Header'dan kontrol ediliyor */}
       <StickyNotesContainer visible={true} />

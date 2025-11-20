@@ -1,7 +1,8 @@
 ﻿'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { toast, confirm } from '@/lib/toast'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSession } from '@/hooks/useSession'
 import { Plus, Edit, Trash2, Eye } from 'lucide-react'
@@ -74,22 +75,22 @@ export default function TicketList() {
   const t = useTranslations('tickets')
   const tCommon = useTranslations('common')
   const { data: session } = useSession()
-  
+
   // SuperAdmin kontrolü
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
-  
+
   const statusLabels: Record<string, string> = {
     OPEN: t('statusOpen'),
     IN_PROGRESS: t('statusInProgress'),
     CLOSED: t('statusClosed'),
   }
-  
+
   const priorityLabels: Record<string, string> = {
     LOW: t('priorityLow'),
     MEDIUM: t('priorityMedium'),
     HIGH: t('priorityHigh'),
   }
-  
+
   const [status, setStatus] = useState('')
   const [priority, setPriority] = useState('')
   const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin için firma filtresi
@@ -98,18 +99,19 @@ export default function TicketList() {
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
   const [selectedTicketData, setSelectedTicketData] = useState<Ticket | null>(null)
-  
+  const { confirm } = useConfirm()
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
-  
+
   // SuperAdmin için firmaları çek
   const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
     isSuperAdmin ? '/api/superadmin/companies' : null,
     { dedupingInterval: 60000, revalidateOnFocus: false }
   )
   // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
-  const companies = (companiesData?.companies || []).filter((company, index, self) => 
+  const companies = (companiesData?.companies || []).filter((company, index, self) =>
     index === self.findIndex((c) => c.id === company.id)
   )
 
@@ -133,12 +135,12 @@ export default function TicketList() {
       totalPages: number
     }
   }
-  
+
   const { data: ticketsData, isLoading, error, mutate: mutateTickets } = useData<Ticket[] | TicketsResponse>(apiUrl, {
     dedupingInterval: 5000,
     revalidateOnFocus: false,
   })
-  
+
   const tickets = useMemo(() => {
     if (Array.isArray(ticketsData)) return ticketsData
     if (ticketsData && typeof ticketsData === 'object' && 'data' in ticketsData) {
@@ -146,7 +148,7 @@ export default function TicketList() {
     }
     return []
   }, [ticketsData])
-  
+
   const pagination = useMemo(() => {
     if (!ticketsData || Array.isArray(ticketsData)) return null
     if (ticketsData && typeof ticketsData === 'object' && 'pagination' in ticketsData) {
@@ -166,7 +168,13 @@ export default function TicketList() {
   }
 
   const handleDelete = useCallback(async (id: string, subject: string) => {
-    if (!(await confirm(t('deleteConfirm', { subject })))) {
+    if (!(await confirm({
+      title: t('deleteConfirmTitle', { subject }),
+      description: t('deleteConfirmMessage'),
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
+      variant: 'destructive'
+    }))) {
       return
     }
 
@@ -174,25 +182,25 @@ export default function TicketList() {
       const res = await fetch(`/api/tickets/${id}`, {
         method: 'DELETE',
       })
-      
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
         throw new Error(errorData.error || 'Failed to delete ticket')
       }
-      
+
       // Optimistic update - silinen kaydı listeden kaldır
       const updatedTickets = tickets.filter((t) => t.id !== id)
-      
+
       // Cache'i güncelle - yeni listeyi hemen göster
       await mutateTickets(updatedTickets, { revalidate: false })
-      
+
       // Tüm diğer ticket URL'lerini de güncelle
       await Promise.all([
         mutate('/api/tickets', updatedTickets, { revalidate: false }),
         mutate('/api/tickets?', updatedTickets, { revalidate: false }),
         mutate(apiUrl, updatedTickets, { revalidate: false }),
       ])
-      
+
       // Success toast göster
       const tCommon = useTranslations('common')
       toast.success(tCommon('ticketDeletedSuccess'), { description: tCommon('deleteSuccessMessage', { name: subject }) })
@@ -322,102 +330,102 @@ export default function TicketList() {
       <div className="hidden md:block bg-white rounded-lg shadow-card overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('tableHeaders.subject')}</TableHead>
-              {isSuperAdmin && <TableHead>{t('tableHeaders.company')}</TableHead>}
-              <TableHead>{t('tableHeaders.status')}</TableHead>
-              <TableHead>{t('tableHeaders.priority')}</TableHead>
-              <TableHead>{t('tableHeaders.customer')}</TableHead>
-              <TableHead>{t('tableHeaders.assignedTo')}</TableHead>
-              <TableHead>{t('tableHeaders.date')}</TableHead>
-              <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tickets.length === 0 ? (
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={isSuperAdmin ? 8 : 7} className="text-center py-8 text-gray-500">
-                  {t('noTicketsFound')}
-                </TableCell>
+                <TableHead>{t('tableHeaders.subject')}</TableHead>
+                {isSuperAdmin && <TableHead>{t('tableHeaders.company')}</TableHead>}
+                <TableHead>{t('tableHeaders.status')}</TableHead>
+                <TableHead>{t('tableHeaders.priority')}</TableHead>
+                <TableHead>{t('tableHeaders.customer')}</TableHead>
+                <TableHead>{t('tableHeaders.assignedTo')}</TableHead>
+                <TableHead>{t('tableHeaders.date')}</TableHead>
+                <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
               </TableRow>
-            ) : (
-              tickets.map((ticket) => (
-                <TableRow key={ticket.id}>
-                  <TableCell className="font-medium">{ticket.subject}</TableCell>
-                  {isSuperAdmin && (
-                    <TableCell>
-                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-                        {ticket.Company?.name || '-'}
-                      </Badge>
-                    </TableCell>
-                  )}
-                  <TableCell>
-                    <Badge className={statusColors[ticket.status] || 'bg-gray-100'}>
-                      {statusLabels[ticket.status] || ticket.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={priorityColors[ticket.priority] || 'bg-gray-100'}>
-                      {priorityLabels[ticket.priority] || ticket.priority}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {ticket.customerId ? (
-                      <Link 
-                        href={`/${locale}/customers/${ticket.customerId}`}
-                        className="text-primary-600 hover:underline"
-                        prefetch={true}
-                      >
-                        {tCommon('customers')} #{ticket.customerId.substring(0, 8)}
-                      </Link>
-                    ) : (
-                      '-'
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {ticket.User?.name || '-'}
-                  </TableCell>
-                  <TableCell>
-                    {new Date(ticket.createdAt).toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US')}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setSelectedTicketId(ticket.id)
-                          setSelectedTicketData(ticket)
-                          setDetailModalOpen(true)
-                        }}
-                        aria-label={t('viewTicket', { subject: ticket.subject })}
-                      >
-                        <Eye className="h-4 w-4 text-gray-600" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(ticket)}
-                        aria-label={t('editTicket', { subject: ticket.subject })}
-                      >
-                        <Edit className="h-4 w-4 text-gray-600" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(ticket.id, ticket.subject)}
-                        className="text-red-600 hover:text-red-700"
-                        aria-label={t('deleteTicket', { subject: ticket.subject })}
-                      >
-                        <Trash2 className="h-4 w-4 text-red-600" />
-                      </Button>
-                    </div>
+            </TableHeader>
+            <TableBody>
+              {tickets.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={isSuperAdmin ? 8 : 7} className="text-center py-8 text-gray-500">
+                    {t('noTicketsFound')}
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
+              ) : (
+                tickets.map((ticket) => (
+                  <TableRow key={ticket.id}>
+                    <TableCell className="font-medium">{ticket.subject}</TableCell>
+                    {isSuperAdmin && (
+                      <TableCell>
+                        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                          {ticket.Company?.name || '-'}
+                        </Badge>
+                      </TableCell>
+                    )}
+                    <TableCell>
+                      <Badge className={statusColors[ticket.status] || 'bg-gray-100'}>
+                        {statusLabels[ticket.status] || ticket.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={priorityColors[ticket.priority] || 'bg-gray-100'}>
+                        {priorityLabels[ticket.priority] || ticket.priority}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {ticket.customerId ? (
+                        <Link
+                          href={`/${locale}/customers/${ticket.customerId}`}
+                          className="text-primary-600 hover:underline"
+                          prefetch={true}
+                        >
+                          {tCommon('customers')} #{ticket.customerId.substring(0, 8)}
+                        </Link>
+                      ) : (
+                        '-'
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {ticket.User?.name || '-'}
+                    </TableCell>
+                    <TableCell>
+                      {new Date(ticket.createdAt).toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US')}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setSelectedTicketId(ticket.id)
+                            setSelectedTicketData(ticket)
+                            setDetailModalOpen(true)
+                          }}
+                          aria-label={t('viewTicket', { subject: ticket.subject })}
+                        >
+                          <Eye className="h-4 w-4 text-gray-600" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(ticket)}
+                          aria-label={t('editTicket', { subject: ticket.subject })}
+                        >
+                          <Edit className="h-4 w-4 text-gray-600" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDelete(ticket.id, ticket.subject)}
+                          className="text-red-600 hover:text-red-700"
+                          aria-label={t('deleteTicket', { subject: ticket.subject })}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
           </Table>
         </div>
         {/* Pagination */}
@@ -534,9 +542,9 @@ export default function TicketList() {
         onSuccess={async (savedTicket: Ticket) => {
           // Optimistic update - yeni/ güncellenmiş kaydı hemen cache'e ekle ve UI'da göster
           // Böylece form kapanmadan önce destek talebi listede görünür
-          
+
           let updatedTickets: Ticket[]
-          
+
           if (selectedTicket) {
             // UPDATE: Mevcut kaydı güncelle
             updatedTickets = tickets.map((t) =>
@@ -546,11 +554,11 @@ export default function TicketList() {
             // CREATE: Yeni kaydı listenin başına ekle
             updatedTickets = [savedTicket, ...tickets]
           }
-          
+
           // Cache'i güncelle - optimistic update'i hemen uygula ve koru
           // revalidate: false = background refetch yapmaz, optimistic update korunur
           await mutateTickets(updatedTickets, { revalidate: false })
-          
+
           // Tüm diğer ticket URL'lerini de güncelle (optimistic update)
           await Promise.all([
             mutate('/api/tickets', updatedTickets, { revalidate: false }),

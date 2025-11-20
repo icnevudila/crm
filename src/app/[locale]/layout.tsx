@@ -7,7 +7,9 @@ import QueryProvider from '@/components/providers/QueryProvider'
 import { NavigationProvider } from '@/components/providers/NavigationProvider'
 import UndoStackProvider from '@/components/providers/UndoStackProvider'
 import ConditionalLayout from '@/components/layout/ConditionalLayout'
+import { ConfirmProvider } from '@/hooks/useConfirm'
 import { Toaster } from 'sonner'
+import FloatingAIChat from '@/components/ai/FloatingAIChat'
 
 // CRITICAL FIX: force-dynamic cache'i tamamen kapatıyor - performans için kaldırıldı
 // Session kontrolü için sadece gerekli yerlerde dynamic yapılacak
@@ -37,7 +39,7 @@ export default async function LocaleLayout({
   try {
     messages = await Promise.race([
       getMessages({ locale }),
-      new Promise((_, reject) => 
+      new Promise((_, reject) =>
         setTimeout(() => reject(new Error('getMessages timeout')), 1000) // 1 saniye timeout (5s'den düşürüldü)
       ),
     ]) as any
@@ -56,34 +58,37 @@ export default async function LocaleLayout({
           <UndoStackProvider>
             <NavigationProvider>
               <ConditionalLayout>
-                {children}
+                <ConfirmProvider>
+                  {children}
+                </ConfirmProvider>
               </ConditionalLayout>
-            <Toaster 
-            position="top-right" 
-            expand={false}
-            richColors
-            closeButton
-            duration={4000}
-            toastOptions={{
-              classNames: {
-                toast: 'group toast shadow-lg border-2',
-                title: 'text-base font-semibold',
-                description: 'text-sm',
-                actionButton: 'bg-indigo-600 text-white hover:bg-indigo-700',
-                cancelButton: 'bg-gray-100 text-gray-700 hover:bg-gray-200',
-                closeButton: 'bg-white border-2 border-gray-200 hover:border-gray-300 text-gray-700',
-                error: 'border-red-300 bg-red-50 text-red-900',
-                success: 'border-emerald-300 bg-emerald-50 text-emerald-900',
-                warning: 'border-amber-300 bg-amber-50 text-amber-900',
-                info: 'border-indigo-300 bg-indigo-50 text-indigo-900',
-              },
-              style: {
-                borderRadius: '12px',
-                padding: '16px',
-                fontSize: '14px',
-              }
-            }}
-          />
+              <Toaster
+                position="top-right"
+                expand={false}
+                richColors
+                closeButton
+                duration={4000}
+                toastOptions={{
+                  classNames: {
+                    toast: 'group toast shadow-lg border-2',
+                    title: 'text-base font-semibold',
+                    description: 'text-sm',
+                    actionButton: 'bg-indigo-600 text-white hover:bg-indigo-700',
+                    cancelButton: 'bg-gray-100 text-gray-700 hover:bg-gray-200',
+                    closeButton: 'bg-white border-2 border-gray-200 hover:border-gray-300 text-gray-700',
+                    error: 'border-red-300 bg-red-50 text-red-900',
+                    success: 'border-emerald-300 bg-emerald-50 text-emerald-900',
+                    warning: 'border-amber-300 bg-amber-50 text-amber-900',
+                    info: 'border-indigo-300 bg-indigo-50 text-indigo-900',
+                  },
+                  style: {
+                    borderRadius: '12px',
+                    padding: '16px',
+                    fontSize: '14px',
+                  }
+                }}
+              />
+              <FloatingAIChat />
             </NavigationProvider>
           </UndoStackProvider>
         </QueryProvider>

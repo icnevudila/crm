@@ -1,7 +1,8 @@
 ﻿'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { toast, confirm } from '@/lib/toast'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSearchParams } from 'next/navigation'
 import { useSession } from '@/hooks/useSession'
@@ -82,15 +83,15 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
   const tCommon = useTranslations('common')
   const searchParams = useSearchParams()
   const { data: session } = useSession()
-  
+
   // SuperAdmin kontrolü
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
-  
+
   // URL parametrelerinden filtreleri oku
   const searchFromUrl = searchParams.get('search') || ''
-  
+
   const [search, setSearch] = useState(searchFromUrl)
-  
+
   // URL'den gelen search parametresini state'e set et
   useEffect(() => {
     if (searchFromUrl && searchFromUrl !== search) {
@@ -106,30 +107,31 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null)
   const [selectedProductData, setSelectedProductData] = useState<Product | null>(null)
-  
+  const { confirm } = useConfirm()
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
-  
+
   // SuperAdmin için firmaları çek
   const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
     isOpen && isSuperAdmin ? '/api/superadmin/companies' : null,
     { dedupingInterval: 60000, revalidateOnFocus: false }
   )
   // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
-  const companies = (companiesData?.companies || []).filter((company, index, self) => 
+  const companies = (companiesData?.companies || []).filter((company, index, self) =>
     index === self.findIndex((c) => c.id === company.id)
   )
 
   // Debounced search - performans için
   const [debouncedSearch, setDebouncedSearch] = useState(search)
-  
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
       setCurrentPage(1) // Arama değiştiğinde ilk sayfaya dön
     }, 300)
-    
+
     return () => clearTimeout(timer)
   }, [search])
 
@@ -198,7 +200,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
     }
     return []
   }, [productsData, error])
-  
+
   const pagination = useMemo(() => {
     if (!productsData || Array.isArray(productsData)) return null
     if (productsData && typeof productsData === 'object' && 'pagination' in productsData) {
@@ -224,7 +226,13 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
   }, [])
 
   const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!(await confirm(t('deleteConfirm', { name })))) {
+    if (!(await confirm({
+      title: t('deleteConfirmTitle', { name }),
+      description: t('deleteConfirmMessage'),
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
+      variant: 'destructive'
+    }))) {
       return
     }
 
@@ -232,25 +240,25 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
       const res = await fetch(`/api/products/${id}`, {
         method: 'DELETE',
       })
-      
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
         throw new Error(errorData.error || 'Failed to delete product')
       }
-      
+
       // Optimistic update - silinen kaydı listeden kaldır
       const updatedProducts = products.filter((p) => p.id !== id)
-      
+
       // Cache'i güncelle
       await mutateProducts(updatedProducts, { revalidate: false })
-      
+
       // Tüm diğer product URL'lerini de güncelle
       await Promise.all([
         mutate('/api/products', updatedProducts, { revalidate: false }),
         mutate('/api/products?', updatedProducts, { revalidate: false }),
         apiUrl ? mutate(apiUrl, updatedProducts, { revalidate: false }) : Promise.resolve(),
       ])
-      
+
       // Success toast göster
       toast.success(tCommon('productDeletedSuccess'), { description: tCommon('deleteSuccessMessage', { name }) })
     } catch (error: any) {
@@ -284,7 +292,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
   const getStockBadge = (stock: number, minStock?: number, product?: Product) => {
     // minimumStock kolonu API'den minimumStock olarak geliyor
     const actualMinStock = product ? ((product as any).minimumStock || product.minStock) : minStock
-    
+
     if (stock === 0) {
       return <Badge className="bg-red-100 text-red-800">{t('stockStatus.outOfStock')}</Badge>
     } else if (actualMinStock && stock <= actualMinStock) {
@@ -314,12 +322,12 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
       const minStock = (p as any).minimumStock || p.minStock
       return p.stock > (minStock || 10)
     }).length
-    
+
     // Son giriş ve çıkış tarihlerini bul
     const lastEntry = products
       .filter(p => p.updatedAt)
       .sort((a, b) => new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime())[0]
-    
+
     return {
       critical,
       lowStock,
@@ -343,7 +351,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
       <div className="space-y-6">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">
           <p className="text-red-800">
-            {t('errorLoadingProducts')} 
+            {t('errorLoadingProducts')}
             {error?.message?.includes('incomingQuantity') || error?.message?.includes('reservedQuantity') ? (
               <span className="block mt-2 text-sm">
                 {t('migrationMissing')}
@@ -403,7 +411,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
           },
         ]}
       />
-      
+
       {/* Stok Durumu İstatistik Kartları */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <motion.div
@@ -420,7 +428,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
             <Package className="h-8 w-8 text-indigo-500" />
           </div>
         </motion.div>
-        
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -435,7 +443,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
             <AlertTriangle className="h-8 w-8 text-red-500" />
           </div>
         </motion.div>
-        
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -446,7 +454,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
             <div>
               <p className="text-sm text-gray-600 mb-1">{t('stats.lastEntry')}</p>
               <p className="text-sm font-semibold text-gray-900">
-                {stockStats.lastUpdate 
+                {stockStats.lastUpdate
                   ? new Date(stockStats.lastUpdate).toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US')
                   : '-'}
               </p>
@@ -454,7 +462,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
             <TrendingUp className="h-8 w-8 text-green-500" />
           </div>
         </motion.div>
-        
+
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -465,7 +473,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
             <div>
               <p className="text-sm text-gray-600 mb-1">{t('stats.lastExit')}</p>
               <p className="text-sm font-semibold text-gray-900">
-                {stockStats.lastUpdate 
+                {stockStats.lastUpdate
                   ? new Date(stockStats.lastUpdate).toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US')
                   : '-'}
               </p>
@@ -571,180 +579,180 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
       <div className="hidden md:block bg-white rounded-lg shadow-card overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('tableHeaders.name')}</TableHead>
-              {isSuperAdmin && <TableHead>{t('company')}</TableHead>}
-              <TableHead>{t('tableHeaders.category')}</TableHead>
-              <TableHead>{t('tableHeaders.sku')}/{t('barcode')}</TableHead>
-              <TableHead>{t('tableHeaders.price')}</TableHead>
-              <TableHead>{t('tableHeaders.stock')}</TableHead>
-              <TableHead>{t('tableHeaders.status')}</TableHead>
-              <TableHead>{t('tableHeaders.date')}</TableHead>
-              <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {products.length === 0 ? (
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={isSuperAdmin ? 9 : 8} className="p-0">
-                  <EmptyState
-                    icon={Package}
-                    title={t('noProductsFound')}
-                    description={t('emptyStateDescription') || 'Yeni ürün ekleyerek başlayın'}
-                    action={{
-                      label: t('newProduct'),
-                      onClick: handleAdd,
-                    }}
-                    className="border-0 shadow-none"
-                  />
-                </TableCell>
+                <TableHead>{t('tableHeaders.name')}</TableHead>
+                {isSuperAdmin && <TableHead>{t('company')}</TableHead>}
+                <TableHead>{t('tableHeaders.category')}</TableHead>
+                <TableHead>{t('tableHeaders.sku')}/{t('barcode')}</TableHead>
+                <TableHead>{t('tableHeaders.price')}</TableHead>
+                <TableHead>{t('tableHeaders.stock')}</TableHead>
+                <TableHead>{t('tableHeaders.status')}</TableHead>
+                <TableHead>{t('tableHeaders.date')}</TableHead>
+                <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
               </TableRow>
-            ) : (
-              products.map((product, index) => (
-                <motion.tr
-                  key={product.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2, delay: index * 0.02 }}
-                  className={`border-b hover:bg-gray-50 transition-colors ${(product as any).reservedQuantity > 0 ? 'bg-orange-50/30 border-l-4 border-orange-400' : ''}`}
-                >
-                  <TableCell className="font-medium">
-                    <div className="flex items-center gap-3">
-                      {product.imageUrl && (
-                        <img 
-                          src={product.imageUrl} 
-                          alt={product.name}
-                          className="w-10 h-10 object-cover rounded border border-gray-200 flex-shrink-0"
-                          onError={(e) => {
-                            // Fotoğraf yüklenemezse gizle
-                            (e.target as HTMLImageElement).style.display = 'none'
-                          }}
-                        />
-                      )}
-                      <div>
-                        <div>{product.name}</div>
-                        {product.status && product.status !== 'ACTIVE' && (
-                          <Badge variant="outline" className="mt-1 text-xs">
-                            {product.status === 'INACTIVE' ? tCommon('inactive') : t('discontinued')}
-                          </Badge>
+            </TableHeader>
+            <TableBody>
+              {products.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={isSuperAdmin ? 9 : 8} className="p-0">
+                    <EmptyState
+                      icon={Package}
+                      title={t('noProductsFound')}
+                      description={t('emptyStateDescription') || 'Yeni ürün ekleyerek başlayın'}
+                      action={{
+                        label: t('newProduct'),
+                        onClick: handleAdd,
+                      }}
+                      className="border-0 shadow-none"
+                    />
+                  </TableCell>
+                </TableRow>
+              ) : (
+                products.map((product, index) => (
+                  <motion.tr
+                    key={product.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2, delay: index * 0.02 }}
+                    className={`border-b hover:bg-gray-50 transition-colors ${(product as any).reservedQuantity > 0 ? 'bg-orange-50/30 border-l-4 border-orange-400' : ''}`}
+                  >
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-3">
+                        {product.imageUrl && (
+                          <img
+                            src={product.imageUrl}
+                            alt={product.name}
+                            className="w-10 h-10 object-cover rounded border border-gray-200 flex-shrink-0"
+                            onError={(e) => {
+                              // Fotoğraf yüklenemezse gizle
+                              (e.target as HTMLImageElement).style.display = 'none'
+                            }}
+                          />
                         )}
+                        <div>
+                          <div>{product.name}</div>
+                          {product.status && product.status !== 'ACTIVE' && (
+                            <Badge variant="outline" className="mt-1 text-xs">
+                              {product.status === 'INACTIVE' ? tCommon('inactive') : t('discontinued')}
+                            </Badge>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  {isSuperAdmin && (
-                    <TableCell>
-                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-                        {product.Company?.name || '-'}
-                      </Badge>
                     </TableCell>
-                  )}
-                  <TableCell>
-                    {product.category ? (
-                      <Badge variant="outline" className="text-gray-700 border-gray-300">{product.category}</Badge>
-                    ) : (
-                      <span className="text-gray-400">-</span>
+                    {isSuperAdmin && (
+                      <TableCell>
+                        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                          {product.Company?.name || '-'}
+                        </Badge>
+                      </TableCell>
                     )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm">
-                      {product.sku && (
-                        <div className="font-mono text-gray-600">{product.sku}</div>
-                      )}
-                      {product.barcode && (
-                        <div className="font-mono text-xs text-gray-500">{product.barcode}</div>
-                      )}
-                      {!product.sku && !product.barcode && (
+                    <TableCell>
+                      {product.category ? (
+                        <Badge variant="outline" className="text-gray-700 border-gray-300">{product.category}</Badge>
+                      ) : (
                         <span className="text-gray-400">-</span>
                       )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-semibold">
-                    {formatCurrency(product.price || 0)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div>
-                        <div className="font-medium">{product.stock || 0} {product.unit || 'ADET'}</div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        {product.sku && (
+                          <div className="font-mono text-gray-600">{product.sku}</div>
+                        )}
+                        {product.barcode && (
+                          <div className="font-mono text-xs text-gray-500">{product.barcode}</div>
+                        )}
+                        {!product.sku && !product.barcode && (
+                          <span className="text-gray-400">-</span>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-semibold">
+                      {formatCurrency(product.price || 0)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <div className="font-medium">{product.stock || 0} {product.unit || 'ADET'}</div>
+                          {(() => {
+                            const minStock = (product as any).minimumStock || product.minStock
+                            const maxStock = (product as any).maximumStock || product.maxStock
+                            return minStock && (
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                {t('min')}: {minStock} {maxStock ? `| ${t('max')}: ${maxStock}` : ''}
+                              </div>
+                            )
+                          })()}
+                          {product.updatedAt && (
+                            <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {new Date(product.updatedAt).toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US')}
+                            </div>
+                          )}
+                        </div>
                         {(() => {
                           const minStock = (product as any).minimumStock || product.minStock
-                          const maxStock = (product as any).maximumStock || product.maxStock
-                          return minStock && (
-                            <div className="text-xs text-gray-500 mt-0.5">
-                              {t('min')}: {minStock} {maxStock ? `| ${t('max')}: ${maxStock}` : ''}
+                          return minStock && product.stock !== null && product.stock <= minStock && (
+                            <div className="relative group">
+                              <AlertTriangle className="h-5 w-5 text-red-500" />
+                              <div className="absolute left-0 top-6 hidden group-hover:block z-10 bg-red-600 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
+                                {t('stockStatus.critical')}
+                              </div>
                             </div>
                           )
                         })()}
-                        {product.updatedAt && (
-                          <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {new Date(product.updatedAt).toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US')}
-                          </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {getStockBadge(product.stock || 0, product.minStock, product)}
+                        {(product as any).reservedQuantity > 0 && (
+                          <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">
+                            {t('reserved')}: {(product as any).reservedQuantity}
+                          </Badge>
                         )}
                       </div>
-                      {(() => {
-                        const minStock = (product as any).minimumStock || product.minStock
-                        return minStock && product.stock !== null && product.stock <= minStock && (
-                          <div className="relative group">
-                            <AlertTriangle className="h-5 w-5 text-red-500" />
-                            <div className="absolute left-0 top-6 hidden group-hover:block z-10 bg-red-600 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
-                              {t('stockStatus.critical')}
-                            </div>
-                          </div>
-                        )
-                      })()}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      {getStockBadge(product.stock || 0, product.minStock, product)}
-                      {(product as any).reservedQuantity > 0 && (
-                        <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-300">
-                          {t('reserved')}: {(product as any).reservedQuantity}
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    {new Date(product.createdAt).toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US')}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setSelectedProductId(product.id)
-                          setSelectedProductData(product) // Liste sayfasındaki veriyi hemen göster (hızlı açılış)
-                          setDetailModalOpen(true)
-                        }}
-                        aria-label={t('viewProduct', { name: product.name })}
-                      >
-                        <Eye className="h-4 w-4 text-gray-600" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(product)}
-                        aria-label={t('editProduct', { name: product.name })}
-                      >
-                        <Edit className="h-4 w-4 text-gray-600" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(product.id, product.name)}
-                        className="text-red-600 hover:text-red-700"
-                        aria-label={t('deleteProduct', { name: product.name })}
-                      >
-                        <Trash2 className="h-4 w-4 text-red-600" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </motion.tr>
-              ))
-            )}
-          </TableBody>
+                    </TableCell>
+                    <TableCell>
+                      {new Date(product.createdAt).toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US')}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setSelectedProductId(product.id)
+                            setSelectedProductData(product) // Liste sayfasındaki veriyi hemen göster (hızlı açılış)
+                            setDetailModalOpen(true)
+                          }}
+                          aria-label={t('viewProduct', { name: product.name })}
+                        >
+                          <Eye className="h-4 w-4 text-gray-600" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(product)}
+                          aria-label={t('editProduct', { name: product.name })}
+                        >
+                          <Edit className="h-4 w-4 text-gray-600" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDelete(product.id, product.name)}
+                          className="text-red-600 hover:text-red-700"
+                          aria-label={t('deleteProduct', { name: product.name })}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </motion.tr>
+                ))
+              )}
+            </TableBody>
           </Table>
         </div>
         {/* Pagination */}
@@ -789,14 +797,13 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
                       <Badge variant="outline" className="text-xs">{product.category}</Badge>
                     )}
                     {getStockBadge(product.stock || 0, product.minStock, product)}
-                    <Badge className={`text-xs ${
-                      product.status === 'ACTIVE' ? 'bg-green-600 text-white' :
-                      product.status === 'INACTIVE' ? 'bg-gray-600 text-white' :
-                      'bg-red-600 text-white'
-                    }`}>
+                    <Badge className={`text-xs ${product.status === 'ACTIVE' ? 'bg-green-600 text-white' :
+                        product.status === 'INACTIVE' ? 'bg-gray-600 text-white' :
+                          'bg-red-600 text-white'
+                      }`}>
                       {product.status === 'ACTIVE' ? tCommon('active') :
-                       product.status === 'INACTIVE' ? tCommon('inactive') :
-                       t('discontinued')}
+                        product.status === 'INACTIVE' ? tCommon('inactive') :
+                          t('discontinued')}
                     </Badge>
                     {isSuperAdmin && product.Company?.name && (
                       <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
@@ -807,8 +814,8 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
                   <div className="mt-2 space-y-1">
                     {product.imageUrl && (
                       <div className="mb-2">
-                        <img 
-                          src={product.imageUrl} 
+                        <img
+                          src={product.imageUrl}
                           alt={product.name}
                           className="w-16 h-16 object-cover rounded-md border border-gray-200"
                           onError={(e) => {
@@ -887,7 +894,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
         onSuccess={async (savedProduct: Product) => {
           // Optimistic update - yeni/güncellenmiş kaydı hemen cache'e ekle
           let updatedProducts: Product[]
-          
+
           if (selectedProduct) {
             // UPDATE: Mevcut kaydı güncelle - savedProduct'daki tüm alanları kullan (minStock dahil)
             // savedProduct API'den dönen tam veri, tüm alanları içeriyor
@@ -898,18 +905,18 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
             // CREATE: Yeni kaydı listenin başına ekle
             updatedProducts = [{ ...savedProduct }, ...products]
           }
-          
+
           // Cache'i güncelle - optimistic update (revalidate: true ile fresh data çek)
           // Böylece API'den fresh data çekilir ve minStock güncel gelir
           await mutateProducts(updatedProducts, { revalidate: true })
-          
+
           // Tüm diğer product URL'lerini de güncelle (revalidate: true ile fresh data çek)
           await Promise.all([
             mutate('/api/products', updatedProducts, { revalidate: true }),
             mutate('/api/products?', updatedProducts, { revalidate: true }),
             apiUrl ? mutate(apiUrl, updatedProducts, { revalidate: true }) : Promise.resolve(),
           ])
-          
+
           // Form'u kapat ve seçili ürünü temizle
           setFormOpen(false)
           setSelectedProduct(null)

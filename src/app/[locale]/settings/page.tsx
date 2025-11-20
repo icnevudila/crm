@@ -17,11 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-<<<<<<< HEAD
-import { toast, confirm } from '@/lib/toast'
-=======
-import { toastError, toastSuccess } from '@/lib/toast'
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
+import { toast, toastError, toastSuccess, confirm } from '@/lib/toast'
 
 export default function SettingsPage() {
   const { data: session, status } = useSession()

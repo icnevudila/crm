@@ -44,17 +44,17 @@ export async function GET(request: Request) {
     const companyId = session.user.companyId
     const supabase = getSupabaseWithServiceRole()
 
-    // DEBUG: Session bilgisini logla - multi-tenant kontrolü için
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Customers API] 🔍 Session Check:', {
-        userId: session.user.id,
-        email: session.user.email,
-        role: session.user.role,
-        companyId: session.user.companyId,
-        companyName: session.user.companyName,
-        isSuperAdmin,
-      })
-    }
+    // DEBUG: Session bilgisini logla - multi-tenant kontrolü için (sadece gerekirse)
+    // if (process.env.NODE_ENV === 'development') {
+    //   console.log('[Customers API] 🔍 Session Check:', {
+    //     userId: session.user.id,
+    //     email: session.user.email,
+    //     role: session.user.role,
+    //     companyId: session.user.companyId,
+    //     companyName: session.user.companyName,
+    //     isSuperAdmin,
+    //   })
+    // }
 
     // Toplam kayıt sayısını al (pagination için)
     let countQuery = supabase

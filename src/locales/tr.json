@@ -134,12 +134,9 @@
       "documents": "Dökümanlar",
       "vendors": "Tedarikçiler",
       "emailTemplates": "E-posta Şablonları",
-<<<<<<< HEAD
       "integrations": "Entegrasyonlar",
-=======
       "userIntegrations": "Kullanıcı Entegrasyonları",
       "integrationAnalytics": "Entegrasyon İstatistikleri",
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
       "settings": "Ayarlar",
       "adminPanel": "Admin Paneli",
       "superAdmin": "Süper Admin"
@@ -769,6 +766,7 @@
       "invoiceSentEmailSubject": "Faturanız gönderildi",
       "shipmentApproved": "Sevkiyat Onaylandı",
       "shipmentApprovedMessage": "{invoiceNumber} faturası için sevkiyat onaylandı ve stoktan düşüldü.",
+      "shipmentInTransitMessage": "{invoiceNumber} faturası için sevkiyat yolda (IN_TRANSIT) durumuna güncellendi.",
       "purchaseApproved": "Mal Kabul Tamamlandı",
       "purchaseApprovedMessage": "{invoiceNumber} faturası için mal kabul tamamlandı ve stoğa giriş yapıldı.",
       "invoiceCancelled": "Fatura İptal Edildi",
@@ -789,6 +787,8 @@
       "invoiceTitleUpdated": "Fatura başlığı güncellendi: {oldTitle} → {newTitle}",
       "shipmentCannotBeApproved": "Sevkiyat kaydı onaylanamadı",
       "shipmentCannotBeApprovedMessage": "Sevkiyat kaydı güncellenirken bir hata oluştu. Lütfen tekrar deneyin.",
+      "shipmentCannotBeUpdated": "Sevkiyat durumu güncellenemedi",
+      "shipmentCannotBeUpdatedMessage": "Sevkiyat durumu güncellenirken bir hata oluştu. Lütfen tekrar deneyin.",
       "purchaseCannotBeApproved": "Mal kabul kaydı onaylanamadı",
       "purchaseCannotBeApprovedMessage": "Mal kabul kaydı güncellenirken bir hata oluştu. Lütfen tekrar deneyin.",
       "ticketsCannotBeFetched": "Destek talepleri getirilemedi",

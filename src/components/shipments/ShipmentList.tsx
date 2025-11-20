@@ -10,7 +10,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 
 
 
-import { toast, confirm } from '@/lib/toast'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 
 
 
@@ -619,7 +620,7 @@ export default function ShipmentList() {
 
 
 
-  
+
 
 
 
@@ -655,7 +656,7 @@ export default function ShipmentList() {
 
 
 
-  
+
 
 
 
@@ -667,7 +668,7 @@ export default function ShipmentList() {
 
 
 
-  
+
 
 
 
@@ -712,14 +713,15 @@ export default function ShipmentList() {
 
 
   const [statusChangingId, setStatusChangingId] = useState<string | null>(null)
-  
+  const { confirm } = useConfirm()
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
 
 
 
-  
+
 
 
 
@@ -747,7 +749,7 @@ export default function ShipmentList() {
 
 
 
-  const companies = (companiesData?.companies || []).filter((company, index, self) => 
+  const companies = (companiesData?.companies || []).filter((company, index, self) =>
 
 
 
@@ -771,7 +773,7 @@ export default function ShipmentList() {
 
 
 
-  
+
 
 
 
@@ -786,7 +788,7 @@ export default function ShipmentList() {
 
 
 
-    
+
 
 
 
@@ -830,7 +832,7 @@ export default function ShipmentList() {
 
 
 
-  
+
 
 
 
@@ -884,7 +886,7 @@ export default function ShipmentList() {
     }
     return []
   }, [shipmentsData])
-  
+
   const pagination = useMemo(() => {
     if (!shipmentsData || Array.isArray(shipmentsData)) return null
     if (shipmentsData && typeof shipmentsData === 'object' && 'pagination' in shipmentsData) {
@@ -931,7 +933,7 @@ export default function ShipmentList() {
 
 
 
-    
+
 
 
 
@@ -984,46 +986,56 @@ export default function ShipmentList() {
 
 
   const handleStatusChange = useCallback(async (id: string, newStatus: string) => {
+    const currentShipment = shipments.find(s => s.id === id)
 
+    // ✅ APPROVED durumuna geçerken onay iste
+    if (newStatus === 'APPROVED') {
+      if (currentShipment) {
+        const confirmed = await confirm({
+          title: 'Sevkiyatı Onaylamak İstediğinize Emin Misiniz?',
+          description: `"${currentShipment.tracking || currentShipment.trackingNumber || 'Sevkiyat'}" sevkiyatını onayladığınızda otomatik olarak şu işlemler yapılacak:\n\n• Ürünler stoktan düşecek (her InvoiceItem için)\n• Rezerve miktar azalacak (reservedQuantity düşecek)\n• Stok hareketi kaydedilecek (OUT - SEVKIYAT)\n• Faturaya "Sevk Edildi" bildirimi gönderilecek\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
+          confirmLabel: 'Evet, Onayla',
+          cancelLabel: 'İptal',
+          variant: 'default'
+        })
+        
+        if (!confirmed) {
+          return // İşlemi iptal et
+        }
+      }
+    }
 
+    // ✅ DELIVERED durumuna geçerken onay iste
+    if (newStatus === 'DELIVERED') {
+      if (currentShipment) {
+        const shippingCost = (currentShipment as any)?.shippingCost || 0
+        const confirmed = await confirm({
+          title: 'Sevkiyatı Teslim Edildi Olarak İşaretlemek İstediğinize Emin Misiniz?',
+          description: `"${currentShipment.tracking || currentShipment.trackingNumber || 'Sevkiyat'}" sevkiyatını teslim edildi olarak işaretlediğinizde otomatik olarak şu işlemler yapılacak:\n\n• Sevkiyat maliyeti Finance kaydına eklenecek (GİDER - SHIPPING${shippingCost > 0 ? ` - ${formatCurrency(shippingCost)}` : ''})\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
+          confirmLabel: 'Evet, Teslim Edildi Olarak İşaretle',
+          cancelLabel: 'İptal',
+          variant: 'default'
+        })
+        
+        if (!confirmed) {
+          return // İşlemi iptal et
+        }
+      }
+    }
 
     // Onaylı sevkiyatlar iptal edilemez
 
-
-
-    const currentShipment = shipments.find(s => s.id === id)
-
-
-
     if (currentShipment?.status?.toUpperCase() === 'APPROVED' && newStatus === 'CANCELLED') {
-
-
-
       toast.warning(
-
-
-
         t('cannotCancelApproved'),
-
-
-
         t('cannotCancelApprovedMessage')
-
-
-
       )
-
-
-
       return
-
-
-
     }
 
 
 
-    
+
 
 
 
@@ -1123,7 +1135,7 @@ export default function ShipmentList() {
 
 
 
-      
+
 
 
 
@@ -1131,7 +1143,7 @@ export default function ShipmentList() {
 
 
 
-      
+
 
 
 
@@ -1167,7 +1179,7 @@ export default function ShipmentList() {
 
 
 
-      
+
 
 
 
@@ -1175,7 +1187,7 @@ export default function ShipmentList() {
 
 
 
-      
+
 
 
 
@@ -1227,7 +1239,7 @@ export default function ShipmentList() {
 
 
 
-      
+
 
 
 
@@ -1311,38 +1323,25 @@ export default function ShipmentList() {
 
 
 
-      
 
 
 
-      let message = ''
 
-
-
-      if (newStatus === 'APPROVED') {
-
-
-
-        message = `${shipmentName} sevkiyatı başarıyla onaylandı ve ürünler stoktan düşüldü. Faturaya "Sevk Edildi" bildirimi gönderildi.`
-
-
-
-        toast.success('Sevkiyat onaylandı!', { description: message || 'Sevkiyat başarıyla onaylandı' })
-
-
-
+      // ✅ Detaylı toast mesajı
+      const automation = (result as any)?.automation || {}
+      if (newStatus === 'DELIVERED') {
+        const shipmentForToast = shipments.find(s => s.id === id) || currentShipment
+        const shippingCost = (shipmentForToast as any)?.shippingCost || 0
+        toast.success('🚚 Sevkiyat Teslim Edildi!', {
+          description: `"${shipmentForToast?.tracking || shipmentForToast?.trackingNumber || 'Sevkiyat'}" sevkiyatı teslim edildi.\n\nOtomatik işlemler:\n${automation.financeCreated ? `• Finance kaydı oluşturuldu (ID: ${automation.financeId?.substring(0, 8)}...)\n• Sevkiyat maliyeti kaydedildi${shippingCost > 0 ? ` (${formatCurrency(shippingCost)})` : ''}\n` : ''}• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+        })
+      } else if (newStatus === 'APPROVED') {
+        toast.success('✅ Sevkiyat Onaylandı!', {
+          description: `"${shipmentName}" sevkiyatı onaylandı.\n\nOtomatik işlemler:\n• Ürünler stoktan düşüldü (her InvoiceItem için)\n• Rezerve miktar azaldı (reservedQuantity düştü)\n• Stok hareketi kaydedildi (OUT - SEVKIYAT)\n• Faturaya "Sevk Edildi" bildirimi gönderildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+        })
       } else {
-
-
-
-        message = `${shipmentName} sevkiyatının durumu "${statusLabel}" olarak değiştirildi.`
-
-
-
+        const message = `${shipmentName} sevkiyatının durumu "${statusLabel}" olarak değiştirildi.`
         toast.success('Durum güncellendi!', { description: message || 'Sevkiyat durumu başarıyla güncellendi' })
-
-
-
       }
 
 
@@ -1419,7 +1418,7 @@ export default function ShipmentList() {
 
 
 
-      
+
 
 
 
@@ -1443,7 +1442,7 @@ export default function ShipmentList() {
 
 
 
-          
+
 
 
 
@@ -1475,7 +1474,7 @@ export default function ShipmentList() {
 
 
 
-          
+
 
 
 
@@ -1507,7 +1506,7 @@ export default function ShipmentList() {
 
 
 
-          
+
 
 
 
@@ -1539,7 +1538,7 @@ export default function ShipmentList() {
 
 
 
-          
+
 
 
 
@@ -1715,7 +1714,7 @@ export default function ShipmentList() {
 
 
 
-      
+
 
 
 
@@ -1735,7 +1734,7 @@ export default function ShipmentList() {
 
 
 
-      
+
 
 
 
@@ -1747,7 +1746,7 @@ export default function ShipmentList() {
 
 
 
-      
+
 
 
 
@@ -1759,7 +1758,7 @@ export default function ShipmentList() {
 
 
 
-      
+
 
 
 
@@ -1787,7 +1786,7 @@ export default function ShipmentList() {
 
 
 
-      
+
 
 
 
@@ -1800,7 +1799,7 @@ export default function ShipmentList() {
 
 
 
-      
+
 
 
 
@@ -1844,7 +1843,7 @@ export default function ShipmentList() {
 
 
 
-        console.error('Delete error:', error)
+      console.error('Delete error:', error)
 
 
 
@@ -2093,31 +2092,31 @@ export default function ShipmentList() {
 
 
 
-        <Button
+          <Button
 
 
 
-          onClick={handleAdd}
+            onClick={handleAdd}
 
 
 
-          className="bg-gradient-primary text-white w-full sm:w-auto"
+            className="bg-gradient-primary text-white w-full sm:w-auto"
 
 
 
-        >
+          >
 
 
 
-          <Plus className="mr-2 h-4 w-4" />
+            <Plus className="mr-2 h-4 w-4" />
 
 
 
-          {t('newShipment')}
+            {t('newShipment')}
 
 
 
-        </Button>
+          </Button>
 
 
 
@@ -2997,7 +2996,7 @@ export default function ShipmentList() {
 
 
 
-                const shipmentName = shipment.Invoice?.title 
+                const shipmentName = shipment.Invoice?.title
 
 
 
@@ -3009,23 +3008,23 @@ export default function ShipmentList() {
 
 
 
-                  ? `Fatura #${shipment.Invoice.invoiceNumber} sevkiyatı`
+                    ? `Fatura #${shipment.Invoice.invoiceNumber} sevkiyatı`
 
 
 
-                  : shipment.invoiceId
+                    : shipment.invoiceId
 
 
 
-                  ? `Fatura #${shipment.invoiceId.substring(0, 8)} sevkiyatı`
+                      ? `Fatura #${shipment.invoiceId.substring(0, 8)} sevkiyatı`
 
 
 
-                  : `Sevkiyat #${shipment.tracking || shipment.id.substring(0, 8)}`
+                      : `Sevkiyat #${shipment.tracking || shipment.id.substring(0, 8)}`
 
 
 
-                
+
 
 
 
@@ -3033,499 +3032,63 @@ export default function ShipmentList() {
 
 
 
-                <motion.tr
+                  <motion.tr
 
 
 
-                  key={shipment.id}
+                    key={shipment.id}
 
 
 
-                  initial={{ opacity: 0, y: 10 }}
+                    initial={{ opacity: 0, y: 10 }}
 
 
 
-                  animate={{ opacity: 1, y: 0 }}
+                    animate={{ opacity: 1, y: 0 }}
 
 
 
-                  transition={{ duration: 0.2, delay: index * 0.02 }}
+                    transition={{ duration: 0.2, delay: index * 0.02 }}
 
 
 
-                  className={`border-b transition-colors ${statusRowColors[shipment.status] || 'bg-white'}`}
+                    className={`border-b transition-colors ${statusRowColors[shipment.status] || 'bg-white'}`}
 
 
 
-                >
+                  >
 
 
 
-                  <TableCell className="font-medium">
+                    <TableCell className="font-medium">
 
 
 
-                    <div className="flex flex-col">
+                      <div className="flex flex-col">
 
 
 
-                      <span className="text-gray-900">{shipmentName}</span>
+                        <span className="text-gray-900">{shipmentName}</span>
 
 
 
-                      {shipment.tracking && (
+                        {shipment.tracking && (
 
 
 
-                        <span className="text-xs text-gray-500 font-mono mt-1">
+                          <span className="text-xs text-gray-500 font-mono mt-1">
 
 
 
-                          Takip: {shipment.tracking}
+                            Takip: {shipment.tracking}
 
 
 
-                        </span>
+                          </span>
 
 
 
-                      )}
-
-
-
-                    </div>
-
-
-
-                  </TableCell>
-
-
-
-                  {isSuperAdmin && (
-
-
-
-                    <TableCell>
-
-
-
-                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-
-
-
-                        {shipment.Company?.name || '-'}
-
-
-
-                      </Badge>
-
-
-
-                    </TableCell>
-
-
-
-                  )}
-
-
-
-                  <TableCell className="font-medium font-mono text-sm text-gray-600">
-
-
-
-                    {shipment.tracking || shipment.id.substring(0, 8)}
-
-
-
-                  </TableCell>
-
-
-
-                  <TableCell>
-
-
-
-                    <div className="flex items-center gap-2">
-
-
-
-                      {/* 2️⃣ Inline Durum Dropdown - APPROVED durumunda disabled */}
-
-
-
-                      {/* Status'ü uppercase yaparak kontrol et (güvenlik için) */}
-
-
-
-                      {shipment.status?.toUpperCase() === 'APPROVED' ? (
-
-
-
-                        // Onaylandıktan sonra sadece badge göster (değiştirilemez)
-
-
-
-                        <Badge className={statusColors[shipment.status] || 'bg-green-100'}>
-
-
-
-                      {statusLabels[shipment.status] || shipment.status}
-
-
-
-                    </Badge>
-
-
-
-                      ) : (
-
-
-
-                        // Onaylanmamış sevkiyatlar için dropdown
-
-
-
-                        <>
-
-
-
-                          <Select
-
-
-
-                            value={shipment.status}
-
-
-
-                            onValueChange={(newStatus) => handleStatusChange(shipment.id, newStatus)}
-
-
-
-                            disabled={statusChangingId === shipment.id}
-
-
-
-                          >
-
-
-
-                            <SelectTrigger className="w-32 h-8">
-
-
-
-                              <SelectValue />
-
-
-
-                            </SelectTrigger>
-
-
-
-                            <SelectContent>
-
-
-
-                              <SelectItem value="DRAFT">{t('statusDraft')}</SelectItem>
-
-
-
-                              <SelectItem value="PENDING">{t('statusPending')}</SelectItem>
-
-
-
-                              <SelectItem value="APPROVED">{t('statusApproved')}</SelectItem>
-
-
-
-                              <SelectItem value="IN_TRANSIT">{t('statusInTransit')}</SelectItem>
-
-
-
-                              <SelectItem value="DELIVERED">{t('statusDelivered')}</SelectItem>
-
-
-
-                              <SelectItem value="CANCELLED">{t('statusCancelled')}</SelectItem>
-
-
-
-                            </SelectContent>
-
-
-
-                          </Select>
-
-
-
-                          {/* Onayla Butonu - Sadece DRAFT veya PENDING durumunda */}
-
-
-
-                          {/* Status'ü uppercase yaparak kontrol et (güvenlik için) */}
-
-
-
-                          {(shipment.status?.toUpperCase() === 'DRAFT' || shipment.status?.toUpperCase() === 'PENDING') && (
-
-
-
-                            <Button
-
-
-
-                              size="sm"
-
-
-
-                              onClick={() => handleStatusChange(shipment.id, 'APPROVED')}
-
-
-
-                              disabled={statusChangingId === shipment.id}
-
-
-
-                              className="bg-green-600 hover:bg-green-700 text-white text-xs h-8 px-3"
-
-
-
-                            >
-
-
-
-                              <CheckCircle className="mr-1 h-3 w-3" />
-
-
-
-                              {t('approveButton')}
-
-
-
-                            </Button>
-
-
-
-                          )}
-
-
-
-                        </>
-
-
-
-                      )}
-
-
-
-                    </div>
-
-
-
-                  </TableCell>
-
-
-
-                  <TableCell>
-
-
-
-                    {/* 3️⃣ Fatura Hover Tooltip */}
-
-
-
-                    {shipment.invoiceId ? (
-
-
-
-                      shipment.Invoice ? (
-
-
-
-                        <TooltipProvider>
-
-
-
-                          <Tooltip>
-
-
-
-                            <TooltipTrigger asChild>
-
-
-
-                              <Link 
-
-
-
-                                href={`/${locale}/invoices/${shipment.invoiceId}`}
-
-
-
-                                className="text-indigo-600 hover:underline font-medium"
-
-
-
-                                prefetch={true}
-
-
-
-                              >
-
-
-
-                                {shipment.Invoice.title || shipment.Invoice.invoiceNumber || `Fatura #${shipment.invoiceId.substring(0, 8)}`}
-
-
-
-                              </Link>
-
-
-
-                            </TooltipTrigger>
-
-
-
-                            <TooltipContent className="bg-gray-900 text-white p-3">
-
-
-
-                              <div className="space-y-1 text-sm">
-
-
-
-                                <p><strong>Fatura No:</strong> {shipment.Invoice.invoiceNumber || shipment.invoiceId.substring(0, 8)}</p>
-
-
-
-                                <p><strong>Başlık:</strong> {shipment.Invoice.title || '-'}</p>
-
-
-
-                                <p><strong>Müşteri:</strong> {getCustomerName(shipment)}</p>
-
-
-
-                                <p><strong>Toplam:</strong> {formatCurrency(shipment.Invoice.total || 0)}</p>
-
-
-
-                                <p><strong>Tarih:</strong> {new Date(shipment.Invoice.createdAt).toLocaleDateString('tr-TR')}</p>
-
-
-
-                              </div>
-
-
-
-                            </TooltipContent>
-
-
-
-                          </Tooltip>
-
-
-
-                        </TooltipProvider>
-
-
-
-                      ) : (
-
-
-
-                      <Link 
-
-
-
-                        href={`/${locale}/invoices/${shipment.invoiceId}`}
-
-
-
-                          className="text-indigo-600 hover:underline font-medium"
-
-
-
-                        prefetch={true}
-
-
-
-                      >
-
-
-
-                        Fatura #{shipment.invoiceId.substring(0, 8)}
-
-
-
-                      </Link>
-
-
-
-                      )
-
-
-
-                    ) : (
-
-
-
-                      '-'
-
-
-
-                    )}
-
-
-
-                  </TableCell>
-
-
-
-                  <TableCell>
-
-
-
-                    {getCustomerName(shipment)}
-
-
-
-                  </TableCell>
-
-
-
-                  <TableCell>
-
-
-
-                    {new Date(shipment.createdAt).toLocaleDateString('tr-TR')}
-
-
-
-                  </TableCell>
-
-
-
-                  <TableCell>
-
-
-
-                    {/* 9️⃣ Otomatik Teslim Tarihi */}
-
-
-
-                    {shipment.estimatedDelivery ? (
-
-
-
-                      <div className="flex items-center gap-1 text-sm text-gray-600">
-
-
-
-                        <Calendar className="h-4 w-4" />
-
-
-
-                        {new Date(shipment.estimatedDelivery).toLocaleDateString('tr-TR')}
+                        )}
 
 
 
@@ -3533,11 +3096,31 @@ export default function ShipmentList() {
 
 
 
-                    ) : (
+                    </TableCell>
 
 
 
-                      <span className="text-gray-400">-</span>
+                    {isSuperAdmin && (
+
+
+
+                      <TableCell>
+
+
+
+                        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+
+
+
+                          {shipment.Company?.name || '-'}
+
+
+
+                        </Badge>
+
+
+
+                      </TableCell>
 
 
 
@@ -3545,59 +3128,339 @@ export default function ShipmentList() {
 
 
 
-                  </TableCell>
+                    <TableCell className="font-medium font-mono text-sm text-gray-600">
 
 
 
-                  <TableCell className="text-right">
+                      {shipment.tracking || shipment.id.substring(0, 8)}
 
 
 
-                    <div className="flex justify-end gap-2">
+                    </TableCell>
 
 
 
-                      {/* 7️⃣ Context Menü (3-dot) - Onaylı sevkiyatlar için sadece görüntüle */}
+                    <TableCell>
 
 
 
-                      {shipment.status?.toUpperCase() === 'APPROVED' ? (
+                      <div className="flex items-center gap-2">
 
 
 
-                        // Onaylı sevkiyatlar için sadece görüntüle butonu (tek göz ikonu)
+                        {/* 2️⃣ Inline Durum Dropdown - APPROVED durumunda disabled */}
 
 
 
-                        <Button
+                        {/* Status'ü uppercase yaparak kontrol et (güvenlik için) */}
 
 
 
-                          variant="ghost"
+                        {shipment.status?.toUpperCase() === 'APPROVED' ? (
 
 
 
-                          size="icon"
+                          // Onaylandıktan sonra sadece badge göster (değiştirilemez)
 
 
 
-                          onClick={() => handleViewDetail(shipment)}
+                          <Badge className={statusColors[shipment.status] || 'bg-green-100'}>
 
 
 
-                          aria-label="Detayları görüntüle"
+                            {statusLabels[shipment.status] || shipment.status}
 
 
 
-                        >
+                          </Badge>
 
 
 
-                          <Eye className="h-4 w-4 text-gray-600" />
+                        ) : (
 
 
 
-                        </Button>
+                          // Onaylanmamış sevkiyatlar için dropdown
+
+
+
+                          <>
+
+
+
+                            <Select
+
+
+
+                              value={shipment.status}
+
+
+
+                              onValueChange={(newStatus) => handleStatusChange(shipment.id, newStatus)}
+
+
+
+                              disabled={statusChangingId === shipment.id}
+
+
+
+                            >
+
+
+
+                              <SelectTrigger className="w-32 h-8">
+
+
+
+                                <SelectValue />
+
+
+
+                              </SelectTrigger>
+
+
+
+                              <SelectContent>
+
+
+
+                                <SelectItem value="DRAFT">{t('statusDraft')}</SelectItem>
+
+
+
+                                <SelectItem value="PENDING">{t('statusPending')}</SelectItem>
+
+
+
+                                <SelectItem value="APPROVED">{t('statusApproved')}</SelectItem>
+
+
+
+                                <SelectItem value="IN_TRANSIT">{t('statusInTransit')}</SelectItem>
+
+
+
+                                <SelectItem value="DELIVERED">{t('statusDelivered')}</SelectItem>
+
+
+
+                                <SelectItem value="CANCELLED">{t('statusCancelled')}</SelectItem>
+
+
+
+                              </SelectContent>
+
+
+
+                            </Select>
+
+
+
+                            {/* Onayla Butonu - Sadece DRAFT veya PENDING durumunda */}
+
+
+
+                            {/* Status'ü uppercase yaparak kontrol et (güvenlik için) */}
+
+
+
+                            {(shipment.status?.toUpperCase() === 'DRAFT' || shipment.status?.toUpperCase() === 'PENDING') && (
+
+
+
+                              <Button
+
+
+
+                                size="sm"
+
+
+
+                                onClick={() => handleStatusChange(shipment.id, 'APPROVED')}
+
+
+
+                                disabled={statusChangingId === shipment.id}
+
+
+
+                                className="bg-green-600 hover:bg-green-700 text-white text-xs h-8 px-3"
+
+
+
+                              >
+
+
+
+                                <CheckCircle className="mr-1 h-3 w-3" />
+
+
+
+                                {t('approveButton')}
+
+
+
+                              </Button>
+
+
+
+                            )}
+
+
+
+                          </>
+
+
+
+                        )}
+
+
+
+                      </div>
+
+
+
+                    </TableCell>
+
+
+
+                    <TableCell>
+
+
+
+                      {/* 3️⃣ Fatura Hover Tooltip */}
+
+
+
+                      {shipment.invoiceId ? (
+
+
+
+                        shipment.Invoice ? (
+
+
+
+                          <TooltipProvider>
+
+
+
+                            <Tooltip>
+
+
+
+                              <TooltipTrigger asChild>
+
+
+
+                                <Link
+
+
+
+                                  href={`/${locale}/invoices/${shipment.invoiceId}`}
+
+
+
+                                  className="text-indigo-600 hover:underline font-medium"
+
+
+
+                                  prefetch={true}
+
+
+
+                                >
+
+
+
+                                  {shipment.Invoice.title || shipment.Invoice.invoiceNumber || `Fatura #${shipment.invoiceId.substring(0, 8)}`}
+
+
+
+                                </Link>
+
+
+
+                              </TooltipTrigger>
+
+
+
+                              <TooltipContent className="bg-gray-900 text-white p-3">
+
+
+
+                                <div className="space-y-1 text-sm">
+
+
+
+                                  <p><strong>Fatura No:</strong> {shipment.Invoice.invoiceNumber || shipment.invoiceId.substring(0, 8)}</p>
+
+
+
+                                  <p><strong>Başlık:</strong> {shipment.Invoice.title || '-'}</p>
+
+
+
+                                  <p><strong>Müşteri:</strong> {getCustomerName(shipment)}</p>
+
+
+
+                                  <p><strong>Toplam:</strong> {formatCurrency(shipment.Invoice.total || 0)}</p>
+
+
+
+                                  <p><strong>Tarih:</strong> {new Date(shipment.Invoice.createdAt).toLocaleDateString('tr-TR')}</p>
+
+
+
+                                </div>
+
+
+
+                              </TooltipContent>
+
+
+
+                            </Tooltip>
+
+
+
+                          </TooltipProvider>
+
+
+
+                        ) : (
+
+
+
+                          <Link
+
+
+
+                            href={`/${locale}/invoices/${shipment.invoiceId}`}
+
+
+
+                            className="text-indigo-600 hover:underline font-medium"
+
+
+
+                            prefetch={true}
+
+
+
+                          >
+
+
+
+                            Fatura #{shipment.invoiceId.substring(0, 8)}
+
+
+
+                          </Link>
+
+
+
+                        )
 
 
 
@@ -3605,15 +3468,103 @@ export default function ShipmentList() {
 
 
 
-                        // Onaylanmamış sevkiyatlar için göz ikonu + context menü
+                        '-'
 
 
 
-                        <>
+                      )}
 
 
 
-                          {/* 5️⃣ Göz İkonu - Detay Modal */}
+                    </TableCell>
+
+
+
+                    <TableCell>
+
+
+
+                      {getCustomerName(shipment)}
+
+
+
+                    </TableCell>
+
+
+
+                    <TableCell>
+
+
+
+                      {new Date(shipment.createdAt).toLocaleDateString('tr-TR')}
+
+
+
+                    </TableCell>
+
+
+
+                    <TableCell>
+
+
+
+                      {/* 9️⃣ Otomatik Teslim Tarihi */}
+
+
+
+                      {shipment.estimatedDelivery ? (
+
+
+
+                        <div className="flex items-center gap-1 text-sm text-gray-600">
+
+
+
+                          <Calendar className="h-4 w-4" />
+
+
+
+                          {new Date(shipment.estimatedDelivery).toLocaleDateString('tr-TR')}
+
+
+
+                        </div>
+
+
+
+                      ) : (
+
+
+
+                        <span className="text-gray-400">-</span>
+
+
+
+                      )}
+
+
+
+                    </TableCell>
+
+
+
+                    <TableCell className="text-right">
+
+
+
+                      <div className="flex justify-end gap-2">
+
+
+
+                        {/* 7️⃣ Context Menü (3-dot) - Onaylı sevkiyatlar için sadece görüntüle */}
+
+
+
+                        {shipment.status?.toUpperCase() === 'APPROVED' ? (
+
+
+
+                          // Onaylı sevkiyatlar için sadece görüntüle butonu (tek göz ikonu)
 
 
 
@@ -3649,103 +3600,107 @@ export default function ShipmentList() {
 
 
 
-                          
+                        ) : (
 
 
 
-                          {/* Context Menü (3-dot) */}
+                          // Onaylanmamış sevkiyatlar için göz ikonu + context menü
 
 
 
-                          <DropdownMenu>
+                          <>
 
 
 
-                            <DropdownMenuTrigger asChild>
+                            {/* 5️⃣ Göz İkonu - Detay Modal */}
 
 
 
-                              <Button variant="ghost" size="icon">
+                            <Button
 
 
 
-                                <MoreVertical className="h-4 w-4 text-gray-600" />
+                              variant="ghost"
 
 
 
-                              </Button>
+                              size="icon"
 
 
 
-                            </DropdownMenuTrigger>
+                              onClick={() => handleViewDetail(shipment)}
 
 
 
-                            <DropdownMenuContent align="end">
+                              aria-label="Detayları görüntüle"
 
 
 
-                              <DropdownMenuLabel>İşlemler</DropdownMenuLabel>
+                            >
 
 
 
-                              <DropdownMenuSeparator />
+                              <Eye className="h-4 w-4 text-gray-600" />
 
 
 
-                              <DropdownMenuItem onClick={() => handleEdit(shipment)}>
+                            </Button>
 
 
 
-                                <Edit className="mr-2 h-4 w-4" />
 
 
 
-                                Düzenle
 
+                            {/* Context Menü (3-dot) */}
 
 
-                              </DropdownMenuItem>
 
+                            <DropdownMenu>
 
 
-                              <DropdownMenuItem onClick={() => handleViewDetail(shipment)}>
 
+                              <DropdownMenuTrigger asChild>
 
 
-                                <Eye className="mr-2 h-4 w-4" />
 
+                                <Button variant="ghost" size="icon">
 
 
-                                Görüntüle
 
+                                  <MoreVertical className="h-4 w-4 text-gray-600" />
 
 
-                              </DropdownMenuItem>
 
+                                </Button>
 
 
-                              {shipment.invoiceId && (
 
+                              </DropdownMenuTrigger>
 
 
-                                <DropdownMenuItem asChild>
 
+                              <DropdownMenuContent align="end">
 
 
-                                  <Link href={`/${locale}/invoices/${shipment.invoiceId}`} className="flex items-center">
 
+                                <DropdownMenuLabel>İşlemler</DropdownMenuLabel>
 
 
-                                    <FileText className="mr-2 h-4 w-4" />
 
+                                <DropdownMenuSeparator />
 
 
-                                    Faturaya Git
 
+                                <DropdownMenuItem onClick={() => handleEdit(shipment)}>
 
 
-                                  </Link>
+
+                                  <Edit className="mr-2 h-4 w-4" />
+
+
+
+                                  Düzenle
 
 
 
@@ -3753,27 +3708,147 @@ export default function ShipmentList() {
 
 
 
-                              )}
+                                <DropdownMenuItem onClick={() => handleViewDetail(shipment)}>
 
 
 
-                              {/* Onaylı sevkiyatlar için iptal butonu gösterilmez */}
+                                  <Eye className="mr-2 h-4 w-4" />
 
 
 
-                              {shipment.status?.toUpperCase() !== 'APPROVED' && (
+                                  Görüntüle
 
 
 
-                                <DropdownMenuItem 
+                                </DropdownMenuItem>
 
 
 
-                                  onClick={() => handleStatusChange(shipment.id, 'CANCELLED')}
+                                {shipment.invoiceId && (
 
 
 
-                                  className="text-red-600"
+                                  <DropdownMenuItem asChild>
+
+
+
+                                    <Link href={`/${locale}/invoices/${shipment.invoiceId}`} className="flex items-center">
+
+
+
+                                      <FileText className="mr-2 h-4 w-4" />
+
+
+
+                                      Faturaya Git
+
+
+
+                                    </Link>
+
+
+
+                                  </DropdownMenuItem>
+
+
+
+                                )}
+
+
+
+                                {/* Onaylı sevkiyatlar için iptal butonu gösterilmez */}
+
+
+
+                                {shipment.status?.toUpperCase() !== 'APPROVED' && (
+
+
+
+                                  <DropdownMenuItem
+
+
+
+                                    onClick={() => handleStatusChange(shipment.id, 'CANCELLED')}
+
+
+
+                                    className="text-red-600"
+
+
+
+                                  >
+
+
+
+                                    <X className="mr-2 h-4 w-4" />
+
+
+
+                                    İptal Et
+
+
+
+                                  </DropdownMenuItem>
+
+
+
+                                )}
+
+
+
+                                <DropdownMenuSeparator />
+
+
+
+                                <DropdownMenuItem
+
+
+
+                                  onClick={() => {
+
+
+
+                                    if (shipment.status === 'DELIVERED') {
+
+
+
+                                      toast.warning(
+
+
+
+                                        'Teslim edilmiş sevkiyat silinemez',
+
+
+
+                                        'Bu sevkiyat müşteriye teslim edildi ve işlem tamamlandı. Silmek için önce sevkiyat durumunu değiştirin.'
+
+
+
+                                      )
+
+
+
+                                      return
+
+
+
+                                    }
+
+
+
+                                    handleDelete(shipment.id, shipment.tracking || '', shipment.status)
+
+
+
+                                  }}
+
+
+
+                                  disabled={shipment.status === 'DELIVERED'}
+
+
+
+                                  className="text-red-600 disabled:opacity-50"
 
 
 
@@ -3781,11 +3856,11 @@ export default function ShipmentList() {
 
 
 
-                                  <X className="mr-2 h-4 w-4" />
+                                  <Trash2 className="mr-2 h-4 w-4" />
 
 
 
-                                  İptal Et
+                                  Sil
 
 
 
@@ -3793,107 +3868,31 @@ export default function ShipmentList() {
 
 
 
-                              )}
+                              </DropdownMenuContent>
 
 
 
-                              <DropdownMenuSeparator />
+                            </DropdownMenu>
 
 
 
-                              <DropdownMenuItem 
+                          </>
 
 
 
-                                onClick={() => {
+                        )}
 
 
 
-                                  if (shipment.status === 'DELIVERED') {
+                      </div>
 
 
 
-                                    toast.warning(
+                    </TableCell>
 
 
 
-                                      'Teslim edilmiş sevkiyat silinemez',
-
-
-
-                                      'Bu sevkiyat müşteriye teslim edildi ve işlem tamamlandı. Silmek için önce sevkiyat durumunu değiştirin.'
-
-
-
-                                    )
-
-
-
-                                    return
-
-
-
-                                  }
-
-
-
-                                  handleDelete(shipment.id, shipment.tracking || '', shipment.status)
-
-
-
-                                }}
-
-
-
-                                disabled={shipment.status === 'DELIVERED'}
-
-
-
-                                className="text-red-600 disabled:opacity-50"
-
-
-
-                              >
-
-
-
-                                <Trash2 className="mr-2 h-4 w-4" />
-
-
-
-                                Sil
-
-
-
-                              </DropdownMenuItem>
-
-
-
-                            </DropdownMenuContent>
-
-
-
-                          </DropdownMenu>
-
-
-
-                        </>
-
-
-
-                      )}
-
-
-
-                    </div>
-
-
-
-                  </TableCell>
-
-
-
-                </motion.tr>
+                  </motion.tr>
 
 
 
@@ -3914,7 +3913,7 @@ export default function ShipmentList() {
 
 
         </Table>
-        
+
         {/* Pagination */}
         {pagination && (
           <Pagination
@@ -3961,7 +3960,7 @@ export default function ShipmentList() {
 
 
 
-                const shipmentName = detailShipment?.Invoice?.title 
+                const shipmentName = detailShipment?.Invoice?.title
 
 
 
@@ -3973,19 +3972,19 @@ export default function ShipmentList() {
 
 
 
-                  ? `Fatura #${detailShipment.Invoice.invoiceNumber} sevkiyatı`
+                    ? `Fatura #${detailShipment.Invoice.invoiceNumber} sevkiyatı`
 
 
 
-                  : detailShipment?.invoiceId
+                    : detailShipment?.invoiceId
 
 
 
-                  ? `Fatura #${detailShipment.invoiceId.substring(0, 8)} sevkiyatı`
+                      ? `Fatura #${detailShipment.invoiceId.substring(0, 8)} sevkiyatı`
 
 
 
-                  : `Sevkiyat #${detailShipment?.tracking || detailShipment?.id.substring(0, 8)}`
+                      : `Sevkiyat #${detailShipment?.tracking || detailShipment?.id.substring(0, 8)}`
 
 
 
@@ -4017,7 +4016,7 @@ export default function ShipmentList() {
 
 
 
-          
+
 
 
 
@@ -4957,7 +4956,7 @@ export default function ShipmentList() {
 
 
 
-                            
+
 
 
 
@@ -5385,7 +5384,7 @@ export default function ShipmentList() {
 
 
 
-          
+
 
 
 
@@ -5529,7 +5528,7 @@ export default function ShipmentList() {
 
 
 
-          
+
 
 
 
@@ -5561,7 +5560,7 @@ export default function ShipmentList() {
 
 
 
-          
+
 
 
 

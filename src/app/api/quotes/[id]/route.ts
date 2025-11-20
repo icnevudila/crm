@@ -593,6 +593,7 @@ export async function PUT(
         automationInfo.invoiceId = (invoice as any).id
         automationInfo.invoiceCreated = true
         automationInfo.invoiceTitle = invoiceData.title
+        automationInfo.invoiceNumber = (invoice as any).invoiceNumber || null
         // ✅ Email otomasyonu: Quote ACCEPTED → Müşteriye email gönder
         try {
           const { getAndRenderEmailTemplate, getTemplateVariables } = await import('@/lib/template-renderer')

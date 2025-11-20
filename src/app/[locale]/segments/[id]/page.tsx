@@ -14,11 +14,7 @@ import { Input } from '@/components/ui/input'
 import { useData } from '@/hooks/useData'
 import SegmentForm from '@/components/segments/SegmentForm'
 import { mutate } from 'swr'
-<<<<<<< HEAD
-import { confirm } from '@/lib/toast'
-=======
-import { toastError, toast, toastSuccess } from '@/lib/toast'
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
+import { toastError, toast, toastSuccess, confirm } from '@/lib/toast'
 
 interface SegmentMember {
   id: string
@@ -94,13 +90,13 @@ export default function SegmentDetailPage() {
     }
   }
 
-  const handleRemoveMember = async (memberId: string, customerName: string) => {
+  const handleRemoveMember = async (member: SegmentMember, customerName: string) => {
     if (!confirm(`${customerName} müşteriyi bu segmentten çıkarmak istediğinize emin misiniz?`)) {
       return
     }
 
     try {
-      const res = await fetch(`/api/segments/${segmentId}/members/${memberId}`, {
+      const res = await fetch(`/api/segments/${segmentId}/members?customerId=${member.customerId}`, {
         method: 'DELETE',
       })
 
@@ -108,8 +104,8 @@ export default function SegmentDetailPage() {
         throw new Error('Failed to remove member')
       }
 
-      // Refresh segment data
-      mutate(`/api/segments/${segmentId}`)
+      // Refresh segment data - revalidate ile
+      await mutate(`/api/segments/${segmentId}`, undefined, { revalidate: true })
       toastSuccess('Üye çıkarıldı', `${customerName} segmentten çıkarıldı.`)
     } catch (error: any) {
       console.error('Remove member error:', error)
@@ -141,8 +137,12 @@ export default function SegmentDetailPage() {
         throw new Error(errorData.error || 'Üye eklenemedi')
       }
 
-      // Refresh segment data
-      mutate(`/api/segments/${segmentId}`)
+      // Refresh segment data ve members listesi - revalidate ile
+      await Promise.all([
+        mutate(`/api/segments/${segmentId}`, undefined, { revalidate: true }),
+        mutate(`/api/segments/${segmentId}/members`, undefined, { revalidate: true }),
+      ])
+      
       toastSuccess('Üye eklendi', `${selectedCustomer.name} segment'e eklendi.`)
       
       // Modal'ı kapat ve form'u temizle
@@ -309,7 +309,7 @@ export default function SegmentDetailPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleRemoveMember(member.id, member.customer.name)}
+                        onClick={() => handleRemoveMember(member, member.customer.name)}
                         className="text-red-600 hover:text-red-700"
                       >
                         <UserMinus className="h-4 w-4" />

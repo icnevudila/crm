@@ -11,7 +11,7 @@ import { getSupabaseWithServiceRole } from '@/lib/supabase'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { session, error: sessionError } = await getSafeSession(request)
@@ -29,8 +29,9 @@ export async function GET(
       return buildPermissionDeniedResponse()
     }
 
+    const { id } = await params
     const supabase = getSupabaseWithServiceRole()
-    const segmentId = params.id
+    const segmentId = id
 
     // Segment'in var olduğunu kontrol et
     const { data: segment } = await supabase
@@ -76,7 +77,7 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { session, error: sessionError } = await getSafeSession(request)
@@ -94,6 +95,7 @@ export async function POST(
       return buildPermissionDeniedResponse()
     }
 
+    const { id } = await params
     const body = await request.json()
     const { customerId } = body
 
@@ -105,7 +107,7 @@ export async function POST(
     }
 
     const supabase = getSupabaseWithServiceRole()
-    const segmentId = params.id
+    const segmentId = id
 
     // Segment'in var olduğunu kontrol et
     const { data: segment } = await supabase
@@ -186,7 +188,7 @@ export async function POST(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { session, error: sessionError } = await getSafeSession(request)
@@ -204,6 +206,7 @@ export async function DELETE(
       return buildPermissionDeniedResponse()
     }
 
+    const { id } = await params
     const { searchParams } = new URL(request.url)
     const customerId = searchParams.get('customerId')
 
@@ -215,7 +218,7 @@ export async function DELETE(
     }
 
     const supabase = getSupabaseWithServiceRole()
-    const segmentId = params.id
+    const segmentId = id
 
     // Segment ve Customer bilgilerini çek (ActivityLog için)
     const { data: segment } = await supabase

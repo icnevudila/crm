@@ -1,7 +1,8 @@
 ﻿'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { toast, confirm } from '@/lib/toast'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye, Calendar, Building2, User, FileText, Download, FileSpreadsheet, FileText as FileTextIcon, AlertCircle, Mail, MessageSquare, MessageCircle, Sparkles, List, CalendarDays } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -117,10 +118,10 @@ export default function MeetingList() {
   const tCommon = useTranslations('common')
   const router = useRouter()
   const { data: session } = useSession()
-  
+
   // SuperAdmin kontrolü
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
-  
+
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
   const [dateFrom, setDateFrom] = useState('')
@@ -141,24 +142,25 @@ export default function MeetingList() {
   const [whatsAppDialogOpen, setWhatsAppDialogOpen] = useState(false)
   const [selectedMeetingForCommunication, setSelectedMeetingForCommunication] = useState<Meeting | null>(null)
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
-  
+  const { confirm } = useConfirm()
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
-  
+
   // View mode: 'list' or 'calendar'
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list')
   const [selectedDateForForm, setSelectedDateForForm] = useState<Date | null>(null)
 
   // Debounced search - performans için
   const [debouncedSearch, setDebouncedSearch] = useState(search)
-  
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
       setCurrentPage(1) // Arama değiştiğinde ilk sayfaya dön
     }, 300)
-    
+
     return () => clearTimeout(timer)
   }, [search])
 
@@ -168,7 +170,7 @@ export default function MeetingList() {
     { dedupingInterval: 60000, revalidateOnFocus: false }
   )
   // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
-  const companies = (companiesData?.companies || []).filter((company, index, self) => 
+  const companies = (companiesData?.companies || []).filter((company, index, self) =>
     index === self.findIndex((c) => c.id === company.id)
   )
 
@@ -197,12 +199,12 @@ export default function MeetingList() {
       totalPages: number
     }
   }
-  
+
   const { data: meetingsData, isLoading, error, mutate: mutateMeetings } = useData<Meeting[] | MeetingsResponse>(apiUrl, {
     dedupingInterval: 5000,
     revalidateOnFocus: false,
   })
-  
+
   const meetings = useMemo(() => {
     if (Array.isArray(meetingsData)) return meetingsData
     if (meetingsData && typeof meetingsData === 'object' && 'data' in meetingsData) {
@@ -210,7 +212,7 @@ export default function MeetingList() {
     }
     return []
   }, [meetingsData])
-  
+
   const pagination = useMemo(() => {
     if (!meetingsData || Array.isArray(meetingsData)) return null
     if (meetingsData && typeof meetingsData === 'object' && 'pagination' in meetingsData) {
@@ -253,7 +255,13 @@ export default function MeetingList() {
 
   const handleDelete = async (id: string, title: string) => {
     const tCommon = useTranslations('common')
-    if (!(await confirm(tCommon('deleteConfirm', { name: title, item: 'görüşme' })))) {
+    if (!(await confirm({
+      title: tCommon('deleteConfirmTitle', { name: title }),
+      description: tCommon('deleteConfirmMessage'),
+      confirmLabel: tCommon('delete'),
+      cancelLabel: tCommon('cancel'),
+      variant: 'destructive'
+    }))) {
       return
     }
 
@@ -262,16 +270,16 @@ export default function MeetingList() {
       const res = await fetch(`/api/meetings/${id}`, {
         method: 'DELETE',
       })
-      
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
         throw new Error(errorData.error || 'Silme işlemi başarısız oldu')
       }
-      
+
       // Optimistic update
       const updatedMeetings = meetings.filter((m) => m.id !== id)
       await mutateMeetings(updatedMeetings, { revalidate: false })
-      
+
       await Promise.all([
         mutate('/api/meetings', updatedMeetings, { revalidate: false }),
         mutate('/api/meetings?', updatedMeetings, { revalidate: false }),
@@ -308,10 +316,10 @@ export default function MeetingList() {
       if (dateFrom) exportParams.append('dateFrom', dateFrom)
       if (dateTo) exportParams.append('dateTo', dateTo)
       if (status) exportParams.append('status', status)
-      
+
       const res = await fetch(`/api/meetings/export?format=${format}&${exportParams.toString()}`)
       if (!res.ok) throw new Error('Export failed')
-      
+
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -523,262 +531,261 @@ export default function MeetingList() {
 
       {/* List View */}
       {viewMode === 'list' && (
-      <div className="border rounded-lg">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('tableHeaders.date')}</TableHead>
-              <TableHead>{t('tableHeaders.title')}</TableHead>
-              <TableHead>{t('tableHeaders.company')}</TableHead>
-              {isSuperAdmin && <TableHead>Firma</TableHead>}
-              <TableHead>{t('tableHeaders.customer')}</TableHead>
-              <TableHead>{t('tableHeaders.status')}</TableHead>
-              <TableHead>{t('tableHeaders.expense')}</TableHead>
-              <TableHead>{t('tableHeaders.createdBy')}</TableHead>
-              <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading && meetings.length === 0 ? (
-              // Loading skeleton - her satır için
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={`skeleton-${i}`}>
-                  <TableCell colSpan={isSuperAdmin ? 9 : 8}>
-                    <div className="h-12 bg-gray-100 animate-pulse rounded" />
+        <div className="border rounded-lg">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('tableHeaders.date')}</TableHead>
+                <TableHead>{t('tableHeaders.title')}</TableHead>
+                <TableHead>{t('tableHeaders.company')}</TableHead>
+                {isSuperAdmin && <TableHead>Firma</TableHead>}
+                <TableHead>{t('tableHeaders.customer')}</TableHead>
+                <TableHead>{t('tableHeaders.status')}</TableHead>
+                <TableHead>{t('tableHeaders.expense')}</TableHead>
+                <TableHead>{t('tableHeaders.createdBy')}</TableHead>
+                <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading && meetings.length === 0 ? (
+                // Loading skeleton - her satır için
+                Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={`skeleton-${i}`}>
+                    <TableCell colSpan={isSuperAdmin ? 9 : 8}>
+                      <div className="h-12 bg-gray-100 animate-pulse rounded" />
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : meetings.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-8 text-gray-500">
+                    {t('noMeetingsFound')}
                   </TableCell>
                 </TableRow>
-              ))
-            ) : meetings.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={isSuperAdmin ? 9 : 8} className="text-center py-8 text-gray-500">
-                  {t('noMeetingsFound')}
-                </TableCell>
-              </TableRow>
-            ) : (
-              meetings.map((meeting) => (
-                <motion.tr
-                  key={meeting.id}
-                  className={`border-b hover:bg-gray-50 transition-colors ${
-                    meeting.status === 'DONE' ? 'bg-gray-50' : ''
-                  }`}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <TableCell>
-                    {new Date(meeting.meetingDate).toLocaleDateString('tr-TR', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/${locale}/meetings/${meeting.id}`}
-                      className="text-primary-600 hover:underline font-medium"
-                      prefetch={true}
-                    >
-                      {meeting.title}
-                    </Link>
-                    {meeting.expenseWarning && (
-                      <AlertCircle className="inline-block ml-2 h-4 w-4 text-amber-600" />
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {meeting.Company ? (
+              ) : (
+                meetings.map((meeting) => (
+                  <motion.tr
+                    key={meeting.id}
+                    className={`border-b hover:bg-gray-50 transition-colors ${meeting.status === 'DONE' ? 'bg-gray-50' : ''
+                      }`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <TableCell>
+                      {new Date(meeting.meetingDate).toLocaleDateString('tr-TR', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </TableCell>
+                    <TableCell>
                       <Link
-                        href={`/${locale}/companies/${meeting.companyId}`}
-                        className="text-primary-600 hover:underline"
+                        href={`/${locale}/meetings/${meeting.id}`}
+                        className="text-primary-600 hover:underline font-medium"
+                        prefetch={true}
                       >
-                        {meeting.Company.name}
+                        {meeting.title}
                       </Link>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                  </TableCell>
-                  {isSuperAdmin && (
+                      {meeting.expenseWarning && (
+                        <AlertCircle className="inline-block ml-2 h-4 w-4 text-amber-600" />
+                      )}
+                    </TableCell>
                     <TableCell>
                       {meeting.Company ? (
-                        <Badge variant="outline">{meeting.Company.name}</Badge>
-                      ) : '-'}
-                    </TableCell>
-                  )}
-                  <TableCell>
-                    {meeting.Customer ? (
-                      <Link
-                        href={`/${locale}/customers/${meeting.customerId}`}
-                        className="text-primary-600 hover:underline"
-                      >
-                        {meeting.Customer.name}
-                      </Link>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge className={statusColors[meeting.status] || 'bg-gray-100 text-gray-800'}>
-                      {statusLabels[meeting.status] || meeting.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    {meeting.totalExpense && meeting.totalExpense > 0 ? (
-                      <span className="font-semibold text-green-600">
-                        {formatCurrency(meeting.totalExpense)}
-                      </span>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {meeting.CreatedBy ? (
-                      <span className="text-sm text-gray-600">{meeting.CreatedBy.name}</span>
-                    ) : (
-                      <span className="text-gray-400">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Link href={`/${locale}/meetings/${meeting.id}`} prefetch={true}>
-                        <Button variant="ghost" size="icon">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </Link>
-                      {(session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPER_ADMIN' || meeting.createdBy === session?.user?.id) && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEdit(meeting)}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDelete(meeting.id, meeting.title)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </>
+                        <Link
+                          href={`/${locale}/companies/${meeting.companyId}`}
+                          className="text-primary-600 hover:underline"
+                        >
+                          {meeting.Company.name}
+                        </Link>
+                      ) : (
+                        <span className="text-gray-400">-</span>
                       )}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" aria-label="Hızlı İşlemler">
-                            <Sparkles className="h-4 w-4 text-indigo-500" />
+                    </TableCell>
+                    {isSuperAdmin && (
+                      <TableCell>
+                        {meeting.Company ? (
+                          <Badge variant="outline">{meeting.Company.name}</Badge>
+                        ) : '-'}
+                      </TableCell>
+                    )}
+                    <TableCell>
+                      {meeting.Customer ? (
+                        <Link
+                          href={`/${locale}/customers/${meeting.customerId}`}
+                          className="text-primary-600 hover:underline"
+                        >
+                          {meeting.Customer.name}
+                        </Link>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={statusColors[meeting.status] || 'bg-gray-100 text-gray-800'}>
+                        {statusLabels[meeting.status] || meeting.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {meeting.totalExpense && meeting.totalExpense > 0 ? (
+                        <span className="font-semibold text-green-600">
+                          {formatCurrency(meeting.totalExpense)}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {meeting.CreatedBy ? (
+                        <span className="text-sm text-gray-600">{meeting.CreatedBy.name}</span>
+                      ) : (
+                        <span className="text-gray-400">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Link href={`/${locale}/meetings/${meeting.id}`} prefetch={true}>
+                          <Button variant="ghost" size="icon">
+                            <Eye className="h-4 w-4" />
                           </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-56">
-                          <DropdownMenuLabel>Hızlı İşlemler</DropdownMenuLabel>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onSelect={async () => {
-                              if (meeting.customerId) {
-                                try {
-                                  const customerRes = await fetch(`/api/customers/${meeting.customerId}`)
-                                  if (customerRes.ok) {
-                                    const customer = await customerRes.json()
-                                    if (customer?.email) {
-                                      setSelectedMeetingForCommunication(meeting)
-                                      setSelectedCustomer(customer)
-                                      setEmailDialogOpen(true)
-                                    } else {
-                                      toast.error('E-posta adresi yok', { description: 'Müşterinin e-posta adresi bulunamadı' })
+                        </Link>
+                        {(session?.user?.role === 'ADMIN' || session?.user?.role === 'SUPER_ADMIN' || meeting.createdBy === session?.user?.id) && (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEdit(meeting)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDelete(meeting.id, meeting.title)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" aria-label="Hızlı İşlemler">
+                              <Sparkles className="h-4 w-4 text-indigo-500" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuLabel>Hızlı İşlemler</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onSelect={async () => {
+                                if (meeting.customerId) {
+                                  try {
+                                    const customerRes = await fetch(`/api/customers/${meeting.customerId}`)
+                                    if (customerRes.ok) {
+                                      const customer = await customerRes.json()
+                                      if (customer?.email) {
+                                        setSelectedMeetingForCommunication(meeting)
+                                        setSelectedCustomer(customer)
+                                        setEmailDialogOpen(true)
+                                      } else {
+                                        toast.error('E-posta adresi yok', { description: 'Müşterinin e-posta adresi bulunamadı' })
+                                      }
                                     }
+                                  } catch (error) {
+                                    console.error('Customer fetch error:', error)
                                   }
-                                } catch (error) {
-                                  console.error('Customer fetch error:', error)
+                                } else {
+                                  toast.error('Müşteri yok', { description: 'Bu toplantı için müşteri bilgisi bulunamadı' })
                                 }
-                              } else {
-                                toast.error('Müşteri yok', { description: 'Bu toplantı için müşteri bilgisi bulunamadı' })
-                              }
-                            }}
-                            disabled={!meeting.customerId}
-                          >
-                            <Mail className="h-4 w-4" />
-                            E-posta Gönder
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={async () => {
-                              if (meeting.customerId) {
-                                try {
-                                  const customerRes = await fetch(`/api/customers/${meeting.customerId}`)
-                                  if (customerRes.ok) {
-                                    const customer = await customerRes.json()
-                                    if (customer?.phone) {
-                                      setSelectedMeetingForCommunication(meeting)
-                                      setSelectedCustomer(customer)
-                                      setSmsDialogOpen(true)
-                                    } else {
-                                      toast.error('Telefon numarası yok', { description: 'Müşterinin telefon numarası bulunamadı' })
+                              }}
+                              disabled={!meeting.customerId}
+                            >
+                              <Mail className="h-4 w-4" />
+                              E-posta Gönder
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={async () => {
+                                if (meeting.customerId) {
+                                  try {
+                                    const customerRes = await fetch(`/api/customers/${meeting.customerId}`)
+                                    if (customerRes.ok) {
+                                      const customer = await customerRes.json()
+                                      if (customer?.phone) {
+                                        setSelectedMeetingForCommunication(meeting)
+                                        setSelectedCustomer(customer)
+                                        setSmsDialogOpen(true)
+                                      } else {
+                                        toast.error('Telefon numarası yok', { description: 'Müşterinin telefon numarası bulunamadı' })
+                                      }
                                     }
+                                  } catch (error) {
+                                    console.error('Customer fetch error:', error)
                                   }
-                                } catch (error) {
-                                  console.error('Customer fetch error:', error)
+                                } else {
+                                  toast.error('Müşteri yok', { description: 'Bu toplantı için müşteri bilgisi bulunamadı' })
                                 }
-                              } else {
-                                toast.error('Müşteri yok', { description: 'Bu toplantı için müşteri bilgisi bulunamadı' })
-                              }
-                            }}
-                            disabled={!meeting.customerId}
-                          >
-                            <MessageSquare className="h-4 w-4" />
-                            SMS Gönder
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onSelect={async () => {
-                              if (meeting.customerId) {
-                                try {
-                                  const customerRes = await fetch(`/api/customers/${meeting.customerId}`)
-                                  if (customerRes.ok) {
-                                    const customer = await customerRes.json()
-                                    if (customer?.phone) {
-                                      setSelectedMeetingForCommunication(meeting)
-                                      setSelectedCustomer(customer)
-                                      setWhatsAppDialogOpen(true)
-                                    } else {
-                                      toast.error('Telefon numarası yok', { description: 'Müşterinin telefon numarası bulunamadı' })
+                              }}
+                              disabled={!meeting.customerId}
+                            >
+                              <MessageSquare className="h-4 w-4" />
+                              SMS Gönder
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onSelect={async () => {
+                                if (meeting.customerId) {
+                                  try {
+                                    const customerRes = await fetch(`/api/customers/${meeting.customerId}`)
+                                    if (customerRes.ok) {
+                                      const customer = await customerRes.json()
+                                      if (customer?.phone) {
+                                        setSelectedMeetingForCommunication(meeting)
+                                        setSelectedCustomer(customer)
+                                        setWhatsAppDialogOpen(true)
+                                      } else {
+                                        toast.error('Telefon numarası yok', { description: 'Müşterinin telefon numarası bulunamadı' })
+                                      }
                                     }
+                                  } catch (error) {
+                                    console.error('Customer fetch error:', error)
                                   }
-                                } catch (error) {
-                                  console.error('Customer fetch error:', error)
+                                } else {
+                                  toast.error('Müşteri yok', { description: 'Bu toplantı için müşteri bilgisi bulunamadı' })
                                 }
-                              } else {
-                                toast.error('Müşteri yok', { description: 'Bu toplantı için müşteri bilgisi bulunamadı' })
-                              }
-                            }}
-                            disabled={!meeting.customerId}
-                          >
-                            <MessageCircle className="h-4 w-4" />
-                            WhatsApp Gönder
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </TableCell>
-                </motion.tr>
-              ))
-            )}
-          </TableBody>
-        </Table>
-        
-        {/* Pagination */}
-        {pagination && (
-          <Pagination
-            currentPage={pagination.page}
-            totalPages={pagination.totalPages}
-            pageSize={pagination.pageSize}
-            totalItems={pagination.totalItems}
-            onPageChange={(page) => setCurrentPage(page)}
-            onPageSizeChange={(size) => {
-              setPageSize(size)
-              setCurrentPage(1)
-            }}
-          />
-        )}
-      </div>
+                              }}
+                              disabled={!meeting.customerId}
+                            >
+                              <MessageCircle className="h-4 w-4" />
+                              WhatsApp Gönder
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </TableCell>
+                  </motion.tr>
+                ))
+              )}
+            </TableBody>
+          </Table>
+
+          {/* Pagination */}
+          {pagination && (
+            <Pagination
+              currentPage={pagination.page}
+              totalPages={pagination.totalPages}
+              pageSize={pagination.pageSize}
+              totalItems={pagination.totalItems}
+              onPageChange={(page) => setCurrentPage(page)}
+              onPageSizeChange={(size) => {
+                setPageSize(size)
+                setCurrentPage(1)
+              }}
+            />
+          )}
+        </div>
       )}
 
       {/* Form Modal */}
@@ -793,7 +800,7 @@ export default function MeetingList() {
         onSuccess={async (savedMeeting: Meeting) => {
           // Optimistic update
           let updatedMeetings: Meeting[]
-          
+
           if (selectedMeeting) {
             // UPDATE
             updatedMeetings = meetings.map((m) =>
@@ -802,20 +809,20 @@ export default function MeetingList() {
           } else {
             // CREATE
             updatedMeetings = [savedMeeting, ...meetings]
-            
+
             // Gider uyarısı kontrolü
             if (savedMeeting.expenseWarning) {
               setNewMeetingId(savedMeeting.id)
               setExpenseWarningOpen(true)
             }
-            
+
             // Yeni görüşme oluşturulduğunda detay sayfasına yönlendir
             router.push(`/${locale}/meetings/${savedMeeting.id}`)
           }
-          
+
           // Cache'i güncelle
           await mutateMeetings(updatedMeetings, { revalidate: false })
-          
+
           // Tüm ilgili URL'leri güncelle
           await Promise.all([
             mutate('/api/meetings', updatedMeetings, { revalidate: false }),
@@ -893,14 +900,14 @@ export default function MeetingList() {
               mutate('/api/meetings?', undefined, { revalidate: true }),
               mutate(apiUrl || '/api/meetings', undefined, { revalidate: true }),
             ])
-            
+
             // Modal'ı kapat
             setFinanceFormOpen(false)
             setFinanceFormMeetingId(null)
-            
+
             // Başarı mesajı göster
             toast.success('Başarılı', { description: 'Operasyon gideri başarıyla eklendi!' })
-            
+
             // Finans sayfasına yönlendir (yeni sekmede açılması için)
             setTimeout(() => {
               window.open(`/${locale}/finance?relatedTo=Meeting&relatedId=${financeFormMeetingId}`, '_blank')
@@ -910,7 +917,7 @@ export default function MeetingList() {
           relatedId={financeFormMeetingId}
         />
       )}
-      
+
       {/* Communication Modals */}
       {emailDialogOpen && selectedMeetingForCommunication && selectedCustomer && (
         <AutomationConfirmationModal
@@ -937,7 +944,7 @@ export default function MeetingList() {
           }}
         />
       )}
-      
+
       {smsDialogOpen && selectedMeetingForCommunication && selectedCustomer && (
         <AutomationConfirmationModal
           type="sms"
@@ -960,7 +967,7 @@ export default function MeetingList() {
           }}
         />
       )}
-      
+
       {whatsAppDialogOpen && selectedMeetingForCommunication && selectedCustomer && (
         <AutomationConfirmationModal
           type="whatsapp"

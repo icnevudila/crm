@@ -49,6 +49,7 @@ interface InvoiceFormProps {
   customerCompanyName?: string
   customerId?: string
   quoteId?: string // Prop olarak quoteId geçilebilir (modal içinde kullanım için)
+  quote?: any // ✅ ÇÖZÜM: Quote objesi direkt geçilebilir (API çağrısı yapmadan)
   skipDialog?: boolean // Wizard içinde kullanım için Dialog wrapper'ı atla
   defaultInvoiceType?: 'SALES' | 'PURCHASE' | 'SERVICE_SALES' | 'SERVICE_PURCHASE' // Varsayılan fatura tipi (Satın Alma modülünden açıldığında PURCHASE)
 }
@@ -99,6 +100,7 @@ export default function InvoiceForm({
   customerCompanyName,
   customerId: customerIdProp,
   quoteId: quoteIdProp,
+  quote: quoteProp, // ✅ ÇÖZÜM: Quote objesi direkt geçilebilir
   skipDialog = false,
   defaultInvoiceType,
 }: InvoiceFormProps) {
@@ -213,13 +215,17 @@ export default function InvoiceForm({
 
   // Güvenlik kontrolü - her zaman array olmalı
   const quotes = Array.isArray(quotesData) ? quotesData : []
+  // ✅ ÇÖZÜM: quoteProp varsa onu da quotes listesine ekle (dropdown'da görünsün)
+  const allQuotes = quoteProp && !quotes.find((q: any) => q.id === quoteProp.id) 
+    ? [quoteProp, ...quotes] 
+    : quotes
   const customers = Array.isArray(customersData) ? customersData : []
   const filteredCustomers = customerCompanyId
     ? customers.filter((customer: any) => customer.customerCompanyId === customerCompanyId)
     : customers
   const filteredQuotes = customerCompanyId
-    ? quotes.filter((quote: any) => quote.customerCompanyId === customerCompanyId)
-    : quotes
+    ? allQuotes.filter((quote: any) => quote.customerCompanyId === customerCompanyId)
+    : allQuotes
   const vendors = Array.isArray(vendorsData) ? vendorsData : []
   const products = Array.isArray(productsData) ? productsData : []
 
@@ -264,17 +270,23 @@ export default function InvoiceForm({
   const invoiceType = watch('invoiceType') || 'SALES'
   const selectedCustomer = customers.find((c: any) => c.id === customerId)
   
-  // quoteIdProp geldiğinde quote bilgilerini çek (wizard'larda kullanım için)
-  const { data: quoteData } = useQuery({
-    queryKey: ['quote', quoteIdProp],
+  // ✅ ÇÖZÜM: quoteProp varsa onun id'sini kullan, yoksa quoteIdProp
+  const effectiveQuoteId = quoteProp?.id || quoteIdProp
+  
+  // ✅ ÇÖZÜM: Quote bilgilerini çek (quoteProp varsa direkt kullan, yoksa API'den çek)
+  const { data: quoteDataFromApi } = useQuery({
+    queryKey: ['quote', effectiveQuoteId],
     queryFn: async () => {
-      if (!quoteIdProp) return null
-      const res = await fetch(`/api/quotes/${quoteIdProp}`)
+      if (!effectiveQuoteId) return null
+      const res = await fetch(`/api/quotes/${effectiveQuoteId}`)
       if (!res.ok) return null
       return res.json()
     },
-    enabled: open && !invoice && !!quoteIdProp, // Sadece yeni invoice ve quoteIdProp varsa
+    enabled: open && !invoice && !!effectiveQuoteId && !quoteProp, // Sadece quoteProp yoksa API'den çek
   })
+  
+  // QuoteProp varsa onu kullan, yoksa API'den gelen datayı kullan
+  const quoteData = quoteProp || quoteDataFromApi
   
   // Durum bazlı koruma kontrolü - form alanlarını devre dışı bırakmak için
   const isProtected = invoice && (
@@ -391,8 +403,52 @@ export default function InvoiceForm({
         } else {
           setServiceSubtotal(0)
         }
-      } else if (quoteIdProp && quoteData) {
-        // Yeni kayıt modu - quoteIdProp varsa ve quote bilgileri yüklendiyse forma yansıt
+      } else if (quoteProp) {
+        // ✅ ÖNEMLİ: quoteProp öncelikli (direkt geçilen quote objesi) - API çağrısı yapmadan
+        const quote = quoteProp
+        const dueDate = new Date()
+        dueDate.setDate(dueDate.getDate() + 30) // 30 gün sonra
+        
+        reset({
+          title: quote.title ? `Fatura - ${quote.title}` : '',
+          status: 'DRAFT',
+          total: typeof quote.total === 'string' ? parseFloat(quote.total) || 0 : (quote.total || 0),
+          invoiceType: 'SALES',
+          customerId: quote.customerId || customerIdProp || '',
+          quoteId: quote.id || effectiveQuoteId, // ✅ quoteProp.id öncelikli
+          vendorId: quote.vendorId || '',
+          invoiceNumber: '',
+          dueDate: dueDate.toISOString().split('T')[0],
+          paymentDate: '',
+          taxRate: quote.taxRate || 18,
+          billingAddress: '',
+          billingCity: '',
+          billingTaxNumber: '',
+          paymentMethod: undefined,
+          paymentNotes: '',
+          description: quote.description || '',
+          serviceDescription: '',
+          customerCompanyId: quote.customerCompanyId || customerCompanyId || '',
+        })
+        
+        // Quote items'ları invoice items'a çevir
+        if (quote.QuoteItem && Array.isArray(quote.QuoteItem)) {
+          setInvoiceItems(
+            quote.QuoteItem.map((item: any) => ({
+              id: `temp-${Date.now()}-${Math.random()}`,
+              productId: item.productId || '',
+              productName: item.Product?.name || item.productName || '',
+              quantity: item.quantity || 0,
+              unitPrice: item.unitPrice || 0,
+              total: (item.quantity || 0) * (item.unitPrice || 0),
+            }))
+          )
+        } else {
+          setInvoiceItems([])
+        }
+        setServiceSubtotal(0)
+      } else if (effectiveQuoteId && quoteData) {
+        // Yeni kayıt modu - quoteIdProp varsa ve quote bilgileri API'den yüklendiyse forma yansıt
         const quote = quoteData
         const dueDate = new Date()
         dueDate.setDate(dueDate.getDate() + 30) // 30 gün sonra
@@ -403,7 +459,7 @@ export default function InvoiceForm({
           total: typeof quote.total === 'string' ? parseFloat(quote.total) || 0 : (quote.total || 0),
           invoiceType: 'SALES',
           customerId: quote.customerId || customerIdProp || '',
-          quoteId: quoteIdProp,
+          quoteId: effectiveQuoteId,
           vendorId: quote.vendorId || '',
           invoiceNumber: '',
           dueDate: dueDate.toISOString().split('T')[0],
@@ -463,12 +519,12 @@ export default function InvoiceForm({
         if (customerIdProp) {
           setValue('customerId', customerIdProp)
         }
-        if (quoteIdProp) {
-          setValue('quoteId', quoteIdProp)
+        if (effectiveQuoteId) {
+          setValue('quoteId', effectiveQuoteId)
         }
       }
     }
-  }, [invoice, open, reset, customerCompanyId, customerIdProp, quoteIdProp, quoteData, setValue]) // onClose dependency'den çıkarıldı - stable değil
+  }, [invoice, open, reset, customerCompanyId, customerIdProp, effectiveQuoteId, quoteData, quoteProp, setValue]) // onClose dependency'den çıkarıldı - stable değil
 
   // InvoiceItem ekleme/düzenleme fonksiyonları
   const handleAddItem = (item: InvoiceItem) => {

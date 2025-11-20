@@ -20,17 +20,17 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // DEBUG: Session ve permission bilgisini logla
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Deals API] 🔍 Session Check:', {
-        userId: session.user.id,
-        email: session.user.email,
-        role: session.user.role,
-        companyId: session.user.companyId,
-        companyName: session.user.companyName,
-        isSuperAdmin,
-      })
-    }
+    // DEBUG: Session ve permission bilgisini logla (sadece gerekirse)
+    // if (process.env.NODE_ENV === 'development') {
+    //   console.log('[Deals API] 🔍 Session Check:', {
+    //     userId: session.user.id,
+    //     email: session.user.email,
+    //     role: session.user.role,
+    //     companyId: session.user.companyId,
+    //     companyName: session.user.companyName,
+    //     isSuperAdmin,
+    //   })
+    // }
 
     // Permission check - canRead kontrolü
     const { hasPermission, buildPermissionDeniedResponse } = await import('@/lib/permissions')

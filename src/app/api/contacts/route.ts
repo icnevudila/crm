@@ -38,16 +38,16 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // DEBUG: Session ve permission bilgisini logla
-    if (process.env.NODE_ENV === 'development') {
-      console.log('[Contacts API] 🔍 Session Check:', {
-        userId: session.user.id,
-        email: session.user.email,
-        role: session.user.role,
-        companyId: session.user.companyId,
-        companyName: session.user.companyName,
-      })
-    }
+    // DEBUG: Session ve permission bilgisini logla (sadece gerekirse)
+    // if (process.env.NODE_ENV === 'development') {
+    //   console.log('[Contacts API] 🔍 Session Check:', {
+    //     userId: session.user.id,
+    //     email: session.user.email,
+    //     role: session.user.role,
+    //     companyId: session.user.companyId,
+    //     companyName: session.user.companyName,
+    //   })
+    // }
 
     const canRead = await hasPermission('contact', 'read', session.user.id)
     if (!canRead) {
@@ -77,6 +77,10 @@ export async function GET(request: Request) {
     
     // SuperAdmin için firma filtresi parametresi
     const filterCompanyId = searchParams.get('filterCompanyId') || ''
+
+    // ✅ ÖNEMLİ: Service role key kullanıldığında RLS bypass edilir
+    // Ama bazen RLS policy yanlış yapılandırılmışsa sorun çıkarabilir
+    // Bu durumda direkt companyId filtresi ile sorgu yapıyoruz
 
     // Count query
     let countQuery = supabase
@@ -108,16 +112,71 @@ export async function GET(request: Request) {
     const { count, error: countError } = await countQuery
     if (countError) {
       const message = countError.message || 'Kişiler getirilemedi'
+      const errorCode = countError.code || ''
+      
+      // Development'ta detaylı hata logla
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Contacts count query error:', {
+          message,
+          code: errorCode,
+          details: countError.details,
+          hint: countError.hint,
+          fullError: countError,
+        })
+      }
+      
+      // Tablo bulunamadı hatası - daha detaylı mesaj
+      if (message.includes('Could not find the table') || 
+          message.includes('relation') ||
+          message.includes('does not exist') ||
+          errorCode === 'PGRST204' ||
+          errorCode === '42P01') {
+        return NextResponse.json(
+          {
+            error: 'Contact tablosu bulunamadı',
+            message: 'Contact tablosu veritabanında bulunamadı. Lütfen migration 033_contact_lead_scoring_improvements.sql dosyasını Supabase SQL Editor\'da çalıştırın.',
+            hint: 'Supabase Dashboard > SQL Editor > supabase/migrations/033_contact_lead_scoring_improvements.sql dosyasını çalıştırın',
+            code: errorCode,
+            details: process.env.NODE_ENV === 'development' ? countError.details : undefined,
+          },
+          { status: 500 }
+        )
+      }
+      
+      // RLS policy hatası
+      if (message.includes('permission denied') || 
+          message.includes('policy') ||
+          message.includes('RLS') ||
+          errorCode === '42501') {
+        return NextResponse.json(
+          {
+            error: 'RLS Policy Hatası',
+            message: 'Contact tablosu için RLS policy hatası. Lütfen migration 999_fix_contact_rls_policy.sql dosyasını Supabase SQL Editor\'da çalıştırın.',
+            hint: 'Supabase Dashboard > SQL Editor > supabase/migrations/999_fix_contact_rls_policy.sql dosyasını çalıştırın',
+            code: errorCode,
+            details: process.env.NODE_ENV === 'development' ? countError.details : undefined,
+          },
+          { status: 500 }
+        )
+      }
+      
       if (isContactSchemaError(message)) {
         return schemaErrorResponse()
       }
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Contacts count query error:', countError)
-      }
-      return NextResponse.json({ error: message }, { status: 500 })
+      
+      return NextResponse.json(
+        { 
+          error: message,
+          code: errorCode,
+          details: process.env.NODE_ENV === 'development' ? countError.details : undefined,
+          hint: process.env.NODE_ENV === 'development' ? countError.hint : undefined,
+        },
+        { status: 500 }
+      )
     }
 
     // Data query
+    // ÖNEMLİ: imageUrl kolonu migration'da olmayabilir, retry pattern ile handle ediyoruz
     let dataQuery = supabase
       .from('Contact')
       .select(`
@@ -169,17 +228,130 @@ export async function GET(request: Request) {
       .order('createdAt', { ascending: false })
       .range((page - 1) * pageSize, page * pageSize - 1)
 
-    const { data, error } = await dataQuery
+    let { data, error } = await dataQuery
+
+    // ✅ ÇÖZÜM: Kolon hatası varsa (42703 = column does not exist), imageUrl olmadan retry yap
+    if (error && (error.code === '42703' || error.message?.includes('does not exist') || error.message?.includes('column'))) {
+      // Development'ta log
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Contact imageUrl kolonu bulunamadı, imageUrl olmadan retry yapılıyor:', error.message)
+      }
+      
+      // Retry: imageUrl kolonu olmadan tekrar dene
+      let retryQuery = supabase
+        .from('Contact')
+        .select(`
+          id, 
+          firstName,
+          lastName,
+          email, 
+          phone,
+          title,
+          role,
+          isPrimary,
+          linkedin,
+          notes,
+          status,
+          createdAt,
+          customerCompanyId,
+          CustomerCompany (
+            id,
+            name,
+            sector,
+            city
+          )
+        `)
+      
+      // Aynı filtreleri uygula
+      if (!isSuperAdmin) {
+        retryQuery = retryQuery.eq('companyId', companyId)
+      } else if (filterCompanyId) {
+        retryQuery = retryQuery.eq('companyId', filterCompanyId)
+      }
+      if (search) {
+        retryQuery = retryQuery.or(`firstName.ilike.%${search}%,lastName.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`)
+      }
+      if (status) {
+        retryQuery = retryQuery.eq('status', status)
+      }
+      if (role) {
+        retryQuery = retryQuery.eq('role', role)
+      }
+      if (customerCompanyId) {
+        retryQuery = retryQuery.eq('customerCompanyId', customerCompanyId)
+      }
+      retryQuery = retryQuery
+        .order('createdAt', { ascending: false })
+        .range((page - 1) * pageSize, page * pageSize - 1)
+      
+      const retryResult = await retryQuery
+      data = retryResult.data
+      error = retryResult.error
+    }
 
     if (error) {
       const message = error.message || 'Kişiler getirilemedi'
+      const errorCode = error.code || ''
+      
+      // Development'ta detaylı hata logla
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Contacts data query error:', {
+          message,
+          code: errorCode,
+          details: error.details,
+          hint: error.hint,
+          fullError: error,
+        })
+      }
+      
+      // Tablo bulunamadı hatası - daha detaylı mesaj
+      if (message.includes('Could not find the table') || 
+          message.includes('relation') ||
+          message.includes('does not exist') ||
+          errorCode === 'PGRST204' ||
+          errorCode === '42P01') {
+        return NextResponse.json(
+          {
+            error: 'Contact tablosu bulunamadı',
+            message: 'Contact tablosu veritabanında bulunamadı. Lütfen migration 033_contact_lead_scoring_improvements.sql dosyasını Supabase SQL Editor\'da çalıştırın.',
+            hint: 'Supabase Dashboard > SQL Editor > supabase/migrations/033_contact_lead_scoring_improvements.sql dosyasını çalıştırın',
+            code: errorCode,
+            details: process.env.NODE_ENV === 'development' ? error.details : undefined,
+          },
+          { status: 500 }
+        )
+      }
+      
+      // RLS policy hatası
+      if (message.includes('permission denied') || 
+          message.includes('policy') ||
+          message.includes('RLS') ||
+          errorCode === '42501') {
+        return NextResponse.json(
+          {
+            error: 'RLS Policy Hatası',
+            message: 'Contact tablosu için RLS policy hatası. Lütfen migration 999_fix_contact_rls_policy.sql dosyasını Supabase SQL Editor\'da çalıştırın.',
+            hint: 'Supabase Dashboard > SQL Editor > supabase/migrations/999_fix_contact_rls_policy.sql dosyasını çalıştırın',
+            code: errorCode,
+            details: process.env.NODE_ENV === 'development' ? error.details : undefined,
+          },
+          { status: 500 }
+        )
+      }
+      
       if (isContactSchemaError(message)) {
         return schemaErrorResponse()
       }
-      if (process.env.NODE_ENV === 'development') {
-        console.error('Contacts GET API query error:', error)
-      }
-      return NextResponse.json({ error: message }, { status: 500 })
+      
+      return NextResponse.json(
+        { 
+          error: message,
+          code: errorCode,
+          details: process.env.NODE_ENV === 'development' ? error.details : undefined,
+          hint: process.env.NODE_ENV === 'development' ? error.hint : undefined,
+        },
+        { status: 500 }
+      )
     }
 
     const totalPages = Math.ceil((count || 0) / pageSize)

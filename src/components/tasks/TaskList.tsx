@@ -1,7 +1,8 @@
 ﻿'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { toast, confirm } from '@/lib/toast'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { useLocale, useTranslations } from 'next-intl'
 import { useSession } from '@/hooks/useSession'
 import { Plus, Edit, Trash2, Eye, CheckSquare } from 'lucide-react'
@@ -74,16 +75,16 @@ export default function TaskList({ isOpen = true }: TaskListProps) {
   const t = useTranslations('tasks')
   const tCommon = useTranslations('common')
   const { data: session } = useSession()
-  
+
   const statusLabels: Record<string, string> = {
     TODO: t('statusTodo'),
     IN_PROGRESS: t('statusInProgress'),
     DONE: t('statusDone'),
   }
-  
+
   // SuperAdmin kontrolü
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
-  
+
   const [status, setStatus] = useState('')
   const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin için firma filtresi
   const [formOpen, setFormOpen] = useState(false)
@@ -91,18 +92,19 @@ export default function TaskList({ isOpen = true }: TaskListProps) {
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [selectedTaskData, setSelectedTaskData] = useState<Task | null>(null)
-  
+  const { confirm } = useConfirm()
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
-  
+
   // SuperAdmin için firmaları çek
   const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
     isOpen && isSuperAdmin ? '/api/superadmin/companies' : null,
     { dedupingInterval: 60000, revalidateOnFocus: false }
   )
   // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
-  const companies = (companiesData?.companies || []).filter((company, index, self) => 
+  const companies = (companiesData?.companies || []).filter((company, index, self) =>
     index === self.findIndex((c) => c.id === company.id)
   )
 
@@ -133,7 +135,7 @@ export default function TaskList({ isOpen = true }: TaskListProps) {
     revalidateOnFocus: true,
     refreshInterval: 10000,
   })
-  
+
   const tasks = useMemo(() => {
     if (Array.isArray(tasksData)) return tasksData
     if (tasksData && typeof tasksData === 'object' && 'data' in tasksData) {
@@ -141,7 +143,7 @@ export default function TaskList({ isOpen = true }: TaskListProps) {
     }
     return []
   }, [tasksData])
-  
+
   const pagination = useMemo(() => {
     if (!tasksData || Array.isArray(tasksData)) return null
     if (tasksData && typeof tasksData === 'object' && 'pagination' in tasksData) {
@@ -161,7 +163,13 @@ export default function TaskList({ isOpen = true }: TaskListProps) {
   }
 
   const handleDelete = useCallback(async (id: string, title: string) => {
-    if (!(await confirm(t('deleteConfirm', { title })))) {
+    if (!(await confirm({
+      title: t('deleteConfirmTitle', { title }),
+      description: t('deleteConfirmMessage'),
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
+      variant: 'destructive'
+    }))) {
       return
     }
 
@@ -169,25 +177,25 @@ export default function TaskList({ isOpen = true }: TaskListProps) {
       const res = await fetch(`/api/tasks/${id}`, {
         method: 'DELETE',
       })
-      
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
         throw new Error(errorData.error || 'Failed to delete task')
       }
-      
+
       // Optimistic update - silinen kaydı listeden kaldır
       const updatedTasks = tasks.filter((t) => t.id !== id)
-      
+
       // Cache'i güncelle - yeni listeyi hemen göster
       await mutateTasks(updatedTasks, { revalidate: false })
-      
+
       // Tüm diğer task URL'lerini de güncelle
       await Promise.all([
         mutate('/api/tasks', updatedTasks, { revalidate: false }),
         mutate('/api/tasks?', updatedTasks, { revalidate: false }),
         apiUrl ? mutate(apiUrl, updatedTasks, { revalidate: false }) : Promise.resolve(),
       ])
-      
+
       // Success toast göster
       const tCommon = useTranslations('common')
       toast.success(tCommon('taskDeletedSuccess'), { description: tCommon('deleteSuccessMessage', { name: title }) })
@@ -307,120 +315,120 @@ export default function TaskList({ isOpen = true }: TaskListProps) {
       <div className="hidden md:block bg-white rounded-lg shadow-card overflow-hidden">
         <div className="overflow-x-auto">
           <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('tableHeaders.task')}</TableHead>
-              {isSuperAdmin && <TableHead>{t('tableHeaders.company')}</TableHead>}
-              <TableHead>{t('tableHeaders.status')}</TableHead>
-              <TableHead>{t('tableHeaders.assignedTo')}</TableHead>
-              <TableHead>{t('tableHeaders.date')}</TableHead>
-              <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tasks.length === 0 ? (
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={isSuperAdmin ? 6 : 5} className="p-0">
-                  <EmptyState
-                    icon={CheckSquare}
-                    title={t('noTasksFound')}
-                    description={t('emptyStateDescription') || 'Yeni görev ekleyerek başlayın'}
-                    action={{
-                      label: t('newTask'),
-                      onClick: handleAdd,
-                    }}
-                    className="border-0 shadow-none"
-                  />
-                </TableCell>
+                <TableHead>{t('tableHeaders.task')}</TableHead>
+                {isSuperAdmin && <TableHead>{t('tableHeaders.company')}</TableHead>}
+                <TableHead>{t('tableHeaders.status')}</TableHead>
+                <TableHead>{t('tableHeaders.assignedTo')}</TableHead>
+                <TableHead>{t('tableHeaders.date')}</TableHead>
+                <TableHead className="text-right">{t('tableHeaders.actions')}</TableHead>
               </TableRow>
-            ) : (
-              tasks.map((task) => (
-                <TableRow key={task.id}>
-                  <TableCell className="font-medium">{task.title}</TableCell>
-                  {isSuperAdmin && (
-                    <TableCell>
-                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-                        {task.Company?.name || '-'}
-                      </Badge>
-                    </TableCell>
-                  )}
-                  <TableCell>
-                    <InlineEditBadge
-                      value={task.status}
-                      options={[
-                        { value: 'TODO', label: statusLabels['TODO'] || 'Yapılacak' },
-                        { value: 'IN_PROGRESS', label: statusLabels['IN_PROGRESS'] || 'Devam Ediyor' },
-                        { value: 'DONE', label: statusLabels['DONE'] || 'Tamamlandı' },
-                      ]}
-                      onSave={async (newStatus) => {
-                        try {
-                          const res = await fetch(`/api/tasks/${task.id}`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ status: newStatus }),
-                          })
-                          if (!res.ok) {
-                            const error = await res.json().catch(() => ({}))
-                            throw new Error(error.error || 'Durum güncellenemedi')
-                          }
-                          const updatedTask = await res.json()
-                          
-                          // Cache'i güncelle
-                          await Promise.all([
-                            mutate('/api/tasks', undefined, { revalidate: true }),
-                            mutate('/api/tasks?', undefined, { revalidate: true }),
-                            mutate((key: string) => typeof key === 'string' && key.startsWith('/api/tasks'), undefined, { revalidate: true }),
-                          ])
-                          
-                          toast.success('Durum güncellendi', { description: `Görev "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
-                        } catch (error: any) {
-                          toast.error('Durum güncellenemedi', error?.message || 'Bir hata oluştu.')
-                          throw error
-                        }
+            </TableHeader>
+            <TableBody>
+              {tasks.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={isSuperAdmin ? 6 : 5} className="p-0">
+                    <EmptyState
+                      icon={CheckSquare}
+                      title={t('noTasksFound')}
+                      description={t('emptyStateDescription') || 'Yeni görev ekleyerek başlayın'}
+                      action={{
+                        label: t('newTask'),
+                        onClick: handleAdd,
                       }}
+                      className="border-0 shadow-none"
                     />
                   </TableCell>
-                  <TableCell>{task.User?.name || '-'}</TableCell>
-                  <TableCell>
-                    {new Date(task.createdAt).toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US')}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setSelectedTaskId(task.id)
-                          setSelectedTaskData(task)
-                          setDetailModalOpen(true)
-                        }}
-                        aria-label={t('viewTask', { title: task.title })}
-                      >
-                        <Eye className="h-4 w-4 text-gray-600" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(task)}
-                        aria-label={t('editTask', { title: task.title })}
-                      >
-                        <Edit className="h-4 w-4 text-gray-600" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(task.id, task.title)}
-                        className="text-red-600 hover:text-red-700"
-                        aria-label={t('deleteTask', { title: task.title })}
-                      >
-                        <Trash2 className="h-4 w-4 text-red-600" />
-                      </Button>
-                    </div>
-                  </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
+              ) : (
+                tasks.map((task) => (
+                  <TableRow key={task.id}>
+                    <TableCell className="font-medium">{task.title}</TableCell>
+                    {isSuperAdmin && (
+                      <TableCell>
+                        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                          {task.Company?.name || '-'}
+                        </Badge>
+                      </TableCell>
+                    )}
+                    <TableCell>
+                      <InlineEditBadge
+                        value={task.status}
+                        options={[
+                          { value: 'TODO', label: statusLabels['TODO'] || 'Yapılacak' },
+                          { value: 'IN_PROGRESS', label: statusLabels['IN_PROGRESS'] || 'Devam Ediyor' },
+                          { value: 'DONE', label: statusLabels['DONE'] || 'Tamamlandı' },
+                        ]}
+                        onSave={async (newStatus) => {
+                          try {
+                            const res = await fetch(`/api/tasks/${task.id}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ status: newStatus }),
+                            })
+                            if (!res.ok) {
+                              const error = await res.json().catch(() => ({}))
+                              throw new Error(error.error || 'Durum güncellenemedi')
+                            }
+                            const updatedTask = await res.json()
+
+                            // Cache'i güncelle
+                            await Promise.all([
+                              mutate('/api/tasks', undefined, { revalidate: true }),
+                              mutate('/api/tasks?', undefined, { revalidate: true }),
+                              mutate((key: string) => typeof key === 'string' && key.startsWith('/api/tasks'), undefined, { revalidate: true }),
+                            ])
+
+                            toast.success('Durum güncellendi', { description: `Görev "${statusLabels[newStatus] || newStatus}" durumuna taşındı.` })
+                          } catch (error: any) {
+                            toast.error('Durum güncellenemedi', error?.message || 'Bir hata oluştu.')
+                            throw error
+                          }
+                        }}
+                      />
+                    </TableCell>
+                    <TableCell>{task.User?.name || '-'}</TableCell>
+                    <TableCell>
+                      {new Date(task.createdAt).toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US')}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setSelectedTaskId(task.id)
+                            setSelectedTaskData(task)
+                            setDetailModalOpen(true)
+                          }}
+                          aria-label={t('viewTask', { title: task.title })}
+                        >
+                          <Eye className="h-4 w-4 text-gray-600" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(task)}
+                          aria-label={t('editTask', { title: task.title })}
+                        >
+                          <Edit className="h-4 w-4 text-gray-600" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDelete(task.id, task.title)}
+                          className="text-red-600 hover:text-red-700"
+                          aria-label={t('deleteTask', { title: task.title })}
+                        >
+                          <Trash2 className="h-4 w-4 text-red-600" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
           </Table>
         </div>
         {/* Pagination */}
@@ -561,9 +569,9 @@ export default function TaskList({ isOpen = true }: TaskListProps) {
         onSuccess={async (savedTask: Task) => {
           // Optimistic update - yeni/ güncellenmiş kaydı hemen cache'e ekle ve UI'da göster
           // Böylece form kapanmadan önce görev listede görünür
-          
+
           let updatedTasks: Task[]
-          
+
           if (selectedTask) {
             // UPDATE: Mevcut kaydı güncelle
             updatedTasks = tasks.map((t) =>
@@ -573,11 +581,11 @@ export default function TaskList({ isOpen = true }: TaskListProps) {
             // CREATE: Yeni kaydı listenin başına ekle
             updatedTasks = [savedTask, ...tasks]
           }
-          
+
           // Cache'i güncelle - optimistic update'i hemen uygula ve koru
           // revalidate: false = background refetch yapmaz, optimistic update korunur
           await mutateTasks(updatedTasks, { revalidate: false })
-          
+
           // Tüm diğer task URL'lerini de güncelle (optimistic update)
           await Promise.all([
             mutate('/api/tasks', updatedTasks, { revalidate: false }),

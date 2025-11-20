@@ -9,7 +9,8 @@ import { useSession } from '@/hooks/useSession'
 import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { toast, confirm } from '@/lib/toast'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import {
   Table,
   TableBody,
@@ -87,11 +88,11 @@ const MeetingForm = dynamic(() => import('../meetings/MeetingForm'), {
   ssr: false,
   loading: () => null,
 })
-<<<<<<< HEAD
 const ContextualWizard = dynamic(() => import('../dashboard/ContextualWizard'), {
-=======
+  ssr: false,
+  loading: () => null,
+})
 const BulkSendDialog = dynamic(() => import('../integrations/BulkSendDialog'), {
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
   ssr: false,
   loading: () => null,
 })
@@ -141,14 +142,15 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
   const { data: session } = useSession()
-  
+  const { confirm } = useConfirm()
+
   // SuperAdmin kontrolü
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
-  
+
   // URL parametrelerinden filtreleri oku
   const cityFromUrl = searchParams.get('city') || ''
   const sectorFromUrl = searchParams.get('sector') || ''
-  
+
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [sector, setSector] = useState(sectorFromUrl)
@@ -198,19 +200,43 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
     setFilterCompanyId('')
     setCurrentPage(1)
   }, [])
-  
+
+  // State tanımlamaları - useEffect'lerden önce olmalı
+  const [formOpen, setFormOpen] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+  const [quickAction, setQuickAction] = useState<{ type: 'deal' | 'quote' | 'invoice' | 'task' | 'meeting'; customer: Customer } | null>(null)
+  const [detailModalOpen, setDetailModalOpen] = useState(false)
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
+  const [selectedCustomerData, setSelectedCustomerData] = useState<Customer | null>(null)
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
+
+  // Bulk operations state
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [selectAll, setSelectAll] = useState(false)
+
+  // Import modal state
+  const [importOpen, setImportOpen] = useState(false)
+  const [importFile, setImportFile] = useState<File | null>(null)
+  const [importing, setImporting] = useState(false)
+
+  // Contextual wizard state
+  const [wizardOpen, setWizardOpen] = useState(false)
+  const [bulkSendOpen, setBulkSendOpen] = useState(false)
+
   // SuperAdmin için firmaları çek
   const { data: companiesData } = useData<{ companies: Array<{ id: string; name: string }> }>(
     isOpen && isSuperAdmin ? '/api/superadmin/companies' : null,
     { dedupingInterval: 60000, revalidateOnFocus: false }
   )
   // Duplicate'leri filtrele - aynı id'ye sahip kayıtları tekilleştir
-  const companies = (companiesData?.companies || []).filter((company, index, self) => 
+  const companies = (companiesData?.companies || []).filter((company, index, self) =>
     index === self.findIndex((c) => c.id === company.id)
   )
-  
+
   // URL'den gelen parametreleri state'e set et
-  // ✅ ÇÖZÜM: Dependency array'den city ve sector'ü kaldırdık - sonsuz döngüyü önlemek için
   useEffect(() => {
     if (cityFromUrl && cityFromUrl !== city) {
       setCity(cityFromUrl)
@@ -218,61 +244,17 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
     if (sectorFromUrl && sectorFromUrl !== sector) {
       setSector(sectorFromUrl)
     }
-<<<<<<< HEAD
-  }, [cityFromUrl, sectorFromUrl, city, sector])
-
-  // İlk müşteri yoksa wizard'ı aç
-  useEffect(() => {
-    if (!isLoading && customers.length === 0 && !search && !status && !sector && !city) {
-      const wizardCompleted = localStorage.getItem('contextual-wizard-first-customer-completed')
-      if (!wizardCompleted) {
-        // 1 saniye sonra wizard'ı aç (sayfa yüklendikten sonra)
-        const timer = setTimeout(() => {
-          setWizardOpen(true)
-        }, 1000)
-        return () => clearTimeout(timer)
-      }
-    }
-  }, [isLoading, customers.length, search, status, sector, city])
-=======
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cityFromUrl, sectorFromUrl]) // Sadece URL parametrelerini dinle, state değişikliklerini dinleme
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
-  const [formOpen, setFormOpen] = useState(false)
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
-  const [quickAction, setQuickAction] = useState<{ type: 'deal' | 'quote' | 'invoice' | 'task' | 'meeting'; customer: Customer } | null>(null)
-  const [detailModalOpen, setDetailModalOpen] = useState(false)
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
-  const [selectedCustomerData, setSelectedCustomerData] = useState<Customer | null>(null)
-  
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(20)
-  
-  // Bulk operations state
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
-  const [selectAll, setSelectAll] = useState(false)
-  
-  // Import modal state
-  const [importOpen, setImportOpen] = useState(false)
-  const [importFile, setImportFile] = useState<File | null>(null)
-  const [importing, setImporting] = useState(false)
-<<<<<<< HEAD
-  
-  // Contextual wizard state
-  const [wizardOpen, setWizardOpen] = useState(false)
-=======
-  const [bulkSendOpen, setBulkSendOpen] = useState(false)
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
+  }, [cityFromUrl, sectorFromUrl, city, sector]) // URL parametrelerini ve state değişikliklerini dinle
 
   // Debounced search - performans için (kullanıcı yazmayı bitirdikten 300ms sonra arama)
   const [debouncedSearch, setDebouncedSearch] = useState(search)
-  
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
     }, 300) // 300ms debounce - her harfte arama yapılmaz
-    
+
     return () => clearTimeout(timer)
   }, [search])
 
@@ -310,20 +292,6 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
     refreshInterval: 0, // Otomatik refresh yok
   })
 
-  // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
-  const handleRefresh = async () => {
-    await Promise.all([
-      mutateCustomers(undefined, { revalidate: true }),
-      mutate('/api/customers', undefined, { revalidate: true }),
-      mutate(apiUrl || '/api/customers', undefined, { revalidate: true }),
-      queryClient.invalidateQueries({ queryKey: ['customers'] }),
-    ])
-  }
-
-  // NOT: apiUrl currentPage'e bağlı olduğu için SWR otomatik refetch yapıyor
-  // currentPage değiştiğinde apiUrl değişir ve SWR yeni URL'i otomatik fetch eder
-  // Bu useEffect'e gerek yok, ama yine de ekstra güvence için bırakıyoruz (sadece log için)
-
   // API'den gelen response formatını kontrol et - hem { data: [...], pagination: {...} } hem de direkt array olabilir
   const { customers, pagination } = useMemo(() => {
     let customersData: Customer[] = []
@@ -338,7 +306,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       // Eğer response direkt array ise
       if (Array.isArray(response)) {
         customersData = response
-      } 
+      }
       // Eğer response { data: [...], pagination: {...} } formatında ise
       else if (response && typeof response === 'object' && 'data' in response) {
         const responseData = (response as CustomersResponse).data
@@ -352,16 +320,40 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       }
     }
 
-    // Güvenlik kontrolü - customers her zaman array olmalı
-    if (!Array.isArray(customersData)) {
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('CustomerList: customers is not an array, defaulting to empty array', { response, customersData })
-      }
-      customersData = []
+    return {
+      customers: customersData,
+      pagination: paginationData,
     }
-
-    return { customers: customersData, pagination: paginationData }
   }, [response])
+
+  // İlk müşteri yoksa wizard'ı aç (customers tanımından sonra)
+  useEffect(() => {
+    if (!isOpen) return
+    if (!isLoading && customers.length === 0 && !search && !status && !sector && !city) {
+      const wizardCompleted = localStorage.getItem('contextual-wizard-first-customer-completed')
+      if (!wizardCompleted) {
+        // 1 saniye sonra wizard'ı aç (sayfa yüklendikten sonra)
+        const timer = setTimeout(() => {
+          setWizardOpen(true)
+        }, 1000)
+        return () => clearTimeout(timer)
+      }
+    }
+  }, [isOpen, isLoading, customers.length, search, status, sector, city])
+
+  // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
+  const handleRefresh = async () => {
+    await Promise.all([
+      mutateCustomers(undefined, { revalidate: true }),
+      mutate('/api/customers', undefined, { revalidate: true }),
+      mutate(apiUrl || '/api/customers', undefined, { revalidate: true }),
+      queryClient.invalidateQueries({ queryKey: ['customers'] }),
+    ])
+  }
+
+  // NOT: apiUrl currentPage'e bağlı olduğu için SWR otomatik refetch yapıyor
+  // currentPage değiştiğinde apiUrl değişir ve SWR yeni URL'i otomatik fetch eder
+  // Bu useEffect'e gerek yok, ama yine de ekstra güvence için bırakıyoruz (sadece log için)
 
   // Stats verisini çek - toplam sayı için
   const { data: stats } = useData<any>(isOpen ? '/api/stats/customers' : null, {
@@ -370,7 +362,13 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
   })
 
   const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!(await confirm(t('deleteConfirm', { name })))) {
+    if (!(await confirm({
+      title: t('deleteConfirmTitle', { name }),
+      description: t('deleteConfirmMessage'),
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
+      variant: 'destructive'
+    }))) {
       return
     }
 
@@ -378,12 +376,12 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       const res = await fetch(`/api/customers/${id}`, {
         method: 'DELETE',
       })
-      
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
         throw new Error(errorData.error || 'Failed to delete customer')
       }
-      
+
       // Optimistic update - silinen kaydı listeden kaldır
       const updatedCustomers = customers.filter((c) => c.id !== id)
       const updatedPagination = {
@@ -391,12 +389,12 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         totalItems: pagination.totalItems - 1,
         totalPages: Math.ceil((pagination.totalItems - 1) / pagination.pageSize),
       }
-      
+
       // Eğer sayfa boşaldıysa, önceki sayfaya git
       if (updatedCustomers.length === 0 && pagination.page > 1) {
         setCurrentPage(pagination.page - 1)
       }
-      
+
       // Cache'i güncelle - yeni listeyi hemen göster
       await mutateCustomers(
         {
@@ -405,7 +403,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         },
         { revalidate: false }
       )
-      
+
       // Tüm diğer customer URL'lerini de güncelle
       await Promise.all([
         mutate('/api/customers', {
@@ -418,14 +416,14 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         }, { revalidate: false }),
         apiUrl
           ? mutate(apiUrl, {
-              data: updatedCustomers,
-              pagination: updatedPagination,
-            }, { revalidate: false })
+            data: updatedCustomers,
+            pagination: updatedPagination,
+          }, { revalidate: false })
           : Promise.resolve(),
         // Dashboard'daki müşteri sektör dağılımı grafiğini güncelle (silinen müşteri grafikten çıkarılmalı)
         queryClient.invalidateQueries({ queryKey: ['distribution'] }),
       ])
-      
+
       // Dashboard'daki distribution query'sini refetch et
       await queryClient.refetchQueries({ queryKey: ['distribution'] })
     } catch (error: any) {
@@ -491,7 +489,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
 
       // Optimistic update - silinen kayıtları listeden kaldır
       const updatedCustomers = customers.filter((c) => !ids.includes(c.id))
-      
+
       // Cache'i güncelle
       await mutateCustomers(
         {
@@ -515,17 +513,17 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         }, { revalidate: false }),
         apiUrl
           ? mutate(apiUrl, {
-              data: updatedCustomers,
-              pagination: {
-                ...pagination,
-                totalItems: pagination.totalItems - ids.length,
-              },
-            }, { revalidate: false })
+            data: updatedCustomers,
+            pagination: {
+              ...pagination,
+              totalItems: pagination.totalItems - ids.length,
+            },
+          }, { revalidate: false })
           : Promise.resolve(),
         // Dashboard'daki müşteri sektör dağılımı grafiğini güncelle (silinen müşteriler grafikten çıkarılmalı)
         queryClient.invalidateQueries({ queryKey: ['distribution'] }),
       ])
-      
+
       // Dashboard'daki distribution query'sini refetch et
       await queryClient.refetchQueries({ queryKey: ['distribution'] })
 
@@ -590,7 +588,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         // Dashboard'daki müşteri sektör dağılımı grafiğini güncelle (yeni import edilen müşteriler grafikte görünmeli)
         queryClient.invalidateQueries({ queryKey: ['distribution'] }),
       ])
-      
+
       // Dashboard'daki distribution query'sini refetch et
       await queryClient.refetchQueries({ queryKey: ['distribution'] })
 
@@ -599,7 +597,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
     } catch (error: any) {
       console.error('Import error:', error)
       toast.error(t('importFailed'), { description: error?.message || 'Bir hata oluştu' })
-    } finally{
+    } finally {
       setImporting(false)
     }
   }, [importFile, mutateCustomers, apiUrl, queryClient])
@@ -666,7 +664,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
             backgroundSize: '40px 40px'
           }} />
         </div>
-        
+
         <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-4">
             <motion.div
@@ -684,38 +682,38 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
               </p>
             </div>
           </div>
-        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-          <div className="flex gap-2">
-            <RefreshButton onRefresh={handleRefresh} />
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <div className="flex gap-2">
+              <RefreshButton onRefresh={handleRefresh} />
+              <Button
+                variant="outline"
+                onClick={() => setImportOpen(true)}
+                aria-label={t('import')}
+                className="flex-1 sm:flex-initial"
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                <span className="hidden sm:inline">{t('import')}</span>
+                <span className="sm:hidden">İçe Aktar</span>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => handleExport('excel')}
+                aria-label={t('export')}
+                className="flex-1 sm:flex-initial"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                <span className="hidden sm:inline">{t('export')}</span>
+                <span className="sm:hidden">Dışa Aktar</span>
+              </Button>
+            </div>
             <Button
-              variant="outline"
-              onClick={() => setImportOpen(true)}
-              aria-label={t('import')}
-              className="flex-1 sm:flex-initial"
+              onClick={handleAdd}
+              className="bg-gradient-primary text-white w-full sm:w-auto"
             >
-              <Upload className="mr-2 h-4 w-4" />
-              <span className="hidden sm:inline">{t('import')}</span>
-              <span className="sm:hidden">İçe Aktar</span>
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => handleExport('excel')}
-              aria-label={t('export')}
-              className="flex-1 sm:flex-initial"
-            >
-              <Download className="mr-2 h-4 w-4" />
-              <span className="hidden sm:inline">{t('export')}</span>
-              <span className="sm:hidden">Dışa Aktar</span>
+              <Plus className="mr-2 h-4 w-4" />
+              {t('newCustomer')}
             </Button>
           </div>
-          <Button
-            onClick={handleAdd}
-            className="bg-gradient-primary text-white w-full sm:w-auto"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            {t('newCustomer')}
-          </Button>
-        </div>
         </div>
       </motion.div>
 
@@ -858,12 +856,12 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
             badges: [
               ...(customer.sector
                 ? [
-                    {
-                      label: customer.sector,
-                      variant: 'outline' as const,
-                      className: 'bg-blue-50 text-blue-700 border-blue-200',
-                    },
-                  ]
+                  {
+                    label: customer.sector,
+                    variant: 'outline' as const,
+                    className: 'bg-blue-50 text-blue-700 border-blue-200',
+                  },
+                ]
                 : []),
               {
                 label: customer.status === 'ACTIVE' ? t('active') : t('inactive'),
@@ -875,12 +873,12 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
               },
               ...(isSuperAdmin && customer.Company?.name
                 ? [
-                    {
-                      label: customer.Company.name,
-                      variant: 'outline' as const,
-                      className: 'bg-purple-50 text-purple-700 border-purple-200',
-                    },
-                  ]
+                  {
+                    label: customer.Company.name,
+                    variant: 'outline' as const,
+                    className: 'bg-purple-50 text-purple-700 border-purple-200',
+                  },
+                ]
                 : []),
             ],
             metadata: [
@@ -1005,13 +1003,13 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
           // Form'u kapat
           setFormOpen(false)
           setSelectedCustomer(null)
-          
+
           if (selectedCustomer) {
             // UPDATE: Mevcut kaydı güncelle
             const updatedCustomers = customers.map((c) =>
               c.id === savedCustomer.id ? savedCustomer : c
             )
-            
+
             // Optimistic update - cache'i güncelle
             await mutateCustomers(
               {
@@ -1020,11 +1018,11 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
               },
               { revalidate: false }
             )
-            
+
             // Dashboard'daki müşteri sektör dağılımı grafiğini güncelle (sektör değişmiş olabilir)
             await queryClient.invalidateQueries({ queryKey: ['distribution'] })
             await queryClient.refetchQueries({ queryKey: ['distribution'] })
-            
+
             // Background refetch yap
             setTimeout(async () => {
               await Promise.all([
@@ -1037,7 +1035,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
           } else {
             // CREATE: Yeni kayıt oluşturuldu
             // Yeni kayıt her zaman 1. sayfada olmalı (createdAt DESC sıralamasına göre)
-            
+
             // 1. sayfa için yeni URL oluştur
             const firstPageParams = new URLSearchParams()
             if (debouncedSearch) firstPageParams.append('search', debouncedSearch)
@@ -1046,9 +1044,9 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
             if (customerCompanyId) firstPageParams.append('customerCompanyId', customerCompanyId)
             firstPageParams.append('page', '1')
             firstPageParams.append('pageSize', pageSize.toString())
-            
+
             const firstPageUrl = `/api/customers?${firstPageParams.toString()}`
-            
+
             // ÖNCE tüm cache'i temizle ve 1. sayfayı refetch et
             await Promise.all([
               mutate('/api/customers', undefined, { revalidate: true }),
@@ -1058,13 +1056,13 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
               // Dashboard'daki müşteri sektör dağılımı grafiğini güncelle
               queryClient.invalidateQueries({ queryKey: ['distribution'] }),
             ])
-            
+
             // Dashboard'daki distribution query'sini refetch et
             await queryClient.refetchQueries({ queryKey: ['distribution'] })
-            
+
             // SONRA 1. sayfaya geç (apiUrl değişir ve SWR otomatik refetch yapar)
             setCurrentPage(1)
-            
+
             // Ekstra güvence: 500ms sonra tekrar refetch (sayfa yenilendiğinde kesinlikle fresh data gelsin)
             setTimeout(async () => {
               await Promise.all([
@@ -1143,14 +1141,14 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         customerCompanyName={quickAction?.customer.CustomerCompany?.name}
         customerId={quickAction?.customer.id}
       />
-<<<<<<< HEAD
 
       {/* Contextual Wizard - İlk müşteri yoksa */}
       <ContextualWizard
         trigger="first-customer"
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
-=======
+      />
+
       <BulkSendDialog
         open={bulkSendOpen}
         onClose={() => setBulkSendOpen(false)}
@@ -1160,7 +1158,6 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
           setSelectedIds([])
           setSelectAll(false)
         }}
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
       />
     </div>
   )

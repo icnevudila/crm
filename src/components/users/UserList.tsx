@@ -1,7 +1,8 @@
 ﻿'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { toast, confirm } from '@/lib/toast'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { useSession } from '@/hooks/useSession'
 import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye, User as UserIcon } from 'lucide-react'
@@ -55,17 +56,18 @@ export default function UserList() {
   const [detailModalOpen, setDetailModalOpen] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [selectedUserData, setSelectedUserData] = useState<User | null>(null)
+  const { confirm } = useConfirm()
 
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
 
   // Debounced search - performans için (kullanıcı yazmayı bitirdikten 300ms sonra arama)
   const [debouncedSearch, setDebouncedSearch] = useState(search)
-  
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
     }, 300) // 300ms debounce - her harfte arama yapılmaz
-    
+
     return () => clearTimeout(timer)
   }, [search])
 
@@ -73,7 +75,7 @@ export default function UserList() {
   const params = new URLSearchParams()
   if (debouncedSearch) params.append('search', debouncedSearch)
   if (role) params.append('role', role)
-  
+
   const apiUrl = `/api/users?${params.toString()}`
   const { data: users = [], isLoading, error, mutate: mutateUsers } = useData<User[]>(apiUrl, {
     dedupingInterval: 5000, // 5 saniye cache (daha kısa - güncellemeler daha hızlı)
@@ -81,7 +83,13 @@ export default function UserList() {
   })
 
   const handleDelete = useCallback(async (id: string, name: string) => {
-    if (!(await confirm(t('deleteConfirm', { name })))) {
+    if (!(await confirm({
+      title: t('deleteConfirmTitle', { name }),
+      description: t('deleteConfirmMessage'),
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
+      variant: 'destructive'
+    }))) {
       return
     }
 
@@ -89,18 +97,18 @@ export default function UserList() {
       const res = await fetch(`/api/users/${id}`, {
         method: 'DELETE',
       })
-      
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
         throw new Error(errorData.error || 'Failed to delete user')
       }
-      
+
       // Optimistic update - silinen kaydı listeden kaldır
       const updatedUsers = users.filter((u) => u.id !== id)
-      
+
       // Cache'i güncelle - yeni listeyi hemen göster
       await mutateUsers(updatedUsers, { revalidate: false })
-      
+
       // Tüm diğer user URL'lerini de güncelle
       await Promise.all([
         mutate('/api/users', updatedUsers, { revalidate: false }),
@@ -282,9 +290,9 @@ export default function UserList() {
           onSuccess={async (savedUser: User) => {
             // Optimistic update - yeni/ güncellenmiş kaydı hemen cache'e ekle ve UI'da göster
             // Böylece form kapanmadan önce kullanıcı listede görünür
-            
+
             let updatedUsers: User[]
-            
+
             if (selectedUser) {
               // UPDATE: Mevcut kaydı güncelle
               updatedUsers = users.map((u) =>
@@ -294,11 +302,11 @@ export default function UserList() {
               // CREATE: Yeni kaydı listenin başına ekle
               updatedUsers = [savedUser, ...users]
             }
-            
+
             // Cache'i güncelle - optimistic update'i hemen uygula ve koru
             // revalidate: false = background refetch yapmaz, optimistic update korunur
             await mutateUsers(updatedUsers, { revalidate: false })
-            
+
             // Tüm diğer user URL'lerini de güncelle (optimistic update)
             await Promise.all([
               mutate('/api/users', updatedUsers, { revalidate: false }),

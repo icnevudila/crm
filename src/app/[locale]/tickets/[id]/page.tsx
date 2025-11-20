@@ -14,42 +14,15 @@ import CommentsSection from '@/components/ui/CommentsSection'
 import TicketForm from '@/components/tickets/TicketForm'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import Link from 'next/link'
-<<<<<<< HEAD
-import { confirm } from '@/lib/toast'
-=======
-import { toastError, toastWarning } from '@/lib/toast'
+import { toastError, toastWarning, confirm } from '@/lib/toast'
 import SendEmailButton from '@/components/integrations/SendEmailButton'
 import SendSmsButton from '@/components/integrations/SendSmsButton'
 import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
 import { useQuickActionSuccess } from '@/lib/quick-action-helper'
 import { useData } from '@/hooks/useData'
 import ContextualActionsBar from '@/components/ui/ContextualActionsBar'
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
 
-interface Ticket {
-  id: string
-  subject: string
-  description?: string
-  status: string
-  priority: string
-  tags?: string[]
-  customerId?: string
-  assignedTo?: string
-  Customer?: {
-    id: string
-    name: string
-    email?: string
-    phone?: string
-  }
-  User?: {
-    id: string
-    name: string
-    email?: string
-  }
-  createdAt: string
-  updatedAt?: string
-  activities?: any[]
-}
+import { Ticket } from '@/types/crm'
 
 export default function TicketDetailPage() {
   const params = useParams()
@@ -126,7 +99,7 @@ export default function TicketDetailPage() {
 
   const handleDelete = async () => {
     if (!ticket) return
-    
+
     // RESOLVED veya CLOSED ticket'ları silinemez
     if (ticket.status === 'RESOLVED' || ticket.status === 'CLOSED') {
       toastWarning('Çözülmüş veya kapatılmış talepler silinemez')
@@ -142,12 +115,12 @@ export default function TicketDetailPage() {
       const res = await fetch(`/api/tickets/${id}`, {
         method: 'DELETE',
       })
-      
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}))
         throw new Error(errorData.error || 'Failed to delete ticket')
       }
-      
+
       router.push(`/${locale}/tickets`)
     } catch (error: any) {
       console.error('Delete error:', error)
@@ -185,7 +158,7 @@ export default function TicketDetailPage() {
             backgroundSize: '40px 40px'
           }} />
         </div>
-        
+
         <div className="relative flex items-center justify-between">
           <div className="flex items-center gap-4">
             <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
@@ -231,11 +204,11 @@ export default function TicketDetailPage() {
               </h2>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-            {ticket.Customer.email && (
-              <SendEmailButton
-                to={ticket.Customer.email}
-                subject={`Destek Talebi: ${ticket.subject}`}
-                html={`
+              {ticket.Customer.email && (
+                <SendEmailButton
+                  to={ticket.Customer.email}
+                  subject={`Destek Talebi: ${ticket.subject}`}
+                  html={`
                   <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                     <h2 style="color: #6366f1; border-bottom: 2px solid #6366f1; padding-bottom: 10px;">
                       Destek Talebi Bilgileri
@@ -251,31 +224,31 @@ export default function TicketDetailPage() {
                     </p>
                   </div>
                 `}
-                category="GENERAL"
-                entityData={ticket}
-                onSuccess={() => handleQuickActionSuccess({
-                  entityType: 'ticket',
-                  entityName: ticket.subject,
-                  entityId: ticket.id,
-                })}
-              />
-            )}
-            {ticket.Customer.phone && (
-              <>
-                <SendSmsButton
-                  to={ticket.Customer.phone}
-                  message={`Merhaba ${ticket.Customer.name}, destek talebiniz hakkında size ulaşmak istiyoruz. Konu: ${ticket.subject}`}
+                  category="GENERAL"
+                  entityData={ticket}
+                  onSuccess={() => handleQuickActionSuccess({
+                    entityType: 'ticket',
+                    entityName: ticket.subject,
+                    entityId: ticket.id,
+                  })}
                 />
-                <SendWhatsAppButton
-                  phoneNumber={ticket.Customer.phone}
-                  entityType="ticket"
-                  entityId={ticket.id}
-                  customerName={ticket.Customer.name}
-                />
-              </>
-            )}
-          </div>
-        </Card>
+              )}
+              {ticket.Customer.phone && (
+                <>
+                  <SendSmsButton
+                    to={ticket.Customer.phone}
+                    message={`Merhaba ${ticket.Customer.name}, destek talebiniz hakkında size ulaşmak istiyoruz. Konu: ${ticket.subject}`}
+                  />
+                  <SendWhatsAppButton
+                    phoneNumber={ticket.Customer.phone}
+                    entityType="ticket"
+                    entityId={ticket.id}
+                    customerName={ticket.Customer.name}
+                  />
+                </>
+              )}
+            </div>
+          </Card>
         </motion.div>
       )}
 

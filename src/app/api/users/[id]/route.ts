@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from '@/lib/auth-supabase'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { logAction } from '@/lib/logger'
 import bcrypt from 'bcryptjs'
@@ -11,12 +11,9 @@ export async function GET(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    const session = await getServerSession(request)
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Oturum bilgisi alınamadı' },
-        { status: 401 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
@@ -93,12 +90,9 @@ export async function PUT(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    const session = await getServerSession(request)
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Oturum bilgisi alınamadı' },
-        { status: 401 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
@@ -195,12 +189,9 @@ export async function DELETE(
 ) {
   try {
     // Session kontrolü - hata yakalama ile
-    const session = await getServerSession(request)
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Oturum bilgisi alınamadı' },
-        { status: 401 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId || session.user.role !== 'SUPER_ADMIN') {

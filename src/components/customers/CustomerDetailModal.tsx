@@ -15,15 +15,11 @@ import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import dynamic from 'next/dynamic'
-<<<<<<< HEAD
 import { toast, confirm } from '@/lib/toast'
-=======
-import { toast } from '@/lib/toast'
 import DetailPageLayout from '@/components/layout/DetailPageLayout'
 import OverviewCard from '@/components/layout/OverviewCard'
 import RelatedRecordsSection from '@/components/layout/RelatedRecordsSection'
 import { formatCurrency } from '@/lib/utils'
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
 
 // Lazy load CustomerForm - performans için
 const CustomerForm = dynamic(() => import('./CustomerForm'), {

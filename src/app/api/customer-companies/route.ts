@@ -94,17 +94,17 @@ export async function GET(request: Request) {
       )
     }
 
-    // Debug: Development'ta log ekle
-    if (process.env.NODE_ENV === 'development') {
-      console.log('CustomerCompanies GET - Query result:', {
-        companyId: session.user.companyId,
-        companiesDataCount: companiesData?.length || 0,
-        count: count,
-        companiesData: companiesData,
-        searchParam,
-        statusParam,
-      })
-    }
+    // Debug: Development'ta log ekle (sadece gerekirse - performans için kapalı)
+    // if (process.env.NODE_ENV === 'development') {
+    //   console.log('CustomerCompanies GET - Query result:', {
+    //     companyId: session.user.companyId,
+    //     companiesDataCount: companiesData?.length || 0,
+    //     count: count,
+    //     companiesData: companiesData,
+    //     searchParam,
+    //     statusParam,
+    //   })
+    // }
 
     // OPTİMİZE: N+1 query problemini çöz - tüm customer'ları tek seferde çek ve grupla
     // Önceki: Her company için ayrı query (N+1 problem - çok yavaş!)

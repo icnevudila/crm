@@ -35,6 +35,7 @@ import { Input } from '@/components/ui/input'
 
 
 import { toast, toastSuccess, toastError, toastWarning, confirm } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 
 
 import {
@@ -198,12 +199,11 @@ const DealDetailModal = dynamic(() => import('./DealDetailModal'), {
 
 })
 
-<<<<<<< HEAD
 const ContextualWizard = dynamic(() => import('../dashboard/ContextualWizard'), {
   ssr: false,
   loading: () => null,
 })
-=======
+
 const QuoteForm = dynamic(() => import('../quotes/QuoteForm'), { ssr: false, loading: () => null })
 
 const InvoiceForm = dynamic(() => import('../invoices/InvoiceForm'), { ssr: false, loading: () => null })
@@ -211,7 +211,6 @@ const InvoiceForm = dynamic(() => import('../invoices/InvoiceForm'), { ssr: fals
 const TaskForm = dynamic(() => import('../tasks/TaskForm'), { ssr: false, loading: () => null })
 
 const MeetingForm = dynamic(() => import('../meetings/MeetingForm'), { ssr: false, loading: () => null })
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
 
 
 
@@ -753,6 +752,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
   const [lostReason, setLostReason] = useState('')
 
+  const { confirm } = useConfirm()
 
   const queryClient = useQueryClient()
   
@@ -1012,7 +1012,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
         }, 1000)
         return () => clearTimeout(timer)
       }
-    } else if (viewMode === 'table' && tableDeals.length === 0 && !search && !stage && !customerId) {
+    } else if (viewMode === 'table' && (!dealsQuery.data || dealsQuery.data.length === 0) && !search && !stage && !customerId) {
       const wizardCompleted = localStorage.getItem('contextual-wizard-first-deal-completed')
       if (!wizardCompleted) {
         const timer = setTimeout(() => {
@@ -1021,7 +1021,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
         return () => clearTimeout(timer)
       }
     }
-  }, [isOpen, viewMode, hasKanbanData, isInitialLoad, tableDeals.length, search, stage, customerId])
+  }, [isOpen, viewMode, hasKanbanData, isInitialLoad, dealsQuery.data, search, stage, customerId])
 
 
 
@@ -2261,28 +2261,54 @@ export default function DealList({ isOpen = true }: DealListProps) {
           }}
 
           onStageChange={async (dealId: string, newStage: string) => {
-
-
-            // ✅ ÇÖZÜM: LOST durumuna geçerken sebep sor
-
-
+            // ✅ LOST durumuna geçerken önce onay iste, sonra sebep sor
             if (newStage === 'LOST') {
+              const deal = kanbanData
+                .flatMap((col: any) => col.deals || [])
+                .find((d: any) => d.id === dealId) || 
+                tableDeals.find((d: any) => d.id === dealId)
 
+              if (deal) {
+                const confirmed = await confirm({
+                  title: 'Fırsatı Kaybedildi Olarak İşaretlemek İstediğinize Emin Misiniz?',
+                  description: `"${deal.title}" fırsatını kaybedildi olarak işaretlediğinizde otomatik olarak şu işlemler yapılacak:\n\n• Analiz görevi oluşturulacak\n• Kayıp sebebi not olarak kaydedilecek\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
+                  confirmLabel: 'Evet, Kaybedildi Olarak İşaretle',
+                  cancelLabel: 'İptal',
+                  variant: 'destructive'
+                })
 
-              // Kayıp dialog'unu aç
+                if (!confirmed) {
+                  return // İşlemi iptal et
+                }
 
-
-              setLosingDealId(dealId)
-
-
-              setLostDialogOpen(true)
-
-
-              return // Dialog açıldı, işlem dialog'dan devam edecek
-
-
+                // Onay verildikten sonra sebep dialog'unu aç
+                setLosingDealId(dealId)
+                setLostDialogOpen(true)
+                return // Dialog açıldı, işlem dialog'dan devam edecek
+              }
             }
 
+            // ✅ WON durumuna geçerken onay iste
+            if (newStage === 'WON') {
+              const deal = kanbanData
+                .flatMap((col: any) => col.deals || [])
+                .find((d: any) => d.id === dealId) || 
+                tableDeals.find((d: any) => d.id === dealId)
+
+              if (deal) {
+                const confirmed = await confirm({
+                  title: 'Fırsatı Kazanıldı Olarak İşaretlemek İstediğinize Emin Misiniz?',
+                  description: `"${deal.title}" fırsatını kazanıldı olarak işaretlediğinizde otomatik olarak şu işlemler yapılacak:\n\n• Sözleşme oluşturulacak (Contract)\n• Sözleşme fırsat bilgileriyle doldurulacak\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
+                  confirmLabel: 'Evet, Kazanıldı Olarak İşaretle',
+                  cancelLabel: 'İptal',
+                  variant: 'default'
+                })
+
+                if (!confirmed) {
+                  return // İşlemi iptal et
+                }
+              }
+            }
 
             
 
@@ -2372,26 +2398,14 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
                 case 'WON':
+                  toastTitle = `🎉 Fırsat Kazanıldı!`
+                  toastDescription = `"${dealTitle}" fırsatı kazanıldı olarak işaretlendi.`
 
-
-                  toastTitle = `Fırsat kazanıldı: "${dealTitle}"`
-
-
-                  toastDescription = `Fırsat "Kazanıldı" aşamasına taşındı.`
-
-
-                  
-
-                  
-                  if (automation.quoteCreated && automation.quoteId) {
-
-
-                    toastDescription += `\n\nOtomatik işlemler:\n• Teklif oluşturuldu (ID: ${automation.quoteId.substring(0, 8)}...)\n• Teklif başlığı: ${automation.quoteTitle || 'Otomatik oluşturuldu'}\n• E-posta gönderildi\n• Bildirim gönderildi`
-
-
+                  if (automation.contractCreated && automation.contractId) {
+                    toastDescription += `\n\nOtomatik işlemler:\n• Sözleşme oluşturuldu (ID: ${automation.contractId.substring(0, 8)}...)\n• Sözleşme başlığı: ${automation.contractTitle || 'Otomatik oluşturuldu'}\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                  } else {
+                    toastDescription += `\n\nOtomatik işlemler:\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
                   }
-
-
                   break
                   
 
@@ -2399,38 +2413,16 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
                 case 'LOST':
-
-
-                  toastTitle = `Fırsat kaybedildi: "${dealTitle}"`
-
-
+                  toastTitle = `⚠️ Fırsat Kaybedildi: "${dealTitle}"`
                   toastDescription = `Fırsat "Kaybedildi" aşamasına taşındı.`
 
-
-                  
-
-                  
                   if (automation.taskCreated && automation.taskId) {
-
-
-                    toastDescription += `\n\nOtomatik işlemler:\n• Analiz görevi oluşturuldu (ID: ${automation.taskId.substring(0, 8)}...)\n• Bildirim gönderildi`
-
-
+                    toastDescription += `\n\nOtomatik işlemler:\n• Analiz görevi oluşturuldu (ID: ${automation.taskId.substring(0, 8)}...)\n• Kayıp sebebi not olarak kaydedildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
                   } else {
-
-
-                    toastDescription += `\n\nBildirim gönderildi`
-
-
+                    toastDescription += `\n\nOtomatik işlemler:\n• Kayıp sebebi not olarak kaydedildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
                   }
 
-
-                  
-
-                  
                   toastType = 'warning'
-
-
                   break
                   
 
@@ -2668,6 +2660,21 @@ export default function DealList({ isOpen = true }: DealListProps) {
                         { value: 'LOST', label: stageLabels['LOST'] || 'Kaybedildi' },
                       ]}
                       onSave={async (newStage) => {
+                        // ✅ WON durumuna geçerken onay iste
+                        if (newStage === 'WON') {
+                          const confirmed = await confirm({
+                            title: 'Fırsatı Kazanıldı Olarak İşaretlemek İstediğinize Emin Misiniz?',
+                            description: `"${deal.title}" fırsatını kazanıldı olarak işaretlediğinizde otomatik olarak şu işlemler yapılacak:\n\n• Sözleşme oluşturulacak (Contract)\n• Sözleşme fırsat bilgileriyle doldurulacak\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
+                            confirmLabel: 'Evet, Kazanıldı Olarak İşaretle',
+                            cancelLabel: 'İptal',
+                            variant: 'default'
+                          })
+
+                          if (!confirmed) {
+                            return // İşlemi iptal et
+                          }
+                        }
+
                         try {
                           const res = await fetch(`/api/deals/${deal.id}`, {
                             method: 'PUT',
@@ -2679,6 +2686,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                             throw new Error(error.error || 'Aşama güncellenemedi')
                           }
                           const updatedDeal = await res.json()
+                          const automation = updatedDeal?.automation || {}
                           
                           // Cache'i güncelle
                           await Promise.all([
@@ -2687,7 +2695,14 @@ export default function DealList({ isOpen = true }: DealListProps) {
                             mutate((key: string) => typeof key === 'string' && key.startsWith('/api/deals'), undefined, { revalidate: true }),
                           ])
                           
-                          toast.success('Aşama güncellendi', { description: `Fırsat "${stageLabels[newStage] || newStage}" aşamasına taşındı.` })
+                          // ✅ Detaylı toast mesajı
+                          if (newStage === 'WON') {
+                            toast.success('🎉 Fırsat Kazanıldı!', {
+                              description: `"${deal.title}" fırsatı kazanıldı olarak işaretlendi.\n\nOtomatik işlemler:\n${automation.contractCreated ? `• Sözleşme oluşturuldu (ID: ${automation.contractId?.substring(0, 8)}...)\n• Sözleşme numarası: ${automation.contractNumber || 'Oluşturuluyor...'}\n` : ''}• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                            })
+                          } else {
+                            toast.success('Aşama güncellendi', { description: `Fırsat "${stageLabels[newStage] || newStage}" aşamasına taşındı.` })
+                          }
                         } catch (error: any) {
                           toast.error('Aşama güncellenemedi', { description: String(error?.message || 'Bir hata oluştu.') })
                           throw error
@@ -2757,32 +2772,55 @@ export default function DealList({ isOpen = true }: DealListProps) {
                         { value: 'WON', label: 'Kazanıldı' },
                         { value: 'LOST', label: 'Kaybedildi' },
                       ]}
-                      onSave={async (newStage) => {
-                        try {
-                          const res = await fetch(`/api/deals/${deal.id}`, {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ stage: newStage }),
-                          })
-                          if (!res.ok) {
-                            const error = await res.json().catch(() => ({}))
-                            throw new Error(error.error || 'Aşama güncellenemedi')
-                          }
-                          const updatedDeal = await res.json()
-                          
-                          // Cache'i güncelle
-                          await Promise.all([
-                            mutate('/api/deals', undefined, { revalidate: true }),
-                            mutate('/api/deals?', undefined, { revalidate: true }),
-                            mutate((key: string) => typeof key === 'string' && key.startsWith('/api/deals'), undefined, { revalidate: true }),
-                          ])
-                          
-                          toast.success('Aşama güncellendi', { description: `Fırsat "${newStage}" aşamasına taşındı.` })
-                        } catch (error: any) {
-                          toast.error('Aşama güncellenemedi', { description: String(error?.message || 'Bir hata oluştu.') })
-                          throw error
-                        }
-                      }}
+                          onSave={async (newStage) => {
+                            // ✅ WON durumuna geçerken onay iste
+                            if (newStage === 'WON') {
+                              const confirmed = await confirm({
+                                title: 'Fırsatı Kazanıldı Olarak İşaretlemek İstediğinize Emin Misiniz?',
+                                description: `"${deal.title}" fırsatını kazanıldı olarak işaretlediğinizde otomatik olarak şu işlemler yapılacak:\n\n• Sözleşme oluşturulacak (Contract)\n• Sözleşme fırsat bilgileriyle doldurulacak\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
+                                confirmLabel: 'Evet, Kazanıldı Olarak İşaretle',
+                                cancelLabel: 'İptal',
+                                variant: 'default'
+                              })
+
+                              if (!confirmed) {
+                                return // İşlemi iptal et
+                              }
+                            }
+
+                            try {
+                              const res = await fetch(`/api/deals/${deal.id}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ stage: newStage }),
+                              })
+                              if (!res.ok) {
+                                const error = await res.json().catch(() => ({}))
+                                throw new Error(error.error || 'Aşama güncellenemedi')
+                              }
+                              const updatedDeal = await res.json()
+                              const automation = updatedDeal?.automation || {}
+                              
+                              // Cache'i güncelle
+                              await Promise.all([
+                                mutate('/api/deals', undefined, { revalidate: true }),
+                                mutate('/api/deals?', undefined, { revalidate: true }),
+                                mutate((key: string) => typeof key === 'string' && key.startsWith('/api/deals'), undefined, { revalidate: true }),
+                              ])
+                              
+                              // ✅ Detaylı toast mesajı
+                              if (newStage === 'WON') {
+                                toast.success('🎉 Fırsat Kazanıldı!', {
+                                  description: `"${deal.title}" fırsatı kazanıldı olarak işaretlendi.\n\nOtomatik işlemler:\n${automation.contractCreated ? `• Sözleşme oluşturuldu (ID: ${automation.contractId?.substring(0, 8)}...)\n• Sözleşme numarası: ${automation.contractNumber || 'Oluşturuluyor...'}\n` : ''}• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                                })
+                              } else {
+                                toast.success('Aşama güncellendi', { description: `Fırsat "${newStage}" aşamasına taşındı.` })
+                              }
+                            } catch (error: any) {
+                              toast.error('Aşama güncellenemedi', { description: String(error?.message || 'Bir hata oluştu.') })
+                              throw error
+                            }
+                          }}
                       disabled={deal.stage === 'WON' || deal.stage === 'LOST'}
                     />
                   </TableCell>
@@ -3250,6 +3288,21 @@ export default function DealList({ isOpen = true }: DealListProps) {
                             { value: 'LOST', label: stageLabels['LOST'] || 'Kaybedildi' },
                           ]}
                           onSave={async (newStage) => {
+                            // ✅ WON durumuna geçerken onay iste
+                            if (newStage === 'WON') {
+                              const confirmed = await confirm({
+                                title: 'Fırsatı Kazanıldı Olarak İşaretlemek İstediğinize Emin Misiniz?',
+                                description: `"${deal.title}" fırsatını kazanıldı olarak işaretlediğinizde otomatik olarak şu işlemler yapılacak:\n\n• Sözleşme oluşturulacak (Contract)\n• Sözleşme fırsat bilgileriyle doldurulacak\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
+                                confirmLabel: 'Evet, Kazanıldı Olarak İşaretle',
+                                cancelLabel: 'İptal',
+                                variant: 'default'
+                              })
+
+                              if (!confirmed) {
+                                return // İşlemi iptal et
+                              }
+                            }
+
                             try {
                               const res = await fetch(`/api/deals/${deal.id}`, {
                                 method: 'PUT',
@@ -3260,11 +3313,22 @@ export default function DealList({ isOpen = true }: DealListProps) {
                                 const error = await res.json().catch(() => ({}))
                                 throw new Error(error.error || 'Aşama güncellenemedi')
                               }
+                              const updatedDeal = await res.json()
+                              const automation = updatedDeal?.automation || {}
+                              
                               await Promise.all([
                                 mutate('/api/deals', undefined, { revalidate: true }),
                                 mutate('/api/deals?', undefined, { revalidate: true }),
                               ])
-                              toastSuccess('Aşama güncellendi', `Fırsat "${stageLabels[newStage] || newStage}" aşamasına taşındı.`)
+                              
+                              // ✅ Detaylı toast mesajı
+                              if (newStage === 'WON') {
+                                toast.success('🎉 Fırsat Kazanıldı!', {
+                                  description: `"${deal.title}" fırsatı kazanıldı olarak işaretlendi.\n\nOtomatik işlemler:\n${automation.contractCreated ? `• Sözleşme oluşturuldu (ID: ${automation.contractId?.substring(0, 8)}...)\n• Sözleşme numarası: ${automation.contractNumber || 'Oluşturuluyor...'}\n` : ''}• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                                })
+                              } else {
+                                toastSuccess('Aşama güncellendi', `Fırsat "${stageLabels[newStage] || newStage}" aşamasına taşındı.`)
+                              }
                             } catch (error: any) {
                               toastError('Aşama güncellenemedi', error?.message || 'Bir hata oluştu.')
                               throw error
@@ -3749,16 +3813,25 @@ export default function DealList({ isOpen = true }: DealListProps) {
                   // Toast mesajı - analiz görevi oluşturulduğunu bildir
 
 
-                  toast.success(
-                    t('lostDialog.dealMarkedAsLost'),
-                    {
-                      description: t('lostDialog.dealMarkedAsLostMessage'),
-                      action: {
-                        label: t('lostDialog.goToTasksPage'),
-                        onClick: () => window.location.href = `/${locale}/tasks`,
-                      }
-                    }
-                  )
+                  // ✅ Detaylı toast mesajı - analiz görevi ve bildirim bilgileri
+                  const automation = updatedDeal?.automation || {}
+                  const dealTitle = updatedDeal?.title || 'Fırsat'
+                  
+                  let toastDescription = `"${dealTitle}" fırsatı kaybedildi olarak işaretlendi.`
+                  
+                  if (automation.taskCreated && automation.taskId) {
+                    toastDescription += `\n\nOtomatik işlemler:\n• Analiz görevi oluşturuldu (ID: ${automation.taskId.substring(0, 8)}...)\n• Kayıp sebebi not olarak kaydedildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                  } else {
+                    toastDescription += `\n\nOtomatik işlemler:\n• Kayıp sebebi not olarak kaydedildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                  }
+
+                  toast.warning('⚠️ Fırsat Kaybedildi', {
+                    description: toastDescription,
+                    action: automation.taskCreated && automation.taskId ? {
+                      label: t('lostDialog.goToTasksPage'),
+                      onClick: () => window.location.href = `/${locale}/tasks`,
+                    } : undefined
+                  })
 
 
 
@@ -3850,13 +3923,13 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
       </Dialog>
 
-<<<<<<< HEAD
       {/* Contextual Wizard - İlk fırsat yoksa */}
       <ContextualWizard
         trigger="first-deal"
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
-=======
+      />
+
       {/* Quick Action Form Modals */}
       <QuoteForm
         open={quickAction?.type === 'quote'}
@@ -3867,8 +3940,8 @@ export default function DealList({ isOpen = true }: DealListProps) {
           // closeQuickAction() tekrar çağrılırsa sonsuz döngü oluşur (Maximum update depth exceeded)
           // Form başarıyla kaydedildi - form'un kendi onClose'u closeQuickAction'ı zaten çağıracak
         }}
-        dealId={quickAction?.deal.id}
-        customerCompanyId={quickAction?.deal.companyId}
+        deal={quickAction?.deal}
+        customerCompanyId={quickAction?.deal?.companyId}
       />
       <InvoiceForm
         open={quickAction?.type === 'invoice'}
@@ -3876,7 +3949,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
         onSuccess={async (savedInvoice) => {
           // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
         }}
-        customerCompanyId={quickAction?.deal.companyId}
+        customerCompanyId={quickAction?.deal?.companyId}
       />
       <TaskForm
         open={quickAction?.type === 'task'}
@@ -3884,7 +3957,8 @@ export default function DealList({ isOpen = true }: DealListProps) {
         onSuccess={async (savedTask) => {
           // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
         }}
-        defaultTitle={quickAction?.deal.title}
+        deal={quickAction?.deal}
+        defaultTitle={quickAction?.deal?.title}
       />
       <MeetingForm
         open={quickAction?.type === 'meeting'}
@@ -3892,9 +3966,8 @@ export default function DealList({ isOpen = true }: DealListProps) {
         onSuccess={async (savedMeeting) => {
           // CRITICAL FIX: onSuccess içinde closeQuickAction çağrılmasın
         }}
-        dealId={quickAction?.deal.id}
-        customerCompanyId={quickAction?.deal.companyId}
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
+        deal={quickAction?.deal}
+        customerCompanyId={quickAction?.deal?.companyId}
       />
 
       {/* Email/SMS/WhatsApp Dialog'ları */}

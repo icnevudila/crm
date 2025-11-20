@@ -56,6 +56,7 @@ interface ShipmentFormProps {
   onClose: () => void
   onSuccess?: (savedShipment: any) => void | Promise<void>
   invoiceId?: string // Prop olarak invoiceId geçilebilir (modal içinde kullanım için)
+  invoice?: any // ✅ ÇÖZÜM: Invoice objesi direkt geçilebilir (API çağrısı yapmadan)
   skipDialog?: boolean // Wizard içinde kullanım için Dialog wrapper'ı atla
 }
 
@@ -69,14 +70,14 @@ async function fetchInvoices() {
   return Array.isArray(data) ? data : []
 }
 
-export default function ShipmentForm({ shipment, open, onClose, onSuccess, invoiceId: invoiceIdProp, skipDialog = false }: ShipmentFormProps) {
+export default function ShipmentForm({ shipment, open, onClose, onSuccess, invoiceId: invoiceIdProp, invoice: invoiceProp, skipDialog = false }: ShipmentFormProps) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
   const invoiceIdFromUrl = searchParams.get('invoiceId') || undefined // URL'den invoiceId al
   
-  // Prop öncelikli - prop varsa prop'u kullan, yoksa URL'den al
-  const invoiceId = invoiceIdProp || invoiceIdFromUrl
+  // ✅ ÇÖZÜM: Prop öncelikli - invoiceProp varsa onun id'sini kullan, yoksa invoiceIdProp, yoksa URL'den al
+  const invoiceId = invoiceProp?.id || invoiceIdProp || invoiceIdFromUrl
   
   const [loading, setLoading] = useState(false)
 
@@ -87,7 +88,11 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess, invoi
   })
 
   // Güvenlik kontrolü - invoices her zaman array olmalı
-  const invoices = Array.isArray(invoicesData) ? invoicesData : []
+  const invoicesFromApi = Array.isArray(invoicesData) ? invoicesData : []
+  // ✅ ÇÖZÜM: invoiceProp varsa onu da invoices listesine ekle (dropdown'da görünsün)
+  const invoices = invoiceProp && !invoicesFromApi.find((inv: any) => inv.id === invoiceProp.id) 
+    ? [invoiceProp, ...invoicesFromApi] 
+    : invoicesFromApi
 
   const {
     register,
@@ -136,6 +141,16 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess, invoi
           estimatedDelivery: formattedEstimatedDelivery,
           deliveryAddress: shipment.deliveryAddress || '',
         })
+      } else if (invoiceProp) {
+        // ✅ ÖNEMLİ: invoiceProp öncelikli (direkt geçilen invoice objesi) - API çağrısı yapmadan
+        reset({
+          tracking: '',
+          status: 'PENDING',
+          invoiceId: invoiceProp.id || invoiceId, // ✅ invoiceProp.id öncelikli
+          shippingCompany: '',
+          estimatedDelivery: '',
+          deliveryAddress: '',
+        })
       } else {
         // Yeni kayıt modu - form'u temizle (invoiceId prop'u varsa kullan)
         reset({
@@ -148,7 +163,7 @@ export default function ShipmentForm({ shipment, open, onClose, onSuccess, invoi
         })
       }
     }
-  }, [shipment, open, reset, invoiceId])
+  }, [shipment, open, reset, invoiceId, invoiceProp])
 
   const mutation = useMutation({
     mutationFn: async (data: ShipmentFormData) => {

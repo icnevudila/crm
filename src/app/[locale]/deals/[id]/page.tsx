@@ -12,14 +12,10 @@ import GradientCard from '@/components/ui/GradientCard'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { formatCurrency } from '@/lib/utils'
-<<<<<<< HEAD
-import { toast, confirm } from '@/lib/toast'
-=======
-import { toast, toastError } from '@/lib/toast'
+import { toast, toastError, confirm } from '@/lib/toast'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
 import WorkflowStepper from '@/components/ui/WorkflowStepper'
 import { getDealWorkflowSteps } from '@/lib/workflowSteps'
 import StatusInfoNote from '@/components/workflow/StatusInfoNote'
@@ -59,12 +55,9 @@ interface Deal {
   expectedCloseDate?: string
   winProbability?: number
   lostReason?: string
-<<<<<<< HEAD
   priorityScore?: number
   isPriority?: boolean
-=======
   description?: string
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
   leadSource?: string
   leadScore?: {
     score: number
@@ -529,14 +522,6 @@ export default function DealDetailPage() {
         ]}
       />
 
-<<<<<<< HEAD
-      {/* Info Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-2 text-gray-600 mb-2">
-            <DollarSign className="h-4 w-4" />
-            <span className="text-sm">Değer</span>
-=======
       {/* İlgili Sözleşme */}
       {deal.Contract && deal.Contract.length > 0 && (
         <Card className="p-6 border-l-4 border-purple-500">
@@ -548,7 +533,6 @@ export default function DealDetailPage() {
             {deal.Contract.length > 1 && (
               <Badge variant="outline">{deal.Contract.length} Sözleşme</Badge>
             )}
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
           </div>
           <div className="space-y-2">
             {deal.Contract.map((contract: any) => (
@@ -642,7 +626,6 @@ export default function DealDetailPage() {
           </motion.div>
         )}
 
-<<<<<<< HEAD
         {deal.priorityScore !== undefined && deal.priorityScore !== null && (
           <Card className="p-4">
             <div className="flex items-center justify-between mb-2">
@@ -678,9 +661,7 @@ export default function DealDetailPage() {
           </Card>
         )}
 
-=======
         {/* Kazanma İhtimali - Premium Card */}
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
         {deal.winProbability && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}

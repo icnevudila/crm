@@ -13,13 +13,9 @@ import { Card } from '@/components/ui/card'
 import GradientCard from '@/components/ui/GradientCard'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { formatCurrency } from '@/lib/utils'
-<<<<<<< HEAD
-import { toast, confirm } from '@/lib/toast'
-=======
-import { toast, toastError, toastWarning } from '@/lib/toast'
+import { toast, toastError, toastWarning, confirm } from '@/lib/toast'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
 import { mutate } from 'swr'
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import dynamic from 'next/dynamic'

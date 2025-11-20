@@ -139,7 +139,47 @@ export function toastPromise<T>(
 }
 
 /**
- * Confirm dialog - window.confirm wrapper
+ * Toast confirmation - Promise döndüren confirmation toast
+ * Kullanıcı "Tamam" veya "İptal" butonuna tıklayıncaya kadar bekler
+ */
+export function toastConfirm(
+  message: string,
+  description?: string,
+  options?: {
+    confirmLabel?: string
+    cancelLabel?: string
+    duration?: number
+  }
+): Promise<boolean> {
+  return new Promise((resolve) => {
+    const confirmLabel = options?.confirmLabel || 'Tamam'
+    const cancelLabel = options?.cancelLabel || 'İptal'
+    
+    sonnerToast.warning(message, {
+      description,
+      duration: options?.duration || Infinity, // Kullanıcı seçene kadar açık kal
+      action: {
+        label: confirmLabel,
+        onClick: () => {
+          resolve(true)
+        },
+      },
+      cancel: {
+        label: cancelLabel,
+        onClick: () => {
+          resolve(false)
+        },
+      },
+      onDismiss: () => {
+        // Toast kapatılırsa (X butonu) false döndür
+        resolve(false)
+      },
+    })
+  })
+}
+
+/**
+ * Confirm dialog - window.confirm wrapper (geriye uyumluluk için)
  * Gelecekte daha güzel bir modal dialog ile değiştirilebilir
  */
 export function confirm(message: string): boolean {

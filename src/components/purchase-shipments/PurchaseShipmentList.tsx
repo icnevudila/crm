@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast, toastSuccess, toastError, confirm } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { Plus, Search, Edit, Trash2, Eye, CheckCircle, MoreVertical, Calendar, FileText, PackageCheck, BarChart3, X } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -180,8 +181,27 @@ export default function PurchaseShipmentList() {
     }
   }, [purchaseShipments])
 
+  const { confirm: confirmDialog } = useConfirm()
+
   // Onaylama
   const handleApprove = useCallback(async (id: string) => {
+    const purchaseShipment = purchaseShipments.find(s => s.id === id)
+
+    // ✅ Onay dialog'u ekle
+    if (purchaseShipment) {
+      const confirmed = await confirmDialog({
+        title: 'Mal Kabulü Onaylamak İstediğinize Emin Misiniz?',
+        description: `Bu mal kabulünü onayladığınızda otomatik olarak şu işlemler yapılacak:\n\n• Ürünler stoğa eklenecek (her InvoiceItem için)\n• Bekleyen stok rezervasyonu kaldırılacak (incomingQuantity düşecek)\n• Stok hareketi kaydedilecek (IN - TEDARIKCI)\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
+        confirmLabel: 'Evet, Onayla',
+        cancelLabel: 'İptal',
+        variant: 'default'
+      })
+
+      if (!confirmed) {
+        return // İşlemi iptal et
+      }
+    }
+
     setApprovingId(id)
     try {
       const res = await fetch(`/api/purchase-shipments/${id}/approve`, {
@@ -195,6 +215,7 @@ export default function PurchaseShipmentList() {
       }
 
       const result = await res.json()
+      const automation = result?.automation || {}
 
       // Optimistic update
       const updated = purchaseShipments.map(s =>
@@ -229,10 +250,10 @@ export default function PurchaseShipmentList() {
         ])
       }, 500) // 500ms sonra revalidate (optimistic update görünür, sonra fresh data çekilir)
 
-      toast.success(
-        t('approveSuccess'),
-        result.message || t('approveSuccessMessage', { id: id.substring(0, 8) })
-      )
+      // ✅ Detaylı toast mesajı
+      toast.success('✅ Mal Kabulü Onaylandı!', {
+        description: `Mal kabulü onaylandı.\n\nOtomatik işlemler:\n• Ürünler stoğa eklendi (her InvoiceItem için)\n• Bekleyen stok rezervasyonu kaldırıldı (incomingQuantity düştü)\n• Stok hareketi kaydedildi (IN - TEDARIKCI)\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+      })
     } catch (error: any) {
       console.error('Approve error:', error)
       toast.error(
@@ -242,7 +263,7 @@ export default function PurchaseShipmentList() {
     } finally {
       setApprovingId(null)
     }
-  }, [purchaseShipments, mutatePurchaseShipments, apiUrl])
+  }, [purchaseShipments, mutatePurchaseShipments, apiUrl, confirmDialog, t])
 
   // Detay modal aç
   const handleViewDetail = useCallback(async (purchaseShipment: PurchaseShipment) => {

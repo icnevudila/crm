@@ -36,6 +36,9 @@ interface TaskFormProps {
   defaultDescription?: string
   customerName?: string
   customerCompanyName?: string
+  deal?: any // ✅ ÇÖZÜM: Deal objesi direkt geçilebilir (API çağrısı yapmadan)
+  quote?: any // ✅ ÇÖZÜM: Quote objesi direkt geçilebilir (API çağrısı yapmadan)
+  invoice?: any // ✅ ÇÖZÜM: Invoice objesi direkt geçilebilir (API çağrısı yapmadan)
 }
 
 async function fetchUsers() {
@@ -44,7 +47,19 @@ async function fetchUsers() {
   return res.json()
 }
 
-export default function TaskForm({ task, open, onClose, onSuccess, defaultTitle, defaultDescription, customerName, customerCompanyName }: TaskFormProps) {
+export default function TaskForm({ 
+  task, 
+  open, 
+  onClose, 
+  onSuccess, 
+  defaultTitle, 
+  defaultDescription, 
+  customerName, 
+  customerCompanyName,
+  deal: dealProp,
+  quote: quoteProp,
+  invoice: invoiceProp,
+}: TaskFormProps) {
   const t = useTranslations('tasks.form')
   const tCommon = useTranslations('common.form')
   const router = useRouter()
@@ -115,6 +130,36 @@ export default function TaskForm({ task, open, onClose, onSuccess, defaultTitle,
           dueDate: formattedDueDate,
           priority: task.priority || 'MEDIUM',
         })
+      } else if (dealProp) {
+        // ✅ ÖNEMLİ: dealProp öncelikli (direkt geçilen deal objesi) - API çağrısı yapmadan
+        reset({
+          title: dealProp.title ? `Görev: ${dealProp.title}` : (defaultTitle || ''),
+          status: 'TODO',
+          assignedTo: '',
+          description: dealProp.description || defaultDescription || '',
+          dueDate: '',
+          priority: 'MEDIUM',
+        })
+      } else if (quoteProp) {
+        // ✅ ÖNEMLİ: quoteProp öncelikli (direkt geçilen quote objesi) - API çağrısı yapmadan
+        reset({
+          title: quoteProp.title ? `Görev: ${quoteProp.title}` : (defaultTitle || ''),
+          status: 'TODO',
+          assignedTo: '',
+          description: quoteProp.description || defaultDescription || '',
+          dueDate: '',
+          priority: 'MEDIUM',
+        })
+      } else if (invoiceProp) {
+        // ✅ ÖNEMLİ: invoiceProp öncelikli (direkt geçilen invoice objesi) - API çağrısı yapmadan
+        reset({
+          title: invoiceProp.title ? `Görev: ${invoiceProp.title}` : (defaultTitle || ''),
+          status: 'TODO',
+          assignedTo: '',
+          description: invoiceProp.description || defaultDescription || '',
+          dueDate: '',
+          priority: 'MEDIUM',
+        })
       } else {
         // Yeni kayıt modu - form'u temizle
         reset({
@@ -127,7 +172,7 @@ export default function TaskForm({ task, open, onClose, onSuccess, defaultTitle,
         })
       }
     }
-  }, [task, open, reset, defaultTitle, defaultDescription])
+  }, [task, open, reset, defaultTitle, defaultDescription, dealProp, quoteProp, invoiceProp])
 
   const mutation = useMutation({
     mutationFn: async (data: TaskFormData) => {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getServerSession } from '@/lib/auth-supabase'
+import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { buildPermissionDeniedResponse } from '@/lib/permissions'
 import bcrypt from 'bcryptjs'
@@ -10,12 +10,9 @@ export const revalidate = 3600
 export async function GET(request: Request) {
   try {
     // Session kontrolü - hata yakalama ile
-    const session = await getServerSession(request)
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Oturum bilgisi alınamadı' },
-        { status: 401 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {
@@ -82,12 +79,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     // Session kontrolü - hata yakalama ile
-    const session = await getServerSession(request)
-    if (!session) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Oturum bilgisi alınamadı' },
-        { status: 401 }
-      )
+    const { session, error: sessionError } = await getSafeSession(request)
+    if (sessionError) {
+      return sessionError
     }
 
     if (!session?.user?.companyId) {

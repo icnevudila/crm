@@ -15,10 +15,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { formatCurrency } from '@/lib/utils'
-<<<<<<< HEAD
-import { confirm } from '@/lib/toast'
-=======
-import { toastError } from '@/lib/toast'
+import { toastError, confirm } from '@/lib/toast'
 import SendEmailButton from '@/components/integrations/SendEmailButton'
 import SendSmsButton from '@/components/integrations/SendSmsButton'
 import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
@@ -26,7 +23,6 @@ import AddToCalendarButton from '@/components/integrations/AddToCalendarButton'
 import SendMeetingLinkButton from '@/components/integrations/SendMeetingLinkButton'
 import ContextualActionsBar from '@/components/ui/ContextualActionsBar'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
 
 // Lazy load MeetingForm - performans için
 const MeetingForm = dynamic(() => import('@/components/meetings/MeetingForm'), {

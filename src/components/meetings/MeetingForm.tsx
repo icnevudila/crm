@@ -36,11 +36,14 @@ interface MeetingFormProps {
   onClose: () => void
   onSuccess?: (savedMeeting: any) => void
   dealId?: string // Prop olarak dealId geçilebilir (modal içinde kullanım için)
+  deal?: any // ✅ ÇÖZÜM: Deal objesi direkt geçilebilir (API çağrısı yapmadan)
   quoteId?: string // Prop olarak quoteId geçilebilir (modal içinde kullanım için)
+  quote?: any // ✅ ÇÖZÜM: Quote objesi direkt geçilebilir (API çağrısı yapmadan)
   customerId?: string // Prop olarak customerId geçilebilir (modal içinde kullanım için)
   customerCompanyId?: string
   customerCompanyName?: string
   invoiceId?: string
+  invoice?: any // ✅ ÇÖZÜM: Invoice objesi direkt geçilebilir (API çağrısı yapmadan)
   initialDate?: Date // Takvimden seçilen tarih
 }
 
@@ -50,10 +53,14 @@ export default function MeetingForm({
   onClose,
   onSuccess,
   dealId: dealIdProp,
+  deal: dealProp, // ✅ ÇÖZÜM: Deal objesi direkt geçilebilir
   quoteId: quoteIdProp,
+  quote: quoteProp, // ✅ ÇÖZÜM: Quote objesi direkt geçilebilir
   customerId: customerIdProp,
   customerCompanyId: customerCompanyIdProp,
   customerCompanyName,
+  invoiceId: invoiceIdProp,
+  invoice: invoiceProp, // ✅ ÇÖZÜM: Invoice objesi direkt geçilebilir
   initialDate,
 }: MeetingFormProps) {
   const t = useTranslations('meetings.form')
@@ -65,9 +72,10 @@ export default function MeetingForm({
   const quoteIdFromUrl = searchParams.get('quoteId') || undefined // URL'den quoteId al
   const customerIdFromUrl = searchParams.get('customerId') || undefined // URL'den customerId al
   
-  // Prop öncelikli - prop varsa prop'u kullan, yoksa URL'den al
-  const dealId = dealIdProp || dealIdFromUrl
-  const quoteId = quoteIdProp || quoteIdFromUrl
+  // ✅ ÇÖZÜM: Prop öncelikli - dealProp varsa onun id'sini kullan, yoksa dealIdProp, yoksa URL'den al
+  const dealId = dealProp?.id || dealIdProp || dealIdFromUrl
+  const quoteId = quoteProp?.id || quoteIdProp || quoteIdFromUrl
+  const invoiceId = invoiceProp?.id || invoiceIdProp
   const customerId = customerIdProp || customerIdFromUrl
   const customerCompanyId = customerCompanyIdProp || customerCompanyIdFromUrl
   const [loading, setLoading] = useState(false)
@@ -165,8 +173,8 @@ export default function MeetingForm({
     ? deals.filter((deal: any) => deal.customerCompanyId === customerCompanyId)
     : deals
 
-  // Deal bilgilerini çek (dealId varsa) - QuoteForm pattern'i ile
-  const { data: dealData } = useQuery({
+  // ✅ ÇÖZÜM: Deal bilgilerini çek (dealProp varsa direkt kullan, yoksa API'den çek)
+  const { data: dealDataFromApi } = useQuery({
     queryKey: ['deal', dealId],
     queryFn: async () => {
       if (!dealId) return null
@@ -174,11 +182,14 @@ export default function MeetingForm({
       if (!res.ok) return null
       return res.json()
     },
-    enabled: !!dealId && open && !meeting, // Sadece yeni kayıt modunda ve dealId varsa
+    enabled: !!dealId && open && !meeting && !dealProp, // Sadece dealProp yoksa API'den çek
   })
+  
+  // DealProp varsa onu kullan, yoksa API'den gelen datayı kullan
+  const dealData = dealProp || dealDataFromApi
 
-  // Quote bilgilerini çek (quoteId varsa)
-  const { data: quoteData } = useQuery({
+  // ✅ ÇÖZÜM: Quote bilgilerini çek (quoteProp varsa direkt kullan, yoksa API'den çek)
+  const { data: quoteDataFromApi } = useQuery({
     queryKey: ['quote', quoteId],
     queryFn: async () => {
       if (!quoteId) return null
@@ -186,8 +197,11 @@ export default function MeetingForm({
       if (!res.ok) return null
       return res.json()
     },
-    enabled: !!quoteId && open && !meeting, // Sadece yeni kayıt modunda ve quoteId varsa
+    enabled: !!quoteId && open && !meeting && !quoteProp, // Sadece quoteProp yoksa API'den çek
   })
+  
+  // QuoteProp varsa onu kullan, yoksa API'den gelen datayı kullan
+  const quoteData = quoteProp || quoteDataFromApi
 
   const {
     register,
@@ -258,8 +272,49 @@ export default function MeetingForm({
         // Yeni kayıt modu
         setSelectedParticipants([])
         
-        // Deal bilgileri varsa formu otomatik doldur
-        if (dealId && dealData) {
+        // ✅ ÖNEMLİ: dealProp öncelikli (direkt geçilen deal objesi) - API çağrısı yapmadan
+        if (dealProp) {
+          const deal = dealProp
+          reset({
+            title: deal.title ? t('autoTitleFromDeal', { dealTitle: deal.title }) : '',
+            description: deal.description || '',
+            meetingDate: new Date().toISOString().slice(0, 16),
+            meetingDuration: 60,
+            location: '',
+            status: 'PLANNED',
+            customerId: deal.customerId || customerId || '',
+            dealId: deal.id || dealId,
+            participantIds: [],
+            customerCompanyId: customerCompanyId || deal.customerCompanyId || '',
+          })
+          // Deal'dan customer bilgilerini otomatik doldur
+          if (deal.customerId) {
+            setValue('customerId', deal.customerId)
+          }
+        } else if (quoteProp) {
+          // ✅ ÖNEMLİ: quoteProp öncelikli (direkt geçilen quote objesi) - API çağrısı yapmadan
+          const quote = quoteProp
+          reset({
+            title: quote.title ? t('autoTitleFromQuote', { quoteTitle: quote.title }) : '',
+            description: quote.description || '',
+            meetingDate: new Date().toISOString().slice(0, 16),
+            meetingDuration: 60,
+            location: '',
+            status: 'PLANNED',
+            customerId: quote.customerId || customerId || '',
+            dealId: quote.dealId || dealId || '',
+            participantIds: [],
+            customerCompanyId: customerCompanyId || quote.customerCompanyId || '',
+          })
+          // Quote'dan deal ve customer bilgilerini otomatik doldur
+          if (quote.dealId) {
+            setValue('dealId', quote.dealId)
+          }
+          if (quote.customerId) {
+            setValue('customerId', quote.customerId)
+          }
+        } else if (dealId && dealData) {
+          // Deal bilgileri API'den yüklendiyse formu otomatik doldur
           const deal = dealData
           reset({
             title: deal.title ? t('autoTitleFromDeal', { dealTitle: deal.title }) : '',
@@ -278,7 +333,7 @@ export default function MeetingForm({
             setValue('customerId', deal.customerId)
           }
         } else if (quoteId && quoteData) {
-          // Quote bilgileri varsa formu otomatik doldur
+          // Quote bilgileri API'den yüklendiyse formu otomatik doldur
           const quote = quoteData
           reset({
             title: quote.title ? t('autoTitleFromQuote', { quoteTitle: quote.title }) : '',
@@ -333,7 +388,7 @@ export default function MeetingForm({
         }
       }
     }
-  }, [meeting, open, reset, dealId, customerId, setValue, dealData, quoteId, quoteData, customerCompanyId, initialDate]) // initialDate eklendi
+  }, [meeting, open, reset, dealId, customerId, setValue, dealData, quoteId, quoteData, customerCompanyId, initialDate, dealProp, quoteProp, invoiceProp]) // dealProp, quoteProp, invoiceProp eklendi
 
   const status = watch('status')
   const selectedCustomerId = watch('customerId') // Form'dan seçilen müşteri ID'si

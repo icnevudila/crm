@@ -20,6 +20,7 @@ import {
   BarChart3,
   Globe,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -43,7 +44,7 @@ function LoginPage() {
     if (status === 'loading') {
       return
     }
-    
+
     // Sadece gerçekten authenticated ve user varsa yönlendir
     if (status === 'authenticated' && session?.user?.id) {
       router.replace(`/${locale}/dashboard`)
@@ -59,50 +60,61 @@ function LoginPage() {
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
+      e.preventDefault()
+      setLoading(true)
+      setError('')
 
-    try {
-      const trimmedEmail = email.trim()
+      try {
+        const trimmedEmail = email.trim()
 
-      if (!trimmedEmail || !password) {
-          setError(t('emailRequired') || 'E-posta ve şifre gereklidir')
-        setLoading(false)
-        return
-      }
+        if (!trimmedEmail || !password) {
+          const msg = t('emailRequired') || 'E-posta ve şifre gereklidir'
+          setError(msg)
+          toast.warning(msg)
+          setLoading(false)
+          return
+        }
 
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        const response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
           credentials: 'include',
-        body: JSON.stringify({
-          email: trimmedEmail,
-          password: password,
-        }),
-      })
+          body: JSON.stringify({
+            email: trimmedEmail,
+            password: password,
+          }),
+        })
 
-      const data = await response.json()
+        const data = await response.json()
 
-      if (!response.ok || !data.success) {
-          setError(data.error || t('invalidCredentials') || 'E-posta veya şifre hatalı')
-        setLoading(false)
-        return
-      }
+        if (!response.ok || !data.success) {
+          const msg = data.error || t('invalidCredentials') || 'E-posta veya şifre hatalı'
+          setError(msg)
+          toast.error(msg)
+          setLoading(false)
+          return
+        }
+
+        toast.success(t('loginSuccess') || 'Giriş başarılı', {
+          description: t('redirecting') || 'Yönlendiriliyorsunuz...'
+        })
 
         router.prefetch(`/${locale}/dashboard`)
-      window.location.href = `/${locale}/dashboard`
-    } catch (err: any) {
-      console.error('Login error:', err)
-      if (err?.message?.includes('fetch') || err?.message?.includes('network')) {
-          setError(t('networkError') || 'Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edin.')
-      } else {
-          setError(t('loginError') || 'Giriş yapılırken bir hata oluştu')
+        window.location.href = `/${locale}/dashboard`
+      } catch (err: any) {
+        console.error('Login error:', err)
+        let msg = ''
+        if (err?.message?.includes('fetch') || err?.message?.includes('network')) {
+          msg = t('networkError') || 'Sunucuya bağlanılamadı. Lütfen internet bağlantınızı kontrol edin.'
+        } else {
+          msg = t('loginError') || 'Giriş yapılırken bir hata oluştu'
+        }
+        setError(msg)
+        toast.error(msg)
+        setLoading(false)
       }
-      setLoading(false)
-    }
     },
     [email, password, router, locale, t]
   )
@@ -290,8 +302,8 @@ function LoginPage() {
                     {t('description') || 'Hesabınıza giriş yapın ve işinizi yönetmeye başlayın'}
                   </CardDescription>
                 </motion.div>
-        </CardHeader>
-        <CardContent>
+              </CardHeader>
+              <CardContent>
                 <form onSubmit={handleSubmit} className="space-y-5">
                   {/* Email */}
                   <motion.div
@@ -313,17 +325,17 @@ function LoginPage() {
                       </motion.div>
                       {t('email') || 'E-posta Adresi'}
                     </motion.label>
-              <div className="relative">
-                <Input
-                  type="email"
+                    <div className="relative">
+                      <Input
+                        type="email"
                         placeholder={t('emailPlaceholder') || 'ornek@email.com'}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={loading}
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        disabled={loading}
                         className="h-11 rounded-md border border-gray-300 bg-white text-gray-900 transition-all duration-200 hover:border-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 focus:shadow-sm"
-                  required
-                />
-              </div>
+                        required
+                      />
+                    </div>
                   </motion.div>
 
                   {/* Password */}
@@ -346,16 +358,16 @@ function LoginPage() {
                       </motion.div>
                       {t('password') || 'Şifre'}
                     </motion.label>
-              <div className="relative">
-                <Input
+                    <div className="relative">
+                      <Input
                         type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={loading}
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        disabled={loading}
                         className="h-11 rounded-md border border-gray-300 bg-white text-gray-900 pr-10 transition-all duration-200 hover:border-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 focus:shadow-sm"
-                  required
-                />
+                        required
+                      />
                       <motion.button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
@@ -370,20 +382,20 @@ function LoginPage() {
                           <Eye className="h-5 w-5" />
                         )}
                       </motion.button>
-              </div>
+                    </div>
                   </motion.div>
 
                   {/* Error Message */}
-            {error && (
+                  {error && (
                     <motion.div
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
                       className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-600 flex items-center gap-2"
                     >
                       <Shield className="h-4 w-4" />
-                {error}
+                      {error}
                     </motion.div>
-            )}
+                  )}
 
                   {/* Submit Button */}
                   <motion.div
@@ -395,18 +407,18 @@ function LoginPage() {
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                     >
-            <Button
-              type="submit"
-              disabled={loading}
+                      <Button
+                        type="submit"
+                        disabled={loading}
                         className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-md shadow-sm hover:shadow-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+                      >
                         <span className="flex items-center justify-center gap-2">
-              {loading ? (
-                <>
+                          {loading ? (
+                            <>
                               <Loader2 className="h-5 w-5 animate-spin" />
                               {t('loggingIn') || 'Giriş yapılıyor...'}
-                </>
-              ) : (
+                            </>
+                          ) : (
                             <>
                               {t('login') || 'Giriş Yap'}
                               <motion.div
@@ -416,9 +428,9 @@ function LoginPage() {
                                 <ArrowRight className="h-5 w-5" />
                               </motion.div>
                             </>
-              )}
+                          )}
                         </span>
-            </Button>
+                      </Button>
                     </motion.div>
                   </motion.div>
 
@@ -470,11 +482,11 @@ function LoginPage() {
                           {t('forgotPassword') || 'Şifremi Unuttum'}
                         </Link>
                       </motion.div>
-            </div>
+                    </div>
                   </motion.div>
-          </form>
-        </CardContent>
-      </Card>
+                </form>
+              </CardContent>
+            </Card>
           </motion.div>
         </motion.div>
       </div>

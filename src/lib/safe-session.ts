@@ -110,19 +110,21 @@ export async function getSafeSession(request?: Request): Promise<SafeSessionResu
 
     return { session }
   } catch (sessionError: any) {
+    // getServerSession zaten null döndürüyor, buraya gelmemeli
+    // Ama yine de güvenli bir şekilde handle et
     if (process.env.NODE_ENV === 'development') {
-      console.error('Session error:', sessionError)
+      console.error('getSafeSession error:', sessionError?.message || sessionError)
     }
     
+    // Session alınamadı - unauthorized döndür (500 yerine 401)
     return {
       session: null,
       error: NextResponse.json(
         {
-          error: 'Session error',
-          message: sessionError?.message || 'Failed to get session',
-          ...(process.env.NODE_ENV === 'development' && { stack: sessionError?.stack }),
+          error: 'Unauthorized',
+          message: 'Session could not be retrieved',
         },
-        { status: 500 }
+        { status: 401 }
       ),
     }
   }

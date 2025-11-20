@@ -15,6 +15,8 @@ import { getStageMessage } from '@/lib/stageTranslations'
 import { handleFormValidationErrors } from '@/lib/form-validation'
 import { useNavigateToDetailToast } from '@/lib/quick-action-helper'
 import { AutomationConfirmationModal } from '@/lib/automations/toast-confirmation'
+import { Sparkles } from 'lucide-react'
+import { useLocale } from 'next-intl'
 import {
   Dialog,
   DialogContent,
@@ -36,6 +38,7 @@ interface QuoteFormProps {
   onClose: () => void
   onSuccess?: (savedQuote: any) => void // Cache güncelleme için callback
   dealId?: string // Prop olarak dealId geçilebilir (modal içinde kullanım için)
+  deal?: any // ✅ ÇÖZÜM: Deal objesi direkt geçilebilir (API çağrısı yapmadan)
   customerId?: string // Prop olarak customerId geçilebilir (modal içinde kullanım için)
   customerCompanyId?: string
   customerCompanyName?: string
@@ -70,6 +73,7 @@ export default function QuoteForm({
   onClose,
   onSuccess,
   dealId: dealIdProp,
+  deal: dealProp, // ✅ ÇÖZÜM: Deal objesi direkt geçilebilir
   customerId: customerIdProp,
   customerCompanyId: customerCompanyIdProp,
   customerCompanyName,
@@ -79,14 +83,15 @@ export default function QuoteForm({
   const tCommon = useTranslations('common.form')
   const tQuotes = useTranslations('quotes')
   const router = useRouter()
+  const locale = useLocale()
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
   const customerCompanyIdFromUrl = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
   const customerCompanyId = customerCompanyIdProp || customerCompanyIdFromUrl
   const dealIdFromUrl = searchParams.get('dealId') || undefined // URL'den dealId al
   
-  // Prop öncelikli - prop varsa prop'u kullan, yoksa URL'den al
-  const dealId = dealIdProp || dealIdFromUrl
+  // ✅ ÇÖZÜM: Prop öncelikli - dealProp varsa onun id'sini kullan, yoksa dealIdProp, yoksa URL'den al
+  const dealId = dealProp?.id || dealIdProp || dealIdFromUrl
   const customerId = customerIdProp
   const [loading, setLoading] = useState(false)
   const navigateToDetailToast = useNavigateToDetailToast()
@@ -138,12 +143,18 @@ export default function QuoteForm({
 
   // Güvenlik kontrolü - her zaman array olmalı
   const deals = Array.isArray(dealsData) ? dealsData : []
+  // ✅ ÇÖZÜM: dealProp varsa onu da deals listesine ekle (dropdown'da görünsün)
+  const allDeals = dealProp && !deals.find((d: any) => d.id === dealProp.id) 
+    ? [dealProp, ...deals] 
+    : deals
   // Filtreleme: customerCompanyId veya customerId ile eşleşen fırsatları göster
-  const filteredDeals = deals.filter((deal: any) => {
+  const filteredDeals = allDeals.filter((deal: any) => {
     if (customerCompanyId && deal.customerCompanyId === customerCompanyId) return true
     if (customerId && deal.customerId === customerId) return true
     // Wizard'dan gelen dealId varsa onu da göster
     if (dealId && deal.id === dealId) return true
+    // dealProp varsa onu da göster
+    if (dealProp && deal.id === dealProp.id) return true
     // Filtre yoksa tüm fırsatları göster
     if (!customerCompanyId && !customerId) return true
     return false
@@ -180,12 +191,62 @@ export default function QuoteForm({
   const total = watch('total')
   const discount = watch('discount') || 0
   const taxRate = watch('taxRate') || 18
+  const [generatingAI, setGeneratingAI] = useState(false)
   
   // Durum bazlı koruma kontrolü - form alanlarını devre dışı bırakmak için
   const isProtected = quote && quote.status === 'ACCEPTED'
 
-  // Deal bilgilerini çek (dealId varsa)
-  const { data: dealData } = useQuery({
+  // AI ile teklif metni oluştur
+  const handleGenerateAIDescription = async () => {
+    if (!selectedDealId || !dealData) {
+      toast.error('Hata', { description: 'Lütfen önce bir fırsat seçin' })
+      return
+    }
+
+    setGeneratingAI(true)
+    try {
+      const selectedDeal = filteredDeals.find((d: any) => d.id === selectedDealId) || dealData
+      const customerName = selectedDeal?.Customer?.name || customerData?.name || 'Müşteri'
+      const customerCompany = selectedDeal?.CustomerCompany?.name || customerCompanyName || ''
+
+      const quoteInfo = {
+        customerName: customerCompany || customerName,
+        products: [
+          {
+            name: selectedDeal?.title || 'Ürün/Hizmet',
+            quantity: 1,
+            price: total || selectedDeal?.value || 0,
+          },
+        ],
+        totalAmount: total || selectedDeal?.value || 0,
+        currency: 'TL',
+        validUntil: watch('validUntil') || undefined,
+      }
+
+      const res = await fetch('/api/ai/generate-quote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quoteInfo, locale }),
+      })
+
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({}))
+        throw new Error(error.error || 'AI metni oluşturulamadı')
+      }
+
+      const { quoteText } = await res.json()
+      setValue('description', quoteText)
+      toast.success('Başarılı', { description: 'AI ile teklif metni oluşturuldu' })
+    } catch (error: any) {
+      console.error('AI Generate Error:', error)
+      toast.error('Hata', { description: error?.message || 'AI metni oluşturulamadı' })
+    } finally {
+      setGeneratingAI(false)
+    }
+  }
+
+  // ✅ ÇÖZÜM: Deal bilgilerini çek (dealProp varsa direkt kullan, yoksa API'den çek)
+  const { data: dealDataFromApi } = useQuery({
     queryKey: ['deal', dealId],
     queryFn: async () => {
       if (!dealId) return null
@@ -193,8 +254,11 @@ export default function QuoteForm({
       if (!res.ok) return null
       return res.json()
     },
-    enabled: !!dealId && open && !quote, // Sadece yeni kayıt modunda ve dealId varsa
+    enabled: !!dealId && open && !quote && !dealProp, // Sadece dealProp yoksa API'den çek
   })
+  
+  // DealProp varsa onu kullan, yoksa API'den gelen datayı kullan
+  const dealData = dealProp || dealDataFromApi
 
   // customerIdProp geldiğinde müşteri bilgilerini çek (wizard'larda kullanım için)
   const { data: customerData } = useQuery({
@@ -242,8 +306,26 @@ export default function QuoteForm({
           taxRate: quote.taxRate || 18,
           customerCompanyId: quote.customerCompanyId || customerCompanyId || '',
         })
+      } else if (dealProp) {
+        // ✅ ÖNEMLİ: dealProp öncelikli (direkt geçilen deal objesi) - API çağrısı yapmadan
+        const deal = dealProp
+        const validUntilDate = new Date()
+        validUntilDate.setDate(validUntilDate.getDate() + 30) // 30 gün sonra
+        
+        reset({
+          title: deal.title ? `Teklif - ${deal.title}` : '',
+          status: 'DRAFT',
+          total: typeof deal.value === 'string' ? parseFloat(deal.value) || 0 : (deal.value || 0),
+          dealId: deal.id || dealId, // ✅ dealProp.id öncelikli
+          vendorId: '',
+          description: deal.description || '',
+          validUntil: validUntilDate.toISOString().split('T')[0],
+          discount: 0,
+          taxRate: 18,
+          customerCompanyId: deal.customerCompanyId || customerCompanyId || '',
+        })
       } else if (dealId && dealData) {
-        // Yeni kayıt modu - dealId varsa ve deal bilgileri yüklendiyse forma yansıt
+        // Yeni kayıt modu - dealId varsa ve deal bilgileri API'den yüklendiyse forma yansıt
         const deal = dealData
         const validUntilDate = new Date()
         validUntilDate.setDate(validUntilDate.getDate() + 30) // 30 gün sonra
@@ -302,7 +384,7 @@ export default function QuoteForm({
         }
       }
     }
-  }, [quote, open, reset, dealId, dealData, customerCompanyId, customerIdProp, customerData, setValue]) // onClose dependency'den çıkarıldı - stable değil
+  }, [quote, open, reset, dealId, dealData, dealProp, customerCompanyId, customerIdProp, customerData, setValue]) // onClose dependency'den çıkarıldı - stable değil
 
   useEffect(() => {
     // Wizard'dan gelen dealId'yi direkt set et
@@ -643,7 +725,22 @@ export default function QuoteForm({
 
             {/* Description */}
             <div className="space-y-2 md:col-span-2">
-              <label className="text-sm font-medium">{t('descriptionLabel')}</label>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">{t('descriptionLabel')}</label>
+                {selectedDealId && dealData && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleGenerateAIDescription}
+                    disabled={loading || isProtected || generatingAI}
+                    className="text-xs"
+                  >
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    {generatingAI ? 'Oluşturuluyor...' : 'AI ile Oluştur'}
+                  </Button>
+                )}
+              </div>
               <Textarea
                 {...register('description')}
                 placeholder={t('descriptionPlaceholder')}

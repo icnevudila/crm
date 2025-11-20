@@ -36,10 +36,26 @@ export async function GET(
     
     const supabase = getSupabaseWithServiceRole()
 
+    // ÖNEMLİ: imageUrl kolonu migration'da olmayabilir, retry pattern ile handle ediyoruz
     let contactQuery = supabase
       .from('Contact')
       .select(`
-        *,
+        id,
+        firstName,
+        lastName,
+        email,
+        phone,
+        title,
+        role,
+        isPrimary,
+        linkedin,
+        notes,
+        status,
+        imageUrl,
+        createdAt,
+        updatedAt,
+        customerCompanyId,
+        companyId,
         CustomerCompany (
           id,
           name,
@@ -53,7 +69,51 @@ export async function GET(
       contactQuery = contactQuery.eq('companyId', companyId)
     }
     
-    const { data, error } = await contactQuery.single()
+    let { data, error } = await contactQuery.single()
+    
+    // ✅ ÇÖZÜM: Kolon hatası varsa (42703 = column does not exist), imageUrl olmadan retry yap
+    if (error && (error.code === '42703' || error.message?.includes('does not exist') || error.message?.includes('column'))) {
+      // Development'ta log
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Contact imageUrl kolonu bulunamadı, imageUrl olmadan retry yapılıyor:', error.message)
+      }
+      
+      // Retry: imageUrl kolonu olmadan tekrar dene
+      let retryQuery = supabase
+        .from('Contact')
+        .select(`
+          id,
+          firstName,
+          lastName,
+          email,
+          phone,
+          title,
+          role,
+          isPrimary,
+          linkedin,
+          notes,
+          status,
+          createdAt,
+          updatedAt,
+          customerCompanyId,
+          companyId,
+          CustomerCompany (
+            id,
+            name,
+            sector,
+            city
+          )
+        `)
+        .eq('id', id)
+      
+      if (!isSuperAdmin) {
+        retryQuery = retryQuery.eq('companyId', companyId)
+      }
+      
+      const retryResult = await retryQuery.single()
+      data = retryResult.data
+      error = retryResult.error
+    }
 
     if (error) {
       const message = error.message || 'İletişim kaydı getirilemedi'

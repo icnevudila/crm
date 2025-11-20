@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react'
-import { toast } from '@/lib/toast'
+import { toast, toastConfirm } from '@/lib/toast'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Briefcase, Edit, Trash2, Eye, GripVertical, History, ChevronLeft, ChevronRight, Info, Mail, MessageSquare, MessageCircle, Sparkles } from 'lucide-react'
+import { Briefcase, Edit, Trash2, Eye, GripVertical, History, ChevronLeft, ChevronRight, Info, Mail, MessageSquare, MessageCircle, Sparkles, Calendar, FileText, ArrowRight, CheckCircle, XCircle } from 'lucide-react'
 import { getStatusColor, getStatusBadgeClass } from '@/lib/crm-colors'
 import {
   ContextMenu,
@@ -270,6 +270,156 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onView
                 <p className="text-xs text-gray-500 mb-2">
                   {new Date(deal.createdAt).toLocaleDateString('tr-TR')}
                 </p>
+              )}
+
+              {/* Workflow Butonları - Stage'e göre */}
+              {!isLocked && (
+                <div className="mt-3 pt-2 border-t border-gray-200">
+                  {stage === 'LEAD' && (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="w-full text-xs h-7 bg-indigo-600 hover:bg-indigo-700 text-white"
+                      onClick={async (e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        if (onStageChange) {
+                          try {
+                            await onStageChange(deal.id, 'CONTACTED')
+                            toast.success('Fırsat güncellendi', { description: 'Durum "İletişimde" olarak güncellendi' })
+                          } catch (error: any) {
+                            toast.error('Durum değiştirilemedi', { description: error?.message || 'Bir hata oluştu' })
+                          }
+                        }
+                      }}
+                    >
+                      <Calendar className="h-3 w-3 mr-1" />
+                      İletişime Geç
+                    </Button>
+                  )}
+                  {stage === 'CONTACTED' && (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="w-full text-xs h-7 bg-indigo-600 hover:bg-indigo-700 text-white"
+                      onClick={async (e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        // ✅ ÇÖZÜM: Önce stage'i güncelle, sonra Quote formunu aç
+                        if (onStageChange) {
+                          try {
+                            await onStageChange(deal.id, 'PROPOSAL')
+                            toast.success('Fırsat güncellendi', { description: 'Durum "Teklif" olarak güncellendi' })
+                            // Stage güncellendikten sonra Quote formunu aç
+                            if (onQuickAction) {
+                              onQuickAction('quote', deal)
+                            }
+                          } catch (error: any) {
+                            toast.error('Durum değiştirilemedi', { description: error?.message || 'Bir hata oluştu' })
+                          }
+                        } else if (onQuickAction) {
+                          // onStageChange yoksa direkt Quote formunu aç
+                          onQuickAction('quote', deal)
+                        }
+                      }}
+                    >
+                      <FileText className="h-3 w-3 mr-1" />
+                      Teklif Hazırla
+                    </Button>
+                  )}
+                  {stage === 'PROPOSAL' && (
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="w-full text-xs h-7 bg-indigo-600 hover:bg-indigo-700 text-white"
+                      onClick={async (e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        if (onStageChange) {
+                          try {
+                            await onStageChange(deal.id, 'NEGOTIATION')
+                            toast.success('Fırsat güncellendi', { description: 'Durum "Pazarlık" olarak güncellendi' })
+                          } catch (error: any) {
+                            toast.error('Durum değiştirilemedi', { description: error?.message || 'Bir hata oluştu' })
+                          }
+                        }
+                      }}
+                    >
+                      <ArrowRight className="h-3 w-3 mr-1" />
+                      Pazarlığa Geç
+                    </Button>
+                  )}
+                  {stage === 'NEGOTIATION' && (
+                    <div className="flex gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="default"
+                        className="flex-1 text-xs h-7 bg-green-600 hover:bg-green-700 text-white"
+                        onClick={async (e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          if (onStageChange) {
+                            // ✅ ÇÖZÜM: WON durumuna geçerken toast confirmation
+                            const confirmed = await toastConfirm(
+                              `"${deal.title}" fırsatını kazanıldı olarak işaretlemek istediğinize emin misiniz?`,
+                              `Bu işlem sonrası otomatik olarak sözleşme oluşturulacaktır. Bu aşamadaki fırsatlar değiştirilemez.`,
+                              {
+                                confirmLabel: 'Kazanıldı İşaretle',
+                                cancelLabel: 'Vazgeç',
+                              }
+                            )
+                            if (!confirmed) {
+                              return
+                            }
+                            
+                            try {
+                              await onStageChange(deal.id, 'WON')
+                              toast.success('Fırsat kazanıldı!', { description: 'Tebrikler! Fırsat başarıyla kazanıldı.' })
+                            } catch (error: any) {
+                              toast.error('Durum değiştirilemedi', { description: error?.message || 'Bir hata oluştu' })
+                            }
+                          }
+                        }}
+                      >
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Kazanıldı
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 text-xs h-7 border-red-300 text-red-600 hover:bg-red-50"
+                        onClick={async (e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          if (onStageChange) {
+                            // ✅ ÇÖZÜM: LOST durumuna geçerken toast confirmation
+                            const confirmed = await toastConfirm(
+                              `"${deal.title}" fırsatını kaybedildi olarak işaretlemek istediğinize emin misiniz?`,
+                              `Bu işlem sonrası analiz görevi otomatik olarak oluşturulacaktır. Bu aşamadaki fırsatlar değiştirilemez.`,
+                              {
+                                confirmLabel: 'Kaybedildi İşaretle',
+                                cancelLabel: 'Vazgeç',
+                              }
+                            )
+                            if (!confirmed) {
+                              return
+                            }
+                            
+                            try {
+                              await onStageChange(deal.id, 'LOST')
+                              toast.success('Fırsat kaydedildi', { description: 'Fırsat "Kaybedildi" olarak işaretlendi' })
+                            } catch (error: any) {
+                              toast.error('Durum değiştirilemedi', { description: error?.message || 'Bir hata oluştu' })
+                            }
+                          }
+                        }}
+                      >
+                        <XCircle className="h-3 w-3 mr-1" />
+                        Kaybedildi
+                      </Button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </Link>

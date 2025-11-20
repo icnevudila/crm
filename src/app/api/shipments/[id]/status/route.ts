@@ -375,11 +375,34 @@ export async function PUT(
       })
     }
 
+    // Otomasyon bilgilerini response'a ekle
+    const automationInfo: any = {
+      financeCreated: false,
+      financeId: null,
+    }
+
+    // Shipment DELIVERED olduğunda Finance kaydı oluşturuldu mu kontrol et
+    if (body.status === 'DELIVERED' && currentShipment.status !== 'DELIVERED') {
+      const { data: financeRecord } = await supabase
+        .from('Finance')
+        .select('id')
+        .eq('relatedEntityType', 'SHIPMENT')
+        .eq('relatedEntityId', id)
+        .eq('companyId', session.user.companyId)
+        .maybeSingle()
+      
+      if (financeRecord) {
+        automationInfo.financeCreated = true
+        automationInfo.financeId = financeRecord.id
+      }
+    }
+
     // ÖNEMLİ: Database'den gelen veriyi kullan (en güncel veri)
     const responseData = {
       ...(finalData as any),
       status: finalStatus, // Database'den gelen status (güncellenmiş)
       message: `Sevkiyat #${(finalData as any)?.tracking || id.substring(0, 8)} '${body.status}' durumuna alındı.`,
+      automation: automationInfo,
     }
 
     return NextResponse.json(responseData)

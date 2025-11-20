@@ -13,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 
@@ -50,6 +51,7 @@ export default function DuplicateDetectionModal({
   onMergeComplete,
 }: DuplicateDetectionModalProps) {
   const [merging, setMerging] = useState<string | null>(null) // Merging group ID
+  const { confirm } = useConfirm()
 
   // Duplicate'leri çek
   const { data: duplicatesData, isLoading, error, mutate: mutateDuplicates } = useData<DuplicatesResponse>(
@@ -64,7 +66,13 @@ export default function DuplicateDetectionModal({
 
   // Merge işlemi
   const handleMerge = async (keepId: string, removeId: string, groupNumber: number) => {
-    if (!(await window.confirm('Bu müşterileri birleştirmek istediğinize emin misiniz? Bu işlem geri alınamaz.'))) {
+    if (!(await confirm({
+      title: 'Müşterileri Birleştir',
+      description: 'Bu müşterileri birleştirmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
+      confirmLabel: 'Birleştir',
+      cancelLabel: 'İptal',
+      variant: 'destructive'
+    }))) {
       return
     }
 
@@ -166,11 +174,10 @@ export default function DuplicateDetectionModal({
                     {group.customers.map((customer, index) => (
                       <div
                         key={customer.id}
-                        className={`p-4 rounded-lg border ${
-                          index === 0
+                        className={`p-4 rounded-lg border ${index === 0
                             ? 'bg-indigo-50 border-indigo-200'
                             : 'bg-gray-50 border-gray-200'
-                        }`}
+                          }`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="flex-1">

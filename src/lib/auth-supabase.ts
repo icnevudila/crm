@@ -125,9 +125,12 @@ export async function getServerSession(request?: Request) {
         const cookieStore = await cookies()
         const sessionCookie = cookieStore.get('crm_session')
         sessionCookieValue = sessionCookie?.value
-      } catch (cookieError) {
+      } catch (cookieError: any) {
         // cookies() çağrısı başarısız olursa (Edge Runtime'da olabilir)
-        console.error('cookies() error:', cookieError)
+        // Sadece development'ta log'la
+        if (process.env.NODE_ENV === 'development') {
+          console.error('cookies() error:', cookieError?.message || cookieError)
+        }
         return null
       }
     }
@@ -146,25 +149,38 @@ export async function getServerSession(request?: Request) {
 
       // User bilgisini güncelle (veritabanından - companyName güncel olsun)
       const supabase = getSupabaseWithServiceRole()
-      const { data: user } = await supabase
+      const { data: user, error: userError } = await supabase
         .from('User')
         .select('id, email, name, role, companyId')
         .eq('id', sessionData.userId)
         .maybeSingle()
 
-      if (!user) {
+      if (userError || !user) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('User fetch error:', userError?.message || 'User not found')
+        }
         return null
       }
 
       // Company bilgisini al
       let companyName = null
       if (user.companyId) {
-        const { data: company } = await supabase
-          .from('Company')
-          .select('name')
-          .eq('id', user.companyId)
-          .maybeSingle()
-        companyName = company?.name || null
+        try {
+          const { data: company, error: companyError } = await supabase
+            .from('Company')
+            .select('name')
+            .eq('id', user.companyId)
+            .maybeSingle()
+          
+          if (!companyError && company) {
+            companyName = company.name || null
+          }
+        } catch (companyError: any) {
+          // Company bilgisi alınamazsa null bırak (kritik değil)
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('Company fetch error:', companyError?.message || companyError)
+          }
+        }
       }
 
       return {
@@ -177,12 +193,18 @@ export async function getServerSession(request?: Request) {
           companyName,
         },
       }
-    } catch (parseError) {
-      console.error('Session parse error:', parseError)
+    } catch (parseError: any) {
+      // Session parse hatası - sadece development'ta log'la
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Session parse error:', parseError?.message || parseError)
+      }
       return null
     }
-  } catch (error) {
-    console.error('getServerSession error:', error)
+  } catch (error: any) {
+    // Genel hata - sadece development'ta log'la
+    if (process.env.NODE_ENV === 'development') {
+      console.error('getServerSession error:', error?.message || error)
+    }
     return null
   }
 }

@@ -13,13 +13,10 @@ import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import CommentsSection from '@/components/ui/CommentsSection'
 import FileUpload from '@/components/ui/FileUpload'
 import dynamic from 'next/dynamic'
-<<<<<<< HEAD
 import { confirm } from '@/lib/toast'
-=======
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import { formatCurrency } from '@/lib/utils'
->>>>>>> 2f6c0097c017a17c4f8c673c6450be3bfcfd0aa8
 
 // Lazy load CustomerForm - performans için
 const CustomerForm = dynamic(() => import('@/components/customers/CustomerForm'), {

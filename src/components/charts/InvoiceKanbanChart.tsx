@@ -22,7 +22,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useLocale } from 'next-intl'
-import { confirm, toast } from '@/lib/toast'
+import { confirm, toast, toastConfirm } from '@/lib/toast'
 import {
   Tooltip,
   TooltipContent,
@@ -64,6 +64,7 @@ interface InvoiceKanbanChartProps {
   onDelete?: (id: string, title: string) => void
   onStatusChange?: (invoiceId: string, newStatus: string) => Promise<void> | void
   onView?: (invoiceId: string) => void // ✅ ÇÖZÜM: Modal açmak için callback
+  onQuickAction?: (type: string, invoice: KanbanInvoice) => void // ✅ ÇÖZÜM: Quick action için callback (shipment, task, meeting)
 }
 
 const STATUS_FLOW = ['DRAFT', 'SENT', 'SHIPPED', 'RECEIVED', 'PAID', 'OVERDUE', 'CANCELLED']
@@ -429,7 +430,7 @@ const getQuickActions = (status: string, invoiceType?: string): QuickActionConfi
   return filteredActions
 }
 
-function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange, onView }: InvoiceKanbanChartProps) {
+function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange, onView, onQuickAction }: InvoiceKanbanChartProps) {
   const locale = useLocale()
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
 
@@ -637,17 +638,40 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange, onVie
                                 // Tek buton varsa full width
                                 const action = actions[0]
                                 const Icon = action.icon
-                                const handleClick = async (e: React.MouseEvent) => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  e.nativeEvent.stopImmediatePropagation()
-                                  if (action.targetStatus === 'CANCELLED') {
-                                    if (!(await confirm(`"${invoice.title}" faturasını iptal etmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz ve ilgili sevkiyat/stok işlemleri geri alınacaktır.`))) {
-                                      return
-                                    }
-                                  }
-                                  try {
-                                    await onStatusChange(invoice.id, action.targetStatus)
+                                        const handleClick = async (e: React.MouseEvent) => {
+                                          e.preventDefault()
+                                          e.stopPropagation()
+                                          e.nativeEvent.stopImmediatePropagation()
+                                          
+                                          // ✅ ÇÖZÜM: Kritik durum değişiklikleri için toast confirmation
+                                          if (action.targetStatus === 'CANCELLED') {
+                                            const confirmed = await toastConfirm(
+                                              `"${invoice.title}" faturasını iptal etmek istediğinize emin misiniz?`,
+                                              `Bu işlem geri alınamaz ve ilgili sevkiyat/stok işlemleri geri alınacaktır.`,
+                                              {
+                                                confirmLabel: 'İptal Et',
+                                                cancelLabel: 'Vazgeç',
+                                              }
+                                            )
+                                            if (!confirmed) {
+                                              return
+                                            }
+                                          } else if (action.targetStatus === 'PAID') {
+                                            const confirmed = await toastConfirm(
+                                              `"${invoice.title}" faturasını ödendi olarak işaretlemek istediğinize emin misiniz?`,
+                                              `Bu işlem sonrası finans kayıtları otomatik olarak oluşturulacaktır.`,
+                                              {
+                                                confirmLabel: 'Ödendi İşaretle',
+                                                cancelLabel: 'Vazgeç',
+                                              }
+                                            )
+                                            if (!confirmed) {
+                                              return
+                                            }
+                                          }
+                                          
+                                          try {
+                                            await onStatusChange(invoice.id, action.targetStatus)
                                   } catch (error: any) {
                                     // Hata parent component'te handle ediliyor, burada sadece log
                                     if (process.env.NODE_ENV === 'development') {
@@ -692,11 +716,34 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange, onVie
                                         e.preventDefault()
                                         e.stopPropagation()
                                         e.nativeEvent.stopImmediatePropagation()
+                                        
+                                        // ✅ ÇÖZÜM: Kritik durum değişiklikleri için toast confirmation
                                         if (action.targetStatus === 'CANCELLED') {
-                                          if (!(await confirm(`"${invoice.title}" faturasını iptal etmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz ve ilgili sevkiyat/stok işlemleri geri alınacaktır.`))) {
+                                          const confirmed = await toastConfirm(
+                                            `"${invoice.title}" faturasını iptal etmek istediğinize emin misiniz?`,
+                                            `Bu işlem geri alınamaz ve ilgili sevkiyat/stok işlemleri geri alınacaktır.`,
+                                            {
+                                              confirmLabel: 'İptal Et',
+                                              cancelLabel: 'Vazgeç',
+                                            }
+                                          )
+                                          if (!confirmed) {
+                                            return
+                                          }
+                                        } else if (action.targetStatus === 'PAID') {
+                                          const confirmed = await toastConfirm(
+                                            `"${invoice.title}" faturasını ödendi olarak işaretlemek istediğinize emin misiniz?`,
+                                            `Bu işlem sonrası finans kayıtları otomatik olarak oluşturulacaktır.`,
+                                            {
+                                              confirmLabel: 'Ödendi İşaretle',
+                                              cancelLabel: 'Vazgeç',
+                                            }
+                                          )
+                                          if (!confirmed) {
                                             return
                                           }
                                         }
+                                        
                                         try {
                                           await onStatusChange(invoice.id, action.targetStatus)
                                         } catch (error: any) {
@@ -773,7 +820,12 @@ function InvoiceKanbanChart({ data = [], onEdit, onDelete, onStatusChange, onVie
                                     e.preventDefault()
                                     e.stopPropagation()
                                     e.nativeEvent.stopImmediatePropagation()
-                                    toast.info('Sevkiyat oluştur', { description: 'Bu özellik yakında eklenecek.' })
+                                    // ✅ ÇÖZÜM: Sevkiyat formunu aç
+                                    if (onQuickAction) {
+                                      onQuickAction('shipment', invoice)
+                                    } else {
+                                      toast.info('Sevkiyat oluştur', { description: 'Lütfen ilgili formu kullanın.' })
+                                    }
                                   }}
                                 >
                                   <Package className="h-3 w-3 mr-2" />
