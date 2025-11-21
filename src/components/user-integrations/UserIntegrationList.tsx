@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Switch } from '@/components/ui/switch'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { Info } from 'lucide-react'
 import UserIntegrationForm from './UserIntegrationForm'
 import CompanyIntegrationCard from './CompanyIntegrationCard'
@@ -42,6 +43,7 @@ interface UserIntegration {
 export default function UserIntegrationList() {
   const locale = useLocale()
   const { data: session } = useSession()
+  const { confirm } = useConfirm()
   const isSuperAdmin = session?.user?.role === 'SUPER_ADMIN'
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
@@ -146,7 +148,15 @@ export default function UserIntegrationList() {
   }
 
   const handleDelete = async (id: string, type: string) => {
-    if (!confirm(`${type} entegrasyonunu silmek istediğinize emin misiniz?`)) {
+    const confirmed = await confirm({
+      title: 'Entegrasyonu Sil?',
+      description: `${type} entegrasyonunu silmek istediğinize emin misiniz?`,
+      confirmLabel: 'Sil',
+      cancelLabel: 'İptal',
+      variant: 'destructive',
+    })
+    
+    if (!confirmed) {
       return
     }
 

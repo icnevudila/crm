@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import { toast, confirm } from '@/lib/toast'
-import { Plus, Edit, Trash2, Target } from 'lucide-react'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
+import { Plus, Edit, Trash2, Target, Eye } from 'lucide-react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -32,6 +34,7 @@ export default function SalesQuotaList() {
   const locale = useLocale()
   const t = useTranslations('salesQuotas')
   const tCommon = useTranslations('common')
+  const { confirm } = useConfirm()
   const [search, setSearch] = useState('')
   const [period, setPeriod] = useState('')
   const [formOpen, setFormOpen] = useState(false)
@@ -53,7 +56,15 @@ export default function SalesQuotaList() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!(await confirm(t('deleteConfirm')))) {
+    const confirmed = await confirm({
+      title: 'Satış Kotasını Sil?',
+      description: 'Bu işlem geri alınamaz.',
+      confirmLabel: 'Sil',
+      cancelLabel: 'İptal',
+      variant: 'destructive'
+    })
+    
+    if (!confirmed) {
       return
     }
 
@@ -201,6 +212,11 @@ export default function SalesQuotaList() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
+                      <Link href={`/${locale}/sales-quotas/${quota.id}`} prefetch={true}>
+                        <Button variant="ghost" size="icon">
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      </Link>
                       <Button
                         variant="ghost"
                         size="icon"

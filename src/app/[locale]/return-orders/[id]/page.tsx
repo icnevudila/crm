@@ -13,7 +13,8 @@ import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import ReturnOrderForm from '@/components/return-orders/ReturnOrderForm'
 import CreditNoteForm from '@/components/credit-notes/CreditNoteForm'
-import { toast, confirm } from '@/lib/toast'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { formatCurrency } from '@/lib/utils'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
 import { useData } from '@/hooks/useData'
@@ -36,6 +37,7 @@ export default function ReturnOrderDetailPage() {
   const params = useParams()
   const router = useRouter()
   const locale = useLocale()
+  const { confirm } = useConfirm()
   const id = params.id as string
   const [formOpen, setFormOpen] = useState(false)
   const [creditNoteFormOpen, setCreditNoteFormOpen] = useState(false)
@@ -84,7 +86,17 @@ export default function ReturnOrderDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (!(await confirm(`${returnOrder.returnNumber} iade siparişini silmek istediğinize emin misiniz?`))) {
+    if (!returnOrder) return
+    
+    const confirmed = await confirm({
+      title: 'İade Siparişini Sil?',
+      description: `${returnOrder.returnNumber} iade siparişini silmek istediğinize emin misiniz?`,
+      confirmLabel: 'Sil',
+      cancelLabel: 'İptal',
+      variant: 'destructive',
+    })
+    
+    if (!confirmed) {
       return
     }
 

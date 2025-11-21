@@ -775,6 +775,15 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
               onEdit={handleEdit}
               onDelete={handleDelete}
               onStatusChange={async (invoiceId: string, newStatus: string) => {
+                // ✅ ÇÖZÜM: "new" ID kontrolü - geçersiz ID'ler için hata göster
+                if (invoiceId === 'new' || !invoiceId || invoiceId.trim() === '') {
+                  queryClient.invalidateQueries({ queryKey: ['kanban-invoices'] })
+                  toast.error('Geçersiz Fatura ID', {
+                    description: 'Fatura ID geçersiz. Lütfen sayfayı yenileyin.',
+                  })
+                  return
+                }
+
                 const invoice = kanbanData
                   .flatMap((col: any) => col.invoices || [])
                   .find((i: any) => i.id === invoiceId)
@@ -875,13 +884,19 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                   }
                 }
 
-                // SONRA API'ye status güncelleme isteği gönder
+                // ✅ OPTİMİZASYON: API çağrısı - timeout ile hızlı hata yakalama
+                const controller = new AbortController()
+                const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 saniye timeout - daha hızlı hata yakalama
+                
                 try {
                   const res = await fetch(`/api/invoices/${invoiceId}`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ status: newStatus }),
+                    signal: controller.signal,
                   })
+                  
+                  clearTimeout(timeoutId)
 
                   if (!res.ok) {
                     // Hata durumunda optimistic update'i geri al
@@ -938,43 +953,16 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                     case 'SENT':
                       toastTitle = `📤 Fatura Gönderildi!`
                       toastDescription = `"${invoiceTitle}" faturası gönderildi.`
-
-                      // Hizmet faturaları için özel mesaj
-                      if (responseData?.invoiceType === 'SERVICE_SALES' || responseData?.invoiceType === 'SERVICE_PURCHASE') {
-                        toastDescription += `\n\nHizmet faturası işlemleri:\n• Bildirim gönderildi`
-                        if (automation.emailSent) {
-                          toastDescription += `\n• E-posta gönderildi`
-                        }
-                        if (automation.notificationSent) {
-                          toastDescription += `\n• İlgili ekipler bilgilendirildi`
-                        }
-                      } else if (automation.shipmentCreated && automation.shipmentId) {
-                        toastDescription += `\n\nOtomatik işlemler:\n• Sevkiyat kaydı oluşturuldu (ID: ${automation.shipmentId.substring(0, 8)}...)\n• Sevkiyat numarası atandı\n• Müşteri adresi sevkiyat adresi olarak ayarlandı\n• Teslimat tarihi belirlendi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
-                      } else if (automation.purchaseTransactionCreated && automation.purchaseTransactionId) {
-                        toastDescription += `\n\nOtomatik işlemler:\n• Mal kabul kaydı oluşturuldu (ID: ${automation.purchaseTransactionId.substring(0, 8)}...)\n• Ürünler bekleyen stok olarak işaretlendi\n• Satın alma ekibi bilgilendirildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
-                      } else {
-                        toastDescription += `\n\nOtomatik işlemler:\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                      if (automation.shipmentCreated && automation.shipmentId) {
+                        toastDescription += ` Sevkiyat kaydı oluşturuldu (ID: ${automation.shipmentId.substring(0, 8)}...).`
                       }
                       break
 
                     case 'SHIPPED':
-                      toastTitle = `🚚 Sevkiyat Yapıldı: "${invoiceTitle}"`
-                      toastDescription = `Fatura "Sevkiyat Yapıldı" durumuna taşındı.`
-
+                      toastTitle = `🚚 Sevkiyat Yapıldı!`
+                      toastDescription = `"${invoiceTitle}" faturası sevkiyat yapıldı.`
                       if (automation.shipmentId) {
-                        if (automation.shipmentStatusUpdated && automation.shipmentNewStatus === 'IN_TRANSIT') {
-                          toastDescription += `\n\nOtomatik işlemler:\n• Sevkiyat durumu "Yolda" (IN_TRANSIT) olarak güncellendi\n• Sevkiyat ID: ${automation.shipmentId.substring(0, 8)}...\n• Ürünler stoktan düşüldü\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
-                        } else {
-                          toastDescription += `\n\nOtomatik işlemler:\n• Sevkiyat onaylandı (ID: ${automation.shipmentId.substring(0, 8)}...)\n• Ürünler stoktan düşüldü\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
-                        }
-                      } else {
-                        toastDescription += `\n\nOtomatik işlemler:\n• Ürünler stoktan düşüldü\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
-                      }
-                      break
-
-                      // Eski kod - kaldırıldı
-                      if (false && automation.shipmentId) {
-                        toastDescription += `\n\nOtomatik işlemler:\n• Sevkiyat kaydı onaylandı (ID: ${automation.shipmentId.substring(0, 8)}...)\n• Stoktan düşüm yapıldı\n• Ürünler sevk edildi olarak işaretlendi`
+                        toastDescription += ` Sevkiyat ID: ${automation.shipmentId.substring(0, 8)}...`
                       }
                       break
 
@@ -984,23 +972,10 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                       break
 
                     case 'PAID':
-                      toastTitle = `Fatura Ödendi`
+                      toastTitle = `💰 Fatura Ödendi!`
+                      toastDescription = `"${invoiceTitle}" faturası ödendi.`
                       if (automation.financeCreated && automation.financeId) {
-                        const invoiceAmount = responseData?.totalAmount || 0
-                        toastDescription = `Finance kaydı oluşturuldu. ${formatCurrency(invoiceAmount)} gelir eklendi.`
-                        toast.success(toastTitle, {
-                          description: toastDescription,
-                          action: {
-                            label: 'Ödeme Planı',
-                            onClick: () => {
-                              window.location.href = `/${locale}/invoices/${invoiceId}`
-                            },
-                          },
-                          duration: 5000,
-                        })
-                      } else {
-                        toastDescription = `Finance kaydı oluşturuluyor...`
-                        toast.success(toastTitle, { description: toastDescription })
+                        toastDescription += ` Finance kaydı oluşturuldu.`
                       }
                       break
 
@@ -1012,14 +987,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
 
                     case 'CANCELLED':
                       toastTitle = `Fatura İptal Edildi`
-                      const cancelledItems: string[] = []
-                      if (automation.shipmentCancelled) {
-                        cancelledItems.push('Sevkiyat iptal edildi')
-                      }
-                      if (automation.purchaseTransactionCancelled) {
-                        cancelledItems.push('Mal kabul iptal edildi')
-                      }
-                      toastDescription = cancelledItems.length > 0 ? cancelledItems.join(', ') + '.' : `İşlem iptal edildi.`
+                      toastDescription = `"${invoiceTitle}" faturası iptal edildi.`
                       toastType = 'warning'
                       break
 
@@ -1042,30 +1010,36 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                     toast.success(toastTitle, { description: toastDescription })
                   }
 
-                  // Cache'i invalidate et - fresh data çek (hem table hem kanban hem stats)
-                  // ÖNEMLİ: Dashboard'daki tüm ilgili query'leri invalidate et (ana sayfada güncellensin)
-                  await Promise.all([
+                  // ✅ OPTİMİZASYON: Cache güncellemelerini background'da yap (blocking yapma)
+                  Promise.all([
                     queryClient.invalidateQueries({ queryKey: ['invoices'] }),
                     queryClient.invalidateQueries({ queryKey: ['kanban-invoices'] }),
                     queryClient.invalidateQueries({ queryKey: ['stats-invoices'] }),
                     queryClient.invalidateQueries({ queryKey: ['invoice-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
-                    queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle (toplam değer, ortalama vs.)
-                  ])
-
-                  // Refetch yap - anında güncel veri gelsin
-                  await Promise.all([
-                    queryClient.refetchQueries({ queryKey: ['invoices'] }),
-                    queryClient.refetchQueries({ queryKey: ['kanban-invoices'] }),
-                    queryClient.refetchQueries({ queryKey: ['stats-invoices'] }),
-                    queryClient.refetchQueries({ queryKey: ['invoice-kanban'] }), // Dashboard'daki kanban chart'ı refetch et
-                    queryClient.refetchQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs refetch et (toplam değer, ortalama vs.)
-                  ])
+                    queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle
+                  ]).catch(() => {}) // Background'da hata olursa sessizce geç
                 } catch (error: any) {
+                  // Optimistic update'i geri al
+                  queryClient.invalidateQueries({ queryKey: ['kanban-invoices'] })
+                  queryClient.refetchQueries({ queryKey: ['kanban-invoices'] })
+                  
+                  // ✅ OPTİMİZASYON: Timeout veya network hatası için özel mesaj
+                  if (error.name === 'AbortError') {
+                    toast.error('İşlem zaman aşımına uğradı', { 
+                      description: 'Lütfen internet bağlantınızı kontrol edip tekrar deneyin.',
+                      duration: 5000,
+                    })
+                  } else {
+                    let errorMessage = 'Fatura durumu güncellenemedi'
+                    if (error?.message && typeof error.message === 'string') {
+                      errorMessage = error.message
+                    }
+                    toast.error('Fatura Güncellenemedi', {
+                      description: errorMessage,
+                      duration: 5000,
+                    })
+                  }
                   console.error('Status update error:', error)
-                  toast.error('Fatura durumu güncellenemedi', {
-                    description: String(error?.message || 'Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.')
-                  })
-                  throw error
                 }
               }}
             />

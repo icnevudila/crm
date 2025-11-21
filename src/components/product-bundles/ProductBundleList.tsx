@@ -16,6 +16,7 @@ import { mutate } from 'swr'
 import { formatCurrency } from '@/lib/utils'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
 import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { useTranslations } from 'next-intl'
 
 interface ProductBundle {
@@ -42,6 +43,7 @@ const statusLabels: Record<string, string> = {
 export default function ProductBundleList() {
   const locale = useLocale()
   const t = useTranslations('productBundles')
+  const { confirm } = useConfirm()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [formOpen, setFormOpen] = useState(false)
@@ -74,7 +76,15 @@ export default function ProductBundleList() {
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(t('deleteConfirm').replace('{name}', name))) {
+    const confirmed = await confirm({
+      title: 'Ürün Paketini Sil?',
+      description: `${name} paketini silmek istediğinize emin misiniz?`,
+      confirmLabel: 'Sil',
+      cancelLabel: 'İptal',
+      variant: 'destructive'
+    })
+    
+    if (!confirmed) {
       return
     }
 

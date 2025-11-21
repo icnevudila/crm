@@ -678,6 +678,7 @@ export function OnboardingModal({ open, onClose }: OnboardingModalProps) {
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState(1)
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set())
+  const [dontShowAgain, setDontShowAgain] = useState(false)
 
   const currentStepData = steps.find((s) => s.id === String(currentStep)) || steps[0]
   const progress = (currentStep / steps.length) * 100
@@ -709,8 +710,18 @@ export function OnboardingModal({ open, onClose }: OnboardingModalProps) {
     setCompletedSteps(newCompleted)
   }
 
+  const handleClose = () => {
+    if (dontShowAgain) {
+      // localStorage'a kaydet
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('onboarding-dont-show-again', 'true')
+      }
+    }
+    onClose()
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-2xl">
@@ -768,7 +779,7 @@ export function OnboardingModal({ open, onClose }: OnboardingModalProps) {
               </Button>
             ) : (
               <Button 
-                onClick={onClose} 
+                onClick={handleClose} 
                 className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
               >
                 <CheckCircle2 className="h-4 w-4" />
@@ -902,6 +913,21 @@ export function OnboardingModal({ open, onClose }: OnboardingModalProps) {
               aria-label={`Adım ${index + 1}: ${step.title}`}
             />
           ))}
+        </div>
+
+        {/* Tekrar Gösterme Checkbox */}
+        <div className="flex items-center gap-2 pt-4 border-t">
+          <Checkbox
+            id="dont-show-again"
+            checked={dontShowAgain}
+            onCheckedChange={(checked) => setDontShowAgain(checked === true)}
+          />
+          <label
+            htmlFor="dont-show-again"
+            className="text-sm text-gray-600 cursor-pointer select-none"
+          >
+            Bir daha gösterme
+          </label>
         </div>
       </DialogContent>
     </Dialog>

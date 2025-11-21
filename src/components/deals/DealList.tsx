@@ -1183,14 +1183,16 @@ export default function DealList({ isOpen = true }: DealListProps) {
   const [selectAll, setSelectAll] = useState(false)
 
   const handleDelete = async (id: string, title: string) => {
-
-
-    if (!window.confirm(t('deleteConfirm', { title }))) {
-
-
+    const confirmed = await confirm({
+      title: t('deleteConfirmTitle'),
+      description: t('deleteConfirm', { title }),
+      confirmLabel: t('delete'),
+      cancelLabel: t('cancel'),
+      variant: 'destructive',
+    })
+    
+    if (!confirmed) {
       return
-
-
     }
 
 
@@ -2387,6 +2389,15 @@ export default function DealList({ isOpen = true }: DealListProps) {
           }}
 
           onStageChange={async (dealId: string, newStage: string) => {
+            // ✅ ÇÖZÜM: "new" ID kontrolü - geçersiz ID'ler için hata göster
+            if (dealId === 'new' || !dealId || dealId.trim() === '') {
+              queryClient.invalidateQueries({ queryKey: ['kanban-deals'] })
+              toast.error('Geçersiz Fırsat ID', {
+                description: 'Fırsat ID geçersiz. Lütfen sayfayı yenileyin.',
+              })
+              return
+            }
+
             // ✅ LOST durumuna geçerken önce onay iste, sonra sebep sor
             if (newStage === 'LOST') {
               const deal = kanbanData
@@ -2440,24 +2451,19 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
             // Deal'ın stage'ini güncelle
-
-
+            // ✅ OPTİMİZASYON: Timeout ve AbortController ile hızlı hata yakalama
+            const controller = new AbortController()
+            const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 saniye timeout - daha hızlı hata yakalama
+            
             try {
-
-
               const res = await fetch(`/api/deals/${dealId}`, {
-
-
                 method: 'PUT',
-
-
                 headers: { 'Content-Type': 'application/json' },
-
-
                 body: JSON.stringify({ stage: newStage }),
-
-
+                signal: controller.signal,
               })
+              
+              clearTimeout(timeoutId)
 
 
               
@@ -2590,80 +2596,45 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
 
-              // Cache'i invalidate et - fresh data çek (hem table hem kanban hem stats)
-
-
-              // ÖNEMLİ: Dashboard'daki tüm ilgili query'leri invalidate et (ana sayfada güncellensin)
-
-
-              await Promise.all([
-
-
+              // ✅ OPTİMİZASYON: Cache güncellemelerini background'da yap (blocking yapma)
+              Promise.all([
                 queryClient.invalidateQueries({ queryKey: ['deals'] }),
-
-
                 queryClient.invalidateQueries({ queryKey: ['kanban-deals'] }),
-
-
                 queryClient.invalidateQueries({ queryKey: ['stats-deals'] }),
-
-
-      queryClient.invalidateQueries({ queryKey: ['deal-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
-
-
-      queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle (toplam değer, ortalama vs.)
-
-
-              ])
-
-
-              
-
-
-              // Refetch yap - anında güncel veri gelsin
-
-
-              await Promise.all([
-
-
-                queryClient.refetchQueries({ queryKey: ['deals'] }),
-
-
-                queryClient.refetchQueries({ queryKey: ['kanban-deals'] }),
-
-
-                queryClient.refetchQueries({ queryKey: ['stats-deals'] }),
-
-
-      queryClient.refetchQueries({ queryKey: ['deal-kanban'] }), // Dashboard'daki kanban chart'ı refetch et
-
-
-      queryClient.refetchQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs refetch et (toplam değer, ortalama vs.)
-
-
-              ])
-
-
+                queryClient.invalidateQueries({ queryKey: ['deal-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
+                queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle
+              ]).catch(() => {}) // Background'da hata olursa sessizce geç
             } catch (error: any) {
-              console.error('Stage update error:', error)
+              // Optimistic update'i geri al
+              queryClient.invalidateQueries({ queryKey: ['kanban-deals'] })
+              queryClient.refetchQueries({ queryKey: ['kanban-deals'] })
               
-              // Güvenli hata mesajı oluştur
-              let errorMessage: string = 'Fırsat aşaması güncellenemedi'
-              
-              if (error?.message && typeof error.message === 'string') {
-                errorMessage = error.message
-              } else if (error?.error && typeof error.error === 'string') {
-                errorMessage = error.error
-              } else if (typeof error === 'string') {
-                errorMessage = error
+              // ✅ OPTİMİZASYON: Timeout veya network hatası için özel mesaj
+              if (error.name === 'AbortError') {
+                toast.error('İşlem zaman aşımına uğradı', { 
+                  description: 'Lütfen internet bağlantınızı kontrol edip tekrar deneyin.',
+                  duration: 5000,
+                })
+              } else {
+                // Güvenli hata mesajı oluştur
+                let errorMessage: string = 'Fırsat aşaması güncellenemedi'
+                
+                if (error?.message && typeof error.message === 'string') {
+                  errorMessage = error.message
+                } else if (error?.error && typeof error.error === 'string') {
+                  errorMessage = error.error
+                } else if (typeof error === 'string') {
+                  errorMessage = error
+                }
+                
+                // Toast ile hata göster - doğru format
+                toast.error('Fırsat Güncellenemedi', {
+                  description: errorMessage,
+                  duration: 5000,
+                })
               }
               
-              // Toast ile hata göster - doğru format
-              toast.error('Fırsat Güncellenemedi', {
-                description: errorMessage,
-              })
-              
-              throw error // DealKanbanChart'a hata fırlat (optimistic update geri alınır)
+              console.error('Stage update error:', error)
             }
 
 

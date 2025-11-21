@@ -215,10 +215,13 @@ export default function DashboardPage() {
 
   // İlk kullanımda wizard'ı aç
   useEffect(() => {
+    if (typeof window === 'undefined') return
+    
     const wizardCompleted = localStorage.getItem('quick-start-wizard-completed')
     const onboardingCompleted = localStorage.getItem('onboarding-modal-completed')
+    const dontShowOnboarding = localStorage.getItem('onboarding-dont-show-again')
     
-    if (!wizardCompleted && !onboardingCompleted) {
+    if (!wizardCompleted && !onboardingCompleted && !dontShowOnboarding) {
       // İlk kullanımda 2 saniye sonra quick start wizard'ı aç
       const timer = setTimeout(() => {
         setWizardOpen(true)
@@ -260,7 +263,16 @@ export default function DashboardPage() {
           t={t} 
           userName={session?.user?.name}
           onWizardClick={() => setWizardOpen(true)}
-          onOnboardingClick={() => setOnboardingOpen(true)}
+          onOnboardingClick={() => {
+            // localStorage kontrolü - eğer "tekrar gösterme" seçildiyse açma
+            if (typeof window !== 'undefined') {
+              const dontShow = localStorage.getItem('onboarding-dont-show-again')
+              if (dontShow === 'true') {
+                return // Modal'ı açma
+              }
+            }
+            setOnboardingOpen(true)
+          }}
         />
 
         {/* Smart Suggestions ve Workflow Shortcuts */}

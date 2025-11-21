@@ -12,7 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import ProductBundleForm from '@/components/product-bundles/ProductBundleForm'
-import { toast, confirm } from '@/lib/toast'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { formatCurrency } from '@/lib/utils'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
 import { useData } from '@/hooks/useData'
@@ -26,6 +27,7 @@ export default function ProductBundleDetailPage() {
   const params = useParams()
   const router = useRouter()
   const locale = useLocale()
+  const { confirm } = useConfirm()
   const id = params.id as string
   const [formOpen, setFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -64,7 +66,17 @@ export default function ProductBundleDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (!(await confirm(`${bundle.name} paketini silmek istediğinize emin misiniz?`))) {
+    if (!bundle) return
+    
+    const confirmed = await confirm({
+      title: 'Paketi Sil?',
+      description: `${bundle.name} paketini silmek istediğinize emin misiniz?`,
+      confirmLabel: 'Sil',
+      cancelLabel: 'İptal',
+      variant: 'destructive',
+    })
+    
+    if (!confirmed) {
       return
     }
 

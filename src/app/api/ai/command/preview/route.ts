@@ -72,10 +72,18 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error('[AI Command Preview Error]:', error)
     const isTurkish = locale === 'tr'
+    const errorMessage = error.message || (isTurkish ? 'Preview oluşturulamadı' : 'Failed to generate preview')
+    const isApiKeyError = errorMessage.includes('GROQ_API_KEY')
+    
     return NextResponse.json(
       {
         success: false,
-        message: error.message || (isTurkish ? 'Preview oluşturulamadı' : 'Failed to generate preview'),
+        message: errorMessage,
+        ...(isApiKeyError && {
+          hint: isTurkish 
+            ? 'GROQ_API_KEY ortam değişkenini kontrol edin. Vercel\'de Settings > Environment Variables bölümünden ekleyebilirsiniz.'
+            : 'Please check the GROQ_API_KEY environment variable. You can add it in Vercel Settings > Environment Variables.'
+        })
       },
       { status: 500 }
     )

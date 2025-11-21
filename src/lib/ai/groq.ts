@@ -32,8 +32,11 @@ export async function callGroqAPI(
 ): Promise<string> {
   const apiKey = process.env.GROQ_API_KEY
 
-  if (!apiKey) {
-    throw new Error('GROQ_API_KEY environment variable is not set')
+  if (!apiKey || apiKey.trim() === '') {
+    throw new Error(
+      'GROQ_API_KEY bulunamadı. Lütfen Vercel ortam değişkenlerinde veya .env.local dosyasında GROQ_API_KEY değerini ayarlayın. ' +
+      'API anahtarını https://console.groq.com/keys adresinden alabilirsiniz.'
+    )
   }
 
   const requestOptions = { ...DEFAULT_OPTIONS, ...options }
@@ -56,16 +59,38 @@ export async function callGroqAPI(
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      throw new Error(
-        errorData.error?.message || `Groq API error: ${response.status} ${response.statusText}`
-      )
+      
+      // Özel hata mesajları
+      if (response.status === 401) {
+        throw new Error(
+          'GROQ API anahtarı geçersiz. Lütfen Vercel ortam değişkenlerinde veya .env.local dosyasında doğru GROQ_API_KEY değerini ayarlayın.'
+        )
+      } else if (response.status === 429) {
+        throw new Error(
+          'GROQ API rate limit aşıldı. Lütfen birkaç saniye sonra tekrar deneyin. Ücretsiz tier: 14,400 request/gün.'
+        )
+      } else if (errorData.error?.message) {
+        throw new Error(`GROQ API hatası: ${errorData.error.message}`)
+      } else {
+        throw new Error(`GROQ API hatası: ${response.status} ${response.statusText}`)
+      }
     }
 
     const data = await response.json()
     return data.choices[0]?.message?.content || ''
   } catch (error: any) {
     console.error('[Groq API Error]:', error)
-    throw new Error(error.message || 'Failed to call Groq API')
+    
+    // Eğer zaten user-friendly bir mesaj varsa onu kullan
+    if (error.message && (
+      error.message.includes('GROQ_API_KEY') ||
+      error.message.includes('rate limit') ||
+      error.message.includes('geçersiz')
+    )) {
+      throw error
+    }
+    
+    throw new Error(error.message || 'GROQ API çağrısı başarısız oldu. Lütfen daha sonra tekrar deneyin.')
   }
 }
 

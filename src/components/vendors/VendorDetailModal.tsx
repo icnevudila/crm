@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import DetailModal from '@/components/ui/DetailModal'
-import { toast, confirm } from '@/lib/toast'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import dynamic from 'next/dynamic'
@@ -33,6 +34,7 @@ export default function VendorDetailModal({
 }: VendorDetailModalProps) {
   const router = useRouter()
   const locale = useLocale()
+  const { confirm } = useConfirm()
   const [formOpen, setFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
@@ -48,7 +50,17 @@ export default function VendorDetailModal({
   const displayVendor = vendor || initialData
 
   const handleDelete = async () => {
-    if (!displayVendor || !confirm(`${displayVendor.name} tedarikçisini silmek istediğinize emin misiniz?`)) {
+    if (!displayVendor) return
+    
+    const confirmed = await confirm({
+      title: 'Tedarikçiyi Sil?',
+      description: `${displayVendor.name} tedarikçisini silmek istediğinize emin misiniz?`,
+      confirmLabel: 'Sil',
+      cancelLabel: 'İptal',
+      variant: 'destructive',
+    })
+    
+    if (!confirmed) {
       return
     }
 

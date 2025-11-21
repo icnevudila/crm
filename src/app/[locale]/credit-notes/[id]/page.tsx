@@ -11,7 +11,8 @@ import { Card } from '@/components/ui/card'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import CreditNoteForm from '@/components/credit-notes/CreditNoteForm'
-import { toast, confirm } from '@/lib/toast'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { formatCurrency } from '@/lib/utils'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
 import { useData } from '@/hooks/useData'
@@ -27,6 +28,7 @@ export default function CreditNoteDetailPage() {
   const params = useParams()
   const router = useRouter()
   const locale = useLocale()
+  const { confirm } = useConfirm()
   const id = params.id as string
   const [formOpen, setFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -65,7 +67,17 @@ export default function CreditNoteDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (!(await confirm(`${creditNote.creditNoteNumber} alacak dekontunu silmek istediğinize emin misiniz?`))) {
+    if (!creditNote) return
+    
+    const confirmed = await confirm({
+      title: 'Alacak Dekontunu Sil?',
+      description: `${creditNote.creditNoteNumber} alacak dekontunu silmek istediğinize emin misiniz?`,
+      confirmLabel: 'Sil',
+      cancelLabel: 'İptal',
+      variant: 'destructive',
+    })
+    
+    if (!confirmed) {
       return
     }
 

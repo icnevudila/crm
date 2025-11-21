@@ -845,12 +845,19 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                   }
 
                   // ÇÖZÜM: API çağrısı yap - backend'de güncelleme yapılsın
+                  // ✅ OPTİMİZASYON: Timeout ve AbortController ile hızlı hata yakalama
+                  const controller = new AbortController()
+                  const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 saniye timeout - daha hızlı hata yakalama
+                  
                   try {
                     const res = await fetch(`/api/quotes/${quoteId}`, {
                       method: 'PUT',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ status: newStatus }),
+                      signal: controller.signal,
                     })
+                    
+                    clearTimeout(timeoutId)
 
                     if (!res.ok) {
                       // Hata durumunda optimistic update'i geri al
@@ -935,6 +942,11 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                       toast.success(toastTitle, { description: toastDescription })
                     }
 
+                    // ✅ OPTİMİZASYON: Cache güncellemesini paralel yap - API response'u beklemeden
+                    // Cache'i hemen invalidate et (background'da refetch yapılacak)
+                    mutate(apiUrl || '/api/quotes', undefined, { revalidate: true })
+                    queryClient.invalidateQueries({ queryKey: ['kanban-quotes'] })
+                    
                     // %100 KESİN ÇÖZÜM: Backend'den dönen güncellenmiş quote ile kanban data'yı güncelle
                     // ÖNEMLİ: Backend'den dönen gerçek data'yı kullan - updatedAt güncel olacak
                     const updatedKanbanDataWithBackendData = previousKanbanData.map((col: any) => {
@@ -980,48 +992,17 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                       return col
                     })
 
-                    // %100 KESİN ÇÖZÜM: Backend'den dönen güncellenmiş data ile cache'i güncelle
+                    // ✅ OPTİMİZASYON: Sadece gerekli cache güncellemelerini yap - gereksiz işlemleri kaldır
                     const updatedKanbanDataWithNewRef = JSON.parse(JSON.stringify(updatedKanbanDataWithBackendData))
-
-                    // %100 KESİN ÇÖZÜM: Backend'den dönen gerçek data ile cache'i güncelle
-                    // ÖNEMLİ: Backend'den dönen gerçek data ile cache güncelleniyor - refresh sonrası güncel data görünecek
-                    queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId], updatedKanbanDataWithNewRef)
-
-                    // %100 KESİN ÇÖZÜM: State'i de güncelle - backend'den dönen gerçek data ile
+                    
+                    // State'i güncelle - UI hemen güncellenir
                     setKanbanData(updatedKanbanDataWithNewRef)
-
-                    // %100 KESİN ÇÖZÜM: Cache'i tamamen temizle - refresh sonrası kesinlikle yeni data çekilsin
-                    // ÖNEMLİ: removeQueries ile cache'i tamamen temizle - refresh sonrası kesinlikle API'den yeni data çekilecek
-                    queryClient.removeQueries({
-                      queryKey: ['kanban-quotes'],
-                    })
-
-                    // %100 KESİN ÇÖZÜM: Cache'i backend'den dönen gerçek data ile tekrar set et
-                    // ÖNEMLİ: removeQueries sonrası cache'i tekrar set et - refresh sonrası cache'den güncel data gelsin
+                    
+                    // Cache'i güncelle - background'da refetch yapılacak
                     queryClient.setQueryData(['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId], updatedKanbanDataWithNewRef)
-
-                    // %100 KESİN ÇÖZÜM: Query'yi invalidate et ve manuel refetch yap - refresh sonrası API'den yeni data çekilsin
-                    // ÖNEMLİ: staleTime: 0 ve gcTime: 0 nedeniyle refresh sonrası kesinlikle yeni data çekilecek
-                    await queryClient.invalidateQueries({
-                      queryKey: ['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId],
-                      exact: true,
-                    })
-
-                    // %100 KESİN ÇÖZÜM: Manuel refetch yap - kesinlikle fresh data çek
-                    // ÖNEMLİ: invalidateQueries sonrası manuel refetch yap - kesinlikle API'den yeni data çekilsin
-                    await queryClient.refetchQueries({
-                      queryKey: ['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId],
-                      exact: true,
-                    })
-
-                    // %100 KESİN ÇÖZÜM: isInitialLoad'i false yap - useEffect'in state'i override etmesini engelle
-                    setIsInitialLoad(false)
-
-                    // ÇÖZÜM: Sadece dashboard'daki diğer query'leri invalidate et (background'da, refetch olmadan)
-                    // ÖNEMLİ: kanban-quotes query'sini invalidate ETME - optimistic update'i koru
-                    // ÖNEMLİ: refetchQueries KULLANMA - staleTime nedeniyle gereksiz refetch tetikler
-                    // Sadece dashboard'daki diğer query'leri invalidate et - onlar kendi staleTime'larına göre refetch olur
-                    await Promise.all([
+                    
+                    // ✅ OPTİMİZASYON: Background'da diğer cache'leri invalidate et (blocking yapma)
+                    Promise.all([
                       queryClient.invalidateQueries({ queryKey: ['quotes'] }), // Table view için
                       queryClient.invalidateQueries({ queryKey: ['stats-quotes'] }), // Stats için
                       queryClient.invalidateQueries({ queryKey: ['quote-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
@@ -1033,8 +1014,23 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                     // Optimistic update zaten yapıldı, invalidate yeterli - query'ler kendi staleTime'larına göre refetch olur
                   } catch (error: any) {
                     console.error('Status update error:', error)
-                    toast.error(t('rejectDialog.statusUpdateError'), { description: error?.message || 'Bir hata oluştu' })
-                    throw error
+                    
+                    // Optimistic update'i geri al
+                    setKanbanData(previousKanbanData)
+                    queryClient.invalidateQueries({ queryKey: ['kanban-quotes'] })
+                    
+                    // Hata mesajını göster
+                    let errorMessage = 'Teklif durumu güncellenemedi'
+                    if (error?.message && typeof error.message === 'string') {
+                      errorMessage = error.message
+                    } else if (error?.name === 'AbortError') {
+                      errorMessage = 'İşlem zaman aşımına uğradı. Lütfen tekrar deneyin.'
+                    }
+                    
+                    toast.error('Teklif Güncellenemedi', { 
+                      description: errorMessage,
+                      duration: 5000,
+                    })
                   }
                 }}
               />
@@ -1836,15 +1832,11 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                       queryClient.invalidateQueries({ queryKey: ['kpis'] }),
                     ])
 
-                    // ✅ Detaylı toast mesajı - revizyon görevi ve bildirim bilgileri
+                    // ✅ Kısa toast mesajı
                     let toastDescription = `"${quoteTitle}" teklifi reddedildi.`
-                    
                     if (automation.taskCreated && automation.taskId) {
-                      toastDescription += `\n\nOtomatik işlemler:\n• Revizyon görevi oluşturuldu (ID: ${automation.taskId.substring(0, 8)}...)\n• Reddetme sebebi not olarak kaydedildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
-                    } else {
-                      toastDescription += `\n\nOtomatik işlemler:\n• Reddetme sebebi not olarak kaydedildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                      toastDescription += ` Revizyon görevi oluşturuldu.`
                     }
-
                     toast.warning('⚠️ Teklif Reddedildi', { description: toastDescription })
                   } catch (error: any) {
                     console.error('Reject error:', error)

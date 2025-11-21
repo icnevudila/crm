@@ -13,7 +13,8 @@ import DetailModal from '@/components/ui/DetailModal'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import dynamic from 'next/dynamic'
-import { toast, confirm } from '@/lib/toast'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 
 const TicketForm = dynamic(() => import('./TicketForm'), {
   ssr: false,
@@ -35,6 +36,7 @@ export default function TicketDetailModal({
 }: TicketDetailModalProps) {
   const router = useRouter()
   const locale = useLocale()
+  const { confirm } = useConfirm()
   const [formOpen, setFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
@@ -50,7 +52,17 @@ export default function TicketDetailModal({
   const displayTicket = ticket || initialData
 
   const handleDelete = async () => {
-    if (!displayTicket || !confirm(`${displayTicket.subject} destek talebini silmek istediğinize emin misiniz?`)) {
+    if (!displayTicket) return
+    
+    const confirmed = await confirm({
+      title: 'Destek Talebini Sil?',
+      description: `${displayTicket.subject} destek talebini silmek istediğinize emin misiniz?`,
+      confirmLabel: 'Sil',
+      cancelLabel: 'İptal',
+      variant: 'destructive',
+    })
+    
+    if (!confirmed) {
       return
     }
 

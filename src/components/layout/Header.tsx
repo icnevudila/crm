@@ -20,7 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { User, LogOut, Settings, HelpCircle, BookOpen, MessageCircle, Command, Menu, Plus, StickyNote, Eye, EyeOff, Sparkles } from 'lucide-react'
+import { User, LogOut, Settings, HelpCircle, BookOpen, MessageCircle, Command, Menu, Plus, StickyNote, Eye, EyeOff } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import RecentItems from '@/components/layout/RecentItems'
 
@@ -59,10 +59,6 @@ const ProductForm = dynamic(() => import('@/components/products/ProductForm'), {
   loading: () => null,
 })
 
-const AIChat = dynamic(() => import('@/components/ai/AIChat'), {
-  ssr: false,
-  loading: () => null,
-})
 
 interface HeaderProps {
   onMenuClick?: () => void
@@ -74,7 +70,6 @@ export default function Header({ onMenuClick }: HeaderProps) {
   const router = useRouter()
 
   const [quickCreate, setQuickCreate] = useState<'customer' | 'deal' | 'quote' | 'invoice' | 'task' | 'product' | null>(null)
-  const [aiChatOpen, setAiChatOpen] = useState(false)
 
   const quickActions: {
     key: 'customer' | 'deal' | 'quote' | 'invoice' | 'task' | 'product'
@@ -193,17 +188,6 @@ export default function Header({ onMenuClick }: HeaderProps) {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* AI Butonu - Sade, gradyen yok */}
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-9 w-9 border-gray-200 hover:bg-gray-50"
-          onClick={() => setAiChatOpen(true)}
-          title="AI Asistan"
-        >
-          <Sparkles className="h-4 w-4" />
-        </Button>
-        
         {/* Bildirimler */}
         {session?.user?.id && (
           <NotificationMenu userId={session.user.id} />
@@ -304,9 +288,6 @@ export default function Header({ onMenuClick }: HeaderProps) {
         open={quickCreate === 'product'}
         onClose={() => setQuickCreate(null)}
       />
-
-      {/* AI Chat Modal */}
-      <AIChat open={aiChatOpen} onClose={() => setAiChatOpen(false)} />
       
       {/* Sticky Notes Container - Header'dan kontrol ediliyor */}
       <StickyNotesContainer visible={true} />

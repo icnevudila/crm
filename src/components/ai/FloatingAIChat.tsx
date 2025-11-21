@@ -418,12 +418,12 @@ export default function FloatingAIChat() {
                 setIsMinimized(false)
               }}
               size="lg"
-              className="h-14 w-14 rounded-full bg-gradient-to-br from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg shadow-indigo-500/50 hover:shadow-xl hover:shadow-indigo-500/60 transition-all duration-300"
+              className="h-14 w-14 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white shadow-md hover:shadow-lg transition-all duration-300"
             >
               <Sparkles className="h-6 w-6 text-white" />
             </Button>
             {/* Badge */}
-            <div className="absolute -top-1 -right-1 bg-pink-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+            <div className="absolute -top-1 -right-1 bg-pink-600 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-md">
               784
             </div>
           </motion.div>

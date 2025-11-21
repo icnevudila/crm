@@ -16,7 +16,8 @@ import DetailModal from '@/components/ui/DetailModal'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import dynamic from 'next/dynamic'
-import { toast, confirm } from '@/lib/toast'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import StockMovementForm from '@/components/stock/StockMovementForm'
 import Link from 'next/link'
 
@@ -41,6 +42,7 @@ export default function ProductDetailModal({
 }: ProductDetailModalProps) {
   const router = useRouter()
   const locale = useLocale()
+  const { confirm } = useConfirm()
   const [stockFormOpen, setStockFormOpen] = useState(false)
   const [stockFormType, setStockFormType] = useState<'IN' | 'OUT' | 'ADJUSTMENT' | 'RETURN' | undefined>(undefined)
   const [formOpen, setFormOpen] = useState(false)
@@ -79,7 +81,17 @@ export default function ProductDetailModal({
   const displayProduct = product || initialData
 
   const handleDelete = async () => {
-    if (!displayProduct || !confirm(`${displayProduct.name} ürününü silmek istediğinize emin misiniz?`)) {
+    if (!displayProduct) return
+    
+    const confirmed = await confirm({
+      title: 'Ürünü Sil?',
+      description: `${displayProduct.name} ürününü silmek istediğinize emin misiniz?`,
+      confirmLabel: 'Sil',
+      cancelLabel: 'İptal',
+      variant: 'destructive',
+    })
+    
+    if (!confirmed) {
       return
     }
 

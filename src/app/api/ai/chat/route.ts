@@ -49,8 +49,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ response })
   } catch (error: any) {
     console.error('[AI Chat Error]:', error)
+    
+    // GROQ API key hatası için özel mesaj
+    const errorMessage = error.message || 'AI yanıtı oluşturulamadı'
+    const isApiKeyError = errorMessage.includes('GROQ_API_KEY')
+    
     return NextResponse.json(
-      { error: error.message || 'Failed to generate AI response' },
+      { 
+        error: errorMessage,
+        ...(isApiKeyError && {
+          hint: 'GROQ_API_KEY ortam değişkenini kontrol edin. Vercel\'de Settings > Environment Variables bölümünden ekleyebilirsiniz.'
+        })
+      },
       { status: 500 }
     )
   }

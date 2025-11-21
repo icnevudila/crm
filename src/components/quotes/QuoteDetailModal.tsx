@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { toast, confirm } from '@/lib/toast'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import WorkflowStepper from '@/components/ui/WorkflowStepper'
 import { getQuoteWorkflowSteps } from '@/lib/workflowSteps'
 import StatusInfoNote from '@/components/workflow/StatusInfoNote'
@@ -63,6 +64,7 @@ export default function QuoteDetailModal({
 }: QuoteDetailModalProps) {
   const router = useRouter()
   const locale = useLocale()
+  const { confirm } = useConfirm()
   const [creatingRevision, setCreatingRevision] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [meetingFormOpen, setMeetingFormOpen] = useState(false)
@@ -323,7 +325,17 @@ export default function QuoteDetailModal({
   }
 
   const handleDelete = async () => {
-    if (!displayQuote || !confirm(`${displayQuote.title} teklifini silmek istediğinize emin misiniz?`)) {
+    if (!displayQuote) return
+    
+    const confirmed = await confirm({
+      title: 'Teklifi Sil?',
+      description: `${displayQuote.title} teklifini silmek istediğinize emin misiniz?`,
+      confirmLabel: 'Sil',
+      cancelLabel: 'İptal',
+      variant: 'destructive',
+    })
+    
+    if (!confirmed) {
       return
     }
 
@@ -353,7 +365,15 @@ export default function QuoteDetailModal({
   }
 
   const handleCreateRevision = async () => {
-    if (!(await confirm('Bu teklifin yeni bir revizyonunu oluşturmak istiyor musunuz?'))) {
+    const confirmed = await confirm({
+      title: 'Revizyon Oluştur?',
+      description: 'Bu teklifin yeni bir revizyonunu oluşturmak istiyor musunuz?',
+      confirmLabel: 'Oluştur',
+      cancelLabel: 'İptal',
+      variant: 'default',
+    })
+    
+    if (!confirmed) {
       return
     }
 

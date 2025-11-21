@@ -16,6 +16,7 @@ import { mutate } from 'swr'
 import { formatCurrency } from '@/lib/utils'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
 import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 
 interface CreditNote {
   id: string
@@ -40,6 +41,7 @@ const statusLabels: Record<string, string> = {
 
 export default function CreditNoteList() {
   const locale = useLocale()
+  const { confirm } = useConfirm()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [formOpen, setFormOpen] = useState(false)
@@ -85,7 +87,15 @@ export default function CreditNoteList() {
   }
 
   const handleDelete = async (id: string, creditNoteNumber: string) => {
-    if (!confirm(`${creditNoteNumber} alacak dekontunu silmek istediğinize emin misiniz?`)) {
+    const confirmed = await confirm({
+      title: 'Alacak Dekontunu Sil?',
+      description: `${creditNoteNumber} alacak dekontunu silmek istediğinize emin misiniz?`,
+      confirmLabel: 'Sil',
+      cancelLabel: 'İptal',
+      variant: 'destructive'
+    })
+    
+    if (!confirmed) {
       return
     }
 

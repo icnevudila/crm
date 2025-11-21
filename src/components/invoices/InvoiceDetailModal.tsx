@@ -10,7 +10,8 @@ import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { formatCurrency } from '@/lib/utils'
-import { toast, confirm } from '@/lib/toast'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import WorkflowStepper from '@/components/ui/WorkflowStepper'
 import { getInvoiceWorkflowSteps } from '@/lib/workflowSteps'
 import StatusInfoNote from '@/components/workflow/StatusInfoNote'
@@ -82,6 +83,7 @@ export default function InvoiceDetailModal({
 }: InvoiceDetailModalProps) {
   const router = useRouter()
   const locale = useLocale()
+  const { confirm } = useConfirm()
   const [formOpen, setFormOpen] = useState(false)
   const [itemFormOpen, setItemFormOpen] = useState(false)
   const [shipmentFormOpen, setShipmentFormOpen] = useState(false)
@@ -457,7 +459,17 @@ export default function InvoiceDetailModal({
   }
 
   const handleDelete = async () => {
-    if (!displayInvoice || !confirm(`${displayInvoice.title} faturasını silmek istediğinize emin misiniz?`)) {
+    if (!displayInvoice) return
+    
+    const confirmed = await confirm({
+      title: 'Faturayı Sil?',
+      description: `${displayInvoice.title} faturasını silmek istediğinize emin misiniz?`,
+      confirmLabel: 'Sil',
+      cancelLabel: 'İptal',
+      variant: 'destructive',
+    })
+    
+    if (!confirmed) {
       return
     }
 

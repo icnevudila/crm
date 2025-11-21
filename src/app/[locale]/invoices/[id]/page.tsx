@@ -110,6 +110,24 @@ export default function InvoiceDetailPage() {
     }
   )
 
+  // Return Orders - Invoice'a bağlı iade siparişleri
+  const { data: returnOrders = [] } = useData<any[]>(
+    id ? `/api/return-orders?invoiceId=${id}` : null,
+    {
+      dedupingInterval: 30000,
+      revalidateOnFocus: false,
+    }
+  )
+
+  // Credit Notes - Invoice'a bağlı alacak dekontları
+  const { data: creditNotes = [] } = useData<any[]>(
+    id ? `/api/credit-notes?invoiceId=${id}` : null,
+    {
+      dedupingInterval: 30000,
+      revalidateOnFocus: false,
+    }
+  )
+
   if (isLoading) {
     return <SkeletonDetail />
   }
@@ -1331,6 +1349,131 @@ export default function InvoiceDetailPage() {
 
       {/* Document List */}
       <DocumentList relatedTo="Invoice" relatedId={id} />
+
+      {/* Return Orders */}
+      {returnOrders && returnOrders.length > 0 && (
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-orange-600" />
+              İade Siparişleri ({returnOrders.length})
+            </h2>
+          </div>
+          <div className="space-y-4">
+            {returnOrders.map((returnOrder: any) => (
+              <div
+                key={returnOrder.id}
+                className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Link
+                        href={`/${locale}/return-orders/${returnOrder.id}`}
+                        className="font-semibold text-orange-600 hover:underline"
+                      >
+                        {returnOrder.returnNumber}
+                      </Link>
+                      <Badge variant="outline" className={getStatusBadgeClass(returnOrder.status)}>
+                        {returnOrder.status === 'PENDING' ? 'Beklemede' : 
+                         returnOrder.status === 'APPROVED' ? 'Onaylandı' : 
+                         returnOrder.status === 'REJECTED' ? 'Reddedildi' : 
+                         returnOrder.status === 'COMPLETED' ? 'Tamamlandı' : returnOrder.status}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <p className="text-gray-600">Toplam Tutar</p>
+                        <p className="font-medium">{formatCurrency(returnOrder.totalAmount || 0)}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">İade Tarihi</p>
+                        <p className="font-medium">
+                          {new Date(returnOrder.returnDate).toLocaleDateString('tr-TR')}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Oluşturulma</p>
+                        <p className="font-medium">
+                          {new Date(returnOrder.createdAt).toLocaleDateString('tr-TR')}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <Link href={`/${locale}/return-orders/${returnOrder.id}`}>
+                    <Button variant="outline" size="sm">
+                      Detaylar
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Credit Notes */}
+      {creditNotes && creditNotes.length > 0 && (
+        <Card className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <FileText className="h-5 w-5 text-purple-600" />
+              Alacak Dekontları ({creditNotes.length})
+            </h2>
+          </div>
+          <div className="space-y-4">
+            {creditNotes.map((creditNote: any) => (
+              <div
+                key={creditNote.id}
+                className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Link
+                        href={`/${locale}/credit-notes/${creditNote.id}`}
+                        className="font-semibold text-purple-600 hover:underline"
+                      >
+                        {creditNote.creditNoteNumber}
+                      </Link>
+                      <Badge variant="outline" className={getStatusBadgeClass(creditNote.status)}>
+                        {creditNote.status === 'DRAFT' ? 'Taslak' : 
+                         creditNote.status === 'ISSUED' ? 'Düzenlendi' : 
+                         creditNote.status === 'APPLIED' ? 'Uygulandı' : creditNote.status}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <p className="text-gray-600">Tutar</p>
+                        <p className="font-medium">{formatCurrency(creditNote.amount || 0)}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Durum</p>
+                        <p className="font-medium">
+                          {creditNote.status === 'DRAFT' ? 'Taslak' : 
+                           creditNote.status === 'ISSUED' ? 'Düzenlendi' : 
+                           creditNote.status === 'APPLIED' ? 'Uygulandı' : creditNote.status}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-gray-600">Oluşturulma</p>
+                        <p className="font-medium">
+                          {new Date(creditNote.createdAt).toLocaleDateString('tr-TR')}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <Link href={`/${locale}/credit-notes/${creditNote.id}`}>
+                    <Button variant="outline" size="sm">
+                      Detaylar
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Payment Plans */}
       {paymentPlans && paymentPlans.length > 0 && (

@@ -67,17 +67,17 @@ export default async function LocaleLayout({
               </KeyboardShortcutsProvider>
               <Toaster
                 position="top-right"
-                expand={false}
+                expand={true}
                 richColors
                 closeButton
                 duration={4000}
                 toastOptions={{
                   classNames: {
-                    toast: 'group toast shadow-lg border-2 min-w-[500px] max-w-[600px]',
-                    title: 'text-base font-semibold leading-snug',
-                    description: 'text-sm leading-relaxed whitespace-normal break-words',
-                    actionButton: 'bg-indigo-600 text-white hover:bg-indigo-700 text-sm px-3 py-1.5',
-                    cancelButton: 'bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm px-3 py-1.5',
+                    toast: 'group toast shadow-xl border-2 min-w-[600px] max-w-[800px] w-full',
+                    title: 'text-lg font-bold leading-tight mb-2 break-words',
+                    description: 'text-base leading-relaxed whitespace-normal break-words overflow-visible max-h-none',
+                    actionButton: 'bg-indigo-600 text-white hover:bg-indigo-700 text-sm px-4 py-2',
+                    cancelButton: 'bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm px-4 py-2',
                     closeButton: 'bg-white border-2 border-gray-200 hover:border-gray-300 text-gray-700',
                     error: 'border-red-300 bg-red-50 text-red-900',
                     success: 'border-emerald-300 bg-emerald-50 text-emerald-900',
@@ -86,10 +86,11 @@ export default async function LocaleLayout({
                   },
                   style: {
                     borderRadius: '12px',
-                    padding: '16px',
-                    fontSize: '14px',
-                    minWidth: '500px',
-                    maxWidth: '600px',
+                    padding: '24px 28px',
+                    fontSize: '15px',
+                    minWidth: '600px',
+                    maxWidth: '800px',
+                    width: 'auto',
                   }
                 }}
               />

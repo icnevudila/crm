@@ -15,7 +15,8 @@ import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import dynamic from 'next/dynamic'
-import { toast, confirm } from '@/lib/toast'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import DetailPageLayout from '@/components/layout/DetailPageLayout'
 import OverviewCard from '@/components/layout/OverviewCard'
 import RelatedRecordsSection from '@/components/layout/RelatedRecordsSection'
@@ -53,6 +54,7 @@ export default function CustomerDetailModal({
   const router = useRouter()
   const locale = useLocale()
   const tCommon = useTranslations('common')
+  const { confirm } = useConfirm()
   const [formOpen, setFormOpen] = useState(false)
   const [dealFormOpen, setDealFormOpen] = useState(false)
   const [quoteFormOpen, setQuoteFormOpen] = useState(false)
@@ -71,7 +73,17 @@ export default function CustomerDetailModal({
   const displayCustomer = customer || initialData
 
   const handleDelete = async () => {
-    if (!displayCustomer || !confirm(tCommon('deleteConfirm', { name: displayCustomer.name, item: 'müşteri' }))) {
+    if (!displayCustomer) return
+    
+    const confirmed = await confirm({
+      title: tCommon('deleteConfirmTitle'),
+      description: tCommon('deleteConfirm', { name: displayCustomer.name, item: 'müşteri' }),
+      confirmLabel: tCommon('delete'),
+      cancelLabel: tCommon('cancel'),
+      variant: 'destructive',
+    })
+    
+    if (!confirmed) {
       return
     }
 

@@ -12,7 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import PaymentPlanForm from '@/components/payment-plans/PaymentPlanForm'
-import { toast, confirm } from '@/lib/toast'
+import { toast } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { formatCurrency } from '@/lib/utils'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
 import { useData } from '@/hooks/useData'
@@ -35,6 +36,7 @@ export default function PaymentPlanDetailPage() {
   const params = useParams()
   const router = useRouter()
   const locale = useLocale()
+  const { confirm } = useConfirm()
   const id = params.id as string
   const [formOpen, setFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -73,7 +75,17 @@ export default function PaymentPlanDetailPage() {
   }
 
   const handleDelete = async () => {
-    if (!(await confirm(`${plan.name} ödeme planını silmek istediğinize emin misiniz?`))) {
+    if (!plan) return
+    
+    const confirmed = await confirm({
+      title: 'Ödeme Planını Sil?',
+      description: `${plan.name} ödeme planını silmek istediğinize emin misiniz?`,
+      confirmLabel: 'Sil',
+      cancelLabel: 'İptal',
+      variant: 'destructive',
+    })
+    
+    if (!confirmed) {
       return
     }
 
