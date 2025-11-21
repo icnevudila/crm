@@ -261,7 +261,7 @@ export default function QuickStartWizard({ open, onClose }: QuickStartWizardProp
                 {currentStepData.action && (
                   <Button
                     onClick={handleAction}
-                    className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg hover:shadow-xl transition-all"
+                    className="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all"
                   >
                     {currentStepData.action.label}
                     <ArrowRight className="ml-2 h-4 w-4" />

@@ -314,7 +314,7 @@ export default function DashboardPage() {
                 >
                   <AccordionTrigger className="px-3 sm:px-4 md:px-6 py-2.5 sm:py-3 text-left">
                     <div className="flex items-center gap-2 sm:gap-3">
-                      <div className="flex h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 items-center justify-center rounded-lg sm:rounded-xl bg-gradient-to-br from-indigo-500/10 to-purple-500/10 text-indigo-500 flex-shrink-0">
+                      <div className="flex h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 items-center justify-center rounded-lg sm:rounded-xl bg-gradient-to-br from-indigo-500/10 to-indigo-500/10 text-indigo-500 flex-shrink-0">
                         <Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5 md:h-4 md:w-4" />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -443,7 +443,7 @@ function HeroBanner({
             {onWizardClick && (
               <button
                 onClick={onWizardClick}
-                className="inline-flex items-center gap-2 rounded-full border border-indigo-300/40 bg-gradient-to-r from-indigo-500 to-purple-500 px-4 py-1.5 font-semibold text-white shadow-lg shadow-indigo-500/50 hover:shadow-indigo-500/70 transition-all hover:scale-105"
+                className="inline-flex items-center gap-2 rounded-full border border-indigo-300/40 bg-gradient-to-r from-indigo-500 to-indigo-600 px-4 py-1.5 font-semibold text-white shadow-lg shadow-indigo-500/50 hover:shadow-indigo-500/70 transition-all hover:scale-105"
               >
                 <Sparkles className="h-3.5 w-3.5" />
                 Hızlı Başlangıç
@@ -452,7 +452,7 @@ function HeroBanner({
             {onOnboardingClick && (
               <button
                 onClick={onOnboardingClick}
-                className="inline-flex items-center gap-2 rounded-full border border-purple-300/40 bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-1.5 font-semibold text-white shadow-lg shadow-purple-500/50 hover:shadow-purple-500/70 transition-all hover:scale-105"
+                className="inline-flex items-center gap-2 rounded-full border border-indigo-300/40 bg-gradient-to-r from-indigo-500 to-indigo-600 px-4 py-1.5 font-semibold text-white shadow-lg shadow-indigo-500/50 hover:shadow-indigo-500/70 transition-all hover:scale-105"
               >
                 <Sparkles className="h-3.5 w-3.5" />
                 Detaylı Rehber

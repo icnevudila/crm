@@ -12,7 +12,8 @@ import GradientCard from '@/components/ui/GradientCard'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { formatCurrency } from '@/lib/utils'
-import { toast, toastError, confirm } from '@/lib/toast'
+import { toast, toastError } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
@@ -124,6 +125,7 @@ export default function DealDetailPage() {
   const params = useParams()
   const router = useRouter()
   const locale = useLocale()
+  const { confirm } = useConfirm()
   const dealId = params.id as string
   const [formOpen, setFormOpen] = useState(false)
   const [quoteFormOpen, setQuoteFormOpen] = useState(false)
@@ -201,7 +203,14 @@ export default function DealDetailPage() {
         }}
         onEdit={() => setFormOpen(true)}
         onDelete={async () => {
-          if (!confirm(`${deal.title} fırsatını silmek istediğinize emin misiniz?`)) {
+          const confirmed = await confirm({
+            title: 'Fırsatı Sil?',
+            description: `${deal.title} fırsatını silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`,
+            confirmLabel: 'Sil',
+            cancelLabel: 'İptal',
+            variant: 'destructive',
+          })
+          if (!confirmed) {
             return
           }
           setDeleteLoading(true)

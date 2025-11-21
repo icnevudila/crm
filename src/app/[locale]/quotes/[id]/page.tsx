@@ -13,7 +13,8 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
-import { toast, toastError, confirm } from '@/lib/toast'
+import { toast, toastError } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
 import WorkflowStepper from '@/components/ui/WorkflowStepper'
 import { getQuoteWorkflowSteps } from '@/lib/workflowSteps'
@@ -113,6 +114,7 @@ export default function QuoteDetailPage() {
   const params = useParams()
   const router = useRouter()
   const locale = useLocale()
+  const { confirm } = useConfirm()
   const quoteId = params.id as string
   const [creatingRevision, setCreatingRevision] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
@@ -133,7 +135,14 @@ export default function QuoteDetailPage() {
   )
 
   const handleCreateRevision = async () => {
-    if (!confirm('Bu teklifin yeni bir revizyonunu oluşturmak istiyor musunuz?')) {
+    const confirmed = await confirm({
+      title: 'Teklif Revizyonu Oluştur?',
+      description: 'Bu teklifin yeni bir revizyonunu oluşturmak istiyor musunuz?',
+      confirmLabel: 'Oluştur',
+      cancelLabel: 'İptal',
+      variant: 'default',
+    })
+    if (!confirmed) {
       return
     }
 
@@ -236,7 +245,14 @@ export default function QuoteDetailPage() {
         }}
         onEdit={() => setFormOpen(true)}
         onDelete={async () => {
-          if (!confirm(`${quote.title} teklifini silmek istediğinize emin misiniz?`)) {
+          const confirmed = await confirm({
+            title: 'Teklifi Sil?',
+            description: `${quote.title} teklifini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.`,
+            confirmLabel: 'Sil',
+            cancelLabel: 'İptal',
+            variant: 'destructive',
+          })
+          if (!confirmed) {
             return
           }
           setDeleteLoading(true)

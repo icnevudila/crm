@@ -74,7 +74,7 @@ export async function GET(
       .from('Deal')
       .select(
         `
-        id, title, stage, value, status, customerId, customerCompanyId, priorityScore, isPriority, leadSource, description, companyId, createdAt, updatedAt,
+        id, title, stage, value, customerId, customerCompanyId, priorityScore, isPriority, leadSource, description, companyId, createdAt, updatedAt,
         Customer (
           id,
           name,
@@ -110,7 +110,7 @@ export async function GET(
         .from('Deal')
         .select(
           `
-          id, title, stage, value, status, customerId, customerCompanyId, priorityScore, isPriority, leadSource, description, companyId, createdAt, updatedAt,
+          id, title, stage, value, customerId, customerCompanyId, priorityScore, isPriority, leadSource, description, companyId, createdAt, updatedAt,
           Customer (
             id,
             name,
@@ -276,7 +276,7 @@ export async function PUT(
     // Önce mevcut deal'ı çek - sadece gönderilen alanları güncelle (partial update)
     let existingDealQuery = supabase
       .from('Deal')
-      .select('title, stage, status, value, customerId, companyId')
+      .select('title, stage, value, customerId, companyId')
       .eq('id', id)
     
     // SuperAdmin değilse ve companyId varsa filtrele
@@ -347,8 +347,8 @@ export async function PUT(
       }
     }
 
-    // ÖNEMLİ: Deal CLOSED olduğunda değiştirilemez
-    if ((existingDeal as any)?.status === 'CLOSED') {
+    // ÖNEMLİ: Deal WON/LOST olduğunda değiştirilemez (stage kontrolü)
+    if ((existingDeal as any)?.stage === 'WON' || (existingDeal as any)?.stage === 'LOST') {
       return NextResponse.json(
         { 
           error: getErrorMessage('errors.api.dealClosedCannotBeChanged', request),
@@ -490,48 +490,9 @@ export async function PUT(
       }
     }
 
-    // ÖNEMLİ: Deal CLOSED olduğunda özel ActivityLog ve bildirim
-    if (cleanBody.status === 'CLOSED' && (existingDeal as any)?.status !== 'CLOSED') {
-      try {
-        const dealTitle = cleanBody.title || (existingDeal as any)?.title || getActivityMessage(locale, 'defaultDealTitle')
-        
-        // Özel ActivityLog kaydı
-        // @ts-ignore - Supabase type inference issue with dynamic table names
-        await (supabase.from('ActivityLog') as any).insert([
-          {
-            entity: 'Deal',
-            action: 'UPDATE',
-            description: getActivityMessage(locale, 'dealClosed', { title: dealTitle }),
-            meta: { 
-              entity: 'Deal', 
-              action: 'closed', 
-              id, 
-              dealId: id,
-              closedAt: new Date().toISOString()
-            },
-            userId: session.user.id,
-            companyId: session.user.companyId,
-          },
-        ])
-
-        // Bildirim: Fırsat kapatıldı
-        const { createNotificationForRole } = await import('@/lib/notification-helper')
-        await createNotificationForRole({
-          companyId: session.user.companyId,
-          role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
-          title: msgs.activity.dealClosedTitle,
-          message: getActivityMessage(locale, 'dealClosedMessage', { title: dealTitle }),
-          type: 'info',
-          relatedTo: 'Deal',
-          relatedId: id,
-        })
-      } catch (activityError) {
-        // ActivityLog hatası ana işlemi engellemez
-        if (process.env.NODE_ENV === 'development') {
-          console.error('Deal CLOSED ActivityLog error:', activityError)
-        }
-      }
-    }
+    // ÖNEMLİ: Deal WON olduğunda özel ActivityLog ve bildirim (status yerine stage kontrolü kaldırıldı - WON zaten yukarıda işleniyor)
+    // NOT: Bu kod artık gereksiz - WON durumu yukarıda zaten işleniyor, bu kısmı kaldırabiliriz veya sadece WON değilse çalıştırabiliriz
+    // Şimdilik kaldırıyoruz çünkü WON durumu zaten yukarıda işleniyor
 
     // Otomasyon bilgilerini sakla (response'a eklemek için)
     const automationInfo: any = {}
@@ -736,8 +697,8 @@ export async function PUT(
         
         // ✅ UserPerformanceMetrics güncelle - Deal WON olduğunda
         try {
-          const dealUserId = (deal as any)?.createdBy || session.user.id
-          const dealValue = dealValue || 0
+          const dealUserId = (existingDeal as any)?.createdBy || session.user.id
+          const dealValueForMetrics = dealValue || 0
           const now = new Date()
           const periodDate = new Date(now.getFullYear(), now.getMonth(), 1) // Ayın ilk günü
           const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}` // YYYY-MM formatı
@@ -790,12 +751,8 @@ export async function PUT(
             const { getAndRenderEmailTemplate, getTemplateVariables } = await import('@/lib/template-renderer')
             const { sendEmail } = await import('@/lib/email-service')
             
-            // Deal verisini çek (email için)
-            const { data: dealData } = await supabase
-              .from('Deal')
-              .select('*')
-              .eq('id', id)
-              .single()
+            // Deal verisini çek (email için) - existingDeal zaten var, tekrar çekmeye gerek yok
+            const dealData = existingDeal
             
             if (dealData) {
               // Template değişkenlerini hazırla
@@ -963,7 +920,7 @@ export async function DELETE(
     // Önce deal'ı kontrol et - koruma kontrolü için
     let dealQuery = supabase
       .from('Deal')
-      .select('title, stage, status')
+      .select('title, stage')
       .eq('id', id)
     
     // SuperAdmin değilse ve companyId varsa filtrele
@@ -996,8 +953,8 @@ export async function DELETE(
       )
     }
 
-    // ÖNEMLİ: Deal CLOSED olduğunda silinemez (Kapatılmış fırsat)
-    if ((deal as any)?.status === 'CLOSED') {
+    // ÖNEMLİ: Deal WON/LOST olduğunda silinemez (stage kontrolü)
+    if ((deal as any)?.stage === 'WON' || (deal as any)?.stage === 'LOST') {
       return NextResponse.json(
         { 
           error: getErrorMessage('errors.api.dealClosedCannotBeDeleted', request),

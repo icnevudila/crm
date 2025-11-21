@@ -136,8 +136,8 @@ const KPICards = ({
                   className="block h-full"
                   title={t('totalSales')}
                 >
-                  <Card className="relative h-full cursor-pointer overflow-hidden bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 border border-indigo-200/60 p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-200/50 hover:border-indigo-300">
-            <div className="absolute top-0 right-0 h-32 w-32 -translate-y-1/2 translate-x-1/2 rounded-full bg-gradient-to-br from-indigo-200/20 to-purple-200/20 blur-2xl" />
+                  <Card className="relative h-full cursor-pointer overflow-hidden bg-gradient-to-br from-indigo-50 via-indigo-50 to-blue-50 border border-indigo-200/60 p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-200/50 hover:border-indigo-300">
+            <div className="absolute top-0 right-0 h-32 w-32 -translate-y-1/2 translate-x-1/2 rounded-full bg-gradient-to-br from-indigo-200/20 to-blue-200/20 blur-2xl" />
             <div className="relative z-10 flex items-center justify-between">
               <div className="flex-1 min-w-0">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600">
@@ -146,10 +146,10 @@ const KPICards = ({
                 <AnimatedCounter
                   value={kpis?.totalSales ?? 0}
                   prefix="₺"
-                  className="text-xl font-bold leading-tight text-transparent sm:text-2xl md:text-3xl bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text"
+                  className="text-xl font-bold leading-tight text-transparent sm:text-2xl md:text-3xl bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text"
                 />
               </div>
-              <div className="ml-3 flex-shrink-0 rounded-xl bg-gradient-to-br from-indigo-100 to-purple-100 p-3.5 transition-transform duration-300">
+              <div className="ml-3 flex-shrink-0 rounded-xl bg-gradient-to-br from-indigo-100 to-blue-100 p-3.5 transition-transform duration-300">
                 <TrendingUp className="h-6 w-6 text-indigo-600" />
               </div>
             </div>
@@ -171,8 +171,8 @@ const KPICards = ({
                   className="block h-full"
                   title={t('totalQuotes')}
                 >
-                  <Card className="relative h-full cursor-pointer overflow-hidden bg-gradient-to-br from-purple-50 via-pink-50 to-rose-50 border border-purple-200/60 p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-purple-200/50 hover:border-purple-300">
-            <div className="absolute top-0 right-0 h-32 w-32 -translate-y-1/2 translate-x-1/2 rounded-full bg-gradient-to-br from-purple-200/20 to-pink-200/20 blur-2xl" />
+                  <Card className="relative h-full cursor-pointer overflow-hidden bg-gradient-to-br from-orange-50 via-orange-50 to-amber-50 border border-orange-200/60 p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-orange-200/50 hover:border-orange-300">
+            <div className="absolute top-0 right-0 h-32 w-32 -translate-y-1/2 translate-x-1/2 rounded-full bg-gradient-to-br from-orange-200/20 to-amber-200/20 blur-2xl" />
             <div className="relative z-10 flex items-center justify-between">
               <div className="flex-1 min-w-0">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600">
@@ -180,11 +180,11 @@ const KPICards = ({
                 </p>
                 <AnimatedCounter
                   value={kpis?.totalQuotes ?? 0}
-                  className="text-xl font-bold leading-tight text-transparent sm:text-2xl md:text-3xl bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text"
+                  className="text-xl font-bold leading-tight text-transparent sm:text-2xl md:text-3xl bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text"
                 />
               </div>
-              <div className="ml-3 flex-shrink-0 rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 p-3.5 transition-transform duration-300">
-                <FileText className="h-6 w-6 text-purple-600" />
+              <div className="ml-3 flex-shrink-0 rounded-xl bg-gradient-to-br from-orange-100 to-amber-100 p-3.5 transition-transform duration-300">
+                <FileText className="h-6 w-6 text-orange-600" />
               </div>
             </div>
           </Card>
@@ -377,8 +377,8 @@ const KPICards = ({
                   className="block h-full"
                   title={t('totalDeals')}
                 >
-                  <Card className="relative h-full cursor-pointer overflow-hidden bg-gradient-to-br from-purple-50 via-violet-50 to-fuchsia-50 border border-purple-200/60 p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-purple-200/50 hover:border-purple-300">
-                    <div className="absolute top-0 right-0 h-32 w-32 -translate-y-1/2 translate-x-1/2 rounded-full bg-gradient-to-br from-purple-200/20 to-violet-200/20 blur-2xl" />
+                  <Card className="relative h-full cursor-pointer overflow-hidden bg-gradient-to-br from-emerald-50 via-emerald-50 to-teal-50 border border-emerald-200/60 p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-200/50 hover:border-emerald-300">
+                    <div className="absolute top-0 right-0 h-32 w-32 -translate-y-1/2 translate-x-1/2 rounded-full bg-gradient-to-br from-emerald-200/20 to-teal-200/20 blur-2xl" />
                     <div className="relative z-10 flex items-center justify-between">
                       <div className="flex-1 min-w-0">
                         <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-600">
@@ -386,11 +386,11 @@ const KPICards = ({
                         </p>
                         <AnimatedCounter
                           value={kpis?.totalDeals ?? 0}
-                          className="text-xl font-bold leading-tight text-transparent sm:text-2xl md:text-3xl bg-gradient-to-r from-purple-600 to-violet-600 bg-clip-text"
+                          className="text-xl font-bold leading-tight text-transparent sm:text-2xl md:text-3xl bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text"
                         />
                       </div>
-                      <div className="ml-3 flex-shrink-0 rounded-xl bg-gradient-to-br from-purple-100 to-violet-100 p-3.5 transition-transform duration-300">
-                        <Briefcase className="h-6 w-6 text-purple-600" />
+                      <div className="ml-3 flex-shrink-0 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-100 p-3.5 transition-transform duration-300">
+                        <Briefcase className="h-6 w-6 text-emerald-600" />
                       </div>
                     </div>
                   </Card>
@@ -450,10 +450,10 @@ const MonthlyKPICards = ({
                       <AnimatedCounter
                         value={monthly.sales ?? 0}
                         prefix="₺"
-                        className="text-sm font-bold text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text"
+                        className="text-sm font-bold text-transparent bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text"
                       />
                     </div>
-                    <div className="ml-2 flex-shrink-0 rounded-lg bg-gradient-to-br from-indigo-500/10 to-purple-500/10 p-1.5">
+                    <div className="ml-2 flex-shrink-0 rounded-lg bg-gradient-to-br from-indigo-500/10 to-blue-500/10 p-1.5">
                       <TrendingUp className="h-3 w-3 text-indigo-600" />
                     </div>
                   </div>
@@ -467,11 +467,11 @@ const MonthlyKPICards = ({
                       </p>
                       <AnimatedCounter
                         value={monthly.quotes ?? 0}
-                        className="text-sm font-bold text-transparent bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text"
+                        className="text-sm font-bold text-transparent bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text"
                       />
                     </div>
-                    <div className="ml-2 flex-shrink-0 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 p-1.5">
-                      <FileText className="h-3 w-3 text-purple-600" />
+                    <div className="ml-2 flex-shrink-0 rounded-lg bg-gradient-to-br from-orange-500/10 to-amber-500/10 p-1.5">
+                      <FileText className="h-3 w-3 text-orange-600" />
                     </div>
                   </div>
                 </GradientCard>
@@ -503,10 +503,10 @@ const MonthlyKPICards = ({
                       <AnimatedCounter
                         value={monthly.invoices ?? 0}
                         prefix="₺"
-                        className="text-sm font-bold text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text"
+                        className="text-sm font-bold text-transparent bg-gradient-to-r from-indigo-600 to-blue-600 bg-clip-text"
                       />
                     </div>
-                    <div className="ml-2 flex-shrink-0 rounded-lg bg-gradient-to-br from-indigo-500/10 to-purple-500/10 p-1.5">
+                    <div className="ml-2 flex-shrink-0 rounded-lg bg-gradient-to-br from-indigo-500/10 to-blue-500/10 p-1.5">
                       <Clock className="h-3 w-3 text-indigo-600" />
                     </div>
                   </div>
@@ -520,11 +520,11 @@ const MonthlyKPICards = ({
                       </p>
                       <AnimatedCounter
                         value={monthly.deals ?? 0}
-                        className="text-sm font-bold text-transparent bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text"
+                        className="text-sm font-bold text-transparent bg-gradient-to-r from-emerald-600 to-teal-600 bg-clip-text"
                       />
                     </div>
-                    <div className="ml-2 flex-shrink-0 rounded-lg bg-gradient-to-br from-purple-500/10 to-pink-500/10 p-1.5">
-                      <Briefcase className="h-3 w-3 text-purple-600" />
+                    <div className="ml-2 flex-shrink-0 rounded-lg bg-gradient-to-br from-emerald-500/10 to-teal-500/10 p-1.5">
+                      <Briefcase className="h-3 w-3 text-emerald-600" />
                     </div>
                   </div>
                 </GradientCard>

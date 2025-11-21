@@ -206,6 +206,10 @@ export default function QuoteToInvoiceWizard({ open, onClose, quoteId }: QuoteTo
               onClose={() => {}}
               onSuccess={handleInvoiceSuccess}
               quoteId={createdQuote?.id}
+              quote={createdQuote || undefined}
+              customerId={createdQuote?.customerId}
+              customerCompanyId={createdQuote?.customerCompanyId}
+              customerCompanyName={createdQuote?.CustomerCompany?.name}
               skipDialog={true}
             />
           )}
@@ -218,6 +222,7 @@ export default function QuoteToInvoiceWizard({ open, onClose, quoteId }: QuoteTo
               onClose={() => {}}
               onSuccess={handleShipmentSuccess}
               invoiceId={createdInvoice?.id}
+              invoice={createdInvoice || undefined}
               skipDialog={true}
             />
           )}

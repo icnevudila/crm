@@ -13,7 +13,8 @@ import { Card } from '@/components/ui/card'
 import GradientCard from '@/components/ui/GradientCard'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { formatCurrency } from '@/lib/utils'
-import { toast, toastError, toastWarning, confirm } from '@/lib/toast'
+import { toast, toastError, toastWarning } from '@/lib/toast'
+import { useConfirm } from '@/hooks/useConfirm'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
 import { mutate } from 'swr'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
@@ -85,6 +86,7 @@ export default function InvoiceDetailPage() {
   const params = useParams()
   const router = useRouter()
   const locale = useLocale()
+  const { confirm } = useConfirm()
   const id = params.id as string
   const [formOpen, setFormOpen] = useState(false)
   const [itemFormOpen, setItemFormOpen] = useState(false)
@@ -191,7 +193,14 @@ export default function InvoiceDetailPage() {
         }}
         onEdit={() => setFormOpen(true)}
         onDelete={async () => {
-          if (!confirm(`${invoice.title} faturasını silmek istediğinize emin misiniz?`)) {
+          const confirmed = await confirm({
+            title: 'Faturayı Sil?',
+            description: `${invoice.title} faturasını silmek istediğinize emin misiniz?`,
+            confirmLabel: 'Sil',
+            cancelLabel: 'İptal',
+            variant: 'destructive',
+          })
+          if (!confirmed) {
             return
           }
           setDeleteLoading(true)

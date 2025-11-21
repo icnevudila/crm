@@ -1171,7 +1171,7 @@ BEGIN
               u.id,
               NEW."companyId",
               '📝 Teklif Revizyonu Gerekli',
-              'Teklif #' || COALESCE(NEW.id::text, NEW.title) || ' reddedildi. Revizyon görevi oluşturuldu. Görev ID: ' || task_id::text,
+              COALESCE(NEW.title, 'Teklif') || ' reddedildi. Revizyon görevi oluşturuldu.',
               'warning'
             FROM "User" u
             WHERE (
@@ -1231,6 +1231,7 @@ COMMENT ON FUNCTION validate_quote_status_change IS 'Quote status değişiklikle
 COMMENT ON FUNCTION create_invoice_on_quote_accepted IS 'Quote ACCEPTED olduğunda invoice oluşturur. QuoteItem, Notification, ActivityLog yoksa hata vermez.';
 COMMENT ON FUNCTION handle_quote_accepted_automations IS 'Quote ACCEPTED olduğunda invoice ve contract oluşturur. Notification, QuoteItem, ActivityLog, Contract yoksa hata vermez.';
 COMMENT ON FUNCTION auto_suggest_revision_on_quote_rejected IS 'Quote REJECTED olduğunda otomatik revizyon görevi oluşturur. Task ve Notification tabloları yoksa hata vermez.';
+
 
 
 

@@ -845,6 +845,16 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                   }
 
                   // ÇÖZÜM: API çağrısı yap - backend'de güncelleme yapılsın
+                  // ✅ "new" ID kontrolü - geçersiz ID'ler için hemen hata göster
+                  if (quoteId === 'new' || !quoteId || quoteId.trim() === '') {
+                    setKanbanData(previousKanbanData)
+                    toast.error('Geçersiz Teklif', {
+                      description: 'Teklif ID geçersiz. Lütfen sayfayı yenileyin.',
+                      duration: 3000,
+                    })
+                    return
+                  }
+
                   // ✅ OPTİMİZASYON: Timeout ve AbortController ile hızlı hata yakalama
                   const controller = new AbortController()
                   const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 saniye timeout - daha hızlı hata yakalama
@@ -864,7 +874,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                       setKanbanData(previousKanbanData)
                       const errorData = await res.json().catch(() => ({}))
 
-                      // Güvenli hata mesajı oluştur
+                      // Güvenli hata mesajı oluştur - kullanıcı dostu
                       let errorMessage: string = 'Teklif durumu güncellenemedi'
 
                       if (errorData?.message && typeof errorData.message === 'string') {
@@ -873,9 +883,17 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                         errorMessage = errorData.error
                       }
 
-                      // Toast ile hata göster - doğru format
+                      // Teknik mesajları kullanıcı dostu mesajlara çevir
+                      if (errorMessage.includes('quoteNumber') || errorMessage.includes('has no field')) {
+                        errorMessage = 'Teklif kaydı eksik. Lütfen sayfayı yenileyin.'
+                      } else if (errorMessage.includes('signal is aborted') || errorMessage.includes('aborted')) {
+                        errorMessage = 'İşlem zaman aşımına uğradı. Lütfen tekrar deneyin.'
+                      }
+
+                      // Toast ile hata göster - kısa ve okunabilir
                       toast.error('Teklif Güncellenemedi', {
                         description: errorMessage,
+                        duration: 4000,
                       })
 
                       throw new Error(errorMessage)
