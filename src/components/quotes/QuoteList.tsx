@@ -835,6 +835,15 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                   const optimisticKanbanDataWithNewRef = JSON.parse(JSON.stringify(optimisticKanbanData))
                   setKanbanData(optimisticKanbanDataWithNewRef)
 
+                  // ✅ ÇÖZÜM: "new" ID kontrolü - geçersiz ID'ler için hata göster
+                  if (quoteId === 'new' || !quoteId || quoteId.trim() === '') {
+                    setKanbanData(previousKanbanData)
+                    toast.error('Geçersiz Teklif ID', {
+                      description: 'Teklif ID geçersiz. Lütfen sayfayı yenileyin.',
+                    })
+                    return
+                  }
+
                   // ÇÖZÜM: API çağrısı yap - backend'de güncelleme yapılsın
                   try {
                     const res = await fetch(`/api/quotes/${quoteId}`, {
