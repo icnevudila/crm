@@ -1259,19 +1259,39 @@ export async function PUT(
         if (invoiceShipment?.shipmentId) {
           shipmentIdForAutomation = invoiceShipment.shipmentId
         } else {
-          // Sevkiyat kaydı yok - önce SENT durumuna geçilmeli
-          // İş akışı: DRAFT → SENT (sevkiyat kaydı oluştur) → SHIPPED (sevkiyat kaydı onayla)
-          const { getErrorMessage } = await import('@/lib/api-locale')
-          return NextResponse.json(
-            { 
-              error: getErrorMessage('errors.api.shipmentNotFound', request),
-              message: getErrorMessage('errors.api.shipmentNotFoundMessage', request),
-              reason: 'SHIPMENT_NOT_FOUND',
-              requiredStep: 'SENT',
-              workflow: 'DRAFT → SENT (sevkiyat kaydı oluştur) → SHIPPED (sevkiyat kaydı onayla)'
-            },
-            { status: 400 }
-          )
+          // ✅ ÇÖZÜM: Invoice SENT durumunda ama sevkiyat kaydı yok - otomatik oluştur
+          // SENT durumunda sevkiyat kaydı otomatik oluşturulmalı, ama oluşturulmamışsa şimdi oluştur
+          const invoiceItems = await fetchInvoiceItemsForAutomation(supabase, id, companyId)
+          
+          const shipmentResult = await ensureSalesShipmentForSentStatus({
+            supabase,
+            invoiceId: id,
+            companyId,
+            sessionUserId: session.user.id,
+            invoiceItems,
+            request,
+          })
+          
+          if (shipmentResult.created && shipmentResult.shipmentId) {
+            shipmentIdForAutomation = shipmentResult.shipmentId
+            // Invoice'a shipmentId'yi ekle
+            await supabase
+              .from('Invoice')
+              .update({ shipmentId: shipmentResult.shipmentId })
+              .eq('id', id)
+              .eq('companyId', companyId)
+          } else {
+            // Sevkiyat oluşturulamadı - hata döndür
+            const { getErrorMessage } = await import('@/lib/api-locale')
+            return NextResponse.json(
+              { 
+                error: getErrorMessage('errors.api.shipmentCannotBeCreated', request),
+                message: shipmentResult.error || 'Sevkiyat kaydı oluşturulamadı. Lütfen önce faturayı "Gönderildi" durumuna taşıyın.',
+                reason: 'SHIPMENT_CREATION_FAILED',
+              },
+              { status: 400 }
+            )
+          }
         }
       }
 

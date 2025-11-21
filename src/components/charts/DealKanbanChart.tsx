@@ -87,7 +87,7 @@ interface DealKanbanChartProps {
   onDelete?: (id: string, title: string) => void
   onStageChange?: (dealId: string, newStage: string) => void | Promise<void>
   onView?: (dealId: string) => void
-  onQuickAction?: (type: string, deal: any) => void
+  onQuickAction?: (type: 'task' | 'meeting' | 'invoice' | 'quote', deal: any) => void
 }
 
 const stageLabels: Record<string, string> = {
@@ -142,7 +142,7 @@ function SortableDealCard({ deal, stage, onEdit, onDelete, onStageChange, onView
   onDelete?: (id: string, title: string) => void
   onStageChange?: (dealId: string, newStage: string) => void | Promise<void>
   onView?: (dealId: string) => void
-  onQuickAction?: (type: string, deal: any) => void
+  onQuickAction?: (type: 'task' | 'meeting' | 'invoice' | 'quote', deal: any) => void
 }) {
   const locale = useLocale()
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)

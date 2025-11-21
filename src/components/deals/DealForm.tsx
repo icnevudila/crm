@@ -254,7 +254,17 @@ export default function DealForm({
         }
       }
     }
-  }, [deal, open, reset, customerCompanyId, customerIdProp, customerData, setValue])
+  }, [deal?.id, open]) // ✅ ÇÖZÜM: Sadece deal ID ve open değiştiğinde reset et - diğer dependency'ler ayrı useEffect'lerde
+
+  // ✅ ÇÖZÜM: Müşteri bilgileri geldiğinde customerCompanyId'yi güncelle (ayrı useEffect)
+  useEffect(() => {
+    if (open && !deal && customerIdProp) {
+      setValue('customerId', customerIdProp)
+    }
+    if (open && !deal && customerData?.customerCompanyId && !customerCompanyId) {
+      setValue('customerCompanyId', customerData.customerCompanyId)
+    }
+  }, [open, deal, customerIdProp, customerData?.customerCompanyId, customerCompanyId, setValue])
 
   const mutation = useMutation({
     mutationFn: async (data: DealFormData) => {

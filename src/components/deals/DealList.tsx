@@ -36,7 +36,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
 
-import { toast, toastSuccess, toastError, toastWarning, confirm } from '@/lib/toast'
+import { toast, toastSuccess, toastError, toastWarning } from '@/lib/toast'
 import { useConfirm } from '@/hooks/useConfirm'
 
 
@@ -639,6 +639,7 @@ const stageLabels: Record<string, string> = {
 
 
 export default function DealList({ isOpen = true }: DealListProps) {
+  const { confirm } = useConfirm()
 
 
   const locale = useLocale()
@@ -687,7 +688,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
   const [stage, setStage] = useState('')
-
+  const [dealType, setDealType] = useState('')
 
   const [customerId, setCustomerId] = useState('')
 
@@ -753,8 +754,6 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
   const [lostReason, setLostReason] = useState('')
-
-  const { confirm } = useConfirm()
 
   const queryClient = useQueryClient()
   
@@ -1186,7 +1185,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
   const handleDelete = async (id: string, title: string) => {
 
 
-    if (!(await confirm(t('deleteConfirm', { title })))) {
+    if (!window.confirm(t('deleteConfirm', { title }))) {
 
 
       return
@@ -2383,7 +2382,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
             setDetailModalOpen(true)
           }} // ✅ ÇÖZÜM: Modal açmak için callback
           
-          onQuickAction={(type, deal) => {
+          onQuickAction={(type: 'task' | 'meeting' | 'invoice' | 'quote', deal) => {
             setQuickAction({ type, deal })
           }}
 
@@ -2397,9 +2396,9 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
               if (deal) {
                 const confirmed = await confirm({
-                  title: 'Fırsatı Kaybedildi Olarak İşaretlemek İstediğinize Emin Misiniz?',
-                  description: `"${deal.title}" fırsatını kaybedildi olarak işaretlediğinizde otomatik olarak şu işlemler yapılacak:\n\n• Analiz görevi oluşturulacak\n• Kayıp sebebi not olarak kaydedilecek\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
-                  confirmLabel: 'Evet, Kaybedildi Olarak İşaretle',
+                  title: 'Fırsatı Kaybedildi Olarak İşaretle?',
+                  description: `Analiz görevi oluşturulacak.`,
+                  confirmLabel: 'Kaybedildi',
                   cancelLabel: 'İptal',
                   variant: 'destructive'
                 })
@@ -2424,9 +2423,9 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
               if (deal) {
                 const confirmed = await confirm({
-                  title: 'Fırsatı Kazanıldı Olarak İşaretlemek İstediğinize Emin Misiniz?',
-                  description: `"${deal.title}" fırsatını kazanıldı olarak işaretlediğinizde otomatik olarak şu işlemler yapılacak:\n\n• Sözleşme oluşturulacak (Contract)\n• Sözleşme fırsat bilgileriyle doldurulacak\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
-                  confirmLabel: 'Evet, Kazanıldı Olarak İşaretle',
+                  title: 'Fırsatı Kazanıldı Olarak İşaretle?',
+                  description: `Sözleşme oluşturulacak.`,
+                  confirmLabel: 'Kazanıldı',
                   cancelLabel: 'İptal',
                   variant: 'default'
                 })
@@ -2530,21 +2529,19 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
                   if (automation.contractCreated && automation.contractId) {
                     const contractId = automation.contractId
-                    toastDescription += `\n\n✅ Otomatik işlemler:\n• Sözleşme oluşturuldu (ID: ${contractId.substring(0, 8)}...)\n• Sözleşme başlığı: ${automation.contractTitle || 'Otomatik oluşturuldu'}\n• Teklif oluşturuldu\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi\n\n💡 Öneri: Müşteriye teşekkür e-postası göndermek için müşteri detay sayfasına gidin.`
-                    
-                    // Toast'a action button ekle (sözleşme detay sayfasına git)
+                    toastDescription = `Sözleşme oluşturuldu. ${automation.contractTitle ? `"${automation.contractTitle}"` : ''}`
                     toast.success(toastTitle, {
                       description: toastDescription,
                       action: {
-                        label: 'Sözleşmeyi Görüntüle',
+                        label: 'Sözleşmeyi Gör',
                         onClick: () => {
                           window.location.href = `/${locale}/contracts/${contractId}`
                         },
                       },
-                      duration: 8000, // 8 saniye göster
+                      duration: 5000,
                     })
                   } else {
-                    toastDescription += `\n\nOtomatik işlemler:\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                    toastDescription = `İşlem tamamlandı.`
                     toast.success(toastTitle, { description: toastDescription })
                   }
                   break
@@ -2554,15 +2551,8 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
                 case 'LOST':
-                  toastTitle = `⚠️ Fırsat Kaybedildi: "${dealTitle}"`
-                  toastDescription = `Fırsat "Kaybedildi" aşamasına taşındı.`
-
-                  if (automation.taskCreated && automation.taskId) {
-                    toastDescription += `\n\nOtomatik işlemler:\n• Analiz görevi oluşturuldu (ID: ${automation.taskId.substring(0, 8)}...)\n• Kayıp sebebi not olarak kaydedildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
-                  } else {
-                    toastDescription += `\n\nOtomatik işlemler:\n• Kayıp sebebi not olarak kaydedildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
-                  }
-
+                  toastTitle = `Fırsat Kaybedildi`
+                  toastDescription = automation.taskCreated ? `Analiz görevi oluşturuldu.` : `Kayıp sebebi kaydedildi.`
                   toastType = 'warning'
                   break
                   

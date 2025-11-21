@@ -545,7 +545,30 @@ export default function InvoiceForm({
         }
       }
     }
-  }, [invoice, open, reset, customerCompanyId, customerIdProp, effectiveQuoteId, quoteData, quoteProp, setValue]) // onClose dependency'den çıkarıldı - stable değil
+  }, [invoice?.id, open, quoteProp?.id]) // ✅ ÇÖZÜM: Sadece invoice ID, open ve quoteProp ID değiştiğinde reset et - diğer dependency'ler ayrı useEffect'lerde
+
+  // ✅ ÇÖZÜM: Quote bilgileri geldiğinde form'u güncelle (ayrı useEffect)
+  useEffect(() => {
+    if (open && !invoice && quoteData && !quoteProp) {
+      // Quote'tan fatura oluşturuluyorsa bilgileri doldur
+      if (quoteData.customerId) {
+        setValue('customerId', quoteData.customerId)
+      }
+      if (quoteData.customerCompanyId) {
+        setValue('customerCompanyId', quoteData.customerCompanyId)
+      }
+      if (quoteData.id) {
+        setValue('quoteId', quoteData.id)
+      }
+    }
+  }, [open, invoice, quoteData, quoteProp, setValue])
+
+  // ✅ ÇÖZÜM: CustomerCompanyId prop geldiğinde set et (ayrı useEffect)
+  useEffect(() => {
+    if (open && !invoice && customerCompanyId && !watch('customerCompanyId')) {
+      setValue('customerCompanyId', customerCompanyId)
+    }
+  }, [open, invoice, customerCompanyId, setValue, watch])
 
   // InvoiceItem ekleme/düzenleme fonksiyonları
   const handleAddItem = (item: InvoiceItem) => {

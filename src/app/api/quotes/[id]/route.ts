@@ -44,6 +44,15 @@ export async function GET(
     }
 
     const { id } = await params
+    
+    // ✅ ÇÖZÜM: "new" ID'si için hata döndürme - bu bir geçersiz ID
+    if (id === 'new' || !id || id.trim() === '') {
+      return NextResponse.json(
+        { error: 'Invalid quote ID' },
+        { status: 400 }
+      )
+    }
+    
     const supabase = getSupabaseWithServiceRole()
 
     // SuperAdmin tüm şirketlerin verilerini görebilir
@@ -224,9 +233,18 @@ export async function PUT(
     }
 
     const { id } = await params
+    
+    // ✅ ÇÖZÜM: "new" ID'si için hata döndürme - bu bir geçersiz ID
+    if (id === 'new' || !id || id.trim() === '') {
+      return NextResponse.json(
+        { error: 'Invalid quote ID' },
+        { status: 400 }
+      )
+    }
+    
     const bodyRaw = await request.json()
     // Güvenlik: createdBy ve updatedBy otomatik dolduruluyor (CRUD fonksiyonunda), body'den alınmamalı
-    const { id: bodyId, companyId: bodyCompanyId, createdAt, updatedAt, createdBy, updatedBy, ...body } = bodyRaw
+    const { id: bodyId, companyId: bodyCompanyId, createdAt, updatedAt, createdBy, updatedBy, quoteNumber, ...body } = bodyRaw
     const supabase = getSupabaseWithServiceRole()
 
     // ÖNEMLİ: Mevcut quote'u çek - validation için

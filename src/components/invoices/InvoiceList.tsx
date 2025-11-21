@@ -755,8 +755,8 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
           )}
           {!isLoadingKanban && !isErrorKanban && (
             <InvoiceKanbanChart
-              onQuickAction={(type, invoice) => {
-                setQuickAction({ type, invoice })
+              onQuickAction={(type: 'shipment' | 'task' | 'meeting', invoice) => {
+                setQuickAction({ type, invoice: invoice as any })
               }} // ✅ ÇÖZÜM: Quick action için callback (shipment, task, meeting)
               onView={(invoiceId) => {
                 // DEBUG: Invoice ID kontrolü
@@ -787,9 +787,9 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                   // Satış faturaları için sevkiyat oluşturulacak
                   if (invoiceType === 'SALES' && hasProducts) {
                     const confirmed = await confirm({
-                      title: 'Faturayı Göndermek İstediğinize Emin Misiniz?',
-                      description: `"${invoice.title || invoice.invoiceNumber || 'Fatura'}" faturasını gönderdiğinizde otomatik olarak şu işlemler yapılacak:\n\n• Sevkiyat kaydı oluşturulacak (PENDING durumunda)\n• Sevkiyat numarası atanacak\n• Müşteri adresi sevkiyat adresi olarak ayarlanacak\n• Teslimat tarihi belirlenecek (vade tarihinden 3 gün sonra)\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
-                      confirmLabel: 'Evet, Gönder',
+                      title: 'Faturayı Gönder?',
+                      description: `Sevkiyat kaydı oluşturulacak.`,
+                      confirmLabel: 'Gönder',
                       cancelLabel: 'İptal',
                       variant: 'default'
                     })
@@ -804,9 +804,9 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                 if (newStatus === 'PAID' && invoice) {
                   const invoiceValue = getInvoiceValue(invoice)
                   const confirmed = await confirm({
-                    title: 'Faturayı Ödendi Olarak İşaretlemek İstediğinize Emin Misiniz?',
-                    description: `"${invoice.title || invoice.invoiceNumber || 'Fatura'}" faturasını ödendi olarak işaretlediğinizde otomatik olarak şu işlemler yapılacak:\n\n• Finance kaydı oluşturulacak (GELİR - ${formatCurrency(invoiceValue)})\n• Finans raporları güncellenecek\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
-                    confirmLabel: 'Evet, Ödendi Olarak İşaretle',
+                    title: 'Faturayı Ödendi Olarak İşaretle?',
+                    description: `Finance kaydı oluşturulacak (${formatCurrency(invoiceValue)}).`,
+                    confirmLabel: 'Ödendi',
                     cancelLabel: 'İptal',
                     variant: 'default'
                   })
@@ -979,66 +979,53 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                       break
 
                     case 'RECEIVED':
-                      toastTitle = `Mal kabul edildi: "${invoiceTitle}"`
-                      toastDescription = `Fatura "Mal Kabul Edildi" durumuna taşındı.`
-
-                      if (automation.purchaseTransactionId) {
-                        toastDescription += `\n\nOtomatik işlemler:\n• Mal kabul kaydı onaylandı (ID: ${automation.purchaseTransactionId.substring(0, 8)}...)\n• Stoğa giriş yapıldı\n• Ürünler stokta olarak işaretlendi`
-                      }
+                      toastTitle = `Mal Kabul Edildi`
+                      toastDescription = automation.purchaseTransactionId ? `Stoğa giriş yapıldı.` : `İşlem tamamlandı.`
                       break
 
                     case 'PAID':
-                      toastTitle = `💰 Fatura Ödendi!`
-                      toastDescription = `"${invoiceTitle}" faturası ödendi olarak işaretlendi.`
-
+                      toastTitle = `Fatura Ödendi`
                       if (automation.financeCreated && automation.financeId) {
                         const invoiceAmount = responseData?.totalAmount || 0
-                        const invoiceType = responseData?.invoiceType || 'SALES'
-                        const hasProducts = responseData?.invoiceItems?.length > 0 || responseData?.items?.length > 0
-                        
-                        toastDescription += `\n\n✅ Otomatik işlemler:\n• Finance kaydı oluşturuldu (ID: ${automation.financeId.substring(0, 8)}...)\n• Gelir kaydı eklendi (${formatCurrency(invoiceAmount)})\n• Finans raporları güncellendi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
-                        
-                        // Satış faturaları için sevkiyat önerisi
-                        if (invoiceType === 'SALES' && hasProducts && responseData?.status !== 'SHIPPED') {
-                          toastDescription += `\n\n💡 Öneri: Ürünler sevk edilmediyse, sevkiyat oluşturmak için fatura detay sayfasına gidin.`
-                        }
+                        toastDescription = `Finance kaydı oluşturuldu. ${formatCurrency(invoiceAmount)} gelir eklendi.`
+                        toast.success(toastTitle, {
+                          description: toastDescription,
+                          action: {
+                            label: 'Ödeme Planı',
+                            onClick: () => {
+                              window.location.href = `/${locale}/invoices/${invoiceId}`
+                            },
+                          },
+                          duration: 5000,
+                        })
                       } else {
-                        toastDescription += `\n\nOtomatik işlemler:\n• Finance kaydı oluşturuluyor...\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                        toastDescription = `Finance kaydı oluşturuluyor...`
+                        toast.success(toastTitle, { description: toastDescription })
                       }
                       break
 
                     case 'OVERDUE':
-                      toastTitle = `Fatura vadesi geçti: "${invoiceTitle}"`
-                      toastDescription = `Fatura "Vadesi Geçti" durumuna taşındı.\n\nÖnemli:\n• Müşteriye ödeme hatırlatması gönderildi\n• Takip görevi oluşturuldu`
+                      toastTitle = `Fatura Vadesi Geçti`
+                      toastDescription = `Ödeme hatırlatması gönderildi.`
                       toastType = 'info'
                       break
 
                     case 'CANCELLED':
-                      toastTitle = `Fatura iptal edildi: "${invoiceTitle}"`
-                      toastDescription = `Fatura "İptal Edildi" durumuna taşındı.`
-
+                      toastTitle = `Fatura İptal Edildi`
                       const cancelledItems: string[] = []
-                      if (automation.shipmentCancelled && automation.shipmentId) {
-                        cancelledItems.push(`• Sevkiyat iptal edildi (ID: ${automation.shipmentId.substring(0, 8)}...)`)
-                        cancelledItems.push(`• Rezerve edilen ürünler geri alındı`)
+                      if (automation.shipmentCancelled) {
+                        cancelledItems.push('Sevkiyat iptal edildi')
                       }
-                      if (automation.purchaseTransactionCancelled && automation.purchaseTransactionId) {
-                        cancelledItems.push(`• Mal kabul iptal edildi (ID: ${automation.purchaseTransactionId.substring(0, 8)}...)`)
-                        cancelledItems.push(`• Bekleyen stok işlemleri geri alındı`)
+                      if (automation.purchaseTransactionCancelled) {
+                        cancelledItems.push('Mal kabul iptal edildi')
                       }
-
-                      if (cancelledItems.length > 0) {
-                        toastDescription += `\n\nGeri alınan işlemler:\n${cancelledItems.join('\n')}`
-                      } else {
-                        toastDescription += `\n\nBu fatura için sevkiyat/mal kabul kaydı bulunmuyordu.`
-                      }
-
+                      toastDescription = cancelledItems.length > 0 ? cancelledItems.join(', ') + '.' : `İşlem iptal edildi.`
                       toastType = 'warning'
                       break
 
                     default:
-                      toastTitle = `Fatura durumu güncellendi: "${invoiceTitle}"`
-                      toastDescription = `Fatura durumu "${newStatus}" olarak güncellendi.`
+                      toastTitle = `Durum Güncellendi`
+                      toastDescription = `"${newStatus}" durumuna taşındı.`
                   }
 
                   if (toastType === 'success') {

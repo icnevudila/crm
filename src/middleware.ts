@@ -33,7 +33,8 @@ export async function middleware(request: NextRequest) {
   // /dashboard gibi locale olmayan path'leri /tr/dashboard'a yönlendir
   const protectedPaths = [
     '/dashboard', '/customers', '/quotes', '/invoices', '/deals', '/products',
-    '/companies', '/shipments', '/finance', '/tasks', '/tickets', '/reports', '/settings'
+    '/companies', '/shipments', '/finance', '/tasks', '/tickets', '/reports', '/settings',
+    '/sales-quotas', '/product-bundles', '/return-orders', '/credit-notes', '/payment-plans'
   ]
   
   const needsRedirect = protectedPaths.some(path => pathname.startsWith(path))

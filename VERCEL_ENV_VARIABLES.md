@@ -46,6 +46,15 @@ https://crm-enterprise-v3-7bivtsem9-alis-projects-a7c43f3e.vercel.app
 ```
 **Not:** Deploy sonrası Vercel'in verdiği production URL'i buraya yazın.
 
+### 7. GROQ_API_KEY (AI Bot için)
+```
+your_groq_api_key_here
+```
+**Not:** 
+- Groq Console'dan alın: https://console.groq.com
+- API Keys → Create API Key
+- Ücretsiz tier: 14,400 request/gün
+
 ---
 
 ## ⚠️ ÖNEMLİ

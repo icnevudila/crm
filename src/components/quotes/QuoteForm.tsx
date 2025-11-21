@@ -384,17 +384,28 @@ export default function QuoteForm({
         }
       }
     }
-  }, [quote, open, reset, dealId, dealData, dealProp, customerCompanyId, customerIdProp, customerData, setValue]) // onClose dependency'den çıkarıldı - stable değil
+  }, [quote?.id, open]) // ✅ ÇÖZÜM: Sadece quote ID ve open değiştiğinde reset et - diğer dependency'ler ayrı useEffect'lerde
 
+  // ✅ ÇÖZÜM: Müşteri bilgileri geldiğinde customerCompanyId'yi güncelle (ayrı useEffect)
   useEffect(() => {
-    // Wizard'dan gelen dealId'yi direkt set et
+    if (open && !quote && customerData?.customerCompanyId && !customerCompanyId) {
+      setValue('customerCompanyId', customerData.customerCompanyId)
+    }
+  }, [open, quote, customerData?.customerCompanyId, customerCompanyId, setValue])
+
+  // ✅ ÇÖZÜM: Wizard'dan gelen dealId'yi set et (ayrı useEffect)
+  useEffect(() => {
     if (open && !quote && dealId && !selectedDealId) {
       setValue('dealId', dealId)
-    } else if (open && !quote && filteredDeals.length === 1 && !selectedDealId && !dealId) {
-      // Eğer dealId yoksa ve tek fırsat varsa otomatik seç
+    }
+  }, [open, quote, dealId, selectedDealId, setValue])
+
+  // ✅ ÇÖZÜM: Tek fırsat varsa otomatik seç (ayrı useEffect)
+  useEffect(() => {
+    if (open && !quote && filteredDeals.length === 1 && !selectedDealId && !dealId) {
       setValue('dealId', filteredDeals[0].id)
     }
-  }, [open, quote, filteredDeals, selectedDealId, setValue, dealId])
+  }, [open, quote, filteredDeals.length, selectedDealId, dealId, setValue])
 
   // Toplam hesaplama (indirim ve KDV ile)
   const subtotal = total || 0

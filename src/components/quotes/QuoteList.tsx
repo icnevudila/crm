@@ -717,7 +717,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                   setSelectedQuoteId(quoteId)
                   setDetailModalOpen(true)
                 }} // ✅ ÇÖZÜM: Modal açmak için callback
-                onQuickAction={(type, quote) => {
+                onQuickAction={(type: 'invoice' | 'task' | 'meeting', quote) => {
                   setQuickAction({ type, quote })
                 }} // ✅ ÇÖZÜM: Quick action için callback (invoice, task, meeting)
                 data={kanbanData}
@@ -732,9 +732,9 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                     
                     if (quote) {
                       const confirmed = await confirm({
-                        title: 'Teklifi Reddetmek İstediğinize Emin Misiniz?',
-                        description: `"${quote.title || 'Teklif'}" teklifini reddettiğinizde otomatik olarak şu işlemler yapılacak:\n\n• Revizyon görevi oluşturulacak\n• Reddetme sebebi not olarak kaydedilecek\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
-                        confirmLabel: 'Evet, Reddet',
+                        title: 'Teklifi Reddet?',
+                        description: `Revizyon görevi oluşturulacak.`,
+                        confirmLabel: 'Reddet',
                         cancelLabel: 'İptal',
                         variant: 'destructive'
                       })
@@ -758,9 +758,9 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                     
                     if (quote) {
                       const confirmed = await confirm({
-                        title: 'Teklifi Kabul Etmek İstediğinize Emin Misiniz?',
-                        description: `"${quote.title || 'Teklif'}" teklifini kabul ettiğinizde otomatik olarak şu işlemler yapılacak:\n\n• Fatura oluşturulacak (DRAFT durumunda)\n• Fatura kalemleri kopyalanacak (QuoteItem → InvoiceItem)\n• Ürünler rezerve edilecek (reservedQuantity artacak)\n• Bildirim gönderilecek\n• Aktivite geçmişine kaydedilecek\n\nBu işlem geri alınamaz. Devam etmek istiyor musunuz?`,
-                        confirmLabel: 'Evet, Kabul Et',
+                        title: 'Teklifi Kabul Et?',
+                        description: `Fatura oluşturulacak ve ürünler rezerve edilecek.`,
+                        confirmLabel: 'Kabul Et',
                         cancelLabel: 'İptal',
                         variant: 'default'
                       })
@@ -880,53 +880,42 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
 
                     switch (newStatus) {
                       case 'ACCEPTED':
-                        toastTitle = `🎉 Teklif Kabul Edildi!`
-                        toastDescription = `"${quoteTitle}" teklifi kabul edildi.`
-
+                        toastTitle = `Teklif Kabul Edildi`
                         if (automation.invoiceCreated && automation.invoiceId) {
                           const invoiceId = automation.invoiceId
-                          toastDescription += `\n\n✅ Otomatik işlemler:\n• Fatura oluşturuldu (ID: ${invoiceId.substring(0, 8)}...)\n• Fatura numarası: ${automation.invoiceNumber || automation.invoiceTitle || 'Oluşturuluyor...'}\n• Fatura kalemleri kopyalandı\n• Ürünler rezerve edildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi\n\n💡 Öneri: Faturayı göndermek için fatura detay sayfasına gidin.`
-                          
-                          // Toast'a action button ekle (fatura detay sayfasına git)
+                          toastDescription = `Fatura oluşturuldu. ${automation.invoiceNumber ? `No: ${automation.invoiceNumber}` : ''}`
                           toast.success(toastTitle, {
                             description: toastDescription,
                             action: {
-                              label: 'Faturayı Görüntüle',
+                              label: 'Faturayı Gör',
                               onClick: () => {
                                 window.location.href = `/${locale}/invoices/${invoiceId}`
                               },
                             },
-                            duration: 8000, // 8 saniye göster (kullanıcı action'ı görebilsin)
+                            duration: 5000,
                           })
                         } else {
-                          toastDescription += `\n\nOtomatik işlemler:\n• Fatura oluşturuluyor...\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
+                          toastDescription = `Fatura oluşturuluyor...`
                           toast.success(toastTitle, { description: toastDescription })
                         }
                         break
 
                       case 'REJECTED':
                       case 'DECLINED':
-                        toastTitle = `⚠️ Teklif Reddedildi: "${quoteTitle}"`
-                        toastDescription = `Teklif "${newStatus === 'REJECTED' ? 'Reddedildi' : 'İptal Edildi'}" durumuna taşındı.`
-
-                        if (automation.taskCreated && automation.taskId) {
-                          toastDescription += `\n\nOtomatik işlemler:\n• Revizyon görevi oluşturuldu (ID: ${automation.taskId.substring(0, 8)}...)\n• Reddetme sebebi not olarak kaydedildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
-                        } else {
-                          toastDescription += `\n\nOtomatik işlemler:\n• Reddetme sebebi not olarak kaydedildi\n• Bildirim gönderildi\n• Aktivite geçmişine kaydedildi`
-                        }
-
+                        toastTitle = `Teklif Reddedildi`
+                        toastDescription = automation.taskCreated ? `Revizyon görevi oluşturuldu.` : `Reddetme sebebi kaydedildi.`
                         toastType = 'warning'
                         break
 
                       case 'SENT':
-                        toastTitle = `Teklif gönderildi: "${quoteTitle}"`
-                        toastDescription = `Teklif "Gönderildi" durumuna taşındı.\n\nOtomatik işlemler:\n• E-posta gönderildi\n• Bildirim gönderildi`
+                        toastTitle = `Teklif Gönderildi`
+                        toastDescription = `E-posta gönderildi.`
                         break
 
                       default:
                         const statusName = statusLabels[newStatus] || newStatus
-                        toastTitle = `Teklif durumu güncellendi: "${quoteTitle}"`
-                        toastDescription = `Teklif "${statusName}" durumuna taşındı.`
+                        toastTitle = `Durum Güncellendi`
+                        toastDescription = `"${statusName}" durumuna taşındı.`
                     }
 
                     if (toastType === 'success') {

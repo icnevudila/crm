@@ -87,8 +87,8 @@ const invoiceTransitions: Record<InvoiceStatus, InvoiceStatus[]> = {
   CANCELLED: [], // CANCELLED immutable
 }
 
-const immutableInvoiceStatuses: InvoiceStatus[] = ['PAID', 'SHIPPED', 'RECEIVED', 'CANCELLED']
-const undeletableInvoiceStatuses: InvoiceStatus[] = ['PAID', 'SHIPPED', 'RECEIVED', 'CANCELLED']
+const immutableInvoiceStatuses: InvoiceStatus[] = ['PAID', 'RECEIVED', 'CANCELLED']
+const undeletableInvoiceStatuses: InvoiceStatus[] = ['PAID', 'RECEIVED', 'CANCELLED']
 
 // ============================================
 // CONTRACT STATUS TRANSITIONS

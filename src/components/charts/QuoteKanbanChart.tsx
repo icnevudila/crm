@@ -64,6 +64,7 @@ import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
 import AddToCalendarButton from '@/components/integrations/AddToCalendarButton'
 
 interface QuoteKanbanChartProps {
+  onQuickAction?: (type: 'invoice' | 'task' | 'meeting', quote: any) => void
   data: Array<{
     status: string
     count: number
@@ -140,7 +141,7 @@ function SortableQuoteCard({ quote, status, onEdit, onDelete, onStatusChange, on
   onDelete?: (id: string, title: string) => void
   onStatusChange?: (quoteId: string, newStatus: string) => void | Promise<void>
   onView?: (quoteId: string) => void // ✅ ÇÖZÜM: Modal açmak için callback
-  onQuickAction?: (type: string, quote: any) => void // ✅ ÇÖZÜM: Quick action için callback
+  onQuickAction?: (type: 'invoice' | 'task' | 'meeting', quote: any) => void // ✅ ÇÖZÜM: Quick action için callback
 }) {
   const locale = useLocale()
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false)

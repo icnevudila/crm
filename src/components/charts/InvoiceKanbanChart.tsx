@@ -64,7 +64,7 @@ interface InvoiceKanbanChartProps {
   onDelete?: (id: string, title: string) => void
   onStatusChange?: (invoiceId: string, newStatus: string) => Promise<void> | void
   onView?: (invoiceId: string) => void // ✅ ÇÖZÜM: Modal açmak için callback
-  onQuickAction?: (type: string, invoice: KanbanInvoice) => void // ✅ ÇÖZÜM: Quick action için callback (shipment, task, meeting)
+  onQuickAction?: (type: 'shipment' | 'task' | 'meeting', invoice: KanbanInvoice) => void // ✅ ÇÖZÜM: Quick action için callback (shipment, task, meeting)
 }
 
 const STATUS_FLOW = ['DRAFT', 'SENT', 'SHIPPED', 'RECEIVED', 'PAID', 'OVERDUE', 'CANCELLED']

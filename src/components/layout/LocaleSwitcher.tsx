@@ -78,7 +78,7 @@ export default function LocaleSwitcher() {
   }
 
   return (
-    <div className="flex items-center gap-0.5 rounded-lg border border-gray-200/80 bg-gradient-to-b from-gray-50 to-white p-1 shadow-sm backdrop-blur-sm">
+    <div className="flex items-center gap-0.5 rounded-lg border border-gray-200 bg-white p-1">
       {locales.map((loc) => {
         const isActive = locale === loc
         return (
@@ -88,38 +88,24 @@ export default function LocaleSwitcher() {
             size="sm"
             onClick={() => switchLocale(loc)}
             className={`
-              h-9 px-2.5 gap-2 
-              transition-all duration-300 ease-out
+              h-8 px-2 gap-1.5 
+              transition-colors
               rounded-md
-              relative
-              group
               ${isActive
-                ? 'bg-white shadow-md border border-indigo-200/50 scale-105'
-                : 'hover:bg-white/70 opacity-70 hover:opacity-100 hover:scale-105'
+                ? 'bg-gray-100'
+                : 'hover:bg-gray-50'
               }
             `}
             title={localeNames[loc]}
           >
-            {/* Aktif durum için subtle glow */}
-            {isActive && (
-              <div className="absolute inset-0 rounded-md bg-gradient-to-r from-indigo-500/5 via-purple-500/5 to-indigo-500/5 animate-pulse" />
-            )}
-            
-            <span className={`
-              flex items-center justify-center 
-              w-7 h-5 
-              flex-shrink-0
-              transition-transform duration-300
-              ${isActive ? 'scale-110' : 'group-hover:scale-105'}
-            `}>
+            <span className="flex items-center justify-center w-6 h-4 flex-shrink-0">
               {localeFlags[loc]}
             </span>
             
             <span className={`
-              text-xs font-semibold 
+              text-xs font-medium 
               hidden sm:inline 
-              transition-colors duration-300
-              ${isActive ? 'text-indigo-700' : 'text-gray-600 group-hover:text-gray-800'}
+              ${isActive ? 'text-gray-900' : 'text-gray-600'}
             `}>
               {localeNames[loc]}
             </span>

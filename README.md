@@ -88,6 +88,7 @@ Vercel Dashboard'da şu environment variables'ları ekleyin:
 - `DATABASE_URL` (opsiyonel)
 - `NEXTAUTH_SECRET`
 - `NEXTAUTH_URL` (production URL)
+- `GROQ_API_KEY` (AI Bot için - https://console.groq.com'dan alın)
 
 ## 📚 Dokümantasyon
 

@@ -146,25 +146,25 @@ export default function Header({ onMenuClick }: HeaderProps) {
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3 flex-shrink-0">
-        {/* Recent Items - Mobilde gizle */}
-        <div className="hidden md:block">
+      <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+        {/* Recent Items - Mobilde gizle, daha kompakt */}
+        <div className="hidden lg:block">
           <RecentItems />
         </div>
 
-        {/* Quick Create Menu - Header sağ üstte + menüsü */}
+        {/* Quick Create + Search - Birleştirilmiş dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="outline"
               size="icon"
-              className="hidden sm:inline-flex h-9 w-9 border-indigo-100 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-900"
-              title="Hızlı Oluştur (Müşteri, Fırsat, Teklif, Fatura, Görev)"
+              className="h-9 w-9 border-gray-200 hover:bg-gray-50"
+              title="Hızlı Oluştur"
             >
               <Plus className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
+          <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>Hızlı Oluştur</DropdownMenuLabel>
             <DropdownMenuSeparator />
             {quickActions.map((action) => (
@@ -174,72 +174,43 @@ export default function Header({ onMenuClick }: HeaderProps) {
                   e.preventDefault()
                   setQuickCreate(action.key)
                 }}
-                className="flex flex-col items-start cursor-pointer"
+                className="cursor-pointer"
               >
-                <span className="text-sm font-medium">{action.label}</span>
-                <span className="text-xs text-muted-foreground">{action.description}</span>
+                <span className="text-sm">{action.label}</span>
               </DropdownMenuItem>
             ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={(e) => {
+                e.preventDefault()
+                document.dispatchEvent(new CustomEvent('open-command-palette'))
+              }}
+              className="cursor-pointer"
+            >
+              <Command className="mr-2 h-4 w-4" />
+              <span className="text-sm">Ara (⌘K)</span>
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* AI Asistan Butonu */}
+        {/* AI Butonu - Sade, gradyen yok */}
         <Button
-          variant="default"
-          size="sm"
-          className="hidden sm:flex items-center gap-2 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white shadow-md"
+          variant="outline"
+          size="icon"
+          className="h-9 w-9 border-gray-200 hover:bg-gray-50"
           onClick={() => setAiChatOpen(true)}
-          title="AI Asistan - Komut ver, işlem yap"
+          title="AI Asistan"
         >
           <Sparkles className="h-4 w-4" />
-          <span className="hidden lg:inline">AI</span>
         </Button>
-
-        {/* Command Palette Trigger - Tek buton (hem Ctrl+K hem Ctrl+N ile açılır) */}
-        <Button
-          variant="default"
-          size="sm"
-          className="hidden sm:flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-md"
-          onClick={() => {
-            // Command Palette'i açmak için custom event gönder
-            document.dispatchEvent(new CustomEvent('open-command-palette'))
-          }}
-          title="Komut Paleti - Ara, Yeni Kayıt Oluştur (Cmd+K / Ctrl+K veya Cmd+N / Ctrl+N)"
-        >
-          <Command className="h-4 w-4" />
-          <span className="hidden lg:inline">Ara</span>
-          <kbd className="hidden xl:inline-flex h-5 select-none items-center gap-1 rounded border bg-white/20 px-1.5 font-mono text-[10px] font-medium opacity-100">
-            <span className="text-xs">⌘</span>K
-          </kbd>
-        </Button>
-
-        {/* Sticky Notes Butonu - Header'da */}
-        <div className="hidden sm:flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-9 w-9 border-gray-200 hover:bg-gray-50"
-            onClick={() => {
-              // Custom event gönder - StickyNotesContainer dinliyor
-              if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('openStickyNote', {
-                  detail: {}
-                }))
-              }
-            }}
-            title="Not Ekle"
-          >
-            <StickyNote className="h-4 w-4" />
-          </Button>
-        </div>
         
         {/* Bildirimler */}
         {session?.user?.id && (
           <NotificationMenu userId={session.user.id} />
         )}
 
-        {/* Dil Değiştirici - Mobilde küçült */}
-        <div className="hidden sm:block">
+        {/* Dil Değiştirici - Mobilde gizle */}
+        <div className="hidden md:block">
           <LocaleSwitcher />
         </div>
 
@@ -247,10 +218,10 @@ export default function Header({ onMenuClick }: HeaderProps) {
         {session?.user && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full hover:bg-indigo-50 transition-colors">
+              <Button variant="ghost" size="icon" className="rounded-full hover:bg-gray-100 transition-colors">
                 <Avatar className="h-8 w-8">
                   <AvatarImage src={(session.user as any)?.image || ''} alt={session.user.name || ''} />
-                  <AvatarFallback className="bg-gradient-to-br from-indigo-500 to-purple-500 text-white text-sm">
+                  <AvatarFallback className="bg-gray-600 text-white text-sm">
                     {session.user.name?.charAt(0).toUpperCase() || 'U'}
                   </AvatarFallback>
                 </Avatar>
