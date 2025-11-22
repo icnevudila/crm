@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
+import { useData } from '@/hooks/useData'
+import { mutate } from 'swr'
 import { useTranslations, useLocale } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -72,7 +73,6 @@ export default function DealForm({
   const tCommon = useTranslations('common.form')
   const locale = useLocale()
   const router = useRouter()
-  const queryClient = useQueryClient()
   const searchParams = useSearchParams()
   const searchCustomerCompanyId = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
   const customerCompanyId = customerCompanyIdProp || searchCustomerCompanyId
@@ -114,17 +114,15 @@ export default function DealForm({
 
   type DealFormData = z.infer<typeof dealSchema>
 
-  const { data: customersData } = useQuery({
-    queryKey: ['customers'],
-    queryFn: fetchCustomers,
-    enabled: open,
-  })
+  const { data: customersData = [] } = useData<any[]>(
+    open ? '/api/customers?pageSize=1000' : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
 
-  const { data: competitorsData } = useQuery({
-    queryKey: ['competitors'],
-    queryFn: fetchCompetitors,
-    enabled: open,
-  })
+  const { data: competitorsData = [] } = useData<any[]>(
+    open ? '/api/competitors?pageSize=1000' : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
 
   // Güvenlik kontrolü - customers her zaman array olmalı
   const customers = Array.isArray(customersData) ? customersData : []
@@ -194,16 +192,10 @@ export default function DealForm({
   }, [selectedCustomer, deal, open, customerId, setValue, watch])
 
   // customerIdProp geldiğinde müşteri bilgilerini çek (wizard'larda kullanım için)
-  const { data: customerData } = useQuery({
-    queryKey: ['customer', customerIdProp],
-    queryFn: async () => {
-      if (!customerIdProp) return null
-      const res = await fetch(`/api/customers/${customerIdProp}`)
-      if (!res.ok) return null
-      return res.json()
-    },
-    enabled: open && !deal && !!customerIdProp, // Sadece yeni deal ve customerIdProp varsa
-  })
+  const { data: customerData } = useData(
+    open && !deal && customerIdProp ? `/api/customers/${customerIdProp}` : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
 
   // Deal değiştiğinde formu güncelle
   useEffect(() => {
@@ -266,8 +258,7 @@ export default function DealForm({
     }
   }, [open, deal, customerIdProp, customerData?.customerCompanyId, customerCompanyId, setValue])
 
-  const mutation = useMutation({
-    mutationFn: async (data: DealFormData) => {
+  const saveDeal = async (data: DealFormData) => {
       const url = deal ? `/api/deals/${deal.id}` : '/api/deals'
       const method = deal ? 'PUT' : 'POST'
 
@@ -300,8 +291,9 @@ export default function DealForm({
       }
 
       return res.json()
-    },
-    onSuccess: async (savedDeal) => {
+  }
+
+  const handleSaveSuccess = async (savedDeal: any) => {
       // Toast mesajı göster
       if (deal) {
         // WON stage'i için özel mesaj
@@ -401,23 +393,13 @@ export default function DealForm({
         }
       }
       
-      // Query cache'ini invalidate et - fresh data çek
-      // ÖNEMLİ: Dashboard'daki tüm ilgili query'leri invalidate et (ana sayfada güncellensin)
+      // SWR cache'lerini güncelle
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['deals'] }),
-        queryClient.invalidateQueries({ queryKey: ['kanban-deals'] }),
-        queryClient.invalidateQueries({ queryKey: ['stats-deals'] }),
-        queryClient.invalidateQueries({ queryKey: ['deal-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
-        queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle (toplam değer, ortalama vs.)
-      ])
-      
-      // Refetch yap - anında güncel veri gelsin
-      await Promise.all([
-        queryClient.refetchQueries({ queryKey: ['deals'] }),
-        queryClient.refetchQueries({ queryKey: ['kanban-deals'] }),
-        queryClient.refetchQueries({ queryKey: ['stats-deals'] }),
-        queryClient.refetchQueries({ queryKey: ['deal-kanban'] }), // Dashboard'daki kanban chart'ı refetch et
-        queryClient.refetchQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs refetch et (toplam değer, ortalama vs.)
+        mutate('/api/deals', undefined, { revalidate: true }),
+        mutate('/api/deals?', undefined, { revalidate: true }),
+        mutate('/api/kanban/deals', undefined, { revalidate: true }),
+        mutate('/api/stats/deals', undefined, { revalidate: true }),
+        mutate('/api/analytics/kpis', undefined, { revalidate: true }),
       ])
       
       // Parent component'e callback gönder - optimistic update için
@@ -429,8 +411,7 @@ export default function DealForm({
       reset()
       // Form'u kapat - onSuccess callback'inden SONRA (sonsuz döngü önleme)
       onClose()
-    },
-  })
+  }
 
   const onSubmit = async (data: DealFormData) => {
     // LOST stage seçildiyse ve lostReason yoksa dialog aç
@@ -475,7 +456,8 @@ export default function DealForm({
         // lostReason ekle (LOST stage'inde)
         lostReason: data.lostReason?.trim() || undefined,
       }
-      await mutation.mutateAsync(cleanData)
+      const result = await saveDeal(cleanData)
+      await handleSaveSuccess(result)
     } catch (error: any) {
       console.error('Deal save error:', error)
         const message =

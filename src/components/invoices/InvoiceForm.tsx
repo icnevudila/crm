@@ -264,14 +264,10 @@ export default function InvoiceForm({
   const effectiveQuoteId = quoteProp?.id || quoteIdProp
   
   // ✅ ÇÖZÜM: Quote bilgilerini çek (quoteProp varsa direkt kullan, yoksa API'den çek)
-  const { data: quoteDataFromApi } = useQuery({
-    queryKey: ['quote', effectiveQuoteId],
-    queryFn: async () => {
-      if (!effectiveQuoteId) return null
-      const res = await fetch(`/api/quotes/${effectiveQuoteId}`)
-      if (!res.ok) return null
-      return res.json()
-    },
+  const { data: quoteDataFromApi } = useData(
+    open && !invoice && effectiveQuoteId && !quoteProp ? `/api/quotes/${effectiveQuoteId}` : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
   
   // QuoteProp varsa onu kullan, yoksa API'den gelen datayı kullan
   const quoteData = quoteProp || quoteDataFromApi
@@ -616,8 +612,7 @@ export default function InvoiceForm({
     }
   }, [open, invoice, filteredCustomers, customerId, setValue])
 
-  const mutation = useMutation({
-    mutationFn: async (data: InvoiceFormData) => {
+  const saveInvoice = async (data: InvoiceFormData) => {
       const url = invoice ? `/api/invoices/${invoice.id}` : '/api/invoices'
       const method = invoice ? 'PUT' : 'POST'
 
@@ -692,8 +687,9 @@ export default function InvoiceForm({
       }
       
       return result
-    },
-    onSuccess: async (result) => {
+  }
+
+  const handleSaveSuccess = async (result: any) => {
       // Toast mesajı göster
       if (invoice) {
         toast.success(t('invoiceUpdated'), { description: t('invoiceUpdatedMessage', { title: result.title }) })
@@ -705,22 +701,13 @@ export default function InvoiceForm({
         navigateToDetailToast('invoice', result.id, result.title)
       }
       
-      // Dashboard güncellemeleri - invoice-kanban ve kpis query'lerini invalidate et
+      // Dashboard güncellemeleri - SWR cache'lerini güncelle
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['invoices'] }),
-        queryClient.invalidateQueries({ queryKey: ['kanban-invoices'] }),
-        queryClient.invalidateQueries({ queryKey: ['stats-invoices'] }),
-        queryClient.invalidateQueries({ queryKey: ['invoice-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
-        queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle (toplam değer, ortalama vs.)
-      ])
-      
-      // Refetch yap - anında güncel veri gelsin
-      await Promise.all([
-        queryClient.refetchQueries({ queryKey: ['invoices'] }),
-        queryClient.refetchQueries({ queryKey: ['kanban-invoices'] }),
-        queryClient.refetchQueries({ queryKey: ['stats-invoices'] }),
-        queryClient.refetchQueries({ queryKey: ['invoice-kanban'] }), // Dashboard'daki kanban chart'ı refetch et
-        queryClient.refetchQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs refetch et (toplam değer, ortalama vs.)
+        mutate('/api/invoices', undefined, { revalidate: true }),
+        mutate('/api/invoices?', undefined, { revalidate: true }),
+        mutate('/api/kanban/invoices', undefined, { revalidate: true }),
+        mutate('/api/stats/invoices', undefined, { revalidate: true }),
+        mutate('/api/analytics/kpis', undefined, { revalidate: true }),
       ])
       
       // Parent component'e callback gönder - optimistic update için
@@ -799,8 +786,7 @@ export default function InvoiceForm({
       setInvoiceItems([]) // InvoiceItem'ları temizle
       // Form'u kapat - onSuccess callback'inden SONRA (sonsuz döngü önleme)
       onClose()
-    },
-  })
+  }
 
   const onError = (errors: any) => {
     // Form validation hatalarını göster ve scroll yap
@@ -851,7 +837,8 @@ export default function InvoiceForm({
         serviceDescription: data.serviceDescription && data.serviceDescription.trim() !== '' ? data.serviceDescription.trim() : undefined,
         invoiceType: data.invoiceType, // invoiceType'ı açıkça ekle
       }
-      await mutation.mutateAsync(cleanData)
+      const result = await saveInvoice(cleanData)
+      await handleSaveSuccess(result)
     } catch (error: any) {
       console.error('Invoice save error:', error)
       toast.error(

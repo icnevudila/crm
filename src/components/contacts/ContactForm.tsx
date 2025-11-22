@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useQuery } from '@tanstack/react-query'
+import { useData } from '@/hooks/useData'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -73,8 +73,6 @@ export default function ContactForm({
       if (!res.ok) return []
       return res.json()
     },
-    enabled: open,
-  })
   const customerCompanies = Array.isArray(customerCompaniesData) ? customerCompaniesData : []
 
   const {

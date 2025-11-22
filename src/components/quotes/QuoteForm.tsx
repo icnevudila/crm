@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
+import { useData } from '@/hooks/useData'
+import { mutate } from 'swr'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -45,27 +46,6 @@ interface QuoteFormProps {
   skipDialog?: boolean // Wizard içinde kullanım için Dialog wrapper'ı atla
 }
 
-async function fetchDeals(customerCompanyId?: string, customerId?: string) {
-  const params = new URLSearchParams()
-  params.append('pageSize', '1000')
-  if (customerCompanyId) {
-    params.append('customerCompanyId', customerCompanyId)
-  }
-  if (customerId) {
-    params.append('customerId', customerId)
-  }
-  const res = await fetch(`/api/deals?${params.toString()}`)
-  if (!res.ok) throw new Error('Failed to fetch deals')
-  const data = await res.json()
-  return Array.isArray(data) ? data : (data.data || data.deals || [])
-}
-
-async function fetchVendors() {
-  const res = await fetch('/api/vendors?pageSize=1000')
-  if (!res.ok) throw new Error('Failed to fetch vendors')
-  const data = await res.json()
-  return Array.isArray(data) ? data : (data.data || data.vendors || [])
-}
 
 export default function QuoteForm({
   quote,
@@ -84,7 +64,6 @@ export default function QuoteForm({
   const tQuotes = useTranslations('quotes')
   const router = useRouter()
   const locale = useLocale()
-  const queryClient = useQueryClient()
   const searchParams = useSearchParams()
   const customerCompanyIdFromUrl = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
   const customerCompanyId = customerCompanyIdProp || customerCompanyIdFromUrl
@@ -129,17 +108,23 @@ export default function QuoteForm({
 
   type QuoteFormData = z.infer<typeof quoteSchema>
 
-  const { data: dealsData } = useQuery({
-    queryKey: ['deals', customerCompanyId, customerId],
-    queryFn: () => fetchDeals(customerCompanyId || undefined, customerId || undefined),
-    enabled: open,
-  })
+  const dealsUrl = open ? (() => {
+    const params = new URLSearchParams()
+    params.append('pageSize', '1000')
+    if (customerCompanyId) params.append('customerCompanyId', customerCompanyId)
+    if (customerId) params.append('customerId', customerId)
+    return `/api/deals?${params.toString()}`
+  })() : null
 
-  const { data: vendorsData } = useQuery({
-    queryKey: ['vendors'],
-    queryFn: fetchVendors,
-    enabled: open,
-  })
+  const { data: dealsData = [] } = useData<any[]>(
+    dealsUrl,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
+
+  const { data: vendorsData = [] } = useData<any[]>(
+    open ? '/api/vendors?pageSize=1000' : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
 
   // Güvenlik kontrolü - her zaman array olmalı
   const deals = Array.isArray(dealsData) ? dealsData : []
@@ -254,23 +239,15 @@ export default function QuoteForm({
       if (!res.ok) return null
       return res.json()
     },
-    enabled: !!dealId && open && !quote && !dealProp, // Sadece dealProp yoksa API'den çek
-  })
   
   // DealProp varsa onu kullan, yoksa API'den gelen datayı kullan
   const dealData = dealProp || dealDataFromApi
 
   // customerIdProp geldiğinde müşteri bilgilerini çek (wizard'larda kullanım için)
-  const { data: customerData } = useQuery({
-    queryKey: ['customer', customerIdProp],
-    queryFn: async () => {
-      if (!customerIdProp) return null
-      const res = await fetch(`/api/customers/${customerIdProp}`)
-      if (!res.ok) return null
-      return res.json()
-    },
-    enabled: open && !quote && !dealId && !!customerIdProp, // Sadece yeni quote, dealId yok ve customerIdProp varsa
-  })
+  const { data: customerData } = useData(
+    open && !quote && !dealId && customerIdProp ? `/api/customers/${customerIdProp}` : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
 
   // Quote prop değiştiğinde veya modal açıldığında form'u güncelle
   useEffect(() => {
@@ -414,8 +391,7 @@ export default function QuoteForm({
   const taxAmount = (afterDiscount * taxRate) / 100
   const finalTotal = afterDiscount + taxAmount
 
-  const mutation = useMutation({
-    mutationFn: async (data: QuoteFormData) => {
+  const saveQuote = async (data: QuoteFormData) => {
       const url = quote ? `/api/quotes/${quote.id}` : '/api/quotes'
       const method = quote ? 'PUT' : 'POST'
 
@@ -447,23 +423,13 @@ export default function QuoteForm({
         navigateToDetailToast('quote', savedQuote.id, savedQuote.title)
       }
       
-      // Query cache'ini invalidate et - fresh data çek
-      // ÖNEMLİ: Dashboard'daki tüm ilgili query'leri invalidate et (ana sayfada güncellensin)
+      // SWR cache'lerini güncelle
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['quotes'] }),
-        queryClient.invalidateQueries({ queryKey: ['kanban-quotes'] }),
-        queryClient.invalidateQueries({ queryKey: ['stats-quotes'] }),
-        queryClient.invalidateQueries({ queryKey: ['quote-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
-        queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle (toplam değer, ortalama vs.)
-      ])
-      
-      // Refetch yap - anında güncel veri gelsin
-      await Promise.all([
-        queryClient.refetchQueries({ queryKey: ['quotes'] }),
-        queryClient.refetchQueries({ queryKey: ['kanban-quotes'] }),
-        queryClient.refetchQueries({ queryKey: ['stats-quotes'] }),
-        queryClient.refetchQueries({ queryKey: ['quote-kanban'] }), // Dashboard'daki kanban chart'ı refetch et
-        queryClient.refetchQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs refetch et (toplam değer, ortalama vs.)
+        mutate('/api/quotes', undefined, { revalidate: true }),
+        mutate('/api/quotes?', undefined, { revalidate: true }),
+        mutate('/api/kanban/quotes', undefined, { revalidate: true }),
+        mutate('/api/stats/quotes', undefined, { revalidate: true }),
+        mutate('/api/analytics/kpis', undefined, { revalidate: true }),
       ])
       
       // Callback ile yeni eklenen teklifi parent'a gönder - optimistic update için
@@ -545,8 +511,7 @@ export default function QuoteForm({
       
       reset()
       onClose()
-    },
-  })
+  }
 
   const onError = (errors: any) => {
     // Form validation hatalarını göster ve scroll yap
@@ -568,7 +533,8 @@ export default function QuoteForm({
           ? data.customerCompanyId
           : customerCompanyId || undefined,
       }
-      await mutation.mutateAsync(cleanData)
+      const result = await saveQuote(cleanData)
+      await handleSaveSuccess(result)
     } catch (error: any) {
       console.error('Quote save error:', error)
       toast.error(
