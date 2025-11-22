@@ -7,7 +7,6 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
 
 import { useLocale, useTranslations } from 'next-intl'
@@ -590,7 +589,7 @@ const stageColors: Record<string, string> = {
   LEAD: 'bg-blue-100 text-blue-800',
 
 
-  CONTACTED: 'bg-purple-100 text-purple-800',
+  CONTACTED: 'bg-indigo-100 text-indigo-800',
 
 
   PROPOSAL: 'bg-yellow-100 text-yellow-800',
@@ -755,17 +754,15 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
   const [lostReason, setLostReason] = useState('')
 
-  const queryClient = useQueryClient()
-  
   // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
   const handleRefresh = useCallback(async () => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ['deals'] }),
-      queryClient.invalidateQueries({ queryKey: ['kanban-deals'] }),
-      queryClient.invalidateQueries({ queryKey: ['stats-deals'] }),
-      queryClient.invalidateQueries({ queryKey: ['customers'] }),
+      mutate('/api/deals', undefined, { revalidate: true }),
+      mutate('/api/analytics/deal-kanban', undefined, { revalidate: true }),
+      mutate('/api/analytics/stats-deals', undefined, { revalidate: true }),
+      mutate('/api/customers', undefined, { revalidate: true }),
     ])
-  }, [queryClient])
+  }, [])
 
   // SuperAdmin için firmaları çek
 
@@ -897,36 +894,38 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
   // OPTİMİZE: debouncedSearch kullan - her harfte arama yapılmaz
+  // SWR ile veri çekme (CustomerList pattern'i)
+  const dealsApiUrl = useMemo(() => {
+    if (!isOpen) return null
+    const params = new URLSearchParams()
+    if (stage) params.append('stage', stage)
+    if (customerId) params.append('customerId', customerId)
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    if (minValue) params.append('minValue', minValue)
+    if (maxValue) params.append('maxValue', maxValue)
+    if (startDate) params.append('startDate', startDate)
+    if (endDate) params.append('endDate', endDate)
+    if (leadSourceFilter) params.append('leadSource', leadSourceFilter)
+    if (filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+    return `/api/deals?${params.toString()}`
+  }, [isOpen, stage, customerId, debouncedSearch, minValue, maxValue, startDate, endDate, leadSourceFilter, filterCompanyId])
 
+  const { data: dealsResponse, isLoading: isLoadingDeals, error: errorDeals, mutate: mutateDeals } = useData<Deal[] | { data: Deal[] }>(
+    dealsApiUrl,
+    {
+      dedupingInterval: 5 * 60 * 1000, // 5 dakika cache
+      revalidateOnFocus: false,
+      refreshInterval: 0,
+    }
+  )
 
-  const dealsQuery = useQuery({
-
-
-    queryKey: ['deals', stage, customerId, debouncedSearch, minValue, maxValue, startDate, endDate, leadSourceFilter, filterCompanyId],
-
-
-    queryFn: () => fetchDeals(stage || '', customerId, debouncedSearch, minValue, maxValue, startDate, endDate, leadSourceFilter, filterCompanyId || undefined), // debouncedSearch kullan
-
-
-    staleTime: 5 * 60 * 1000, // 5 dakika cache
-
-
-    gcTime: 10 * 60 * 1000,
-
-
-    refetchOnWindowFocus: false,
-
-
-    refetchOnMount: true, // Sayfa yüklendiğinde veri çek (table view için)
-
-
-    placeholderData: (previousData) => previousData, // Optimistic update
-
-
-    // enabled kaldırıldı - her zaman veri çek (viewMode değiştiğinde anında göster)
-
-
-  })
+  // Pagination format desteği: { data: [...], pagination: {...} } veya direkt array
+  const deals = useMemo(() => {
+    if (!dealsResponse) return []
+    if (Array.isArray(dealsResponse)) return dealsResponse
+    if (dealsResponse?.data && Array.isArray(dealsResponse.data)) return dealsResponse.data
+    return []
+  }, [dealsResponse])
 
 
 
@@ -934,70 +933,32 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
   // SuperAdmin için filterCompanyId'yi normalize et - boş string yerine undefined kullan
   const normalizedFilterCompanyId = filterCompanyId && filterCompanyId !== '' ? filterCompanyId : undefined
-  const kanbanQuery = useQuery({
-
-
-    queryKey: ['kanban-deals', customerId, debouncedSearch, minValue, maxValue, startDate, endDate, normalizedFilterCompanyId, customerCompanyId, isSuperAdmin],
-
-
-    queryFn: () => fetchKanbanDeals(customerId, debouncedSearch, minValue, maxValue, startDate, endDate, normalizedFilterCompanyId, customerCompanyId || undefined), // debouncedSearch kullan
-
-
-    staleTime: 0, // ✅ ÇÖZÜM: Cache'i kapat - SuperAdmin için her zaman fresh data
-
-
-    gcTime: 0, // ✅ ÇÖZÜM: Garbage collection'ı kapat - cache'i hemen temizle
-
-
-    refetchOnWindowFocus: false, // Focus'ta refetch yapma
-
-
-    refetchOnMount: true, // ✅ ÇÖZÜM: Mount'ta refetch YAP - SuperAdmin için veri göster
-
-
-    placeholderData: (previousData) => previousData, // Optimistic update
-
-
-    enabled: isOpen && viewMode === 'kanban', // Sadece kanban view'da çalış
-  })
-
-  // ✅ ÇÖZÜM: useQuery'den gelen data'yı state'e kopyala - optimistic update için
-  // ÖNEMLİ: State-based optimistic update - React Query cache'inden bağımsız
-  const [kanbanData, setKanbanData] = useState<any[]>(Array.isArray(kanbanQuery.data) ? kanbanQuery.data : [])
-
-  // ✅ DEBUG: kanbanQuery durumunu logla
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development') {
-      const queryData = Array.isArray(kanbanQuery.data) ? kanbanQuery.data : []
-      console.log('[DealList] KanbanQuery Debug:', {
-        enabled: isOpen && viewMode === 'kanban',
-        isLoading: kanbanQuery.isLoading,
-        isError: kanbanQuery.isError,
-        error: kanbanQuery.error,
-        dataLength: queryData.length,
-        kanbanDataLength: kanbanData.length,
-        isOpen,
-        viewMode,
-      })
-    }
-  }, [kanbanQuery.isLoading, kanbanQuery.isError, kanbanQuery.error, kanbanQuery.data, kanbanData, isOpen, viewMode])
-  const [isInitialLoad, setIsInitialLoad] = useState(true) // ✅ ÇÖZÜM: Initial load kontrolü
   
-  // useQuery'den gelen data değiştiğinde state'i güncelle (sadece initial load'da)
-  // ÖNEMLİ: Bu useEffect sadece initial load'da çalışır - optimistic update'ler bu useEffect'i bypass eder
-  // ÖNEMLİ: Refresh sonrası API'den eski data gelirse state'i override etmemek için initial load kontrolü var
-  useEffect(() => {
-    if (!isOpen || viewMode !== 'kanban') return
-    const queryData = Array.isArray(kanbanQuery.data) ? kanbanQuery.data : []
-    if (!isInitialLoad && queryData.length === 0) {
-      return
-    }
+  // Kanban view için SWR kullanıyoruz
+  const kanbanApiUrl = useMemo(() => {
+    if (!isOpen) return null
+    const params = new URLSearchParams()
+    if (customerId) params.append('customerId', customerId)
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    if (minValue) params.append('minValue', minValue)
+    if (maxValue) params.append('maxValue', maxValue)
+    if (startDate) params.append('startDate', startDate)
+    if (endDate) params.append('endDate', endDate)
+    if (normalizedFilterCompanyId) params.append('filterCompanyId', normalizedFilterCompanyId)
+    if (customerCompanyId) params.append('customerCompanyId', customerCompanyId)
+    return `/api/analytics/deal-kanban?${params.toString()}`
+  }, [isOpen, customerId, debouncedSearch, minValue, maxValue, startDate, endDate, normalizedFilterCompanyId, customerCompanyId])
 
-    if (queryData.length > 0) {
-      setKanbanData(queryData)
-      setIsInitialLoad(false)
+  const { data: kanbanResponse, isLoading: isLoadingKanban, error: errorKanban, mutate: mutateKanban } = useData<{ kanban: any[] }>(
+    kanbanApiUrl,
+    {
+      dedupingInterval: 0, // SuperAdmin için cache'i kapat
+      revalidateOnFocus: false,
+      refreshInterval: 0,
     }
-  }, [kanbanQuery.data, isInitialLoad, isOpen, viewMode])
+  )
+
+  const kanbanData = kanbanResponse?.kanban || []
 
   // ÖNEMLİ: kanbanData her zaman array olmalı (undefined kontrolü)
   const hasKanbanData = Array.isArray(kanbanData) && kanbanData.length > 0
@@ -1013,7 +974,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
         }, 1000)
         return () => clearTimeout(timer)
       }
-    } else if (viewMode === 'table' && (!dealsQuery.data || dealsQuery.data.length === 0) && !search && !stage && !customerId) {
+    } else if (viewMode === 'table' && (!deals || deals.length === 0) && !search && !stage && !customerId) {
       const wizardCompleted = localStorage.getItem('contextual-wizard-first-deal-completed')
       if (!wizardCompleted) {
         const timer = setTimeout(() => {
@@ -1022,7 +983,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
         return () => clearTimeout(timer)
       }
     }
-  }, [isOpen, viewMode, hasKanbanData, isInitialLoad, dealsQuery.data, search, stage, customerId])
+  }, [isOpen, viewMode, hasKanbanData, deals, search, stage, customerId])
 
 
 
@@ -1106,37 +1067,28 @@ export default function DealList({ isOpen = true }: DealListProps) {
       // ÖNEMLİ: Dashboard'daki tüm ilgili query'leri invalidate et (ana sayfada güncellensin)
 
 
-      queryClient.invalidateQueries({ queryKey: ['deals'] })
+      mutate('/api/deals', undefined, { revalidate: true })
 
 
-      queryClient.invalidateQueries({ queryKey: ['kanban-deals'] })
+      mutate('/api/analytics/deal-kanban', undefined, { revalidate: true })
 
 
-      queryClient.invalidateQueries({ queryKey: ['stats-deals'] })
+      mutate('/api/analytics/stats-deals', undefined, { revalidate: true })
 
 
-      queryClient.invalidateQueries({ queryKey: ['deal-kanban'] }) // Dashboard'daki kanban chart'ı güncelle
+      mutate('/api/analytics/deal-kanban', undefined, { revalidate: true }) // Dashboard'daki kanban chart'ı güncelle
 
 
-      queryClient.invalidateQueries({ queryKey: ['kpis'] }) // Dashboard'daki KPIs güncelle (toplam değer, ortalama vs.)
+      mutate('/api/analytics/kpis', undefined, { revalidate: true }) // Dashboard'daki KPIs güncelle (toplam değer, ortalama vs.)
 
 
-      // Optimistic update için cache'i temizle
+      // Optimistic update için cache'i temizle - mutate zaten revalidate yapıyor
 
 
-      queryClient.refetchQueries({ queryKey: ['deals'] })
+      mutate({ queryKey: ['deal-kanban'] }) // Dashboard'daki kanban chart'ı refetch et
 
 
-      queryClient.refetchQueries({ queryKey: ['kanban-deals'] })
-
-
-      queryClient.refetchQueries({ queryKey: ['stats-deals'] })
-
-
-      queryClient.refetchQueries({ queryKey: ['deal-kanban'] }) // Dashboard'daki kanban chart'ı refetch et
-
-
-      queryClient.refetchQueries({ queryKey: ['kpis'] }) // Dashboard'daki KPIs refetch et (toplam değer, ortalama vs.)
+      mutate({ queryKey: ['kpis'] }) // Dashboard'daki KPIs refetch et (toplam değer, ortalama vs.)
 
 
     },
@@ -1223,37 +1175,37 @@ export default function DealList({ isOpen = true }: DealListProps) {
       // ÖNEMLİ: Dashboard'daki tüm ilgili query'leri invalidate et (ana sayfada güncellensin)
 
 
-      queryClient.invalidateQueries({ queryKey: ['deals'] })
+      mutate({ queryKey: ['deals'] })
 
 
-      queryClient.invalidateQueries({ queryKey: ['kanban-deals'] })
+      mutate({ queryKey: ['kanban-deals'] })
 
 
-      queryClient.invalidateQueries({ queryKey: ['stats-deals'] })
+      mutate({ queryKey: ['stats-deals'] })
 
 
-      queryClient.invalidateQueries({ queryKey: ['deal-kanban'] }) // Dashboard'daki kanban chart'ı güncelle
+      mutate({ queryKey: ['deal-kanban'] }) // Dashboard'daki kanban chart'ı güncelle
 
 
-      queryClient.invalidateQueries({ queryKey: ['kpis'] }) // Dashboard'daki KPIs güncelle (toplam değer, ortalama vs.)
+      mutate({ queryKey: ['kpis'] }) // Dashboard'daki KPIs güncelle (toplam değer, ortalama vs.)
 
 
       // Refetch yap - anında güncel veri gelsin
 
 
-      queryClient.refetchQueries({ queryKey: ['deals'] })
+      mutate({ queryKey: ['deals'] })
 
 
-      queryClient.refetchQueries({ queryKey: ['kanban-deals'] })
+      mutate({ queryKey: ['kanban-deals'] })
 
 
-      queryClient.refetchQueries({ queryKey: ['stats-deals'] })
+      mutate({ queryKey: ['stats-deals'] })
 
 
-      queryClient.refetchQueries({ queryKey: ['deal-kanban'] }) // Dashboard'daki kanban chart'ı refetch et
+      mutate({ queryKey: ['deal-kanban'] }) // Dashboard'daki kanban chart'ı refetch et
 
 
-      queryClient.refetchQueries({ queryKey: ['kpis'] }) // Dashboard'daki KPIs refetch et (toplam değer, ortalama vs.)
+      mutate({ queryKey: ['kpis'] }) // Dashboard'daki KPIs refetch et (toplam değer, ortalama vs.)
 
 
     } catch (error: any) {
@@ -1272,12 +1224,12 @@ export default function DealList({ isOpen = true }: DealListProps) {
     setSelectAll(checked)
     if (checked) {
       // WON, LOST deal'ları seçme - immutable oldukları için
-      const selectableDeals = dealsQuery.data?.filter((d) => !['WON', 'LOST'].includes(d.stage)) || []
+      const selectableDeals = deals?.filter((d) => !['WON', 'LOST'].includes(d.stage)) || []
       setSelectedIds(selectableDeals.map((d) => d.id))
     } else {
       setSelectedIds([])
     }
-  }, [dealsQuery.data])
+  }, [deals])
 
   const handleSelectItem = useCallback((id: string, checked: boolean) => {
     if (checked) {
@@ -1302,10 +1254,10 @@ export default function DealList({ isOpen = true }: DealListProps) {
       }
 
       // Optimistic update - silinen kayıtları listeden kaldır
-      const updatedDeals = (dealsQuery.data || []).filter((d) => !ids.includes(d.id))
+      const updatedDeals = (deals || []).filter((d) => !ids.includes(d.id))
       
       // Cache'i güncelle
-      queryClient.setQueryData(['deals', { search, stage, dealType, customerId, filterCompanyId }], updatedDeals)
+      mutateKanban(['deals', { search, stage, dealType, customerId, filterCompanyId }], updatedDeals)
       
       // Tüm diğer deal URL'lerini de güncelle
       await Promise.all([
@@ -1314,7 +1266,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
       ])
 
       // Kanban cache'ini de güncelle
-      queryClient.invalidateQueries({ queryKey: ['kanban-deals'] })
+      mutate({ queryKey: ['kanban-deals'] })
 
       toast.success(tCommon('bulkDeleteSuccess', { count: ids.length, item: tCommon('deals') }), {
         description: tCommon('bulkDeleteSuccessMessage', { count: ids.length, item: tCommon('deals') }),
@@ -1327,7 +1279,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
       console.error('Bulk delete error:', error)
       toast.error(tCommon('error'), { description: error?.message || 'Toplu silme işlemi başarısız oldu' })
     }
-  }, [dealsQuery.data, search, stage, dealType, customerId, filterCompanyId, queryClient, tCommon])
+  }, [deals, search, stage, dealType, customerId, filterCompanyId, tCommon])
 
   const handleClearSelection = useCallback(() => {
     setSelectedIds([])
@@ -1336,13 +1288,13 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
   // selectAll'u güncelle - tüm seçilebilir deal'lar seçiliyse true
   useEffect(() => {
-    const selectableDeals = dealsQuery.data?.filter((d) => !['WON', 'LOST'].includes(d.stage)) || []
+    const selectableDeals = deals?.filter((d) => !['WON', 'LOST'].includes(d.stage)) || []
     if (selectableDeals.length > 0 && selectedIds.length === selectableDeals.length) {
       setSelectAll(true)
     } else {
       setSelectAll(false)
     }
-  }, [selectedIds, dealsQuery.data])
+  }, [selectedIds, deals])
 
 
 
@@ -1390,7 +1342,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
 
-  const tableDeals = dealsQuery.data ?? []
+  const tableDeals = deals ?? []
 
 
 
@@ -1399,13 +1351,13 @@ export default function DealList({ isOpen = true }: DealListProps) {
   const kanbanTotal = useMemo(() => {
 
 
-    if (!Array.isArray(kanbanQuery.data) || kanbanQuery.data.length === 0) return 0
+    if (!Array.isArray(kanbanData) || kanbanData.length === 0) return 0
 
 
-    return kanbanQuery.data.reduce((sum: number, col: any) => sum + (col.count || 0), 0)
+    return kanbanData.reduce((sum: number, col: any) => sum + (col.count || 0), 0)
 
 
-  }, [kanbanQuery.data])
+  }, [kanbanData])
 
 
 
@@ -1433,7 +1385,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
 
-  if (dealsQuery.isLoading && viewMode === 'table') {
+  if (isLoadingDeals && viewMode === 'table') {
 
 
     return <SkeletonList />
@@ -1577,7 +1529,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
             onClick={() => {
               setViewMode('table')
               // Table view'a geçildiğinde veri çek
-              queryClient.refetchQueries({ queryKey: ['deals'] })
+              mutate({ queryKey: ['deals'] })
             }}
           >
 
@@ -1606,7 +1558,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                 // Kanban view'a geçildiğinde veri çek
 
 
-              queryClient.refetchQueries({ queryKey: ['kanban-deals'] })
+              mutate({ queryKey: ['kanban-deals'] })
 
 
             }}
@@ -2230,8 +2182,8 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
                   // Tarih filtrelerini uygula - query'leri yeniden fetch et
-                  queryClient.invalidateQueries({ queryKey: ['deals'] })
-                  queryClient.invalidateQueries({ queryKey: ['kanban-deals'] })
+                  mutate({ queryKey: ['deals'] })
+                  mutate({ queryKey: ['kanban-deals'] })
 
 
                 }}
@@ -2292,8 +2244,8 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
                   // Filtreleri temizledikten sonra query'leri yeniden fetch et
-                  queryClient.invalidateQueries({ queryKey: ['deals'] })
-                  queryClient.invalidateQueries({ queryKey: ['kanban-deals'] })
+                  mutate({ queryKey: ['deals'] })
+                  mutate({ queryKey: ['kanban-deals'] })
 
 
                 }}
@@ -2330,9 +2282,9 @@ export default function DealList({ isOpen = true }: DealListProps) {
         <div className="mb-4 p-2 bg-yellow-100 text-xs rounded">
           <strong>Debug:</strong> isOpen={String(isOpen)}, viewMode={viewMode}, 
           enabled={String(isOpen && viewMode === 'kanban')}, 
-          isLoading={String(kanbanQuery.isLoading)}, 
-          isError={String(kanbanQuery.isError)}, 
-          dataLength={kanbanQuery.data?.length || 0}
+          isLoading={String(isLoadingKanban)}, 
+          isError={String(errorKanban)}, 
+          dataLength={kanbanData?.length || 0}
         </div>
       )}
 
@@ -2342,13 +2294,13 @@ export default function DealList({ isOpen = true }: DealListProps) {
           {process.env.NODE_ENV === 'development' && (
             <div className="mb-2 p-2 bg-blue-100 text-xs rounded">
               <strong>Query Status:</strong> enabled={String(isOpen && viewMode === 'kanban')}, 
-              isLoading={String(kanbanQuery.isLoading)}, 
-              isError={String(kanbanQuery.isError)}, 
-              isFetching={String(kanbanQuery.isFetching)},
-              dataLength={Array.isArray(kanbanQuery.data) ? kanbanQuery.data.length : 0}
+              isLoading={String(isLoadingKanban)}, 
+              isError={String(errorKanban)}, 
+              isFetching={String(isLoadingKanban)},
+              dataLength={Array.isArray(kanbanData) ? kanbanData.length : 0}
             </div>
           )}
-          {kanbanQuery.isLoading && (
+          {isLoadingKanban && (
             <div className="flex items-center justify-center h-[400px]">
               <div className="text-center">
                 <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-indigo-600 border-r-transparent"></div>
@@ -2356,18 +2308,18 @@ export default function DealList({ isOpen = true }: DealListProps) {
               </div>
             </div>
           )}
-          {kanbanQuery.isError && (
+          {errorKanban && (
             <div className="flex items-center justify-center h-[400px]">
               <div className="text-center">
                 <p className="text-sm text-red-600">Kanban yüklenirken bir hata oluştu.</p>
-                <p className="text-xs text-red-500 mt-2">{String(kanbanQuery.error)}</p>
-                <Button onClick={() => kanbanQuery.refetch()} className="mt-4">
+                <p className="text-xs text-red-500 mt-2">{String(errorKanban)}</p>
+                <Button onClick={() => () => mutateKanban(undefined, { revalidate: true })()} className="mt-4">
                   Tekrar Dene
                 </Button>
               </div>
             </div>
           )}
-          {!kanbanQuery.isLoading && !kanbanQuery.isError && (
+          {!isLoadingKanban && !errorKanban && (
             <DealKanbanChart 
 
 
@@ -2391,7 +2343,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
           onStageChange={async (dealId: string, newStage: string) => {
             // ✅ ÇÖZÜM: "new" ID kontrolü - geçersiz ID'ler için hata göster
             if (dealId === 'new' || !dealId || dealId.trim() === '') {
-              queryClient.invalidateQueries({ queryKey: ['kanban-deals'] })
+              mutate({ queryKey: ['kanban-deals'] })
               toast.error('Geçersiz Fırsat ID', {
                 description: 'Fırsat ID geçersiz. Lütfen sayfayı yenileyin.',
               })
@@ -2598,16 +2550,16 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
               // ✅ OPTİMİZASYON: Cache güncellemelerini background'da yap (blocking yapma)
               Promise.all([
-                queryClient.invalidateQueries({ queryKey: ['deals'] }),
-                queryClient.invalidateQueries({ queryKey: ['kanban-deals'] }),
-                queryClient.invalidateQueries({ queryKey: ['stats-deals'] }),
-                queryClient.invalidateQueries({ queryKey: ['deal-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
-                queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle
+                mutate({ queryKey: ['deals'] }),
+                mutate({ queryKey: ['kanban-deals'] }),
+                mutate({ queryKey: ['stats-deals'] }),
+                mutate({ queryKey: ['deal-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
+                mutate({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle
               ]).catch(() => {}) // Background'da hata olursa sessizce geç
             } catch (error: any) {
               // Optimistic update'i geri al
-              queryClient.invalidateQueries({ queryKey: ['kanban-deals'] })
-              queryClient.refetchQueries({ queryKey: ['kanban-deals'] })
+              mutate({ queryKey: ['kanban-deals'] })
+              mutate({ queryKey: ['kanban-deals'] })
               
               // ✅ OPTİMİZASYON: Timeout veya network hatası için özel mesaj
               if (error.name === 'AbortError') {
@@ -2762,7 +2714,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                     <TableCell>
 
 
-                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                      <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200">
 
 
                         {deal.Company?.name || '-'}
@@ -3470,7 +3422,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
                           {formatCurrency(deal.value || 0)}
                         </Badge>
                         {isSuperAdmin && deal.Company?.name && (
-                          <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                          <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-xs">
                             {deal.Company.name}
                           </Badge>
                         )}
@@ -3633,7 +3585,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
               // UPDATE: Mevcut kaydı güncelle
 
 
-              updatedDeals = dealsQuery.data.map((d) =>
+              updatedDeals = deals.map((d) =>
 
 
                 d.id === savedDeal.id ? savedDeal : d
@@ -3648,7 +3600,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
               // CREATE: Yeni kaydı listenin başına ekle
 
 
-              updatedDeals = [savedDeal, ...dealsQuery.data]
+              updatedDeals = [savedDeal, ...deals]
 
 
             }
@@ -3660,7 +3612,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
             // React Query cache'ini güncelle
 
 
-            queryClient.setQueryData(['deals', stage, customerId, search, minValue, maxValue, startDate, endDate], updatedDeals)
+            mutateKanban(['deals', stage, customerId, search, minValue, maxValue, startDate, endDate], updatedDeals)
 
 
           }
@@ -3675,13 +3627,13 @@ export default function DealList({ isOpen = true }: DealListProps) {
           await Promise.all([
 
 
-            queryClient.invalidateQueries({ queryKey: ['deals'] }),
+            mutate({ queryKey: ['deals'] }),
 
 
-            queryClient.invalidateQueries({ queryKey: ['kanban-deals'] }),
+            mutate({ queryKey: ['kanban-deals'] }),
 
 
-            queryClient.invalidateQueries({ queryKey: ['stats-deals'] }),
+            mutate({ queryKey: ['stats-deals'] }),
 
 
           ])
@@ -3696,13 +3648,13 @@ export default function DealList({ isOpen = true }: DealListProps) {
           await Promise.all([
 
 
-            queryClient.refetchQueries({ queryKey: ['deals'] }),
+            mutate({ queryKey: ['deals'] }),
 
 
-            queryClient.refetchQueries({ queryKey: ['kanban-deals'] }),
+            mutate({ queryKey: ['kanban-deals'] }),
 
 
-            queryClient.refetchQueries({ queryKey: ['stats-deals'] }),
+            mutate({ queryKey: ['stats-deals'] }),
 
 
           ])
@@ -3972,19 +3924,19 @@ export default function DealList({ isOpen = true }: DealListProps) {
                   await Promise.all([
 
 
-                    queryClient.invalidateQueries({ queryKey: ['deals'] }),
+                    mutate({ queryKey: ['deals'] }),
 
 
-                    queryClient.invalidateQueries({ queryKey: ['kanban-deals'] }),
+                    mutate({ queryKey: ['kanban-deals'] }),
 
 
-                    queryClient.invalidateQueries({ queryKey: ['stats-deals'] }),
+                    mutate({ queryKey: ['stats-deals'] }),
 
 
-                    queryClient.invalidateQueries({ queryKey: ['deal-kanban'] }),
+                    mutate({ queryKey: ['deal-kanban'] }),
 
 
-                    queryClient.invalidateQueries({ queryKey: ['kpis'] }),
+                    mutate({ queryKey: ['kpis'] }),
 
 
                   ])
@@ -3999,19 +3951,19 @@ export default function DealList({ isOpen = true }: DealListProps) {
                   await Promise.all([
 
 
-                    queryClient.refetchQueries({ queryKey: ['deals'] }),
+                    mutate({ queryKey: ['deals'] }),
 
 
-                    queryClient.refetchQueries({ queryKey: ['kanban-deals'] }),
+                    mutate({ queryKey: ['kanban-deals'] }),
 
 
-                    queryClient.refetchQueries({ queryKey: ['stats-deals'] }),
+                    mutate({ queryKey: ['stats-deals'] }),
 
 
-                    queryClient.refetchQueries({ queryKey: ['deal-kanban'] }),
+                    mutate({ queryKey: ['deal-kanban'] }),
 
 
-                    queryClient.refetchQueries({ queryKey: ['kpis'] }),
+                    mutate({ queryKey: ['kpis'] }),
 
 
                   ])

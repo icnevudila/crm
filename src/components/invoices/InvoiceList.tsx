@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from '@/lib/toast'
 import { useConfirm } from '@/hooks/useConfirm'
 import {
@@ -227,9 +226,28 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
     return []
   }, [invoicesResponse])
 
-  // Kanban view için TanStack Query kullanıyoruz (kanban özel endpoint)
+  // Kanban view için SWR kullanıyoruz (kanban özel endpoint)
   // ÖNEMLİ: Her zaman çalıştır (viewMode ne olursa olsun) - silme/güncelleme için gerekli
-  const queryClient = useQueryClient()
+  const kanbanApiUrl = useMemo(() => {
+    if (!isOpen) return null
+    const params = new URLSearchParams()
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    if (quoteId) params.append('quoteId', quoteId)
+    if (invoiceType && invoiceType !== 'ALL') params.append('invoiceType', invoiceType)
+    if (filterCompanyId) params.append('filterCompanyId', filterCompanyId)
+    return `/api/analytics/invoice-kanban?${params.toString()}`
+  }, [isOpen, debouncedSearch, quoteId, invoiceType, filterCompanyId])
+
+  const { data: kanbanResponse, isLoading: isLoadingKanban, error: errorKanban, mutate: mutateKanban } = useData<{ kanban: any[] }>(
+    kanbanApiUrl,
+    {
+      dedupingInterval: 5 * 60 * 1000, // 5 dakika cache
+      revalidateOnFocus: false,
+      refreshInterval: 0,
+    }
+  )
+
+  const kanbanDataRaw = kanbanResponse?.kanban || []
 
   // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
   const handleRefresh = async () => {
@@ -238,22 +256,10 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
       mutate('/api/invoices', undefined, { revalidate: true }),
       mutate('/api/invoices?', undefined, { revalidate: true }),
       mutate(apiUrl || '/api/invoices', undefined, { revalidate: true }),
-      queryClient.invalidateQueries({ queryKey: ['invoice-kanban'] }),
-      queryClient.invalidateQueries({ queryKey: ['kanban-invoices'] }),
+      mutateKanban(undefined, { revalidate: true }),
+      mutate(kanbanApiUrl || '/api/analytics/invoice-kanban', undefined, { revalidate: true }),
     ])
   }
-  const { data: kanbanDataRaw = [], isLoading: isLoadingKanban, isError: isErrorKanban, error: errorKanban, refetch: refetchKanban } = useQuery({
-    queryKey: ['kanban-invoices', debouncedSearch, quoteId, invoiceType, filterCompanyId],
-    queryFn: () => fetchKanbanInvoices(debouncedSearch, quoteId, invoiceType, filterCompanyId),
-    staleTime: 5 * 60 * 1000, // 5 dakika cache
-    gcTime: 10 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false, // Mount olduğunda refetch YAPMA - optimistic update'i koru
-    refetchOnReconnect: false, // Reconnect'te refetch YAPMA - optimistic update'i koru
-    placeholderData: (previousData) => previousData, // Optimistic update
-    // enabled kaldırıldı - her zaman çalış (silme/güncelleme için gerekli)
-    enabled: isOpen,
-  })
 
   // Kanban data'yı status filtresine göre filtrele
   const kanbanData = useMemo(() => {
@@ -328,9 +334,10 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
           }
           return col
         })
-        // Kanban query cache'ini güncelle - optimistic update (refetch yapmadan önce)
-        // ÖNEMLİ: setQueryData ile cache'i güncelle, böylece kanbanData prop'u otomatik güncellenir
-        queryClient.setQueryData(['kanban-invoices', debouncedSearch, quoteId], updatedKanbanData)
+        // Kanban cache'ini güncelle - optimistic update (refetch yapmadan önce)
+        // ÖNEMLİ: mutate ile cache'i güncelle, böylece kanbanData prop'u otomatik güncellenir
+        await mutateKanban({ kanban: updatedKanbanData }, { revalidate: false })
+        await mutate(kanbanApiUrl || '/api/analytics/invoice-kanban', { kanban: updatedKanbanData }, { revalidate: false })
       }
 
       // SONRA API'ye DELETE isteği gönder
@@ -341,8 +348,8 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
       if (!res.ok) {
         // Hata durumunda optimistic update'i geri al - eski veriyi geri getir
         mutateInvoices(undefined, { revalidate: true })
-        queryClient.invalidateQueries({ queryKey: ['kanban-invoices'] })
-        queryClient.refetchQueries({ queryKey: ['kanban-invoices'] })
+        mutateKanban(undefined, { revalidate: true })
+        mutate(kanbanApiUrl || '/api/analytics/invoice-kanban', undefined, { revalidate: true })
         const errorData = await res.json().catch(() => ({}))
         throw new Error(errorData.error || 'Failed to delete invoice')
       }
@@ -353,20 +360,13 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
       })
 
       // Başarılı silme sonrası - SADECE invalidate yap, refetch YAPMA (optimistic update zaten yapıldı)
-      // ÖNEMLİ: Dashboard'daki tüm ilgili query'leri invalidate et (ana sayfada güncellensin)
-      // Ama kanban-invoices'i invalidate ve refetch YAPMA - optimistic update'i koru
-      Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['invoices'] }),
-        queryClient.invalidateQueries({ queryKey: ['stats-invoices'] }),
-        queryClient.invalidateQueries({ queryKey: ['invoice-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
-        queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle (toplam değer, ortalama vs.)
-        // kanban-invoices'i invalidate ETME - optimistic update'i koru
-      ]).then(() => {
-        // Background'da refetch yap - AMA kanban-invoices'i refetch YAPMA (optimistic update'i koru)
-        queryClient.refetchQueries({ queryKey: ['invoice-kanban'] })
-        queryClient.refetchQueries({ queryKey: ['kpis'] })
-        mutateInvoices(undefined, { revalidate: true })
-      })
+      // ÖNEMLİ: Dashboard'daki tüm ilgili cache'leri invalidate et (ana sayfada güncellensin)
+      // Ama kanban cache'ini invalidate ve refetch YAPMA - optimistic update'i koru
+      await Promise.all([
+        mutate('/api/analytics/invoice-kanban', undefined, { revalidate: true }), // Dashboard'daki kanban chart'ı güncelle
+        mutate('/api/analytics/kpis', undefined, { revalidate: true }), // Dashboard'daki KPIs güncelle
+        mutateInvoices(undefined, { revalidate: true }),
+      ])
 
       // ÖNEMLİ: kanban-invoices query'sini invalidate ve refetch ETME - optimistic update'i koru
       // setQueryData ile cache'i güncelledik, bu yeterli - invalidate etmek refetch tetikler ve eski veriyi geri getirir
@@ -379,7 +379,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
     } finally {
       setDeletingId(null)
     }
-  }, [invoices, mutateInvoices, apiUrl, kanbanData, debouncedSearch, quoteId, queryClient, deletingId, t, tCommon])
+  }, [invoices, mutateInvoices, apiUrl, kanbanData, debouncedSearch, quoteId, kanbanApiUrl, mutateKanban, deletingId, t, tCommon])
 
   const handleAdd = useCallback(() => {
     setSelectedInvoice(null)
@@ -439,7 +439,8 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
       ])
 
       // Kanban cache'ini de güncelle
-      queryClient.invalidateQueries({ queryKey: ['kanban-invoices'] })
+      mutateKanban(undefined, { revalidate: true })
+      mutate(kanbanApiUrl || '/api/analytics/invoice-kanban', undefined, { revalidate: true })
 
       toast.success(tCommon('bulkDeleteSuccess', { count: ids.length, item: tCommon('invoices') }), {
         description: tCommon('bulkDeleteSuccessMessage', { count: ids.length, item: tCommon('invoices') }),
@@ -452,7 +453,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
       console.error('Bulk delete error:', error)
       toast.error(tCommon('error'), { description: error?.message || 'Toplu silme işlemi başarısız oldu' })
     }
-  }, [invoices, mutateInvoices, apiUrl, queryClient, tCommon])
+  }, [invoices, mutateInvoices, apiUrl, kanbanApiUrl, mutateKanban, tCommon])
 
   const handleClearSelection = useCallback(() => {
     setSelectedIds([])
@@ -738,7 +739,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
               </div>
             </div>
           )}
-          {isErrorKanban && (
+          {errorKanban && (
             <div className="flex items-center justify-center h-[400px]">
               <div className="text-center">
                 <p className="text-sm text-red-600 font-semibold mb-2">Kanban yüklenirken bir hata oluştu.</p>
@@ -747,13 +748,13 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                     {errorKanban instanceof Error ? errorKanban.message : 'Bilinmeyen hata'}
                   </p>
                 )}
-                <Button onClick={() => refetchKanban()} className="mt-4">
+                <Button onClick={() => mutateKanban(undefined, { revalidate: true })} className="mt-4">
                   Tekrar Dene
                 </Button>
               </div>
             </div>
           )}
-          {!isLoadingKanban && !isErrorKanban && (
+          {!isLoadingKanban && !errorKanban && (
             <InvoiceKanbanChart
               onQuickAction={(type: 'shipment' | 'task' | 'meeting', invoice) => {
                 setQuickAction({ type, invoice: invoice as any })
@@ -777,7 +778,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
               onStatusChange={async (invoiceId: string, newStatus: string) => {
                 // ✅ ÇÖZÜM: "new" ID kontrolü - geçersiz ID'ler için hata göster
                 if (invoiceId === 'new' || !invoiceId || invoiceId.trim() === '') {
-                  queryClient.invalidateQueries({ queryKey: ['kanban-invoices'] })
+                  mutateKanban(undefined, { revalidate: true })
                   toast.error('Geçersiz Fatura ID', {
                     description: 'Fatura ID geçersiz. Lütfen sayfayı yenileyin.',
                   })
@@ -877,10 +878,8 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                     })
 
                     // Cache'i güncelle - optimistic update
-                    queryClient.setQueryData(
-                      ['kanban-invoices', debouncedSearch, quoteId, invoiceType],
-                      updatedKanbanData
-                    )
+                    await mutateKanban({ kanban: updatedKanbanData }, { revalidate: false })
+                    await mutate(kanbanApiUrl || '/api/analytics/invoice-kanban', { kanban: updatedKanbanData }, { revalidate: false })
                   }
                 }
 
@@ -900,8 +899,8 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
 
                   if (!res.ok) {
                     // Hata durumunda optimistic update'i geri al
-                    queryClient.invalidateQueries({ queryKey: ['kanban-invoices'] })
-                    queryClient.refetchQueries({ queryKey: ['kanban-invoices'] })
+                    mutateKanban(undefined, { revalidate: true })
+                    mutate(kanbanApiUrl || '/api/analytics/invoice-kanban', undefined, { revalidate: true })
 
                     const errorData = await res.json().catch(() => ({}))
 
@@ -1012,16 +1011,14 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
 
                   // ✅ OPTİMİZASYON: Cache güncellemelerini background'da yap (blocking yapma)
                   Promise.all([
-                    queryClient.invalidateQueries({ queryKey: ['invoices'] }),
-                    queryClient.invalidateQueries({ queryKey: ['kanban-invoices'] }),
-                    queryClient.invalidateQueries({ queryKey: ['stats-invoices'] }),
-                    queryClient.invalidateQueries({ queryKey: ['invoice-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
-                    queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle
+                    mutate('/api/analytics/invoice-kanban', undefined, { revalidate: true }), // Dashboard'daki kanban chart'ı güncelle
+                    mutate('/api/analytics/kpis', undefined, { revalidate: true }), // Dashboard'daki KPIs güncelle
+                    mutateKanban(undefined, { revalidate: true }),
                   ]).catch(() => {}) // Background'da hata olursa sessizce geç
                 } catch (error: any) {
                   // Optimistic update'i geri al
-                  queryClient.invalidateQueries({ queryKey: ['kanban-invoices'] })
-                  queryClient.refetchQueries({ queryKey: ['kanban-invoices'] })
+                  mutateKanban(undefined, { revalidate: true })
+                  mutate(kanbanApiUrl || '/api/analytics/invoice-kanban', undefined, { revalidate: true })
                   
                   // ✅ OPTİMİZASYON: Timeout veya network hatası için özel mesaj
                   if (error.name === 'AbortError') {
@@ -1137,7 +1134,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                           </TableCell>
                           {isSuperAdmin && (
                             <TableCell>
-                              <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                              <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200">
                                 {invoice.Company?.name || '-'}
                               </Badge>
                             </TableCell>
@@ -1634,7 +1631,7 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
                             {formatCurrency(getInvoiceValue(invoice))}
                           </Badge>
                           {isSuperAdmin && invoice.Company?.name && (
-                            <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                            <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-xs">
                               {invoice.Company.name}
                             </Badge>
                           )}
@@ -1797,35 +1794,26 @@ export default function InvoiceList({ isOpen = true }: InvoiceListProps) {
               }
               return col
             })
-            // Kanban query cache'ini güncelle
-            queryClient.setQueryData(['kanban-invoices', debouncedSearch, quoteId], updatedKanbanData)
+            // Kanban cache'ini güncelle
+            await mutateKanban({ kanban: updatedKanbanData }, { revalidate: false })
+            await mutate(kanbanApiUrl || '/api/analytics/invoice-kanban', { kanban: updatedKanbanData }, { revalidate: false })
           }
 
-          // Hem table hem kanban view için query'leri invalidate et
-          // ÖNEMLİ: Dashboard'daki tüm ilgili query'leri invalidate et (ana sayfada güncellensin)
+          // Hem table hem kanban view için cache'leri invalidate et
+          // ÖNEMLİ: Dashboard'daki tüm ilgili cache'leri invalidate et (ana sayfada güncellensin)
           await Promise.all([
-            queryClient.invalidateQueries({ queryKey: ['invoices'] }),
-            queryClient.invalidateQueries({ queryKey: ['kanban-invoices'] }),
-            queryClient.invalidateQueries({ queryKey: ['stats-invoices'] }),
-            queryClient.invalidateQueries({ queryKey: ['invoice-kanban'] }), // Dashboard'daki kanban chart'ı güncelle
-            queryClient.invalidateQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs güncelle (toplam değer, ortalama vs.)
-          ])
-
-          // Refetch yap - anında güncel veri gelsin (background'da)
-          await Promise.all([
-            queryClient.refetchQueries({ queryKey: ['invoices'] }),
-            queryClient.refetchQueries({ queryKey: ['kanban-invoices'] }),
-            queryClient.refetchQueries({ queryKey: ['stats-invoices'] }),
-            queryClient.refetchQueries({ queryKey: ['invoice-kanban'] }), // Dashboard'daki kanban chart'ı refetch et
-            queryClient.refetchQueries({ queryKey: ['kpis'] }), // Dashboard'daki KPIs refetch et (toplam değer, ortalama vs.)
+            mutate('/api/analytics/invoice-kanban', undefined, { revalidate: true }), // Dashboard'daki kanban chart'ı güncelle
+            mutate('/api/analytics/kpis', undefined, { revalidate: true }), // Dashboard'daki KPIs güncelle
+            mutateKanban(undefined, { revalidate: true }),
+            mutateInvoices(undefined, { revalidate: true }),
           ])
 
           // Ekstra güvence: 500ms sonra tekrar refetch (sayfa yenilendiğinde kesinlikle fresh data gelsin)
           setTimeout(async () => {
             await Promise.all([
               mutateInvoices(undefined, { revalidate: true }),
-              queryClient.refetchQueries({ queryKey: ['kanban-invoices'] }),
-              queryClient.refetchQueries({ queryKey: ['invoice-kanban'] }),
+              mutateKanban(undefined, { revalidate: true }),
+              mutate('/api/analytics/invoice-kanban', undefined, { revalidate: true }),
             ])
           }, 500)
         }}
