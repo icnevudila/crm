@@ -5,7 +5,7 @@ import { useLocale } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Sparkles, Send, Loader2, X, Command, HelpCircle, Minimize2, CheckCircle, ExternalLink, AlertCircle, History, Clock } from 'lucide-react'
+import { Bot, Send, Loader2, X, Command, HelpCircle, Minimize2, CheckCircle, ExternalLink, AlertCircle, History, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { COMMAND_EXAMPLES } from '@/lib/ai/commands'
@@ -402,33 +402,7 @@ export default function FloatingAIChat() {
 
   return (
     <>
-      {/* Floating Button */}
-      <AnimatePresence>
-        {!isOpen && (
-          <motion.div
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-            className="fixed bottom-6 right-6 z-50"
-          >
-            <Button
-              onClick={() => {
-                setIsOpen(true)
-                setIsMinimized(false)
-              }}
-              size="lg"
-              className="h-14 w-14 rounded-full bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white shadow-md hover:shadow-lg transition-all duration-300"
-            >
-              <Sparkles className="h-6 w-6 text-white" />
-            </Button>
-            {/* Badge */}
-            <div className="absolute -top-1 -right-1 bg-pink-600 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-md">
-              784
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Floating Button kaldırıldı - Header'da gösteriliyor */}
 
       {/* Chat Panel */}
       <AnimatePresence>
@@ -439,34 +413,34 @@ export default function FloatingAIChat() {
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
             className={cn(
-              'fixed bottom-6 right-6 z-50 w-[420px] bg-white rounded-2xl shadow-2xl border-2 border-indigo-100 flex flex-col',
-              isMinimized ? 'h-16' : 'h-[600px]'
+              'fixed top-20 right-4 z-50 w-[400px] bg-white rounded-lg shadow-lg border border-gray-200 flex flex-col',
+              isMinimized ? 'h-12' : 'h-[600px]'
             )}
           >
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-t-2xl">
+            {/* Header - Düz indigo, gradient yok */}
+            <div className="flex items-center justify-between p-3 border-b border-gray-200 bg-indigo-600 rounded-t-lg">
               <div className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-white" />
-                <h3 className="font-bold text-white text-lg">784 AI</h3>
-                <Badge className="bg-pink-500 text-white text-xs font-bold">AI</Badge>
+                <Bot className="h-4 w-4 text-white" />
+                <h3 className="font-semibold text-white text-sm">784 AI</h3>
+                <Badge className="bg-indigo-500 text-white text-xs font-medium">AI</Badge>
               </div>
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => setHistoryModalOpen(true)}
-                  className="h-8 w-8 text-white hover:bg-white/20"
+                  className="h-7 w-7 text-white hover:bg-white/20"
                   title={isTurkish ? 'Komut geçmişi' : 'Command history'}
                 >
-                  <History className="h-4 w-4" />
+                  <History className="h-3.5 w-3.5" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={() => setIsMinimized(!isMinimized)}
-                  className="h-8 w-8 text-white hover:bg-white/20"
+                  className="h-7 w-7 text-white hover:bg-white/20"
                 >
-                  <Minimize2 className="h-4 w-4" />
+                  <Minimize2 className="h-3.5 w-3.5" />
                 </Button>
                 <Button
                   variant="ghost"
@@ -476,10 +450,10 @@ export default function FloatingAIChat() {
                     setIsMinimized(false)
                     // Mesajlar korunur, sadece panel kapanır
                   }}
-                  className="h-8 w-8 text-white hover:bg-white/20"
+                  className="h-7 w-7 text-white hover:bg-white/20"
                   title={isTurkish ? 'Kapat (mesajlar korunur)' : 'Close (messages saved)'}
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>
@@ -490,7 +464,7 @@ export default function FloatingAIChat() {
                 <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-gray-50">
                   {messages.length === 0 && (
                     <div className="text-center text-gray-500 py-8">
-                      <Sparkles className="h-12 w-12 mx-auto mb-4 text-indigo-200" />
+                      <Bot className="h-12 w-12 mx-auto mb-4 text-indigo-200" />
                       <p className="font-semibold mb-2">
                         {isTurkish ? 'Merhaba! Size nasıl yardımcı olabilirim?' : 'Hello! How can I help you?'}
                       </p>
@@ -539,9 +513,9 @@ export default function FloatingAIChat() {
                     >
                       <div
                         className={cn(
-                          'max-w-[80%] rounded-lg px-4 py-2',
+                          'max-w-[80%] rounded-lg px-3 py-2',
                           message.role === 'user'
-                            ? 'bg-gradient-to-br from-indigo-600 to-purple-600 text-white'
+                            ? 'bg-indigo-600 text-white'
                             : 'bg-white text-gray-900 border border-gray-200'
                         )}
                       >
@@ -585,7 +559,7 @@ export default function FloatingAIChat() {
                   <Button
                     onClick={handleSend}
                     disabled={loading || !input.trim()}
-                    className="bg-gradient-to-br from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white"
                   >
                     {loading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -657,7 +631,7 @@ export default function FloatingAIChat() {
             </Button>
             <Button
               onClick={handleApproveCommand}
-              className="bg-gradient-to-br from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white"
             >
               <CheckCircle className="h-4 w-4 mr-2" />
               {isTurkish ? 'Onayla' : 'Approve'}
@@ -715,7 +689,7 @@ export default function FloatingAIChat() {
             </Button>
             {commandResult?.link && (
               <Link href={commandResult.link} prefetch={true}>
-                <Button className="bg-gradient-to-br from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700">
+                <Button className="bg-indigo-600 hover:bg-indigo-700 text-white">
                   <ExternalLink className="h-4 w-4 mr-2" />
                   {isTurkish ? 'Detayları Gör' : 'View Details'}
                 </Button>

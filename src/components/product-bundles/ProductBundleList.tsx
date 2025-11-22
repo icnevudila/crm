@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useLocale } from 'next-intl'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Search, Edit, Trash2, Eye, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,7 +17,9 @@ import { formatCurrency } from '@/lib/utils'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
 import { toast } from '@/lib/toast'
 import { useConfirm } from '@/hooks/useConfirm'
-import { useTranslations } from 'next-intl'
+import ModuleStats from '@/components/stats/ModuleStats'
+import { AutomationInfo } from '@/components/automation/AutomationInfo'
+import RefreshButton from '@/components/ui/RefreshButton'
 
 interface ProductBundle {
   id: string
@@ -35,40 +37,54 @@ interface ProductBundle {
   createdAt: string
 }
 
-const statusLabels: Record<string, string> = {
-  ACTIVE: 'Aktif',
-  INACTIVE: 'Pasif',
-}
-
 export default function ProductBundleList() {
   const locale = useLocale()
   const t = useTranslations('productBundles')
   const { confirm } = useConfirm()
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('')
+  const [status, setStatus] = useState('all')
   const [formOpen, setFormOpen] = useState(false)
   const [selectedBundle, setSelectedBundle] = useState<ProductBundle | null>(null)
 
-  // Debounced search
+  // Debounced search - performans için (kullanıcı yazmayı bitirdikten 300ms sonra arama)
   const [debouncedSearch, setDebouncedSearch] = useState(search)
   
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
-    }, 300)
+    }, 300) // 300ms debounce - her harfte arama yapılmaz
+    
     return () => clearTimeout(timer)
   }, [search])
 
-  // SWR ile veri çekme
-  const params = new URLSearchParams()
-  if (debouncedSearch) params.append('search', debouncedSearch)
-  if (status) params.append('status', status)
-  
-  const apiUrl = `/api/product-bundles?${params.toString()}`
+  // API URL'ini memoize et - her render'da yeni string oluşturma
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams()
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    if (status && status !== 'all') params.append('status', status)
+    return `/api/product-bundles?${params.toString()}`
+  }, [debouncedSearch, status])
+
+  // Stats URL'ini memoize et
+  const statsUrl = useMemo(() => '/api/stats/product-bundles', [])
+
   const { data: bundles = [], isLoading, error, mutate: mutateBundles } = useData<ProductBundle[]>(apiUrl, {
-    dedupingInterval: 5000,
-    revalidateOnFocus: false,
+    dedupingInterval: 5000, // 5 saniye cache (daha kısa - güncellemeler daha hızlı)
+    revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
+    refreshInterval: 0, // Auto refresh YOK - manual refresh
   })
+
+  // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
+  // ÖNEMLİ: apiUrl'i dependency'den çıkar - sadece base URL'leri invalidate et
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([
+      mutateBundles(undefined, { revalidate: true }),
+      mutate('/api/product-bundles', undefined, { revalidate: true }),
+      mutate('/api/product-bundles?', undefined, { revalidate: true }),
+      mutate('/api/stats/product-bundles', undefined, { revalidate: true }),
+      // apiUrl'i burada kullanma - her değiştiğinde callback yeniden oluşur
+    ])
+  }, [mutateBundles]) // Sadece mutateBundles dependency - callback sabit kalır
 
   const handleEdit = (bundle: ProductBundle) => {
     setSelectedBundle(bundle)
@@ -77,7 +93,7 @@ export default function ProductBundleList() {
 
   const handleDelete = async (id: string, name: string) => {
     const confirmed = await confirm({
-      title: 'Ürün Paketini Sil?',
+      title: t('deleteConfirm') || 'Ürün Paketini Sil?',
       description: `${name} paketini silmek istediğinize emin misiniz?`,
       confirmLabel: 'Sil',
       cancelLabel: 'İptal',
@@ -98,10 +114,13 @@ export default function ProductBundleList() {
         throw new Error(errorData.error || 'Failed to delete bundle')
       }
       
-      // Optimistic update
+      // Optimistic update - silinen kaydı listeden kaldır
       const updatedBundles = bundles.filter((item) => item.id !== id)
+      
+      // Cache'i güncelle - yeni listeyi hemen göster
       await mutateBundles(updatedBundles, { revalidate: false })
       
+      // Tüm diğer product-bundles URL'lerini de güncelle
       await Promise.all([
         mutate('/api/product-bundles', updatedBundles, { revalidate: false }),
         mutate('/api/product-bundles?', updatedBundles, { revalidate: false }),
@@ -120,6 +139,60 @@ export default function ProductBundleList() {
     setSelectedBundle(null)
   }
 
+  // onSuccess callback'i dışarı taşı - React Hooks hatası için
+  const onSuccess = useCallback(async (savedBundle: ProductBundle) => {
+    // Optimistic update - yeni/güncellenmiş kaydı hemen cache'e ekle ve UI'da göster
+    // Böylece form kapanmadan önce bundle listede görünür
+    
+    let updatedBundles: ProductBundle[]
+    
+    if (selectedBundle) {
+      // UPDATE: Mevcut kaydı güncelle
+      updatedBundles = bundles.map((item) =>
+        item.id === savedBundle.id ? savedBundle : item
+      )
+    } else {
+      // CREATE: Yeni kaydı listenin başına ekle
+      updatedBundles = [savedBundle, ...bundles]
+    }
+    
+    // Cache'i güncelle - optimistic update'i hemen uygula ve koru
+    // revalidate: false = background refetch yapmaz, optimistic update korunur
+    await mutateBundles(updatedBundles, { revalidate: false })
+    
+    // Tüm diğer product-bundles URL'lerini de güncelle (optimistic update)
+    await Promise.all([
+      mutate('/api/product-bundles', updatedBundles, { revalidate: false }),
+      mutate('/api/product-bundles?', updatedBundles, { revalidate: false }),
+      mutate(apiUrl, updatedBundles, { revalidate: false }),
+    ])
+  }, [bundles, selectedBundle, mutateBundles, apiUrl])
+
+  // Automation bilgileri - memoize et
+  const automations = useMemo(() => [
+    {
+      title: t('automationTitle') || 'Ürün Paketleri Otomasyonları',
+      items: [
+        {
+          trigger: t('automationQuote') || 'Teklif oluşturulduğunda',
+          result: t('automationQuoteResult') || 'Paket ürünleri otomatik eklenir',
+          details: [
+            t('automationQuoteDetails1') || 'Paket içindeki tüm ürünler teklife eklenir',
+            t('automationQuoteDetails2') || 'Toplam fiyat otomatik hesaplanır',
+          ],
+        },
+        {
+          trigger: t('automationInvoice') || 'Fatura oluşturulduğunda',
+          result: t('automationInvoiceResult') || 'Paket ürünleri otomatik eklenir',
+          details: [
+            t('automationInvoiceDetails1') || 'Paket içindeki tüm ürünler faturaya eklenir',
+            t('automationInvoiceDetails2') || 'Stok otomatik düşer',
+          ],
+        },
+      ],
+    },
+  ], [t])
+
   if (isLoading) {
     return <SkeletonList />
   }
@@ -134,23 +207,37 @@ export default function ProductBundleList() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{t('title')}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{t('description')}</p>
+      {/* Header - Actions only (title removed, shown in parent page) */}
+      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-end">
+        <div className="flex gap-2">
+          <RefreshButton onRefresh={handleRefresh} />
+          <Button
+            onClick={() => {
+              setSelectedBundle(null)
+              setFormOpen(true)
+            }}
+            className="flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            {t('newBundle')}
+          </Button>
         </div>
-        <Button
-          onClick={() => {
-            setSelectedBundle(null)
-            setFormOpen(true)
-          }}
-          className="flex items-center gap-2"
-        >
-          <Plus className="h-4 w-4" />
-          {t('newBundle')}
-        </Button>
       </div>
+
+      {/* Module Stats */}
+      <ModuleStats
+        module="product-bundles"
+        statsUrl={statsUrl}
+        filterStatus={status !== 'all' ? status : undefined}
+        onFilterChange={(filter) => {
+          if (filter.type === 'status') {
+            setStatus(filter.value || 'all')
+          }
+        }}
+      />
+
+      {/* Automation Info */}
+      <AutomationInfo automations={automations} />
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
@@ -170,9 +257,9 @@ export default function ProductBundleList() {
             <SelectValue placeholder={t('selectStatus')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">{t('allStatuses')}</SelectItem>
-            <SelectItem value="ACTIVE">{statusLabels.ACTIVE}</SelectItem>
-            <SelectItem value="INACTIVE">{statusLabels.INACTIVE}</SelectItem>
+            <SelectItem value="all">{t('allStatuses')}</SelectItem>
+            <SelectItem value="ACTIVE">{t('statusActive') || 'Aktif'}</SelectItem>
+            <SelectItem value="INACTIVE">{t('statusInactive') || 'Pasif'}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -223,7 +310,9 @@ export default function ProductBundleList() {
                   </TableCell>
                   <TableCell>
                     <Badge className={getStatusBadgeClass(bundle.status)}>
-                      {statusLabels[bundle.status] || bundle.status}
+                      {bundle.status === 'ACTIVE' ? (t('statusActive') || 'Aktif') : 
+                       bundle.status === 'INACTIVE' ? (t('statusInactive') || 'Pasif') : 
+                       bundle.status}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
@@ -262,25 +351,7 @@ export default function ProductBundleList() {
         bundle={selectedBundle || undefined}
         open={formOpen}
         onClose={handleFormClose}
-        onSuccess={async (savedBundle: ProductBundle) => {
-          let updatedBundles: ProductBundle[]
-          
-          if (selectedBundle) {
-            updatedBundles = bundles.map((item) =>
-              item.id === savedBundle.id ? savedBundle : item
-            )
-          } else {
-            updatedBundles = [savedBundle, ...bundles]
-          }
-          
-          await mutateBundles(updatedBundles, { revalidate: false })
-          
-          await Promise.all([
-            mutate('/api/product-bundles', updatedBundles, { revalidate: false }),
-            mutate('/api/product-bundles?', updatedBundles, { revalidate: false }),
-            mutate(apiUrl, updatedBundles, { revalidate: false }),
-          ])
-        }}
+        onSuccess={onSuccess}
       />
     </div>
   )

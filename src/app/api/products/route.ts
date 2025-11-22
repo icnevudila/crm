@@ -193,60 +193,71 @@ export async function POST(request: Request) {
       )
     }
 
-    // Zorunlu alanları kontrol et
-    if (!body.name || body.name.trim() === '') {
+    // Zod validation
+    const { productCreateSchema } = await import('@/lib/validations/products')
+    const validationResult = productCreateSchema.safeParse(body)
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: (await import('@/lib/api-locale')).getErrorMessage('errors.api.productNameRequired', request) },
+        { 
+          error: 'Validation error',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        },
         { status: 400 }
       )
     }
 
+    const validatedData = validationResult.data
+
     const supabase = getSupabaseWithServiceRole()
 
-    // Product verilerini oluştur - sadece veritabanında olan kolonları gönder
+    // Product verilerini oluştur - Zod validated data kullan
     // NOT: imageUrl ve description kolonları veritabanında olmayabilir (migration çalıştırılmamış olabilir)
     const productData: any = {
-      name: body.name.trim(),
-      price: body.price !== undefined ? parseFloat(body.price) : 0,
-      stock: body.stock !== undefined ? parseFloat(body.stock) : 0,
+      name: validatedData.name.trim(),
+      price: validatedData.price !== undefined ? validatedData.price : 0,
+      stock: validatedData.stock !== undefined ? validatedData.stock : 0,
       companyId: session.user.companyId,
     }
 
     // Yeni kolonlar (migration 005'te eklendi)
-    if (body.category !== undefined && body.category !== null && body.category !== '') {
-      productData.category = body.category
+    if (validatedData.category !== undefined && validatedData.category !== null && validatedData.category !== '') {
+      productData.category = validatedData.category
     }
-    if (body.sku !== undefined && body.sku !== null && body.sku !== '') {
-      productData.sku = body.sku
+    if (validatedData.sku !== undefined && validatedData.sku !== null && validatedData.sku !== '') {
+      productData.sku = validatedData.sku
     }
-    if (body.barcode !== undefined && body.barcode !== null && body.barcode !== '') {
-      productData.barcode = body.barcode
+    if (validatedData.barcode !== undefined && validatedData.barcode !== null && validatedData.barcode !== '') {
+      productData.barcode = validatedData.barcode
     }
-    if (body.status !== undefined && body.status !== null) {
-      productData.status = body.status
+    if (validatedData.status !== undefined && validatedData.status !== null) {
+      productData.status = validatedData.status
     }
     // minStock → minimumStock (migration 049)
-    if (body.minStock !== undefined && body.minStock !== null) {
-      productData.minimumStock = parseFloat(body.minStock)
+    if (validatedData.minStock !== undefined && validatedData.minStock !== null) {
+      productData.minimumStock = validatedData.minStock
     }
-    if (body.maxStock !== undefined && body.maxStock !== null) {
-      productData.maxStock = parseFloat(body.maxStock)
+    if (validatedData.maxStock !== undefined && validatedData.maxStock !== null) {
+      productData.maxStock = validatedData.maxStock
     }
-    if (body.unit !== undefined && body.unit !== null && body.unit !== '') {
-      productData.unit = body.unit
+    if (validatedData.unit !== undefined && validatedData.unit !== null && validatedData.unit !== '') {
+      productData.unit = validatedData.unit
     }
-    if (body.weight !== undefined && body.weight !== null) {
-      productData.weight = parseFloat(body.weight)
+    if (validatedData.weight !== undefined && validatedData.weight !== null) {
+      productData.weight = validatedData.weight
     }
-    if (body.dimensions !== undefined && body.dimensions !== null && body.dimensions !== '') {
-      productData.dimensions = body.dimensions
+    if (validatedData.dimensions !== undefined && validatedData.dimensions !== null && validatedData.dimensions !== '') {
+      productData.dimensions = validatedData.dimensions
     }
-    if (body.description !== undefined && body.description !== null && body.description !== '') {
-      productData.description = body.description
+    if (validatedData.description !== undefined && validatedData.description !== null && validatedData.description !== '') {
+      productData.description = validatedData.description
+    }
+    if (validatedData.vendorId !== undefined && validatedData.vendorId !== null && validatedData.vendorId !== '') {
+      productData.vendorId = validatedData.vendorId
+    }
+    if (validatedData.imageUrl !== undefined && validatedData.imageUrl !== null && validatedData.imageUrl !== '') {
+      productData.imageUrl = validatedData.imageUrl
     }
 
-    // NOT: imageUrl kolonu veritabanında olmayabilir - GÖNDERME!
-    // NOT: vendorId schema-vendor'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
     // NOT: companyId ve createdBy createRecord fonksiyonunda otomatik ekleniyor
 
     // createRecord kullanarak audit trail desteği (createdBy otomatik eklenir)
@@ -255,7 +266,7 @@ export async function POST(request: Request) {
     const data = await createRecord(
       'Product',
       productData,
-      getActivityMessage(locale, 'productCreated', { name: body.name })
+      getActivityMessage(locale, 'productCreated', { name: validatedData.name })
     )
 
     return NextResponse.json(data, { status: 201 })

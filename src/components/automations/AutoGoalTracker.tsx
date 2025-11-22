@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useData } from '@/hooks/useData'
+import { mutate } from 'swr'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,21 +14,6 @@ interface GoalData {
   monthlyGoal: number
   currentProgress: number
   percentage: number
-}
-
-async function fetchGoal(): Promise<GoalData> {
-  const res = await fetch('/api/automations/goal-tracker', {
-    cache: 'no-store',
-    credentials: 'include',
-  })
-  if (!res.ok) {
-    return {
-      monthlyGoal: 0,
-      currentProgress: 0,
-      percentage: 0,
-    }
-  }
-  return res.json()
 }
 
 async function updateGoal(goal: number): Promise<{ monthlyGoal: number }> {
@@ -52,22 +38,15 @@ async function updateGoal(goal: number): Promise<{ monthlyGoal: number }> {
 export default function AutoGoalTracker() {
   const [isEditing, setIsEditing] = useState(false)
   const [goalInput, setGoalInput] = useState('')
-  const queryClient = useQueryClient()
+  const [updating, setUpdating] = useState(false)
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['goal-tracker'],
-    queryFn: fetchGoal,
-    staleTime: 60 * 1000, // 1 dakika cache
-    refetchOnWindowFocus: false,
-  })
-
-  const mutation = useMutation({
-    mutationFn: updateGoal,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['goal-tracker'] })
-      setIsEditing(false)
-    },
-  })
+  const { data, isLoading, mutate: mutateGoal } = useData<GoalData>(
+    '/api/automations/goal-tracker',
+    {
+      dedupingInterval: 60 * 1000, // 1 dakika cache
+      revalidateOnFocus: false,
+    }
+  )
 
   useEffect(() => {
     if (data?.monthlyGoal) {
@@ -75,10 +54,20 @@ export default function AutoGoalTracker() {
     }
   }, [data])
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const goal = parseFloat(goalInput)
-    if (goal > 0) {
-      mutation.mutate(goal)
+    if (goal <= 0) return
+    setUpdating(true)
+    try {
+      const result = await updateGoal(goal)
+      await mutateGoal(result, { revalidate: false })
+      await mutate('/api/automations/goal-tracker', result, { revalidate: false })
+      setIsEditing(false)
+    } catch (error: any) {
+      console.error('Update goal error:', error)
+      alert(error?.message || 'Hedef güncellenemedi')
+    } finally {
+      setUpdating(false)
     }
   }
 
@@ -144,7 +133,7 @@ export default function AutoGoalTracker() {
             <Button
               size="sm"
               onClick={handleSave}
-              disabled={mutation.isPending}
+              disabled={updating}
             >
               <Check className="h-4 w-4" />
             </Button>

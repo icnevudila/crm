@@ -8,6 +8,7 @@ import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { toastError } from '@/lib/toast'
 import {
   Dialog,
   DialogContent,
@@ -143,7 +144,7 @@ export default function UserIntegrationForm({
       onClose()
     } catch (error: any) {
       console.error('Error:', error)
-      alert(error?.message || 'Kaydetme işlemi başarısız oldu')
+      toastError('Hata', error?.message || 'Kaydetme işlemi başarısız oldu')
     } finally {
       setLoading(false)
     }

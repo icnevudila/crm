@@ -203,31 +203,39 @@ export async function POST(request: Request) {
       )
     }
 
-    // Zorunlu alanları kontrol et
-    if (!body.title || body.title.trim() === '') {
+    // Zod validation
+    const { taskCreateSchema } = await import('@/lib/validations/tasks')
+    const validationResult = taskCreateSchema.safeParse(body)
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: 'Görev başlığı gereklidir' },
+        { 
+          error: 'Validation error',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        },
         { status: 400 }
       )
     }
 
-    // Task verilerini oluştur - SADECE schema.sql'de olan kolonları gönder
-    // schema.sql: title, status, assignedTo, companyId
-    // schema-extension.sql: description, dueDate, priority (migration çalıştırılmamış olabilir - GÖNDERME!)
+    const validatedData = validationResult.data
+
+    // Task verilerini oluştur - Zod validated data kullan
     const taskData: any = {
-      title: body.title,
-      status: body.status || 'TODO',
+      title: validatedData.title,
+      status: validatedData.status || 'TODO',
       companyId: session.user.companyId,
     }
 
     // Sadece schema.sql'de olan alanlar
-    if (body.assignedTo) taskData.assignedTo = body.assignedTo
+    if (validatedData.assignedTo) taskData.assignedTo = validatedData.assignedTo
+    if (validatedData.description) taskData.description = validatedData.description
+    if (validatedData.dueDate) taskData.dueDate = validatedData.dueDate
+    if (validatedData.priority) taskData.priority = validatedData.priority
     // NOT: description, dueDate, priority schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
     const data = await createRecord(
       'Task',
       taskData,
-      `Yeni görev oluşturuldu: ${body.title}`
+      `Yeni görev oluşturuldu: ${validatedData.title}`
     )
 
     // Eğer görev bir kullanıcıya atandıysa bildirim gönder
@@ -238,7 +246,7 @@ export async function POST(request: Request) {
           userId: body.assignedTo,
           companyId: session.user.companyId,
           taskId: (data as any).id,
-          taskTitle: body.title,
+          taskTitle: validatedData.title,
         })
       } catch (notifError) {
         // Bildirim hatası ana işlemi engellemez

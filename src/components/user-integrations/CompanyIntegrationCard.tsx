@@ -11,6 +11,7 @@ import { Eye, EyeOff, Save, CheckCircle2, XCircle, Send } from 'lucide-react'
 import { useSession } from '@/hooks/useSession'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
+import { toastError, toastWarning, toastSuccess } from '@/lib/toast'
 
 interface Field {
   key: string
@@ -107,7 +108,7 @@ export default function CompanyIntegrationCard({
       await mutate(`/api/company-integrations?companyId=${session.user.companyId}`, { ...integration, ...updateData }, { revalidate: false })
     } catch (error: any) {
       console.error('Save error:', error)
-      alert(error?.message || 'Kaydetme işlemi başarısız oldu')
+      toastError('Hata', error?.message || 'Kaydetme işlemi başarısız oldu')
     } finally {
       setSaving(false)
     }
@@ -125,7 +126,7 @@ export default function CompanyIntegrationCard({
 
     // Önce kaydedilmiş mi kontrol et
     if (!integration?.[statusKey] || integration?.[statusKey] !== 'ACTIVE') {
-      alert('Lütfen önce entegrasyonu kaydedin ve aktifleştirin.')
+      toastWarning('Uyarı', 'Lütfen önce entegrasyonu kaydedin ve aktifleştirin.')
       return
     }
 
@@ -136,7 +137,7 @@ export default function CompanyIntegrationCard({
     })
 
     if (!hasRequiredFields) {
-      alert('Lütfen önce tüm gerekli alanları doldurup kaydedin.')
+      toastWarning('Uyarı', 'Lütfen önce tüm gerekli alanları doldurup kaydedin.')
       return
     }
 
@@ -154,7 +155,7 @@ export default function CompanyIntegrationCard({
       }
 
       // Başarılı mesajı göster
-      alert(`✅ Test Başarılı!\n\n${data.message || 'API bilgileriniz doğru ve çalışıyor!'}`)
+      toastSuccess('Test Başarılı', data.message || 'API bilgileriniz doğru ve çalışıyor!')
       
       // Status'u güncelle (başarılı test = ACTIVE)
       if (integration) {
@@ -167,7 +168,7 @@ export default function CompanyIntegrationCard({
       const errorMessage = error?.message || 'Test başarısız oldu'
       
       // Hata mesajını göster
-      alert(`❌ Test Başarısız!\n\n${errorMessage}\n\nLütfen API bilgilerinizi kontrol edin.`)
+      toastError('Test Başarısız', `${errorMessage}\n\nLütfen API bilgilerinizi kontrol edin.`)
       
       // Status'u ERROR olarak güncelle
       if (integration) {

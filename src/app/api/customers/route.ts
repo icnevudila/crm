@@ -3,6 +3,7 @@ import { getSafeSession } from '@/lib/safe-session'
 import { getRecords, createRecord } from '@/lib/crud'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { hasPermission, buildPermissionDeniedResponse } from '@/lib/permissions'
+import { customerCreateSchema } from '@/lib/validations/customers'
 
 // Dengeli cache - 60 saniye revalidate (performans + veri güncelliği dengesi)
 export const revalidate = 60
@@ -19,16 +20,11 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Permission check - canRead kontrolü (geçici olarak devre dışı - MeetingForm için)
-    // NOT: MeetingForm'da müşteri seçimi için permission kontrolü sorun çıkarıyor
-    // TODO: Permission sistemi düzeltildiğinde tekrar aktif et
-    // const canRead = await hasPermission('customer', 'read', session.user.id)
-    // if (!canRead) {
-    //   return NextResponse.json(
-    //     { error: 'Forbidden', message: 'Müşterileri görüntüleme yetkiniz yok' },
-    //     { status: 403 }
-    //   )
-    // }
+    // Permission check - canRead kontrolü
+    const canRead = await hasPermission('customer', 'read', session.user.id)
+    if (!canRead) {
+      return buildPermissionDeniedResponse()
+    }
 
     const { searchParams } = new URL(request.url)
     const search = searchParams.get('search') || ''
@@ -253,44 +249,45 @@ export async function POST(request: Request) {
       )
     }
 
-    // Zorunlu alanları kontrol et
-    if (!body.name || body.name.trim() === '') {
+    // Zod validation
+    const validationResult = customerCreateSchema.safeParse(body)
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: (await import('@/lib/api-locale')).getErrorMessage('errors.api.customerNameRequired', request) },
+        { 
+          error: 'Validation error',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        },
         { status: 400 }
       )
     }
 
-    // Customer verilerini oluştur - SADECE schema.sql'de olan kolonları gönder
-    // schema.sql: name, email, phone, city, status, companyId
-    // schema-extension.sql: address, sector, website, taxNumber, fax, notes (migration çalıştırılmamış olabilir - GÖNDERME!)
-    // migration 004: customerCompanyId (müşteri hangi firmada çalışıyor)
+    const validatedData = validationResult.data
+
+    // Customer verilerini oluştur - Zod validated data kullan
     // Güvenlik: createdBy ve updatedBy otomatik dolduruluyor (CRUD fonksiyonunda), body'den alınmamalı
-    const { id, companyId: bodyCompanyId, createdAt, updatedAt, createdBy, updatedBy, ...cleanBody } = body
-    
     const customerData: any = {
-      name: cleanBody.name.trim(),
-      status: cleanBody.status || 'ACTIVE',
+      name: validatedData.name.trim(),
+      status: validatedData.status || 'ACTIVE',
       // companyId ve createdBy CRUD fonksiyonunda otomatik ekleniyor
     }
 
     // Sadece schema.sql'de olan alanlar
-    if (body.email !== undefined && body.email !== null && body.email !== '') {
-      customerData.email = body.email
+    if (validatedData.email !== undefined && validatedData.email !== null && validatedData.email !== '') {
+      customerData.email = validatedData.email
     }
-    if (body.phone !== undefined && body.phone !== null && body.phone !== '') {
-      customerData.phone = body.phone
+    if (validatedData.phone !== undefined && validatedData.phone !== null && validatedData.phone !== '') {
+      customerData.phone = validatedData.phone
     }
-    if (body.city !== undefined && body.city !== null && body.city !== '') {
-      customerData.city = body.city
+    if (validatedData.city !== undefined && validatedData.city !== null && validatedData.city !== '') {
+      customerData.city = validatedData.city
     }
     // customerCompanyId - müşteri hangi firmada çalışıyor (migration 004'te eklendi)
-    if (body.customerCompanyId !== undefined && body.customerCompanyId !== null && body.customerCompanyId !== '') {
-      customerData.customerCompanyId = body.customerCompanyId
+    if (validatedData.customerCompanyId !== undefined && validatedData.customerCompanyId !== null && validatedData.customerCompanyId !== '') {
+      customerData.customerCompanyId = validatedData.customerCompanyId
     }
     // logoUrl - müşteri logosu (migration 070'te eklendi)
-    if (body.logoUrl !== undefined && body.logoUrl !== null && body.logoUrl !== '') {
-      customerData.logoUrl = body.logoUrl
+    if (validatedData.logoUrl !== undefined && validatedData.logoUrl !== null && validatedData.logoUrl !== '') {
+      customerData.logoUrl = validatedData.logoUrl
     }
     // NOT: address, sector, website, taxNumber, fax, notes schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
@@ -299,7 +296,7 @@ export async function POST(request: Request) {
     const created = await createRecord(
       'Customer',
       customerData,
-      getActivityMessage(locale, 'customerCreated', { name: body.name })
+      getActivityMessage(locale, 'customerCreated', { name: validatedData.name })
     )
 
     // Oluşturulan kaydı tam bilgileriyle çek (CustomerCompany ilişkisi dahil)

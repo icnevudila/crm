@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
+import { useData } from '@/hooks/useData'
+import { mutate } from 'swr'
 import { ArrowLeft, Edit, DollarSign, Trash2, Download, Receipt, FileText, User, Building2, Mail, Phone, Calendar, Link as LinkIcon } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -12,7 +13,7 @@ import { Card } from '@/components/ui/card'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import FinanceForm from '@/components/finance/FinanceForm'
-import { toastError, confirm } from '@/lib/toast'
+import { toast, toastError, confirm } from '@/lib/toast'
 
 interface Finance {
   id: string
@@ -57,12 +58,6 @@ interface Finance {
   activities?: any[]
 }
 
-async function fetchFinance(id: string): Promise<Finance> {
-  const res = await fetch(`/api/finance/${id}`)
-  if (!res.ok) throw new Error('Failed to fetch finance record')
-  return res.json()
-}
-
 export default function FinanceDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -71,16 +66,20 @@ export default function FinanceDetailPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
-  const { data: finance, isLoading } = useQuery({
-    queryKey: ['finance', id],
-    queryFn: () => fetchFinance(id),
-  })
+  const { data: finance, isLoading, error, mutate: mutateFinance } = useData<Finance>(
+    id ? `/api/finance/${id}` : null,
+    {
+      dedupingInterval: 30000,
+      revalidateOnFocus: false,
+      refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
+    }
+  )
 
   if (isLoading) {
     return <SkeletonDetail />
   }
 
-  if (!finance) {
+  if (error || !finance) {
     return (
       <div className="text-center py-12">
         <p className="text-gray-600">Finans kaydı bulunamadı</p>
@@ -397,9 +396,15 @@ export default function FinanceDetailPage() {
         finance={finance}
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        onSuccess={async () => {
-          // Form başarılı olduğunda sayfayı yenile
-          window.location.reload()
+        onSuccess={async (savedFinance: Finance) => {
+          // Optimistic update - cache'i güncelle
+          await Promise.all([
+            mutateFinance(savedFinance, { revalidate: false }),
+            mutate(`/api/finance/${id}`, savedFinance, { revalidate: false }),
+            mutate('/api/finance', undefined, { revalidate: true }),
+          ])
+          setFormOpen(false)
+          toast.success('Finans kaydı güncellendi')
         }}
       />
     </div>

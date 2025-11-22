@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useData } from '@/hooks/useData'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { BarChart3, TrendingUp, DollarSign, Calendar } from 'lucide-react'
@@ -19,23 +19,14 @@ const SalesByStatusPieChart = dynamic(() => import('@/components/reports/charts/
   loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
 })
 
-async function fetchSalesReports() {
-  const res = await fetch('/api/reports/sales', {
-    cache: 'no-store',
-    credentials: 'include',
-  })
-  if (!res.ok) throw new Error('Failed to fetch sales reports')
-  return res.json()
-}
-
 export default function SalesReports({ isActive }: ReportSectionProps) {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['sales-reports'],
-    queryFn: fetchSalesReports,
-    staleTime: 5 * 60 * 1000,
-    refetchOnMount: true,
-    enabled: isActive,
-  })
+  const { data, isLoading, error } = useData(
+    isActive ? '/api/reports/sales' : null,
+    {
+      dedupingInterval: 5 * 60 * 1000,
+      revalidateOnFocus: false,
+    }
+  )
 
   if (!isActive) return null
   if (isLoading) return <SkeletonList />

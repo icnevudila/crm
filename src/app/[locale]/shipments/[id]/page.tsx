@@ -1,13 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { useData } from '@/hooks/useData'
+import { mutate } from 'swr'
 import { 
   ArrowLeft, 
   Edit, 
+  Trash2,
   Truck, 
   Receipt, 
   CheckCircle, 
@@ -31,7 +32,6 @@ import {
   Hash,
   Activity,
 } from 'lucide-react'
-import { confirm } from '@/lib/toast'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -39,6 +39,7 @@ import { Card } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import ActivityTimeline from '@/components/ui/ActivityTimeline'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
+import ShipmentForm from '@/components/shipments/ShipmentForm'
 import {
   Table,
   TableBody,
@@ -48,22 +49,27 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatCurrency } from '@/lib/utils'
-import { toast, toastSuccess, toastError } from '@/lib/toast'
+import { toast, toastSuccess, toastError, confirm } from '@/lib/toast'
 import { motion } from 'framer-motion'
 import SendEmailButton from '@/components/integrations/SendEmailButton'
 import SendSmsButton from '@/components/integrations/SendSmsButton'
 import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
 import { useQuickActionSuccess } from '@/lib/quick-action-helper'
 
-async function fetchShipment(id: string) {
-  const res = await fetch(`/api/shipments/${id}`, {
-    cache: 'no-store',
-  })
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}))
-    throw new Error(errorData.error || 'Sevkiyat detayları yüklenemedi')
-  }
-  return res.json()
+interface Shipment {
+  id: string
+  tracking?: string
+  status: string
+  invoiceId?: string
+  shippingCompany?: string
+  estimatedDelivery?: string
+  deliveryAddress?: string
+  createdAt: string
+  updatedAt?: string
+  Invoice?: any
+  activities?: any[]
+  invoiceItems?: any[]
+  stockMovements?: any[]
 }
 
 const statusColors: Record<string, string> = {
@@ -98,16 +104,19 @@ export default function ShipmentDetailPage() {
   const router = useRouter()
   const locale = useLocale()
   const id = params.id as string
-  const queryClient = useQueryClient()
   const [approving, setApproving] = useState(false)
+  const [formOpen, setFormOpen] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
   const { handleQuickActionSuccess } = useQuickActionSuccess()
 
-  const { data: shipment, isLoading, error, refetch } = useQuery({
-    queryKey: ['shipment', id],
-    queryFn: () => fetchShipment(id),
-    retry: 1,
-    retryDelay: 500,
-  })
+  const { data: shipment, isLoading, error, mutate: mutateShipment } = useData<Shipment>(
+    id ? `/api/shipments/${id}` : null,
+    {
+      dedupingInterval: 30000,
+      revalidateOnFocus: false,
+      refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
+    }
+  )
 
   const handleApprove = async () => {
     if (!confirm('Bu sevkiyatı onaylamak istediğinize emin misiniz? Onaylandığında stok düşecek ve rezerve miktar azalacak.')) {
@@ -129,16 +138,15 @@ export default function ShipmentDetailPage() {
 
       const result = await res.json()
 
-      // Cache'i güncelle
+      // Cache'i güncelle - optimistic update
+      const updatedShipment = { ...shipment, status: 'APPROVED' }
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['shipment', id] }),
-        queryClient.invalidateQueries({ queryKey: ['shipments'] }),
-        queryClient.invalidateQueries({ queryKey: ['products'] }),
-        queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+        mutateShipment(updatedShipment, { revalidate: false }),
+        mutate(`/api/shipments/${id}`, updatedShipment, { revalidate: false }),
+        mutate('/api/shipments', undefined, { revalidate: true }),
+        mutate('/api/products', undefined, { revalidate: true }),
+        mutate('/api/invoices', undefined, { revalidate: true }),
       ])
-
-      // Veriyi yeniden çek
-      await refetch()
 
       toastSuccess('Sevkiyat başarıyla onaylandı!', result.message || 'Stok düşürüldü ve rezerve miktar azaltıldı.')
     } catch (error: any) {
@@ -168,12 +176,13 @@ export default function ShipmentDetailPage() {
 
       const result = await res.json()
 
+      // Cache'i güncelle - optimistic update
+      const updatedShipment = { ...shipment, status: newStatus }
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['shipment', id] }),
-        queryClient.invalidateQueries({ queryKey: ['shipments'] }),
+        mutateShipment(updatedShipment, { revalidate: false }),
+        mutate(`/api/shipments/${id}`, updatedShipment, { revalidate: false }),
+        mutate('/api/shipments', undefined, { revalidate: true }),
       ])
-
-      await refetch()
 
       toastSuccess('Sevkiyat durumu güncellendi', result.message || `Sevkiyat durumu "${statusLabels[newStatus]}" olarak güncellendi.`)
     } catch (error: any) {
@@ -276,10 +285,41 @@ export default function ShipmentDetailPage() {
           )}
           <Button
             variant="outline"
-            onClick={() => router.push(`/${locale}/shipments`)}
+            onClick={() => setFormOpen(true)}
           >
             <Edit className="mr-2 h-4 w-4" />
             Düzenle
+          </Button>
+          <Button
+            variant="outline"
+            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            onClick={async () => {
+              if (!confirm('Bu sevkiyatı silmek istediğinize emin misiniz?')) {
+                return
+              }
+              setDeleteLoading(true)
+              try {
+                const res = await fetch(`/api/shipments/${id}`, {
+                  method: 'DELETE',
+                })
+                if (!res.ok) {
+                  const errorData = await res.json().catch(() => ({}))
+                  throw new Error(errorData.error || 'Silme işlemi başarısız')
+                }
+                toastSuccess('Sevkiyat silindi')
+                await mutate('/api/shipments', undefined, { revalidate: true })
+                router.push(`/${locale}/shipments`)
+              } catch (error: any) {
+                console.error('Delete error:', error)
+                toastError('Silme işlemi başarısız oldu', error?.message)
+              } finally {
+                setDeleteLoading(false)
+              }
+            }}
+            disabled={deleteLoading}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            {deleteLoading ? 'Siliniyor...' : 'Sil'}
           </Button>
         </div>
       </div>
@@ -860,6 +900,25 @@ export default function ShipmentDetailPage() {
             )}
           </div>
         </Card>
+      )}
+
+      {/* Form Modal */}
+      {shipment && (
+        <ShipmentForm
+          shipment={shipment}
+          open={formOpen}
+          onClose={() => setFormOpen(false)}
+          onSuccess={async (savedShipment: Shipment) => {
+            // Optimistic update - cache'i güncelle
+            await Promise.all([
+              mutateShipment(savedShipment, { revalidate: false }),
+              mutate(`/api/shipments/${id}`, savedShipment, { revalidate: false }),
+              mutate('/api/shipments', undefined, { revalidate: true }),
+            ])
+            setFormOpen(false)
+            toastSuccess('Sevkiyat güncellendi')
+          }}
+        />
       )}
     </div>
   )

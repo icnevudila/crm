@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { mutate } from 'swr'
-import { useQuery } from '@tanstack/react-query'
+import { useData } from '@/hooks/useData'
 import { Upload } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/button'
@@ -73,15 +73,13 @@ export default function CustomerForm({
   const [logoPreview, setLogoPreview] = useState(customer?.logoUrl || '')
 
   // Müşteri firmalarını çek (müşteri hangi firmada çalışıyor)
-  const { data: customerCompaniesData } = useQuery({
-    queryKey: ['customer-companies'],
-    queryFn: async () => {
-      const res = await fetch('/api/customer-companies')
-      if (!res.ok) return []
-      return res.json()
-    },
-    enabled: open, // Sadece form açıkken çek
-  })
+  const { data: customerCompaniesData = [] } = useData<any[]>(
+    open ? '/api/customer-companies' : null,
+    {
+      dedupingInterval: 60000,
+      revalidateOnFocus: false,
+    }
+  )
   const customerCompanies = Array.isArray(customerCompaniesData) ? customerCompaniesData : []
 
   const formRef = useRef<HTMLFormElement>(null)

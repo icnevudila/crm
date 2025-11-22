@@ -68,8 +68,8 @@ const createEmptySpotlight = (range: DashboardRange): DashboardSpotlightResponse
   watchers: 0,
   live: false,
   stages: [
-    createEmptyStage('new', 'Yeni fırsat', 'from-indigo-500 via-purple-500 to-pink-500'),
-    createEmptyStage('proposal', 'Teklif aşaması', 'from-cyan-500 via-indigo-500 to-purple-500'),
+    createEmptyStage('new', 'Yeni fırsat', 'bg-indigo-500'),
+    createEmptyStage('proposal', 'Teklif aşaması', 'bg-indigo-500'),
     createEmptyStage('closing', 'Kapanışta', 'from-emerald-500 via-teal-500 to-sky-500'),
   ],
   hotDeals: [],
@@ -132,7 +132,7 @@ function SpotlightSkeleton() {
       </div>
       <div className="space-y-4">
         <div className="h-44 rounded-3xl border border-white/40 bg-white/70">
-          <div className="h-full animate-pulse rounded-3xl bg-gradient-to-br from-indigo-200/40 via-purple-200/30 to-pink-200/40" />
+          <div className="h-full animate-pulse rounded-3xl bg-indigo-100/40" />
         </div>
         <div className="h-40 rounded-3xl border border-white/40 bg-white/70">
           <div className="h-full animate-pulse rounded-3xl bg-gradient-to-br from-white/60 via-indigo-50/30 to-white/60" />
@@ -207,7 +207,7 @@ const metrics = data ?? EMPTY_STATE[range]
         className={className}
       >
         <div className="relative overflow-hidden rounded-[20px] sm:rounded-[28px] border border-white/40 bg-white/80 p-4 sm:p-6 shadow-[0_40px_120px_-60px_rgba(99,102,241,0.55)] backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-900/70">
-          <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-purple-500/5 to-pink-500/10" />
+          <div className="absolute inset-0 bg-indigo-50/30" />
           <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
             <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-200">
               <span className="relative flex items-center gap-2 rounded-full border border-emerald-200/60 bg-white/80 px-3 py-1 text-emerald-500 shadow-sm dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-200">
@@ -302,7 +302,7 @@ const metrics = data ?? EMPTY_STATE[range]
                                   initial={{ width: 0 }}
                                   animate={{ width: `${stage.value}%` }}
                                   transition={{ duration: 1, ease: 'easeOut' }}
-                                  className={`h-full rounded-full bg-gradient-to-r ${stage.color}`}
+                                  className={`h-full rounded-full ${stage.color}`}
                                 />
                               </div>
                             </button>
@@ -387,7 +387,7 @@ const metrics = data ?? EMPTY_STATE[range]
                                     pulse={deal.status === 'hot'}
                                     className={`border-none px-2.5 py-1 text-[11px] font-semibold ${
                                       deal.status === 'hot'
-                                        ? 'bg-gradient-to-r from-pink-500 to-indigo-500 text-white shadow'
+                                        ? 'bg-indigo-500 text-white shadow'
                                         : 'bg-indigo-500/10 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-200'
                                     }`}
                                   >

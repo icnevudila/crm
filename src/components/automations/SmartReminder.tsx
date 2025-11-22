@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useData } from '@/hooks/useData'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { X, AlertCircle, FileText, Users, Truck } from 'lucide-react'
@@ -21,32 +21,17 @@ interface SmartReminderData {
   pendingShipments: number
 }
 
-async function fetchSmartReminder(): Promise<SmartReminderData> {
-  const res = await fetch('/api/automations/smart-reminder', {
-    cache: 'no-store',
-    credentials: 'include',
-  })
-  if (!res.ok) {
-    return {
-      pendingQuotes: 0,
-      inactiveCustomers: 0,
-      inactiveCustomersList: [],
-      pendingShipments: 0,
-    }
-  }
-  return res.json()
-}
-
 export default function SmartReminder() {
   const locale = useLocale()
   const [dismissed, setDismissed] = useState(false)
   
-  const { data, isLoading } = useQuery({
-    queryKey: ['smart-reminder'],
-    queryFn: fetchSmartReminder,
-    staleTime: 60 * 1000, // 1 dakika cache
-    refetchOnWindowFocus: false,
-  })
+  const { data, isLoading } = useData<SmartReminderData>(
+    '/api/automations/smart-reminder',
+    {
+      dedupingInterval: 60 * 1000, // 1 dakika cache
+      revalidateOnFocus: false,
+    }
+  )
 
   // localStorage'dan dismissed durumunu kontrol et
   useEffect(() => {

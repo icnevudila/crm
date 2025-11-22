@@ -388,33 +388,34 @@ export async function POST(request: Request) {
       )
     }
 
-    // Zorunlu alanları kontrol et
-    if (!body.title || body.title.trim() === '') {
+    // Zod validation
+    const { meetingCreateSchema } = await import('@/lib/validations/meetings')
+    const validationResult = meetingCreateSchema.safeParse(body)
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: 'Görüşme başlığı gereklidir' },
+        { 
+          error: 'Validation error',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        },
         { status: 400 }
       )
     }
 
-    if (!body.meetingDate) {
-      return NextResponse.json(
-        { error: 'Görüşme tarihi gereklidir' },
-        { status: 400 }
-      )
-    }
+    const validatedData = validationResult.data
 
     const supabase = getSupabaseWithServiceRole()
 
     // ✅ ZAMAN ÇAKIŞMASI KONTROLÜ - Meeting oluşturulmadan önce kontrol et
-    const meetingDate = new Date(body.meetingDate)
-    const meetingDuration = body.meetingDuration || 60 // dakika cinsinden
+    // Validated data kullan - validation'dan geçmiş veriler
+    const meetingDate = new Date(validatedData.meetingDate)
+    const meetingDuration = validatedData.meetingDuration || 60 // dakika cinsinden
     const meetingEndTime = new Date(meetingDate.getTime() + meetingDuration * 60000)
 
     // Çakışan meeting'leri kontrol et
     const conflictChecks: string[] = []
 
     // 1. Participant bazlı çakışma kontrolü (eğer participantIds varsa)
-    if (body.participantIds && Array.isArray(body.participantIds) && body.participantIds.length > 0) {
+    if (validatedData.participantIds && Array.isArray(validatedData.participantIds) && validatedData.participantIds.length > 0) {
       // Tüm participant'ların o zaman aralığındaki meeting'lerini kontrol et
       const { data: participantMeetings, error: participantError } = await supabase
         .from('Meeting')
@@ -428,8 +429,8 @@ export async function POST(request: Request) {
         `)
         .eq('companyId', session.user.companyId)
         .eq('status', 'PLANNED') // Sadece planlanmış meeting'leri kontrol et
-        .neq('id', body.id || '') // Update durumunda kendi ID'sini hariç tut
-        .in('MeetingParticipant.userId', body.participantIds)
+        .neq('id', '') // POST endpoint - yeni meeting oluşturuluyor, id yok
+        .in('MeetingParticipant.userId', validatedData.participantIds)
 
       if (!participantError && participantMeetings) {
         for (const existingMeeting of participantMeetings) {
@@ -444,7 +445,7 @@ export async function POST(request: Request) {
             (meetingDate <= existingStart && meetingEndTime >= existingEnd)
           ) {
             // Çakışan participant'ları bul
-            const conflictingParticipants = body.participantIds.filter((pid: string) => {
+            const conflictingParticipants = validatedData.participantIds.filter((pid: string) => {
               return existingMeeting.MeetingParticipant?.some((mp: any) => mp.userId === pid)
             })
 
@@ -466,14 +467,14 @@ export async function POST(request: Request) {
     }
 
     // 2. Customer bazlı çakışma kontrolü (eğer customerId varsa)
-    if (body.customerId) {
+    if (validatedData.customerId) {
       const { data: customerMeetings, error: customerError } = await supabase
         .from('Meeting')
         .select('id, title, meetingDate, meetingDuration, status')
         .eq('companyId', session.user.companyId)
-        .eq('customerId', body.customerId)
+        .eq('customerId', validatedData.customerId)
         .eq('status', 'PLANNED') // Sadece planlanmış meeting'leri kontrol et
-        .neq('id', body.id || '') // Update durumunda kendi ID'sini hariç tut
+        .neq('id', '') // POST endpoint - yeni meeting oluşturuluyor, id yok
 
       if (!customerError && customerMeetings) {
         for (const existingMeeting of customerMeetings) {
@@ -502,7 +503,7 @@ export async function POST(request: Request) {
       .eq('companyId', session.user.companyId)
       .eq('createdBy', session.user.id)
       .eq('status', 'PLANNED') // Sadece planlanmış meeting'leri kontrol et
-      .neq('id', body.id || '') // Update durumunda kendi ID'sini hariç tut
+      .neq('id', '') // POST endpoint - yeni meeting oluşturuluyor, id yok
 
     if (!creatorError && creatorMeetings) {
       for (const existingMeeting of creatorMeetings) {
@@ -535,35 +536,35 @@ export async function POST(request: Request) {
       )
     }
 
-    // Meeting verilerini oluştur
+    // Meeting verilerini oluştur - validatedData kullan
     const meetingData: any = {
-      title: body.title.trim(),
-      description: body.description || null,
-      meetingDate: body.meetingDate,
-      meetingDuration: body.meetingDuration || 60,
-      location: body.location || null,
-      meetingType: body.meetingType || 'IN_PERSON',
-      meetingUrl: body.meetingUrl || null,
-      meetingPassword: body.meetingPassword || null,
-      status: body.status || 'SCHEDULED',
+      title: validatedData.title.trim(),
+      description: validatedData.description || null,
+      meetingDate: validatedData.meetingDate,
+      meetingDuration: validatedData.meetingDuration || 60,
+      location: validatedData.location || null,
+      meetingType: validatedData.meetingType || 'IN_PERSON',
+      meetingUrl: validatedData.meetingUrl || null,
+      meetingPassword: validatedData.meetingPassword || null,
+      status: validatedData.status || 'PLANNED',
       companyId: session.user.companyId,
-      customerId: body.customerId || null,
-      dealId: body.dealId || null,
-      customerCompanyId: body.customerCompanyId || null,
+      customerId: validatedData.customerId || null,
+      dealId: validatedData.dealId || null,
+      customerCompanyId: validatedData.customerCompanyId || null,
       contactId: null, // ✅ FIX: Migration 035'te eklenmiş olabilir ama yoksa null gönder
-      notes: body.notes || null,
-      outcomes: body.outcomes || null,
-      actionItems: body.actionItems || null,
-      attendees: body.attendees || null,
+      notes: validatedData.notes || null,
+      outcomes: validatedData.outcomes || null,
+      actionItems: validatedData.actionItems || null,
+      attendees: validatedData.attendees || null,
       createdBy: session.user.id,
       // ✅ Recurring meeting alanları
-      isRecurring: body.isRecurring || false,
+      isRecurring: validatedData.isRecurring || false,
       parentMeetingId: null, // Parent meeting (ilk meeting)
-      recurrenceType: body.recurrenceType || null,
-      recurrenceInterval: body.recurrenceInterval || null,
-      recurrenceEndDate: body.recurrenceEndDate || null,
-      recurrenceCount: body.recurrenceCount || null,
-      recurrenceDaysOfWeek: body.recurrenceDaysOfWeek || null, // JSONB - direkt array gönderilebilir
+      recurrenceType: validatedData.recurrenceType || null,
+      recurrenceInterval: validatedData.recurrenceInterval || null,
+      recurrenceEndDate: validatedData.recurrenceEndDate || null,
+      recurrenceCount: validatedData.recurrenceCount || null,
+      recurrenceDaysOfWeek: validatedData.recurrenceDaysOfWeek || null, // JSONB - direkt array gönderilebilir
     }
 
     const { data: meeting, error } = await supabase
@@ -652,7 +653,7 @@ export async function POST(request: Request) {
 
     // Deal ile ilgili işlemler (dealId varsa)
     let dealStageUpdated = false
-    if (body.dealId) {
+    if (validatedData.dealId) {
       try {
         // Deal bilgilerini çek - önce companyId olmadan kontrol et (service role ile RLS bypass)
         // Eğer deal bulunamazsa, companyId kontrolü yap
@@ -663,12 +664,12 @@ export async function POST(request: Request) {
         const { data: dealById, error: errorById } = await supabase
           .from('Deal')
           .select('id, title, stage, companyId')
-          .eq('id', body.dealId)
+          .eq('id', validatedData.dealId)
           .maybeSingle()
 
         if (errorById) {
           console.error('Deal fetch error (by ID):', {
-            dealId: body.dealId,
+            dealId: validatedData.dealId,
             error: errorById.message,
             code: errorById.code,
           })
@@ -683,7 +684,7 @@ export async function POST(request: Request) {
             
             if (process.env.NODE_ENV === 'development') {
               console.log('Deal found and authorized:', {
-                dealId: body.dealId,
+                dealId: validatedData.dealId,
                 dealCompanyId: dealById.companyId,
                 userCompanyId: session.user.companyId,
                 isSuperAdmin,
@@ -692,7 +693,7 @@ export async function POST(request: Request) {
             }
           } else {
             console.warn('Deal found but companyId mismatch (not SuperAdmin):', {
-              dealId: body.dealId,
+              dealId: validatedData.dealId,
               dealCompanyId: dealById.companyId,
               userCompanyId: session.user.companyId,
               userRole: session.user.role,
@@ -702,7 +703,7 @@ export async function POST(request: Request) {
           }
         } else {
           console.warn('Deal not found:', {
-            dealId: body.dealId,
+            dealId: validatedData.dealId,
             companyId: session.user.companyId,
           })
         }
@@ -712,7 +713,7 @@ export async function POST(request: Request) {
           
           if (process.env.NODE_ENV === 'development') {
             console.log('Deal stage check:', {
-              dealId: body.dealId,
+              dealId: validatedData.dealId,
               dealTitle: dealData.title,
               currentStage,
               shouldUpdate: currentStage === 'PROPOSAL',
@@ -733,7 +734,7 @@ export async function POST(request: Request) {
                 stage: 'NEGOTIATION',
                 updatedAt: new Date().toISOString()
               })
-              .eq('id', body.dealId)
+              .eq('id', validatedData.dealId)
               .eq('companyId', dealCompanyId) // Deal'in kendi companyId'sini kullan
               .select('id, stage')
               .single()
@@ -741,7 +742,7 @@ export async function POST(request: Request) {
             if (updateError) {
               // Stage güncelleme hatası - detaylı log
               console.error('Deal stage update error:', {
-                dealId: body.dealId,
+                dealId: validatedData.dealId,
                 currentStage,
                 targetStage: 'NEGOTIATION',
                 error: updateError.message,
@@ -752,7 +753,7 @@ export async function POST(request: Request) {
               
               // Hata durumunda alternatif yöntem: Internal API call (daha yavaş ama validation çalışır)
               // NOT: Bu yöntem validation yapar ama daha yavaş, şimdilik denemiyoruz
-              // const internalUpdateRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/deals/${body.dealId}`, {
+              // const internalUpdateRes = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/deals/${validatedData.dealId}`, {
               //   method: 'PUT',
               //   headers: {
               //     'Content-Type': 'application/json',
@@ -768,7 +769,7 @@ export async function POST(request: Request) {
               
               if (process.env.NODE_ENV === 'development') {
                 console.log('Deal stage successfully updated:', {
-                  dealId: body.dealId,
+                  dealId: validatedData.dealId,
                   from: 'PROPOSAL',
                   to: 'NEGOTIATION',
                   updatedDeal,
@@ -791,7 +792,7 @@ export async function POST(request: Request) {
                       to: 'NEGOTIATION',
                       reason: 'meeting_created',
                       meetingId: meeting.id,
-                      meetingTitle: body.title,
+                      meetingTitle: validatedData.title,
                       companyId: session.user.companyId,
                       createdBy: session.user.id,
                     },
@@ -805,7 +806,7 @@ export async function POST(request: Request) {
             } else {
               // updatedDeal null/undefined veya stage yanlış - güncelleme başarısız olabilir
               console.warn('Deal stage update returned unexpected data:', {
-                dealId: body.dealId,
+                dealId: validatedData.dealId,
                 currentStage,
                 targetStage: 'NEGOTIATION',
                 updatedDeal,
@@ -816,7 +817,7 @@ export async function POST(request: Request) {
             // Deal PROPOSAL aşamasında değil - log'la
             if (process.env.NODE_ENV === 'development') {
               console.log('Deal stage not PROPOSAL, skipping auto-update:', {
-                dealId: body.dealId,
+                dealId: validatedData.dealId,
                 dealTitle: dealData.title,
                 currentStage,
                 expectedStage: 'PROPOSAL',
@@ -829,14 +830,14 @@ export async function POST(request: Request) {
             {
               entity: 'Deal',
               action: 'UPDATE',
-              description: `Fırsat için görüşme planlandı: ${body.title}`,
+              description: `Fırsat için görüşme planlandı: ${validatedData.title}`,
               meta: { 
                 entity: 'Deal', 
                 action: 'meeting_created', 
                 id: dealData.id,
                 dealId: dealData.id,
                 meetingId: meeting.id,
-                meetingTitle: body.title,
+                meetingTitle: validatedData.title,
                 companyId: session.user.companyId,
                 createdBy: session.user.id,
               },
@@ -853,8 +854,8 @@ export async function POST(request: Request) {
 
     // Response'a stage güncelleme bilgisini ekle
     const responseData: any = { ...meeting }
-    if (body.dealId) {
-      responseData.dealId = body.dealId
+    if (validatedData.dealId) {
+      responseData.dealId = validatedData.dealId
       responseData.dealStageUpdated = dealStageUpdated
       
       // Deal bilgilerini de ekle (frontend'de kontrol için) - companyId olmadan kontrol et
@@ -862,12 +863,12 @@ export async function POST(request: Request) {
         const { data: finalDealById, error: finalErrorById } = await supabase
           .from('Deal')
           .select('id, title, stage, companyId')
-          .eq('id', body.dealId)
+          .eq('id', validatedData.dealId)
           .maybeSingle()
         
         if (finalErrorById) {
           console.error('Final deal fetch error (by ID):', {
-            dealId: body.dealId,
+            dealId: validatedData.dealId,
             error: finalErrorById.message,
             code: finalErrorById.code,
           })
@@ -878,14 +879,14 @@ export async function POST(request: Request) {
             responseData.dealTitle = finalDealById.title
           } else {
             console.warn('Final deal found but companyId mismatch:', {
-              dealId: body.dealId,
+              dealId: validatedData.dealId,
               dealCompanyId: finalDealById.companyId,
               userCompanyId: session.user.companyId,
             })
           }
         } else {
           console.warn('Final deal not found:', {
-            dealId: body.dealId,
+            dealId: validatedData.dealId,
             companyId: session.user.companyId,
           })
         }
@@ -900,9 +901,9 @@ export async function POST(request: Request) {
     // Şimdilik sadece deal için log atıyoruz
 
     // Participant'ları kaydet (çoklu kullanıcı atama)
-    if (body.participantIds && Array.isArray(body.participantIds) && body.participantIds.length > 0) {
+    if (validatedData.participantIds && Array.isArray(validatedData.participantIds) && validatedData.participantIds.length > 0) {
       try {
-        const participants = body.participantIds.map((userId: string) => ({
+        const participants = validatedData.participantIds.map((userId: string) => ({
           meetingId: meeting.id,
           userId: userId,
           companyId: session.user.companyId,

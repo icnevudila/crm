@@ -181,16 +181,51 @@ export async function POST(request: Request) {
       return buildPermissionDeniedResponse()
     }
 
-    const body = await request.json()
+    // Body parse - hata yakalama ile
+    let body
+    try {
+      body = await request.json()
+    } catch (jsonError: any) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Finance POST API JSON parse error:', jsonError)
+      }
+      return NextResponse.json(
+        { error: 'Invalid JSON body', message: jsonError?.message || 'Failed to parse request body' },
+        { status: 400 }
+      )
+    }
 
-    const description = `${body.type === 'INCOME' ? 'Gelir' : 'Gider'} kaydı oluşturuldu`
+    // Zod validation
+    const { financeCreateSchema } = await import('@/lib/validations/finance')
+    const validationResult = financeCreateSchema.safeParse(body)
+    if (!validationResult.success) {
+      return NextResponse.json(
+        { 
+          error: 'Validation error',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        },
+        { status: 400 }
+      )
+    }
+
+    const validatedData = validationResult.data
+
+    const description = `${validatedData.type === 'INCOME' ? 'Gelir' : 'Gider'} kaydı oluşturuldu`
     const financeData: any = {
-      ...body,
-      amount: body.amount || 0,
+      type: validatedData.type,
+      amount: validatedData.amount || 0,
       companyId: session.user.companyId,
     }
     // Firma bazlı ilişki (customerCompanyId)
-    if (body.customerCompanyId) financeData.customerCompanyId = body.customerCompanyId
+    if (validatedData.customerCompanyId) financeData.customerCompanyId = validatedData.customerCompanyId
+    if (validatedData.category) financeData.category = validatedData.category
+    if (validatedData.description) financeData.description = validatedData.description
+    if (validatedData.relatedTo) financeData.relatedTo = validatedData.relatedTo
+    if (validatedData.relatedEntityType) financeData.relatedEntityType = validatedData.relatedEntityType
+    if (validatedData.relatedEntityId) financeData.relatedEntityId = validatedData.relatedEntityId
+    if (validatedData.paymentMethod) financeData.paymentMethod = validatedData.paymentMethod
+    if (validatedData.paymentDate) financeData.paymentDate = validatedData.paymentDate
+    if (validatedData.isRecurring !== undefined) financeData.isRecurring = validatedData.isRecurring
     const data = await createRecord(
       'Finance',
       financeData,

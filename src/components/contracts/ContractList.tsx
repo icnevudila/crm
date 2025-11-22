@@ -120,6 +120,7 @@ export default function ContractList() {
   const { data: response, isLoading, error, mutate: mutateContracts } = useData<ContractsResponse>(apiUrl, {
     dedupingInterval: 5000,
     revalidateOnFocus: false,
+    refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
   })
 
   const contracts = response?.data || []

@@ -187,6 +187,45 @@ export async function PUT(
       },
     })
 
+    // Notification - Status değişikliği bildirimleri
+    const hasStatusChange = body.status && body.status !== existing.status
+    if (hasStatusChange) {
+      try {
+        const { createNotificationForRole } = await import('@/lib/notification-helper')
+        const statusMessages: Record<string, { title: string; message: string; type: 'info' | 'success' | 'warning' }> = {
+          ISSUED: {
+            title: '📄 Alacak Dekontu Düzenlendi',
+            message: `${data.creditNoteNumber} alacak dekontu düzenlendi.`,
+            type: 'info',
+          },
+          APPLIED: {
+            title: '✅ Alacak Dekontu Uygulandı',
+            message: `${data.creditNoteNumber} alacak dekontu uygulandı. Finance kaydı oluşturuldu.`,
+            type: 'success',
+          },
+        }
+
+        const statusMessage = statusMessages[body.status]
+        if (statusMessage) {
+          await createNotificationForRole({
+            companyId: session.user.companyId,
+            role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+            title: statusMessage.title,
+            message: statusMessage.message,
+            type: statusMessage.type,
+            priority: body.status === 'APPLIED' ? 'high' : 'normal',
+            relatedTo: 'CreditNote',
+            relatedId: data.id,
+            link: `/tr/credit-notes/${data.id}`,
+          }).catch(() => {})
+        }
+      } catch (notificationError) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Credit note notification error (non-critical):', notificationError)
+        }
+      }
+    }
+
     return NextResponse.json({
       ...data,
       automation: automationInfo,
@@ -258,6 +297,24 @@ export async function DELETE(
       description: activityMessage,
       meta: { creditNoteId: params.id, creditNoteNumber: existing.creditNoteNumber },
     })
+
+    // Notification - Admin/Sales rollere bildirim
+    try {
+      const { createNotificationForRole } = await import('@/lib/notification-helper')
+      await createNotificationForRole({
+        companyId: session.user.companyId,
+        role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+        title: '🗑️ Alacak Dekontu Silindi',
+        message: `${existing.creditNoteNumber} alacak dekontu silindi.`,
+        type: 'warning',
+        relatedTo: 'CreditNote',
+        relatedId: params.id,
+      }).catch(() => {})
+    } catch (notificationError) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Credit note notification error (non-critical):', notificationError)
+      }
+    }
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

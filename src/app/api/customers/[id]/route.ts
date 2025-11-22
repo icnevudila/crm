@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSafeSession } from '@/lib/safe-session'
 import { getSupabaseWithServiceRole } from '@/lib/supabase'
 import { hasPermission, buildPermissionDeniedResponse } from '@/lib/permissions'
+import { customerUpdateSchema } from '@/lib/validations/customers'
 
 // Dengeli cache - 60 saniye revalidate (performans + veri güncelliği dengesi)
 export const revalidate = 60
@@ -162,7 +163,34 @@ export async function PUT(
     }
 
     const { id } = await params
-    const body = await request.json()
+    
+    // Body parse - hata yakalama ile
+    let body
+    try {
+      body = await request.json()
+    } catch (jsonError: any) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Customers PUT API JSON parse error:', jsonError)
+      }
+      return NextResponse.json(
+        { error: 'Invalid JSON body', message: jsonError?.message || 'Failed to parse request body' },
+        { status: 400 }
+      )
+    }
+
+    // Zod validation
+    const validationResult = customerUpdateSchema.safeParse(body)
+    if (!validationResult.success) {
+      return NextResponse.json(
+        { 
+          error: 'Validation error',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        },
+        { status: 400 }
+      )
+    }
+
+    const validatedData = validationResult.data
     
     // Service role key ile RLS bypass - singleton pattern kullan
     const supabase = getSupabaseWithServiceRole()
@@ -195,30 +223,36 @@ export async function PUT(
     // schema-extension.sql: address, sector, website, taxNumber, fax, notes (migration çalıştırılmamış olabilir - GÖNDERME!)
     // migration 004: customerCompanyId (müşteri hangi firmada çalışıyor)
     // Güvenlik: createdBy ve updatedBy otomatik dolduruluyor (CRUD fonksiyonunda), body'den alınmamalı
-    const { id: bodyId, companyId, createdAt, updatedAt, createdBy, updatedBy, ...cleanBody } = body
+    const { id: bodyId, companyId, createdAt, updatedAt, createdBy, updatedBy, ...cleanBody } = validatedData
     
     const customerData: any = {
-      name: cleanBody.name,
-      email: cleanBody.email || null,
-      phone: cleanBody.phone || null,
-      city: cleanBody.city || null,
-      status: cleanBody.status || 'ACTIVE',
       updatedAt: new Date().toISOString(),
       // NOT: updatedBy kolonu migration'da yok, bu yüzden eklenmiyor
     }
+
+    // Sadece gönderilen alanları güncelle (partial update)
+    if (cleanBody.name !== undefined) {
+      customerData.name = cleanBody.name.trim()
+    }
+    if (cleanBody.email !== undefined) {
+      customerData.email = cleanBody.email || null
+    }
+    if (cleanBody.phone !== undefined) {
+      customerData.phone = cleanBody.phone || null
+    }
+    if (cleanBody.city !== undefined) {
+      customerData.city = cleanBody.city || null
+    }
+    if (cleanBody.status !== undefined) {
+      customerData.status = cleanBody.status || 'ACTIVE'
+    }
     // customerCompanyId - müşteri hangi firmada çalışıyor (migration 004'te eklendi)
-    if (body.customerCompanyId !== undefined && body.customerCompanyId !== null && body.customerCompanyId !== '') {
-      customerData.customerCompanyId = body.customerCompanyId
-    } else if (body.customerCompanyId === null || body.customerCompanyId === '') {
-      // Boş string veya null ise NULL yap (ilişkiyi kaldır)
-      customerData.customerCompanyId = null
+    if (cleanBody.customerCompanyId !== undefined) {
+      customerData.customerCompanyId = cleanBody.customerCompanyId || null
     }
     // logoUrl - müşteri logosu (migration 070'te eklendi)
-    if (body.logoUrl !== undefined && body.logoUrl !== null && body.logoUrl !== '') {
-      customerData.logoUrl = body.logoUrl
-    } else if (body.logoUrl === null || body.logoUrl === '') {
-      // Boş string veya null ise NULL yap
-      customerData.logoUrl = null
+    if (cleanBody.logoUrl !== undefined) {
+      customerData.logoUrl = cleanBody.logoUrl || null
     }
     // NOT: address, sector, website, taxNumber, fax, notes schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 

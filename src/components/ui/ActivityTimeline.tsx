@@ -56,12 +56,17 @@ export default function ActivityTimeline({
   entityType, 
   entityId 
 }: ActivityTimelineProps) {
+  // Tüm hook'ları en üstte, conditional olmadan çağır
   const locale = useLocale()
   
   // Eğer activities prop'u verilmişse direkt kullan, yoksa API'den çek
-  const shouldFetch = !providedActivities && entityType && entityId
+  // Hook'u her zaman çağır, sadece URL'yi conditional yap
+  const apiUrl = (!providedActivities && entityType && entityId) 
+    ? `/api/activity?entity=${entityType}&entityId=${entityId}` 
+    : null
+  
   const { data: fetchedActivities = [] } = useData<ActivityLog[]>(
-    shouldFetch ? `/api/activity?entity=${entityType}&entityId=${entityId}` : null,
+    apiUrl,
     {
       dedupingInterval: 30000,
       revalidateOnFocus: false,

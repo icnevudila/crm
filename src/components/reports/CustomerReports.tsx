@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useData } from '@/hooks/useData'
 import { Card } from '@/components/ui/card'
 import { Users, PieChart, BarChart3 } from 'lucide-react'
 import dynamic from 'next/dynamic'
@@ -32,10 +32,13 @@ async function fetchCustomerReports() {
 }
 
 export default function CustomerReports({ isActive }: ReportSectionProps) {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['customer-reports'],
-    queryFn: fetchCustomerReports,
-    staleTime: 5 * 60 * 1000,
+  const { data, isLoading, error } = useData(
+    isActive ? '/api/reports/customers' : null,
+    {
+      dedupingInterval: 5 * 60 * 1000,
+      revalidateOnFocus: false,
+    }
+  )
     refetchOnMount: true,
     enabled: isActive,
   })

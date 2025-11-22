@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
+import { useData } from '@/hooks/useData'
+import { mutate } from 'swr'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -54,33 +55,6 @@ interface InvoiceFormProps {
   defaultInvoiceType?: 'SALES' | 'PURCHASE' | 'SERVICE_SALES' | 'SERVICE_PURCHASE' // Varsayılan fatura tipi (Satın Alma modülünden açıldığında PURCHASE)
 }
 
-async function fetchCustomers() {
-  const res = await fetch('/api/customers?pageSize=1000')
-  if (!res.ok) throw new Error('Failed to fetch customers')
-  const data = await res.json()
-  return Array.isArray(data) ? data : (data.data || data.customers || [])
-}
-
-async function fetchVendors() {
-  const res = await fetch('/api/vendors?pageSize=1000')
-  if (!res.ok) throw new Error('Failed to fetch vendors')
-  const data = await res.json()
-  return Array.isArray(data) ? data : (data.data || data.vendors || [])
-}
-
-async function fetchQuotes() {
-  const res = await fetch('/api/quotes?pageSize=1000')
-  if (!res.ok) throw new Error('Failed to fetch quotes')
-  const data = await res.json()
-  return Array.isArray(data) ? data : (data.data || data.quotes || [])
-}
-
-async function fetchProducts() {
-  const res = await fetch('/api/products')
-  if (!res.ok) throw new Error('Failed to fetch products')
-  const data = await res.json()
-  return Array.isArray(data) ? data : []
-}
 
 interface InvoiceItem {
   id?: string
@@ -107,7 +81,6 @@ export default function InvoiceForm({
   const t = useTranslations('invoices.form')
   const tCommon = useTranslations('common.form')
   const router = useRouter()
-  const queryClient = useQueryClient()
   const navigateToDetailToast = useNavigateToDetailToast()
   const searchParams = useSearchParams()
   const searchCustomerCompanyId = searchParams.get('customerCompanyId') || undefined // URL'den customerCompanyId al
@@ -189,29 +162,25 @@ export default function InvoiceForm({
 
   type InvoiceFormData = z.infer<typeof invoiceSchema>
 
-  const { data: quotesData } = useQuery({
-    queryKey: ['quotes'],
-    queryFn: fetchQuotes,
-    enabled: open,
-  })
+  const { data: quotesData = [] } = useData<any[]>(
+    open ? '/api/quotes?pageSize=1000' : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
 
-  const { data: customersData } = useQuery({
-    queryKey: ['customers'],
-    queryFn: fetchCustomers,
-    enabled: open,
-  })
+  const { data: customersData = [] } = useData<any[]>(
+    open ? '/api/customers?pageSize=1000' : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
 
-  const { data: vendorsData } = useQuery({
-    queryKey: ['vendors'],
-    queryFn: fetchVendors,
-    enabled: open,
-  })
+  const { data: vendorsData = [] } = useData<any[]>(
+    open ? '/api/vendors?pageSize=1000' : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
 
-  const { data: productsData } = useQuery({
-    queryKey: ['products'],
-    queryFn: fetchProducts,
-    enabled: open,
-  })
+  const { data: productsData = [] } = useData<any[]>(
+    open ? '/api/products' : null,
+    { dedupingInterval: 60000, revalidateOnFocus: false }
+  )
 
   // Güvenlik kontrolü - her zaman array olmalı
   const quotes = Array.isArray(quotesData) ? quotesData : []
@@ -303,8 +272,6 @@ export default function InvoiceForm({
       if (!res.ok) return null
       return res.json()
     },
-    enabled: open && !invoice && !!effectiveQuoteId && !quoteProp, // Sadece quoteProp yoksa API'den çek
-  })
   
   // QuoteProp varsa onu kullan, yoksa API'den gelen datayı kullan
   const quoteData = quoteProp || quoteDataFromApi

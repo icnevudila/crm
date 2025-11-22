@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useLocale } from 'next-intl'
-import { Plus, Search, Edit, Trash2, Eye, CreditCard } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
+import { Plus, Edit, Trash2, Eye, CreditCard } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -10,6 +10,9 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import PaymentPlanForm from './PaymentPlanForm'
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import ModuleStats from '@/components/stats/ModuleStats'
+import { AutomationInfo } from '@/components/automation/AutomationInfo'
+import RefreshButton from '@/components/ui/RefreshButton'
 import Link from 'next/link'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
@@ -17,7 +20,6 @@ import { formatCurrency } from '@/lib/utils'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
 import { toast } from '@/lib/toast'
 import { useConfirm } from '@/hooks/useConfirm'
-import { useTranslations } from 'next-intl'
 
 interface PaymentPlan {
   id: string
@@ -41,19 +43,6 @@ interface PaymentPlan {
     paidAt?: string
   }>
   createdAt: string
-}
-
-const statusLabels: Record<string, string> = {
-  ACTIVE: 'Aktif',
-  COMPLETED: 'Tamamlandı',
-  DEFAULTED: 'Vadesi Geçti',
-  CANCELLED: 'İptal Edildi',
-}
-
-const frequencyLabels: Record<string, string> = {
-  WEEKLY: 'Haftalık',
-  MONTHLY: 'Aylık',
-  QUARTERLY: 'Çeyreklik',
 }
 
 export default function PaymentPlanList() {
@@ -87,17 +76,29 @@ export default function PaymentPlanList() {
     }
   }, [])
 
-  // SWR ile veri çekme
-  const params = new URLSearchParams()
-  if (debouncedSearch) params.append('search', debouncedSearch)
-  if (status) params.append('status', status)
-  if (invoiceId) params.append('invoiceId', invoiceId)
-  
-  const apiUrl = `/api/payment-plans?${params.toString()}`
+  // API URL'ini memoize et
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams()
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    if (status) params.append('status', status)
+    if (invoiceId) params.append('invoiceId', invoiceId)
+    return `/api/payment-plans?${params.toString()}`
+  }, [debouncedSearch, status, invoiceId])
+
   const { data: plans = [], isLoading, error, mutate: mutatePlans } = useData<PaymentPlan[]>(apiUrl, {
     dedupingInterval: 5000,
     revalidateOnFocus: false,
+    refreshInterval: 0, // Auto refresh YOK
   })
+
+  // Refresh handler
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([
+      mutatePlans(undefined, { revalidate: true }),
+      mutate('/api/payment-plans', undefined, { revalidate: true }),
+      mutate('/api/payment-plans?', undefined, { revalidate: true }),
+    ])
+  }, [mutatePlans])
 
   const handleEdit = (plan: PaymentPlan) => {
     setSelectedPlan(plan)
@@ -106,10 +107,10 @@ export default function PaymentPlanList() {
 
   const handleDelete = async (id: string, name: string) => {
     const confirmed = await confirm({
-      title: 'Ödeme Planını Sil?',
-      description: `${name} ödeme planını silmek istediğinize emin misiniz?`,
-      confirmLabel: 'Sil',
-      cancelLabel: 'İptal',
+      title: t('deleteConfirm', { name, defaultMessage: 'Ödeme Planını Sil?' }),
+      description: t('deleteConfirm', { name, defaultMessage: `${name} ödeme planını silmek istediğinize emin misiniz?` }),
+      confirmLabel: t('delete', { defaultMessage: 'Sil' }),
+      cancelLabel: t('cancel', { defaultMessage: 'İptal' }),
       variant: 'destructive'
     })
     
@@ -137,10 +138,10 @@ export default function PaymentPlanList() {
         mutate(apiUrl, updatedPlans, { revalidate: false }),
       ])
 
-      toast.success('Ödeme planı silindi')
+      toast.success(t('deleteSuccess', { defaultMessage: 'Ödeme planı silindi' }))
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error(error?.message || t('deleteFailed'))
+      toast.error(error?.message || t('deleteFailed', { defaultMessage: 'Silme işlemi başarısız' }))
     }
   }
 
@@ -149,6 +150,50 @@ export default function PaymentPlanList() {
     setSelectedPlan(null)
   }
 
+  // onSuccess callback'ini memoize et - component'in en üst seviyesinde
+  const handleFormSuccess = useCallback(async (savedPlan: PaymentPlan) => {
+    let updatedPlans: PaymentPlan[]
+    
+    if (selectedPlan) {
+      updatedPlans = plans.map((item) =>
+        item.id === savedPlan.id ? savedPlan : item
+      )
+    } else {
+      updatedPlans = [savedPlan, ...plans]
+    }
+    
+    await mutatePlans(updatedPlans, { revalidate: false })
+    
+    await Promise.all([
+      mutate('/api/payment-plans', updatedPlans, { revalidate: false }),
+      mutate('/api/payment-plans?', updatedPlans, { revalidate: false }),
+      mutate(apiUrl, updatedPlans, { revalidate: false }),
+    ])
+  }, [selectedPlan, plans, mutatePlans, apiUrl])
+
+  // Otomasyon bilgilerini memoize et
+  const automations = useMemo(() => [
+    {
+      action: t('automationInstallmentDue', { defaultMessage: 'Taksit vadesi geldiğinde' }),
+      result: t('automationInstallmentDueResult', { defaultMessage: 'Otomatik bildirim gönderilir' }),
+      details: [
+        t('automationInstallmentDueDetails1', { defaultMessage: 'Müşteriye ödeme hatırlatması gönderilir' }),
+        t('automationInstallmentDueDetails2', { defaultMessage: 'Admin/Sales rollere bildirim gönderilir' }),
+      ],
+    },
+    {
+      action: t('automationOverdue', { defaultMessage: 'Taksit vadesi geçtiğinde' }),
+      result: t('automationOverdueResult', { defaultMessage: 'Otomatik uyarı gönderilir' }),
+      details: [
+        t('automationOverdueDetails1', { defaultMessage: 'Plan durumu "Vadesi Geçti" olarak güncellenir' }),
+        t('automationOverdueDetails2', { defaultMessage: 'Yöneticilere acil bildirim gönderilir' }),
+      ],
+    },
+  ], [t])
+
+  // Stats URL'ini memoize et
+  const statsUrl = useMemo(() => '/api/stats/payment-plans', [])
+
   if (isLoading) {
     return <SkeletonList />
   }
@@ -156,56 +201,58 @@ export default function PaymentPlanList() {
   if (error) {
     return (
       <div className="p-4 text-center text-red-600">
-        Veriler yüklenirken bir hata oluştu.
+        {t('errorLoading', { defaultMessage: 'Veriler yüklenirken bir hata oluştu.' })}
       </div>
     )
   }
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{t('title')}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{t('description')}</p>
-        </div>
-        <Button
-          onClick={() => {
-            setSelectedPlan(null)
-            setFormOpen(true)
-          }}
-          className="flex items-center gap-2"
-        >
-          <Plus className="h-4 w-4" />
-          {t('newPlan')}
-        </Button>
-      </div>
+    <div className="space-y-6">
+      {/* İstatistikler */}
+      <ModuleStats module="payment-plans" statsUrl={statsUrl} />
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="flex-1">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      {/* Otomasyon Bilgileri */}
+      <AutomationInfo
+        title={t('automationTitle', { defaultMessage: 'Ödeme Planları Otomasyonları' })}
+        automations={automations}
+      />
+
+      {/* Filtreler ve Actions */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-4 flex-1">
+          <div className="flex-1">
             <Input
-              placeholder={t('searchPlaceholder')}
+              placeholder={t('searchPlaceholder', { defaultMessage: 'Plan adı ara...' })}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-10"
             />
           </div>
+          <Select value={status || 'all'} onValueChange={(value) => setStatus(value === 'all' ? '' : value)}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder={t('selectStatus', { defaultMessage: 'Durum' })} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('allStatuses', { defaultMessage: 'Tüm Durumlar' })}</SelectItem>
+              <SelectItem value="ACTIVE">{t('statusActive', { defaultMessage: 'Aktif' })}</SelectItem>
+              <SelectItem value="COMPLETED">{t('statusCompleted', { defaultMessage: 'Tamamlandı' })}</SelectItem>
+              <SelectItem value="DEFAULTED">{t('statusDefaulted', { defaultMessage: 'Vadesi Geçti' })}</SelectItem>
+              <SelectItem value="CANCELLED">{t('statusCancelled', { defaultMessage: 'İptal Edildi' })}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-full sm:w-[200px]">
-            <SelectValue placeholder={t('selectStatus')} />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="">{t('allStatuses')}</SelectItem>
-            <SelectItem value="ACTIVE">{statusLabels.ACTIVE}</SelectItem>
-            <SelectItem value="COMPLETED">{statusLabels.COMPLETED}</SelectItem>
-            <SelectItem value="DEFAULTED">{statusLabels.DEFAULTED}</SelectItem>
-            <SelectItem value="CANCELLED">{statusLabels.CANCELLED}</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex gap-2">
+          <RefreshButton onRefresh={handleRefresh} />
+          <Button
+            onClick={() => {
+              setSelectedPlan(null)
+              setFormOpen(true)
+            }}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            {t('newPlan', { defaultMessage: 'Yeni Plan' })}
+          </Button>
+        </div>
       </div>
 
       {/* Table */}
@@ -266,11 +313,18 @@ export default function PaymentPlanList() {
                     {formatCurrency(plan.remainingAmount)}
                   </TableCell>
                   <TableCell>
-                    {plan.installmentCount} {frequencyLabels[plan.installmentFrequency] || plan.installmentFrequency}
+                    {plan.installmentCount} {plan.installmentFrequency === 'WEEKLY' ? t('frequencyWeekly', { defaultMessage: 'Haftalık' }) :
+                     plan.installmentFrequency === 'MONTHLY' ? t('frequencyMonthly', { defaultMessage: 'Aylık' }) :
+                     plan.installmentFrequency === 'QUARTERLY' ? t('frequencyQuarterly', { defaultMessage: 'Çeyreklik' }) :
+                     plan.installmentFrequency}
                   </TableCell>
                   <TableCell>
                     <Badge className={getStatusBadgeClass(plan.status)}>
-                      {statusLabels[plan.status] || plan.status}
+                      {plan.status === 'ACTIVE' ? t('statusActive', { defaultMessage: 'Aktif' }) :
+                       plan.status === 'COMPLETED' ? t('statusCompleted', { defaultMessage: 'Tamamlandı' }) :
+                       plan.status === 'DEFAULTED' ? t('statusDefaulted', { defaultMessage: 'Vadesi Geçti' }) :
+                       plan.status === 'CANCELLED' ? t('statusCancelled', { defaultMessage: 'İptal Edildi' }) :
+                       plan.status}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
@@ -310,25 +364,7 @@ export default function PaymentPlanList() {
         open={formOpen}
         onClose={handleFormClose}
         invoiceId={invoiceId || undefined}
-        onSuccess={async (savedPlan: PaymentPlan) => {
-          let updatedPlans: PaymentPlan[]
-          
-          if (selectedPlan) {
-            updatedPlans = plans.map((item) =>
-              item.id === savedPlan.id ? savedPlan : item
-            )
-          } else {
-            updatedPlans = [savedPlan, ...plans]
-          }
-          
-          await mutatePlans(updatedPlans, { revalidate: false })
-          
-          await Promise.all([
-            mutate('/api/payment-plans', updatedPlans, { revalidate: false }),
-            mutate('/api/payment-plans?', updatedPlans, { revalidate: false }),
-            mutate(apiUrl, updatedPlans, { revalidate: false }),
-          ])
-        }}
+        onSuccess={handleFormSuccess}
       />
     </div>
   )

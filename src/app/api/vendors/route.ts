@@ -92,55 +92,61 @@ export async function POST(request: Request) {
       )
     }
 
-    // Zorunlu alanları kontrol et
-    if (!body.name || body.name.trim() === '') {
+    // Zod validation
+    const { vendorCreateSchema } = await import('@/lib/validations/vendors')
+    const validationResult = vendorCreateSchema.safeParse(body)
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: 'Tedarikçi adı gereklidir' },
+        { 
+          error: 'Validation error',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        },
         { status: 400 }
       )
     }
 
-    // Vendor verilerini oluştur - SADECE veritabanında olan kolonları gönder
-    // Veritabanı şeması: name, sector, city, address, phone, email, website, taxNumber, taxOffice, description, status, companyId
+    const validatedData = validationResult.data
+
+    // Vendor verilerini oluştur - Zod validated data kullan
     const vendorData: any = {
-      name: body.name.trim(),
-      status: body.status || 'ACTIVE',
+      name: validatedData.name.trim(),
+      status: validatedData.status || 'ACTIVE',
       companyId: session.user.companyId,
     }
 
     // Veritabanında olan alanlar
-    if (body.sector !== undefined && body.sector !== null && body.sector !== '') {
-      vendorData.sector = body.sector
+    if (validatedData.sector !== undefined && validatedData.sector !== null && validatedData.sector !== '') {
+      vendorData.sector = validatedData.sector
     }
-    if (body.city !== undefined && body.city !== null && body.city !== '') {
-      vendorData.city = body.city
+    if (validatedData.city !== undefined && validatedData.city !== null && validatedData.city !== '') {
+      vendorData.city = validatedData.city
     }
-    if (body.address !== undefined && body.address !== null && body.address !== '') {
-      vendorData.address = body.address
+    if (validatedData.address !== undefined && validatedData.address !== null && validatedData.address !== '') {
+      vendorData.address = validatedData.address
     }
-    if (body.phone !== undefined && body.phone !== null && body.phone !== '') {
-      vendorData.phone = body.phone
+    if (validatedData.phone !== undefined && validatedData.phone !== null && validatedData.phone !== '') {
+      vendorData.phone = validatedData.phone
     }
-    if (body.email !== undefined && body.email !== null && body.email !== '') {
-      vendorData.email = body.email
+    if (validatedData.email !== undefined && validatedData.email !== null && validatedData.email !== '') {
+      vendorData.email = validatedData.email
     }
-    if (body.website !== undefined && body.website !== null && body.website !== '') {
-      vendorData.website = body.website
+    if (validatedData.website !== undefined && validatedData.website !== null && validatedData.website !== '') {
+      vendorData.website = validatedData.website
     }
-    if (body.taxNumber !== undefined && body.taxNumber !== null && body.taxNumber !== '') {
-      vendorData.taxNumber = body.taxNumber
+    if (validatedData.taxNumber !== undefined && validatedData.taxNumber !== null && validatedData.taxNumber !== '') {
+      vendorData.taxNumber = validatedData.taxNumber
     }
-    if (body.taxOffice !== undefined && body.taxOffice !== null && body.taxOffice !== '') {
-      vendorData.taxOffice = body.taxOffice
+    if (validatedData.taxOffice !== undefined && validatedData.taxOffice !== null && validatedData.taxOffice !== '') {
+      vendorData.taxOffice = validatedData.taxOffice
     }
-    if (body.description !== undefined && body.description !== null && body.description !== '') {
-      vendorData.description = body.description
+    if (validatedData.description !== undefined && validatedData.description !== null && validatedData.description !== '') {
+      vendorData.description = validatedData.description
     }
 
     const data = await createRecord(
       'Vendor',
       vendorData,
-      `Yeni tedarikçi eklendi: ${body.name}`
+      `Yeni tedarikçi eklendi: ${validatedData.name}`
     )
 
     return NextResponse.json(data, { status: 201 })

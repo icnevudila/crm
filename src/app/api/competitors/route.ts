@@ -87,14 +87,34 @@ export async function POST(request: NextRequest) {
       return buildPermissionDeniedResponse()
     }
 
-    const body = await request.json()
-
-    if (!body.name) {
+    // Body parse - hata yakalama ile
+    let body
+    try {
+      body = await request.json()
+    } catch (jsonError: any) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Competitors POST API JSON parse error:', jsonError)
+      }
       return NextResponse.json(
-        { error: 'İsim alanı zorunludur' },
+        { error: 'Invalid JSON body', message: jsonError?.message || 'Failed to parse request body' },
         { status: 400 }
       )
     }
+
+    // Zod validation
+    const { competitorCreateSchema } = await import('@/lib/validations/competitors')
+    const validationResult = competitorCreateSchema.safeParse(body)
+    if (!validationResult.success) {
+      return NextResponse.json(
+        { 
+          error: 'Validation error',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        },
+        { status: 400 }
+      )
+    }
+
+    const validatedData = validationResult.data
 
     // ✅ ÇÖZÜM: strengths ve weaknesses JSON string ise parse et, TEXT[] formatına dönüştür
     let strengths: string[] | null = null
@@ -127,25 +147,25 @@ export async function POST(request: NextRequest) {
     }
 
     // ✅ ÇÖZÜM: averagePrice undefined ise null gönder, 0 geçerli bir değer
-    const averagePrice = body.averagePrice !== undefined && body.averagePrice !== null
-      ? (isNaN(parseFloat(body.averagePrice)) ? null : parseFloat(body.averagePrice))
+    const averagePrice = validatedData.averagePrice !== undefined && validatedData.averagePrice !== null
+      ? validatedData.averagePrice
       : null
 
     // ✅ ÇÖZÜM: marketShare undefined ise null gönder, 0 geçerli bir değer
-    const marketShare = body.marketShare !== undefined && body.marketShare !== null
-      ? (isNaN(parseFloat(body.marketShare)) ? null : parseFloat(body.marketShare))
+    const marketShare = validatedData.marketShare !== undefined && validatedData.marketShare !== null
+      ? validatedData.marketShare
       : null
 
     const supabase = getSupabaseWithServiceRole()
     const { data, error } = await supabase
       .from('Competitor')
       .insert({
-        name: body.name,
-        description: body.description || null,
-        website: body.website || null,
+        name: validatedData.name,
+        description: validatedData.description || null,
+        website: validatedData.website || null,
         strengths: strengths,
         weaknesses: weaknesses,
-        pricingStrategy: body.pricingStrategy || null,
+        pricingStrategy: validatedData.pricingStrategy || null,
         averagePrice: averagePrice,
         marketShare: marketShare,
         companyId: session.user.companyId,

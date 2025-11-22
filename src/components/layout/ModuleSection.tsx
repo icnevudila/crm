@@ -15,7 +15,7 @@ interface ModuleSectionProps {
   description?: string
   icon?: LucideIcon
   defaultOpen?: boolean
-  children: (props: { isOpen: boolean }) => ReactNode
+  children: ReactNode | ((props: { isOpen: boolean }) => ReactNode)
 }
 
 export default function ModuleSection({
@@ -33,9 +33,16 @@ export default function ModuleSection({
 
   // Client-side mount olduktan sonra localStorage'dan oku
   // ✅ ÇÖZÜM: localStorage'da değer yoksa defaultOpen kullan (kullanıcı hiç kapatmadıysa açık gelsin)
+  // ✅ ÇÖZÜM: defaultOpen={true} ise localStorage'ı ignore et - her zaman açık başlasın
   useEffect(() => {
     setIsMounted(true)
     if (typeof window !== 'undefined') {
+      // defaultOpen={true} ise localStorage'ı ignore et
+      if (defaultOpen) {
+        setIsOpen(true)
+        return
+      }
+      
       const stored = localStorage.getItem(storageKey)
       if (stored !== null) {
         // localStorage'da değer varsa onu kullan (kullanıcı daha önce açıp kapattıysa)
@@ -79,7 +86,10 @@ export default function ModuleSection({
           </div>
         </AccordionTrigger>
         <AccordionContent className="pt-4" suppressHydrationWarning>
-          {children({ isOpen: currentIsOpen })}
+          {typeof children === 'function' 
+            ? children({ isOpen: currentIsOpen })
+            : children
+          }
         </AccordionContent>
       </AccordionItem>
     </Accordion>

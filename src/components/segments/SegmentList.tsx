@@ -68,6 +68,7 @@ export default function SegmentList({ isOpen = true }: SegmentListProps) {
     {
       dedupingInterval: 5000,
       revalidateOnFocus: false,
+      refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
     }
   )
 

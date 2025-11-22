@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useData } from '@/hooks/useData'
 import { Card } from '@/components/ui/card'
 import { Target, Users, BarChart3 } from 'lucide-react'
 import dynamic from 'next/dynamic'
@@ -22,23 +22,14 @@ const GoalAchievementLineChart = dynamic(() => import('@/components/reports/char
   loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
 })
 
-async function fetchPerformanceReports() {
-  const res = await fetch('/api/reports/performance', {
-    cache: 'no-store',
-    credentials: 'include',
-  })
-  if (!res.ok) throw new Error('Failed to fetch performance reports')
-  return res.json()
-}
-
 export default function PerformanceReports({ isActive }: ReportSectionProps) {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['performance-reports'],
-    queryFn: fetchPerformanceReports,
-    staleTime: 5 * 60 * 1000,
-    refetchOnMount: true,
-    enabled: isActive,
-  })
+  const { data, isLoading, error } = useData(
+    isActive ? '/api/reports/performance' : null,
+    {
+      dedupingInterval: 5 * 60 * 1000,
+      revalidateOnFocus: false,
+    }
+  )
 
   if (!isActive) return null
   if (isLoading) return <SkeletonList />

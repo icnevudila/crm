@@ -56,6 +56,7 @@ export default function DocumentList({ relatedTo, relatedId, limit = 10 }: Docum
     {
       dedupingInterval: 30000, // 30 saniye cache
       revalidateOnFocus: false,
+      refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
     }
   )
 

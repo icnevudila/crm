@@ -3108,7 +3108,7 @@ export default function ShipmentList() {
 
 
 
-                        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                        <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200">
 
 
 

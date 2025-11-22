@@ -876,7 +876,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
                   {
                     label: customer.Company.name,
                     variant: 'outline' as const,
-                    className: 'bg-purple-50 text-purple-700 border-purple-200',
+                    className: 'bg-indigo-50 text-indigo-700 border-indigo-200',
                   },
                 ]
                 : []),

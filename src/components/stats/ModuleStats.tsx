@@ -10,7 +10,7 @@ import StatsCard from './StatsCard'
 import { Users, Store, Briefcase, FileText, Receipt, Package } from 'lucide-react'
 
 interface ModuleStatsProps {
-  module: 'customers' | 'vendors' | 'deals' | 'quotes' | 'invoices' | 'products'
+  module: 'customers' | 'vendors' | 'deals' | 'quotes' | 'invoices' | 'products' | 'sales-quotas' | 'return-orders' | 'credit-notes' | 'payment-plans' | 'product-bundles'
   statsUrl: string
   filterStatus?: string
   onFilterChange?: (filter: { type: string; value?: string }) => void
@@ -23,6 +23,7 @@ const iconMap = {
   quotes: FileText,
   invoices: Receipt,
   products: Package,
+  'product-bundles': Package,
 }
 
 export default function ModuleStats({ module, statsUrl, filterStatus, onFilterChange }: ModuleStatsProps) {
@@ -32,20 +33,6 @@ export default function ModuleStats({ module, statsUrl, filterStatus, onFilterCh
     refreshInterval: 0, // Auto refresh YOK - manual refresh
   })
 
-  // CRITICAL: Development'ta log ekle - KPI sorununu debug etmek için
-  if (process.env.NODE_ENV === 'development') {
-    console.log('ModuleStats - Request:', {
-      module,
-      statsUrl,
-      isLoading,
-      hasStats: !!stats,
-      stats,
-      error,
-      errorMessage: error?.message,
-      errorStatus: error?.status,
-    })
-  }
-  
   // Filtreleme yapıldığında KPI'ları güncelle - sadece filtrelenmiş veriyi göster
   const filteredStats = useMemo(() => {
     if (!stats || !filterStatus) return stats
@@ -104,21 +91,7 @@ export default function ModuleStats({ module, statsUrl, filterStatus, onFilterCh
     return stats
   }, [stats, filterStatus, module])
 
-  // Debug: Development'ta log ekle
-  if (process.env.NODE_ENV === 'development') {
-    console.log('ModuleStats - Render:', {
-      module,
-      statsUrl,
-      isLoading,
-      hasStats: !!stats,
-      stats,
-      error,
-      timestamp: new Date().toISOString(),
-    })
-  }
-
   if (isLoading) {
-    console.log('ModuleStats - Loading state')
     return (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
         {[...Array(4)].map((_, i) => (
@@ -129,7 +102,6 @@ export default function ModuleStats({ module, statsUrl, filterStatus, onFilterCh
   }
 
   if (!stats) {
-    console.log('ModuleStats - No stats, returning null')
     return null
   }
 

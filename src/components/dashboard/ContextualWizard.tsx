@@ -235,7 +235,7 @@ export default function ContextualWizard({
                 {currentStep === config.steps.length - 1 && (
                   <Button
                     onClick={handleAction}
-                    className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg hover:shadow-xl transition-all"
+                    className="w-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 hover:shadow-xl transition-all"
                   >
                     {config.actionLabel}
                     <ArrowRight className="ml-2 h-4 w-4" />

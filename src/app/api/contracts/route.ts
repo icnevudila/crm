@@ -241,7 +241,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Contract number oluştur (eğer yoksa)
-    let contractNumber = body.contractNumber
+    let contractNumber = body.contractNumber // Schema'da yok, body'den al
     if (!contractNumber) {
       // Get next sequence number
       const { data: lastContract } = await supabase
@@ -267,41 +267,71 @@ export async function POST(request: NextRequest) {
 
     // Calculate totalValue
     const taxRate = body.taxRate || 18
-    const value = parseFloat(body.value)
+    const value = body.value
     const totalValue = value + (value * taxRate / 100)
+    
+    // validatedData oluştur - body'den gelen verileri kullan (Zod validation yok, manuel validation var)
+    const validatedData = {
+      title: body.title,
+      description: body.description,
+      customerId: body.customerId,
+      customerCompanyId: body.customerCompanyId,
+      dealId: body.dealId,
+      type: body.type,
+      category: body.category,
+      startDate: body.startDate,
+      endDate: body.endDate,
+      signedDate: body.signedDate,
+      renewalType: body.renewalType,
+      renewalNoticeDays: body.renewalNoticeDays,
+      autoRenewEnabled: body.autoRenewEnabled,
+      billingCycle: body.billingCycle,
+      billingDay: body.billingDay,
+      paymentTerms: body.paymentTerms,
+      currency: body.currency,
+      taxRate: body.taxRate,
+      status: body.status,
+      terms: body.terms,
+      notes: body.notes,
+      // Optional fields (schema'da yok ama body'den alınabilir)
+      nextRenewalDate: body.nextRenewalDate,
+      attachmentUrl: body.attachmentUrl,
+      tags: body.tags,
+      metadata: body.metadata,
+    }
 
     // Insert
     const { data, error } = await supabase
       .from('Contract')
       .insert({
         contractNumber,
-        title: body.title,
-        description: body.description || null,
-        customerId: body.customerId || null,
-        customerCompanyId: body.customerCompanyId || null,
-        dealId: body.dealId || null,
-        type: body.type || 'SERVICE',
-        category: body.category || null,
-        startDate: body.startDate,
-        endDate: body.endDate,
-        signedDate: body.signedDate || null,
-        renewalType: body.renewalType || 'MANUAL',
-        renewalNoticeDays: body.renewalNoticeDays || 30,
-        nextRenewalDate: body.nextRenewalDate || null,
-        autoRenewEnabled: body.autoRenewEnabled || false,
-        billingCycle: body.billingCycle || 'YEARLY',
-        billingDay: body.billingDay || null,
-        paymentTerms: body.paymentTerms || 30,
+        title: validatedData.title,
+        description: validatedData.description || null,
+        customerId: validatedData.customerId || null,
+        customerCompanyId: validatedData.customerCompanyId || null,
+        dealId: validatedData.dealId || null,
+        type: validatedData.type || 'SERVICE',
+        category: validatedData.category || null,
+        startDate: validatedData.startDate,
+        endDate: validatedData.endDate,
+        signedDate: validatedData.signedDate || null,
+        renewalType: validatedData.renewalType || 'MANUAL',
+        renewalNoticeDays: validatedData.renewalNoticeDays || 30,
+        nextRenewalDate: validatedData.nextRenewalDate || null,
+        autoRenewEnabled: validatedData.autoRenewEnabled || false,
+        billingCycle: validatedData.billingCycle || 'YEARLY',
+        billingDay: validatedData.billingDay || null,
+        paymentTerms: validatedData.paymentTerms || 30,
         value: value,
-        currency: body.currency || 'TRY',
+        currency: validatedData.currency || 'TRY',
         taxRate: taxRate,
         totalValue: totalValue,
-        status: body.status || 'DRAFT',
-        attachmentUrl: body.attachmentUrl || null,
-        terms: body.terms || null,
-        notes: body.notes || null,
-        tags: body.tags || null,
-        metadata: body.metadata || null,
+        status: validatedData.status || 'DRAFT',
+        attachmentUrl: validatedData.attachmentUrl || null,
+        terms: validatedData.terms || null,
+        notes: validatedData.notes || null,
+        tags: validatedData.tags || null,
+        metadata: validatedData.metadata || null,
         companyId: session.user.companyId,
       })
       .select()

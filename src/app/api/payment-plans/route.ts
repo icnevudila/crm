@@ -212,6 +212,25 @@ export async function POST(request: NextRequest) {
       console.error('ActivityLog creation error:', activityError)
     }
 
+    // Notification - Admin/Sales rollere bildirim
+    try {
+      const { createNotificationForRole } = await import('@/lib/notification-helper')
+      await createNotificationForRole({
+        companyId: session.user.companyId,
+        role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+        title: '💳 Yeni Ödeme Planı Oluşturuldu',
+        message: `${name} ödeme planı oluşturuldu. ${installmentCount} taksit.`,
+        type: 'info',
+        relatedTo: 'PaymentPlan',
+        relatedId: paymentPlan.id,
+        link: `/tr/payment-plans/${paymentPlan.id}`,
+      }).catch(() => {})
+    } catch (notificationError) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Payment plan notification error (non-critical):', notificationError)
+      }
+    }
+
     // PaymentPlan'ı installments ile birlikte döndür
     const { data: planWithInstallments } = await supabase
       .from('PaymentPlan')

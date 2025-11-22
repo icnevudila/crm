@@ -11,13 +11,13 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "overflow-hidden bg-gradient-to-r from-[#6366f1] via-[#7c3aed] to-[#8b5cf6] text-white shadow-lg hover:from-[#4f46e5] hover:via-[#6d28d9] hover:to-[#7c3aed] hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 before:absolute before:inset-0 before:bg-white/10 before:opacity-0 hover:before:opacity-20 before:transition-opacity disabled:from-slate-300 disabled:via-slate-300 disabled:to-slate-300",
+          "bg-[#6366f1] text-white shadow-lg hover:bg-[#4f46e5] hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 disabled:bg-slate-300 disabled:text-slate-500",
         destructive:
           "bg-destructive text-destructive-foreground shadow-md hover:bg-destructive/90 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0",
         outline:
           "border border-slate-200 bg-white text-slate-700 shadow-sm hover:bg-slate-50 hover:text-slate-900 hover:shadow-md hover:-translate-y-0.5 active:translate-y-0",
         secondary:
-          "bg-[#8b5cf6] text-white shadow-md hover:bg-[#7c3aed] hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0",
+          "bg-[#6366f1] text-white shadow-md hover:bg-[#4f46e5] hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0",
         ghost:
           "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
         link: "text-[#4f46e5] underline-offset-4 hover:underline",

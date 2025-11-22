@@ -135,6 +135,49 @@ export async function PUT(
       console.error('ActivityLog creation error:', activityError)
     }
 
+    // Notification - Status değişikliği bildirimleri
+    if (status) {
+      try {
+        const { createNotificationForRole } = await import('@/lib/notification-helper')
+        const statusMessages: Record<string, { title: string; message: string; type: 'info' | 'success' | 'warning' }> = {
+          COMPLETED: {
+            title: '✅ Ödeme Planı Tamamlandı',
+            message: `${paymentPlan.name} ödeme planı tamamlandı.`,
+            type: 'success',
+          },
+          DEFAULTED: {
+            title: '⚠️ Ödeme Planı Vadesi Geçti',
+            message: `${paymentPlan.name} ödeme planı vadesi geçti.`,
+            type: 'warning',
+          },
+          CANCELLED: {
+            title: '❌ Ödeme Planı İptal Edildi',
+            message: `${paymentPlan.name} ödeme planı iptal edildi.`,
+            type: 'warning',
+          },
+        }
+
+        const statusMessage = statusMessages[status]
+        if (statusMessage) {
+          await createNotificationForRole({
+            companyId: session.user.companyId,
+            role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+            title: statusMessage.title,
+            message: statusMessage.message,
+            type: statusMessage.type,
+            priority: status === 'DEFAULTED' ? 'high' : 'normal',
+            relatedTo: 'PaymentPlan',
+            relatedId: paymentPlan.id,
+            link: `/tr/payment-plans/${paymentPlan.id}`,
+          }).catch(() => {})
+        }
+      } catch (notificationError) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Payment plan notification error (non-critical):', notificationError)
+        }
+      }
+    }
+
     // PaymentPlan'ı installments ile birlikte döndür
     const { data: planWithInstallments } = await supabase
       .from('PaymentPlan')
@@ -232,6 +275,24 @@ export async function DELETE(
       ])
     } catch (activityError) {
       console.error('ActivityLog creation error:', activityError)
+    }
+
+    // Notification - Admin/Sales rollere bildirim
+    try {
+      const { createNotificationForRole } = await import('@/lib/notification-helper')
+      await createNotificationForRole({
+        companyId: session.user.companyId,
+        role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+        title: '🗑️ Ödeme Planı Silindi',
+        message: `${paymentPlan?.name || 'Ödeme planı'} silindi.`,
+        type: 'warning',
+        relatedTo: 'PaymentPlan',
+        relatedId: params.id,
+      }).catch(() => {})
+    } catch (notificationError) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Payment plan notification error (non-critical):', notificationError)
+      }
     }
 
     return NextResponse.json({ success: true })

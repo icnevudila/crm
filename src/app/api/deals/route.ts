@@ -309,23 +309,30 @@ export async function POST(request: Request) {
       )
     }
 
-    // Zorunlu alanları kontrol et
-    if (!body.title || body.title.trim() === '') {
+    // Zod validation
+    const { dealCreateSchema } = await import('@/lib/validations/deals')
+    const validationResult = dealCreateSchema.safeParse(body)
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: (await import('@/lib/api-locale')).getErrorMessage('errors.api.dealTitleRequired', request) },
+        { 
+          error: 'Validation error',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        },
         { status: 400 }
       )
     }
 
-    // ÖNEMLİ: LOST stage'inde lostReason zorunlu
-    if (body.stage === 'LOST') {
-      if (!body.lostReason || typeof body.lostReason !== 'string' || body.lostReason.trim().length === 0) {
+    const validatedData = validationResult.data
+
+    // ÖNEMLİ: LOST stage'inde lostReason zorunlu (Zod schema'da zaten kontrol ediliyor ama ekstra kontrol)
+    if (validatedData.stage === 'LOST') {
+      if (!validatedData.lostReason || typeof validatedData.lostReason !== 'string' || validatedData.lostReason.trim().length === 0) {
         return NextResponse.json(
           {
             error: (await import('@/lib/api-locale')).getErrorMessage('errors.api.lostReasonRequired', request),
             message: (await import('@/lib/api-locale')).getErrorMessage('errors.api.dealLostReasonRequired', request),
             reason: 'LOST_REASON_REQUIRED',
-            stage: body.stage
+            stage: validatedData.stage
           },
           { status: 400 }
         )
@@ -343,27 +350,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Company ID is required' }, { status: 400 })
     }
 
-    // Deal verilerini oluştur - SADECE schema.sql'de olan kolonları gönder
-    // schema.sql: title, stage, value, status, companyId, customerId
-    // schema-extension.sql: winProbability, expectedCloseDate, description (migration çalıştırılmamış olabilir - GÖNDERME!)
-    // migration 025: leadSource (lead source tracking)
+    // Deal verilerini oluştur - Zod validated data kullan
     const dealData: any = {
-      title: body.title.trim(),
-      stage: body.stage || 'LEAD',
-      status: body.status || 'OPEN',
-      value: body.value !== undefined ? parseFloat(body.value) : 0,
+      title: validatedData.title.trim(),
+      stage: validatedData.stage || 'LEAD',
+      status: validatedData.status || 'OPEN',
+      value: validatedData.value !== undefined ? validatedData.value : 0,
       companyId: companyId,
     }
 
     // Sadece schema.sql'de olan alanlar
-    if (body.customerId) dealData.customerId = body.customerId
+    if (validatedData.customerId) dealData.customerId = validatedData.customerId
     // Firma bazlı ilişki (customerCompanyId)
-    if (body.customerCompanyId) dealData.customerCompanyId = body.customerCompanyId
+    if (validatedData.customerCompanyId) dealData.customerCompanyId = validatedData.customerCompanyId
     // Lead Source (migration 025)
-    if (body.leadSource) dealData.leadSource = body.leadSource
+    if (validatedData.leadSource) dealData.leadSource = validatedData.leadSource
+    // Competitor (competitor tracking)
+    if (validatedData.competitorId) dealData.competitorId = validatedData.competitorId
     // Lost Reason (LOST stage'inde zorunlu)
-    if (body.lostReason) dealData.lostReason = body.lostReason.trim()
-    // NOT: description, winProbability, expectedCloseDate schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
+    if (validatedData.lostReason) dealData.lostReason = validatedData.lostReason.trim()
+    // Description, winProbability, expectedCloseDate (migration varsa)
+    if (validatedData.description) dealData.description = validatedData.description
+    if (validatedData.winProbability !== undefined) dealData.winProbability = validatedData.winProbability
+    if (validatedData.expectedCloseDate) dealData.expectedCloseDate = validatedData.expectedCloseDate
 
     // @ts-ignore - Supabase database type tanımları eksik, insert metodu dinamik tip bekliyor
     const { data, error } = await supabase

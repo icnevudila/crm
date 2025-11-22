@@ -131,9 +131,9 @@ export default function TaskList({ isOpen = true }: TaskListProps) {
   }
 
   const { data: tasksData, isLoading, error, mutate: mutateTasks } = useData<Task[] | TasksResponse>(apiUrl, {
-    dedupingInterval: 2000,
-    revalidateOnFocus: true,
-    refreshInterval: 10000,
+    dedupingInterval: 5000, // 5 saniye cache (dengeli)
+    revalidateOnFocus: false, // Focus'ta revalidate yapma (instant navigation)
+    refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
   })
 
   const tasks = useMemo(() => {
@@ -347,7 +347,7 @@ export default function TaskList({ isOpen = true }: TaskListProps) {
                     <TableCell className="font-medium">{task.title}</TableCell>
                     {isSuperAdmin && (
                       <TableCell>
-                        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                        <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200">
                           {task.Company?.name || '-'}
                         </Badge>
                       </TableCell>
@@ -499,7 +499,7 @@ export default function TaskList({ isOpen = true }: TaskListProps) {
                       }}
                     />
                     {isSuperAdmin && task.Company?.name && (
-                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                      <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-xs">
                         {task.Company.name}
                       </Badge>
                     )}

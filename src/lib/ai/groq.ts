@@ -17,9 +17,11 @@ interface GroqOptions {
 }
 
 const DEFAULT_OPTIONS: GroqOptions = {
-  model: 'llama-3.1-8b-instant', // Ücretsiz, hızlı model
-  temperature: 0.7,
-  max_tokens: 1024,
+  // Öncelik sırası: 1) llama-3.1-8b-instant (en güvenilir), 2) mixtral-8x7b-32768 (daha güçlü)
+  model: 'llama-3.1-8b-instant', // ✅ Ücretsiz tier'da kesinlikle çalışan model (en güvenilir seçenek)
+  // Alternatif: 'mixtral-8x7b-32768' (daha güçlü ama biraz daha yavaş, 32K context)
+  temperature: 0.8, // Daha doğal ve yaratıcı cevaplar için
+  max_tokens: 2000, // Daha uzun ve detaylı cevaplar için
   stream: false,
 }
 

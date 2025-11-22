@@ -14,7 +14,8 @@ import CommentsSection from '@/components/ui/CommentsSection'
 import TicketForm from '@/components/tickets/TicketForm'
 import SkeletonDetail from '@/components/skeletons/SkeletonDetail'
 import Link from 'next/link'
-import { toastError, toastWarning, confirm } from '@/lib/toast'
+import { toast, toastError, toastWarning, confirm } from '@/lib/toast'
+import { mutate } from 'swr'
 import SendEmailButton from '@/components/integrations/SendEmailButton'
 import SendSmsButton from '@/components/integrations/SendSmsButton'
 import SendWhatsAppButton from '@/components/integrations/SendWhatsAppButton'
@@ -38,12 +39,9 @@ export default function TicketDetailPage() {
     {
       dedupingInterval: 30000,
       revalidateOnFocus: false,
+      refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
     }
   )
-
-  const refetch = () => {
-    mutateTicket(undefined, { revalidate: true })
-  }
 
   if (isLoading) {
     return <SkeletonDetail />
@@ -132,7 +130,6 @@ export default function TicketDetailPage() {
 
   const handleFormClose = () => {
     setFormOpen(false)
-    refetch() // Form kapandığında veriyi yenile
   }
 
   return (
@@ -410,8 +407,15 @@ export default function TicketDetailPage() {
         ticket={ticket}
         open={formOpen}
         onClose={handleFormClose}
-        onSuccess={async () => {
-          refetch() // Form kapandığında veriyi yenile
+        onSuccess={async (savedTicket: Ticket) => {
+          // Optimistic update - cache'i güncelle
+          await Promise.all([
+            mutateTicket(savedTicket, { revalidate: false }),
+            mutate(`/api/tickets/${id}`, savedTicket, { revalidate: false }),
+            mutate('/api/tickets', undefined, { revalidate: true }),
+          ])
+          setFormOpen(false)
+          toast.success('Destek talebi güncellendi')
         }}
       />
     </div>

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
-import { ArrowLeft, Edit, Trash2, Target, TrendingUp, Calendar, DollarSign, User } from 'lucide-react'
+import { ArrowLeft, Edit, Trash2, Target, TrendingUp, Calendar, DollarSign, User, Briefcase, Receipt, Eye } from 'lucide-react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -17,29 +17,53 @@ import { useConfirm } from '@/hooks/useConfirm'
 import { formatCurrency } from '@/lib/utils'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
-
-const periodLabels: Record<string, string> = {
-  MONTHLY: 'Aylık',
-  QUARTERLY: 'Üç Aylık',
-  YEARLY: 'Yıllık',
-}
+import { useTranslations } from 'next-intl'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 export default function SalesQuotaDetailPage() {
+  // Tüm hook'ları en üstte, conditional olmadan çağır
   const params = useParams()
   const router = useRouter()
   const locale = useLocale()
   const { confirm } = useConfirm()
-  const id = params.id as string
+  const t = useTranslations('salesQuotas')
   const [formOpen, setFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
+  // id'yi string olarak al, her zaman hook'u çağır
+  const id = (params?.id as string) || ''
+  const apiUrl = id ? `/api/sales-quotas/${id}` : null
+
   const { data: quota, isLoading, error, mutate: mutateQuota } = useData<any>(
-    id ? `/api/sales-quotas/${id}` : null,
+    apiUrl,
     {
       dedupingInterval: 30000,
       revalidateOnFocus: false,
+      refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
     }
   )
+
+  // Early returns - hook'lardan sonra
+  if (!id) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            Geçersiz ID
+          </h1>
+          <p className="text-gray-500 mb-4">
+            Geçersiz kota ID'si.
+          </p>
+          <Link href={`/${locale}/sales-quotas`}>
+            <Button variant="outline">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Listeye Dön
+            </Button>
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   if (isLoading) {
     return <SkeletonDetail />
@@ -116,9 +140,14 @@ export default function SalesQuotaDetailPage() {
             </Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold">Satış Kotası</h1>
+            <h1 className="text-3xl font-bold">{t('title')}</h1>
             <p className="text-gray-500 mt-1">
-              {quota.user?.name || 'N/A'} - {periodLabels[quota.period] || quota.period}
+              {quota.user?.name || 'N/A'} - {
+                quota.period === 'MONTHLY' ? t('periodMonthly') :
+                quota.period === 'QUARTERLY' ? t('periodQuarterly') :
+                quota.period === 'YEARLY' ? t('periodYearly') :
+                quota.period
+              }
             </p>
           </div>
         </div>
@@ -177,21 +206,21 @@ export default function SalesQuotaDetailPage() {
         <Card className="p-6">
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-gray-500">Durum</span>
-            <Calendar className="h-5 w-5 text-purple-500" />
+            <Calendar className="h-5 w-5 text-indigo-500" />
           </div>
           <div className="mt-2">
             {isAchieved ? (
               <Badge className="bg-green-100 text-green-800 border-0">
                 <Target className="h-3 w-3 mr-1" />
-                Hedef Aşıldı
+                {t('statusAchieved', { defaultMessage: 'Hedef Aşıldı' })}
               </Badge>
             ) : isNearTarget ? (
               <Badge className="bg-yellow-100 text-yellow-800 border-0">
-                Hedefe Yakın
+                {t('statusNearTarget', { defaultMessage: 'Hedefe Yakın' })}
               </Badge>
             ) : (
               <Badge className="bg-red-100 text-red-800 border-0">
-                Riskli
+                {t('statusAtRisk', { defaultMessage: 'Riskli' })}
               </Badge>
             )}
           </div>
@@ -222,7 +251,10 @@ export default function SalesQuotaDetailPage() {
               <span className="text-sm text-gray-500">Periyot</span>
               <div className="mt-1">
                 <Badge className="bg-blue-100 text-blue-800 border-0">
-                  {periodLabels[quota.period] || quota.period}
+                  {quota.period === 'MONTHLY' ? t('periodMonthly') :
+                   quota.period === 'QUARTERLY' ? t('periodQuarterly') :
+                   quota.period === 'YEARLY' ? t('periodYearly') :
+                   quota.period}
                 </Badge>
               </div>
             </div>
@@ -278,6 +310,129 @@ export default function SalesQuotaDetailPage() {
             </div>
           </div>
         </Card>
+      </div>
+
+      {/* İlgili Kayıtlar */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* İlgili Deal'lar */}
+        {quota.relatedDeals && quota.relatedDeals.length > 0 && (
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold flex items-center gap-2">
+                <Briefcase className="h-5 w-5 text-indigo-600" />
+                İlgili Fırsatlar ({quota.relatedDeals.length})
+              </h2>
+              <Link href={`/${locale}/deals?assignedTo=${quota.userId}`}>
+                <Button variant="ghost" size="sm">
+                  Tümünü Gör
+                </Button>
+              </Link>
+            </div>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Başlık</TableHead>
+                    <TableHead>Müşteri</TableHead>
+                    <TableHead>Değer</TableHead>
+                    <TableHead>Aşama</TableHead>
+                    <TableHead className="text-right">İşlemler</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {quota.relatedDeals.slice(0, 5).map((deal: any) => (
+                    <TableRow key={deal.id}>
+                      <TableCell className="font-medium">{deal.title || 'N/A'}</TableCell>
+                      <TableCell>{deal.customer?.name || 'N/A'}</TableCell>
+                      <TableCell>{formatCurrency(deal.value || 0)}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{deal.stage || 'N/A'}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Link href={`/${locale}/deals/${deal.id}`} prefetch={true}>
+                          <Button variant="ghost" size="icon">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            {quota.relatedDeals.length > 5 && (
+              <div className="mt-4 text-center">
+                <Link href={`/${locale}/deals?assignedTo=${quota.userId}`}>
+                  <Button variant="outline" size="sm">
+                    +{quota.relatedDeals.length - 5} daha fazla fırsat görüntüle
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </Card>
+        )}
+
+        {/* İlgili Invoice'lar */}
+        {quota.relatedInvoices && quota.relatedInvoices.length > 0 && (
+          <Card className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold flex items-center gap-2">
+                <Receipt className="h-5 w-5 text-green-600" />
+                İlgili Faturalar ({quota.relatedInvoices.length})
+              </h2>
+              <Link href={`/${locale}/invoices?assignedTo=${quota.userId}`}>
+                <Button variant="ghost" size="sm">
+                  Tümünü Gör
+                </Button>
+              </Link>
+            </div>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Fatura No</TableHead>
+                    <TableHead>Müşteri</TableHead>
+                    <TableHead>Tutar</TableHead>
+                    <TableHead>Durum</TableHead>
+                    <TableHead className="text-right">İşlemler</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {quota.relatedInvoices.slice(0, 5).map((invoice: any) => (
+                    <TableRow key={invoice.id}>
+                      <TableCell className="font-medium">
+                        {invoice.invoiceNumber || invoice.title || 'N/A'}
+                      </TableCell>
+                      <TableCell>{invoice.customer?.name || 'N/A'}</TableCell>
+                      <TableCell>{formatCurrency(invoice.totalAmount || 0)}</TableCell>
+                      <TableCell>
+                        <Badge className="bg-green-100 text-green-800 border-0">
+                          {invoice.status || 'N/A'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Link href={`/${locale}/invoices/${invoice.id}`} prefetch={true}>
+                          <Button variant="ghost" size="icon">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            {quota.relatedInvoices.length > 5 && (
+              <div className="mt-4 text-center">
+                <Link href={`/${locale}/invoices?assignedTo=${quota.userId}`}>
+                  <Button variant="outline" size="sm">
+                    +{quota.relatedInvoices.length - 5} daha fazla fatura görüntüle
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </Card>
+        )}
       </div>
 
       {/* Activity Timeline */}

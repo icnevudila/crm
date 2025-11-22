@@ -94,7 +94,7 @@ export default function DealStatusSection({ isOpen }: DealStatusSectionProps) {
               })}
             </h3>
           </div>
-          <div className="rounded-xl bg-gradient-to-br from-indigo-100 to-purple-100 p-3">
+          <div className="rounded-xl bg-indigo-100 p-3">
             <Briefcase className="h-6 w-6 text-indigo-600" />
           </div>
         </div>

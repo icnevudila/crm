@@ -179,18 +179,25 @@ export async function POST(request: Request) {
       )
     }
 
-    // Zorunlu alanları kontrol et
-    if (!body.title || body.title.trim() === '') {
+    // Zod validation
+    const { invoiceCreateSchema } = await import('@/lib/validations/invoices')
+    const validationResult = invoiceCreateSchema.safeParse(body)
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: (await import('@/lib/api-locale')).getErrorMessage('errors.api.invoiceTitleRequired', request) },
+        { 
+          error: 'Validation error',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        },
         { status: 400 }
       )
     }
 
+    const validatedData = validationResult.data
+
     const supabase = getSupabaseWithServiceRole()
 
     // Otomatik fatura numarası oluştur (eğer invoiceNumber gönderilmemişse)
-    let invoiceNumber = body.invoiceNumber
+    let invoiceNumber = validatedData.invoiceNumber
     if (!invoiceNumber || invoiceNumber.trim() === '') {
       const now = new Date()
       const year = now.getFullYear()
@@ -208,35 +215,38 @@ export async function POST(request: Request) {
       invoiceNumber = `INV-${year}-${month}-${nextNumber}`
     }
 
-    // Invoice verilerini oluştur - totalAmount kullan (050 migration ile total → totalAmount olarak değiştirildi)
-    // schema.sql: title, status, totalAmount, quoteId, companyId
-    // schema-extension.sql: invoiceNumber, dueDate, paymentDate, taxRate (migration çalıştırılmamış olabilir - GÖNDERME!)
-    // schema-vendor.sql: vendorId (migration çalıştırılmamış olabilir - GÖNDERME!)
+    // Invoice verilerini oluştur - Zod validated data kullan
     const invoiceData: any = {
-      title: body.title.trim(),
-      status: body.status || 'DRAFT',
-      totalAmount: body.totalAmount !== undefined ? parseFloat(body.totalAmount) : (body.total !== undefined ? parseFloat(body.total) : 0),
+      title: validatedData.title.trim(),
+      status: validatedData.status || 'DRAFT',
+      totalAmount: validatedData.total !== undefined ? validatedData.total : 0,
       companyId: session.user.companyId,
       invoiceNumber: invoiceNumber, // Otomatik oluşturulan numara
     }
 
     // Sadece schema.sql'de olan alanlar
-    if (body.quoteId) invoiceData.quoteId = body.quoteId
+    if (validatedData.quoteId) invoiceData.quoteId = validatedData.quoteId
+    if (validatedData.customerId) invoiceData.customerId = validatedData.customerId
+    if (validatedData.vendorId) invoiceData.vendorId = validatedData.vendorId
     // Firma bazlı ilişki (customerCompanyId)
-    if (body.customerCompanyId) invoiceData.customerCompanyId = body.customerCompanyId
-    // ÖNEMLİ: invoiceType ekle (PURCHASE, SALES, SERVICE_SALES, SERVICE_PURCHASE) - mal kabul/sevkiyat kaydı açmak için gerekli
-    if (body.invoiceType && (
-      body.invoiceType === 'PURCHASE' || 
-      body.invoiceType === 'SALES' || 
-      body.invoiceType === 'SERVICE_SALES' || 
-      body.invoiceType === 'SERVICE_PURCHASE'
-    )) {
-      invoiceData.invoiceType = body.invoiceType
+    if (validatedData.customerCompanyId) invoiceData.customerCompanyId = validatedData.customerCompanyId
+    // ÖNEMLİ: invoiceType ekle (PURCHASE, SALES, SERVICE_SALES, SERVICE_PURCHASE)
+    if (validatedData.invoiceType) {
+      invoiceData.invoiceType = validatedData.invoiceType
     }
     // Hizmet açıklaması ekle (hizmet faturaları için)
-    if (body.serviceDescription && body.serviceDescription.trim() !== '') {
-      invoiceData.serviceDescription = body.serviceDescription.trim()
+    if (validatedData.serviceDescription && validatedData.serviceDescription.trim() !== '') {
+      invoiceData.serviceDescription = validatedData.serviceDescription.trim()
     }
+    // Diğer alanlar
+    if (validatedData.dueDate) invoiceData.dueDate = validatedData.dueDate
+    if (validatedData.paymentDate) invoiceData.paymentDate = validatedData.paymentDate
+    if (validatedData.taxRate !== undefined) invoiceData.taxRate = validatedData.taxRate
+    if (validatedData.billingAddress) invoiceData.billingAddress = validatedData.billingAddress
+    if (validatedData.billingCity) invoiceData.billingCity = validatedData.billingCity
+    if (validatedData.billingTaxNumber) invoiceData.billingTaxNumber = validatedData.billingTaxNumber
+    if (validatedData.paymentMethod) invoiceData.paymentMethod = validatedData.paymentMethod
+    if (validatedData.paymentNotes) invoiceData.paymentNotes = validatedData.paymentNotes
     // NOT: invoiceNumber, dueDate, paymentDate, taxRate, vendorId schema-extension/schema-vendor'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
     // createRecord kullanarak tip sorununu bypass ediyoruz
@@ -245,7 +255,7 @@ export async function POST(request: Request) {
     const data = await createRecord(
       'Invoice',
       invoiceData,
-      getActivityMessage(locale, 'invoiceCreated', { title: body.title })
+      getActivityMessage(locale, 'invoiceCreated', { title: validatedData.title })
     )
 
     // Oluşturulan invoice'ı tam bilgileriyle çek (commit edildiğinden emin olmak için)

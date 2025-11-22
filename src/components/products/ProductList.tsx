@@ -642,7 +642,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
                     </TableCell>
                     {isSuperAdmin && (
                       <TableCell>
-                        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                        <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200">
                           {product.Company?.name || '-'}
                         </Badge>
                       </TableCell>
@@ -806,7 +806,7 @@ export default function ProductList({ isOpen = true }: ProductListProps) {
                           t('discontinued')}
                     </Badge>
                     {isSuperAdmin && product.Company?.name && (
-                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                      <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-xs">
                         {product.Company.name}
                       </Badge>
                     )}

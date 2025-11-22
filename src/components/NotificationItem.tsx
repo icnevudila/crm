@@ -25,7 +25,7 @@ export default function NotificationItem({ notification, onClick }: Notification
     low: 'bg-gray-100 text-gray-800 border-gray-200',
     normal: 'bg-blue-100 text-blue-800 border-blue-200',
     high: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    critical: 'bg-red-100 text-red-800 border-red-200 animate-pulse',
+    critical: 'bg-red-100 text-red-800 border-red-200 border-2',
   }[notification.priority || 'normal']
 
   const typeColor = {

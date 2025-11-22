@@ -98,8 +98,9 @@ export default function MeetingDetailPage() {
   const [quoteFormOpen, setQuoteFormOpen] = useState(false)
 
   const { data: meeting, isLoading, error, mutate } = useData<Meeting>(`/api/meetings/${id}`, {
-    dedupingInterval: 0,
-    revalidateOnFocus: true,
+    dedupingInterval: 30000, // 30 saniye cache (detay sayfası için optimal)
+    revalidateOnFocus: false, // Focus'ta revalidate yapma (instant navigation)
+    refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
   })
 
   if (isLoading) {

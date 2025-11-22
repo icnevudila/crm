@@ -148,6 +148,26 @@ export async function POST(request: NextRequest) {
       console.error('ActivityLog creation error:', activityError)
     }
 
+    // Notification - Admin/Sales rollere bildirim
+    try {
+      const { createNotificationForRole } = await import('@/lib/notification-helper')
+      await createNotificationForRole({
+        companyId: session.user.companyId,
+        role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+        title: '📦 Yeni Ürün Paketi Oluşturuldu',
+        message: `${name} paketi oluşturuldu. Final fiyat: ${new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(bundleWithItems.finalPrice || bundleWithItems.totalPrice || 0)}`,
+        type: 'info',
+        relatedTo: 'ProductBundle',
+        relatedId: bundle.id,
+        link: `/tr/product-bundles/${bundle.id}`,
+      }).catch(() => {}) // Notification hatası ana işlemi engellemez
+    } catch (notificationError) {
+      // Notification hatası ana işlemi engellemez
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Product bundle notification error (non-critical):', notificationError)
+      }
+    }
+
     // Bundle'ı items ile birlikte döndür
     const { data: bundleWithItems } = await supabase
       .from('ProductBundle')

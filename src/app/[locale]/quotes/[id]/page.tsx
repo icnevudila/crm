@@ -131,6 +131,7 @@ export default function QuoteDetailPage() {
     {
       dedupingInterval: 30000, // 30 saniye cache (detay sayfası için optimal)
       revalidateOnFocus: false, // Focus'ta revalidate yapma (instant navigation)
+      refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
     }
   )
 

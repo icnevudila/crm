@@ -83,6 +83,7 @@ export default function CompetitorList() {
   const { data: response, isLoading, mutate: mutateCompetitors } = useData<CompetitorsResponse | Competitor[]>(apiUrl, {
     dedupingInterval: 5000,
     revalidateOnFocus: false,
+    refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
   })
   
   // Backward compatibility: Eğer response data array ise direkt kullan, değilse response.data kullan

@@ -122,6 +122,7 @@ export default function ContactList() {
   const { data: response, isLoading, error, mutate: mutateContacts } = useData<any>(apiUrl, {
     dedupingInterval: 5000,
     revalidateOnFocus: false,
+    refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
   })
 
   const contacts = useMemo(() => {
@@ -188,7 +189,7 @@ export default function ContactList() {
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
       case 'DECISION_MAKER':
-        return 'bg-purple-100 text-purple-800'
+        return 'bg-indigo-100 text-indigo-800'
       case 'INFLUENCER':
         return 'bg-blue-100 text-blue-800'
       case 'END_USER':

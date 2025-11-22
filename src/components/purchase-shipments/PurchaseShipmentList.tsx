@@ -161,6 +161,7 @@ export default function PurchaseShipmentList() {
   const { data: purchaseShipmentsData = [], isLoading, error, mutate: mutatePurchaseShipments } = useData<PurchaseShipment[]>(apiUrl, {
     dedupingInterval: 5000,
     revalidateOnFocus: false,
+    refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
   })
 
   const purchaseShipments = useMemo(() => {

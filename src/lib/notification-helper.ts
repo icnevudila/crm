@@ -47,6 +47,11 @@ export async function createNotification({
         Product: 'products',
         Finance: 'finance',
         Meeting: 'meetings',
+        SalesQuota: 'sales-quotas',
+        ReturnOrder: 'return-orders',
+        CreditNote: 'credit-notes',
+        PaymentPlan: 'payment-plans',
+        ProductBundle: 'product-bundles',
       }
       const path = entityPathMap[relatedTo]
       if (path) {
@@ -211,6 +216,10 @@ export async function createNotificationForRole({
         Product: 'products',
         Finance: 'finance',
         Meeting: 'meetings',
+        SalesQuota: 'sales-quotas',
+        ReturnOrder: 'return-orders',
+        CreditNote: 'credit-notes',
+        PaymentPlan: 'payment-plans',
       }
       const path = entityPathMap[relatedTo]
       if (path) {

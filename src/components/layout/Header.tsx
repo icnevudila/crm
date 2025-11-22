@@ -20,7 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { User, LogOut, Settings, HelpCircle, BookOpen, MessageCircle, Command, Menu, Plus, StickyNote, Eye, EyeOff } from 'lucide-react'
+import { User, LogOut, Settings, HelpCircle, BookOpen, MessageCircle, Command, Menu, Plus, StickyNote, Eye, EyeOff, Bot } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import RecentItems from '@/components/layout/RecentItems'
 
@@ -187,6 +187,19 @@ export default function Header({ onMenuClick }: HeaderProps) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+
+        {/* AI Chatbot Butonu */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent('open-ai-chat'))
+          }}
+          className="h-9 w-9 text-gray-600 hover:bg-gray-100 hover:text-indigo-600 transition-all duration-200"
+          title="AI Asistanı"
+        >
+          <Bot className="h-4 w-4" />
+        </Button>
 
         {/* Bildirimler */}
         {session?.user?.id && (

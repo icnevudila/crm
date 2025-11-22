@@ -423,7 +423,7 @@ function Sidebar() {
     '/customers': { active: 'text-cyan-600', inactive: 'text-slate-500', hover: 'text-cyan-500' },
     '/contacts': { active: 'text-teal-600', inactive: 'text-slate-500', hover: 'text-teal-500' },
     '/segments': { active: 'text-emerald-600', inactive: 'text-slate-500', hover: 'text-emerald-500' },
-    '/deals': { active: 'text-purple-600', inactive: 'text-slate-500', hover: 'text-purple-500' },
+    '/deals': { active: 'text-indigo-600', inactive: 'text-slate-500', hover: 'text-indigo-500' },
     '/meetings': { active: 'text-pink-500', inactive: 'text-slate-500', hover: 'text-pink-400' },
     '/quotes': { active: 'text-rose-500', inactive: 'text-slate-500', hover: 'text-rose-400' },
     '/contracts': { active: 'text-orange-500', inactive: 'text-slate-500', hover: 'text-orange-400' },
@@ -438,11 +438,11 @@ function Sidebar() {
     '/email-campaigns': { active: 'text-indigo-500', inactive: 'text-slate-500', hover: 'text-indigo-400' },
     '/competitors': { active: 'text-orange-500', inactive: 'text-slate-500', hover: 'text-orange-400' }, // Kırmızı yerine turuncu
     '/reports': { active: 'text-blue-500', inactive: 'text-slate-500', hover: 'text-blue-400' },
-    '/activity': { active: 'text-purple-500', inactive: 'text-slate-500', hover: 'text-purple-400' },
+    '/activity': { active: 'text-indigo-500', inactive: 'text-slate-500', hover: 'text-indigo-400' },
     '/documents': { active: 'text-slate-600', inactive: 'text-slate-500', hover: 'text-slate-500' },
     '/vendors': { active: 'text-emerald-500', inactive: 'text-slate-500', hover: 'text-emerald-400' },
     '/admin': { active: 'text-indigo-600', inactive: 'text-slate-500', hover: 'text-indigo-500' },
-    '/superadmin': { active: 'text-purple-600', inactive: 'text-slate-500', hover: 'text-purple-500' },
+    '/superadmin': { active: 'text-indigo-600', inactive: 'text-slate-500', hover: 'text-indigo-500' },
   }
 
   // İkon animasyonları kaldırıldı - sadece glow efekti kullanılacak
@@ -477,7 +477,7 @@ function Sidebar() {
             className="cursor-pointer"
           >
             <motion.h1
-              className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent"
+              className="text-xl font-bold text-indigo-600"
               whileHover={{ 
                 scale: 1.08,
                 transition: {
@@ -504,12 +504,12 @@ function Sidebar() {
             {sidebarSections.map((section) => (
               <div key={section.key} className="space-y-2">
                 <motion.div
-                  className="mx-2 flex items-center gap-2 rounded-full border border-slate-100/60 bg-gradient-to-r from-sky-400/18 via-indigo-500/16 to-purple-500/14 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.26em] shadow-[0_10px_30px_-18px_rgba(45,134,245,0.55)]"
+                  className="mx-2 flex items-center gap-2 rounded-full border border-slate-100/60 bg-indigo-50/50 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.26em] shadow-sm"
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ type: 'spring', stiffness: 420, damping: 32, mass: 0.6 }}
                 >
-                  <span className="h-[7px] w-[7px] rounded-full bg-gradient-to-br from-sky-400 via-indigo-500 to-purple-500 shadow-[0_0_6px_rgba(45,134,245,0.75)]" />
+                  <span className="h-[7px] w-[7px] rounded-full bg-indigo-500" />
                   <span className="text-[10px] font-bold uppercase tracking-[0.26em] text-slate-600">{section.title}</span>
                 </motion.div>
           <AnimatePresence mode="popLayout">
@@ -570,64 +570,22 @@ function Sidebar() {
                                     : (isActive ? 'text-indigo-600' : 'text-slate-500'),
                                 )}
                               />
-                              {/* Aktif ikon için yumuşak geçişli glow efekti - sadece seçili sekmede */}
-                              {isActive && iconColors[item.href] && (
-                        <motion.div
-                                  className="absolute inset-0 rounded-lg blur-xl -z-0"
-                                  style={{
-                                    background: `radial-gradient(circle, currentColor 0%, transparent 80%)`,
-                                    color: iconColors[item.href].active.includes('indigo') ? '#4f46e5' :
-                                           iconColors[item.href].active.includes('blue') ? '#2563eb' :
-                                           iconColors[item.href].active.includes('purple') ? '#9333ea' :
-                                           iconColors[item.href].active.includes('pink') ? '#ec4899' :
-                                           iconColors[item.href].active.includes('green') ? '#16a34a' :
-                                           iconColors[item.href].active.includes('cyan') ? '#0891b2' :
-                                           iconColors[item.href].active.includes('teal') ? '#0d9488' :
-                                           iconColors[item.href].active.includes('emerald') ? '#10b981' :
-                                           iconColors[item.href].active.includes('rose') ? '#f43f5e' :
-                                           iconColors[item.href].active.includes('orange') ? '#f97316' :
-                                           iconColors[item.href].active.includes('amber') ? '#f59e0b' :
-                                           iconColors[item.href].active.includes('violet') ? '#8b5cf6' :
-                                           iconColors[item.href].active.includes('fuchsia') ? '#d946ef' :
-                                           iconColors[item.href].active.includes('sky') ? '#0ea5e9' :
-                                           iconColors[item.href].active.includes('slate') ? '#64748b' :
-                                           '#6366f1',
-                                  }}
-                                  initial={{ opacity: 0, scale: 0.8 }}
-                                  animate={{
-                                    opacity: [0.2, 0.4, 0.2],
-                                    scale: [1, 1.1, 1],
-                                  }}
-                                  transition={{
-                                    duration: 4,
-                                    repeat: Infinity,
-                                    ease: 'easeInOut',
-                                  }}
-                                />
-                              )}
+                              {/* Glow efekti kaldırıldı - göz yormuyor */}
                             </div>
 
-                            {/* Yazı için geçişli renk efekti - sadece aktif sekmede */}
-                            <motion.span
+                            {/* Yazı - animasyon kaldırıldı */}
+                            <span
                               className={cn(
-                                'relative z-10 font-medium transition-colors duration-500 flex-1',
+                                'relative z-10 font-medium flex-1',
                                 iconColors[item.href] && isActive
                                   ? iconColors[item.href].active
                                   : isActive
                                   ? 'text-indigo-600'
                                   : 'text-slate-600'
                               )}
-                              animate={isActive ? {
-                                opacity: [0.9, 1, 0.9],
-                              } : {}}
-                              transition={{
-                                duration: 3,
-                                repeat: isActive ? Infinity : 0,
-                                ease: 'easeInOut',
-                              }}
                     >
                       {item.label}
-                    </motion.span>
+                    </span>
                     
                     {/* Badge - Bildirim sayısı */}
                     {item.badge && item.badge > 0 && (
@@ -641,61 +599,47 @@ function Sidebar() {
                       </motion.span>
                     )}
                     
-                    {/* Priority indicator - Sadece high priority için */}
+                    {/* Priority indicator - Sadece high priority için - animasyon kaldırıldı */}
                     {item.priority === 'high' && !isActive && (
-                      <motion.div
-                        className="h-1.5 w-1.5 rounded-full bg-indigo-500"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: [0.5, 1, 0.5] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                      />
+                      <div className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
                     )}
                     
-                            {/* Aktif sekme için geçişli arka plan glow efekti */}
+                            {/* Aktif sekme için statik arka plan - animasyon kaldırıldı */}
                             {isActive && iconColors[item.href] && (
-                      <motion.div
+                      <div
                         className="absolute inset-0 rounded-lg"
-                                initial={{ opacity: 0 }}
-                                animate={{
-                                  opacity: [0.05, 0.12, 0.05],
-                                }}
-                                transition={{
-                                  duration: 4,
-                                  repeat: Infinity,
-                                  ease: 'easeInOut',
-                        }}
                                 style={{
-                                  background: iconColors[item.href].active.includes('indigo') 
-                                    ? 'linear-gradient(90deg, rgba(99,102,241,0.15) 0%, rgba(139,92,246,0.08) 100%)'
+                                  backgroundColor: iconColors[item.href].active.includes('indigo') 
+                                    ? 'rgba(99,102,241,0.08)'
                                     : iconColors[item.href].active.includes('blue')
-                                    ? 'linear-gradient(90deg, rgba(37,99,235,0.15) 0%, rgba(59,130,246,0.08) 100%)'
+                                    ? 'rgba(37,99,235,0.08)'
                                     : iconColors[item.href].active.includes('purple')
-                                    ? 'linear-gradient(90deg, rgba(147,51,234,0.15) 0%, rgba(168,85,247,0.08) 100%)'
+                                    ? 'rgba(99,102,241,0.08)'
                                     : iconColors[item.href].active.includes('pink')
-                                    ? 'linear-gradient(90deg, rgba(236,72,153,0.15) 0%, rgba(244,114,182,0.08) 100%)'
+                                    ? 'rgba(236,72,153,0.08)'
                                     : iconColors[item.href].active.includes('green')
-                                    ? 'linear-gradient(90deg, rgba(22,163,74,0.15) 0%, rgba(34,197,94,0.08) 100%)'
+                                    ? 'rgba(22,163,74,0.08)'
                                     : iconColors[item.href].active.includes('cyan')
-                                    ? 'linear-gradient(90deg, rgba(8,145,178,0.15) 0%, rgba(34,211,238,0.08) 100%)'
+                                    ? 'rgba(8,145,178,0.08)'
                                     : iconColors[item.href].active.includes('teal')
-                                    ? 'linear-gradient(90deg, rgba(13,148,136,0.15) 0%, rgba(20,184,166,0.08) 100%)'
+                                    ? 'rgba(13,148,136,0.08)'
                                     : iconColors[item.href].active.includes('emerald')
-                                    ? 'linear-gradient(90deg, rgba(16,185,129,0.15) 0%, rgba(34,197,94,0.08) 100%)'
+                                    ? 'rgba(16,185,129,0.08)'
                                     : iconColors[item.href].active.includes('rose')
-                                    ? 'linear-gradient(90deg, rgba(244,63,94,0.15) 0%, rgba(251,113,133,0.08) 100%)'
+                                    ? 'rgba(244,63,94,0.08)'
                                     : iconColors[item.href].active.includes('orange')
-                                    ? 'linear-gradient(90deg, rgba(249,115,22,0.15) 0%, rgba(251,146,60,0.08) 100%)'
+                                    ? 'rgba(249,115,22,0.08)'
                                     : iconColors[item.href].active.includes('amber')
-                                    ? 'linear-gradient(90deg, rgba(245,158,11,0.15) 0%, rgba(251,191,36,0.08) 100%)'
+                                    ? 'rgba(245,158,11,0.08)'
                                     : iconColors[item.href].active.includes('violet')
-                                    ? 'linear-gradient(90deg, rgba(139,92,246,0.15) 0%, rgba(167,139,250,0.08) 100%)'
+                                    ? 'rgba(99,102,241,0.08)'
                                     : iconColors[item.href].active.includes('fuchsia')
-                                    ? 'linear-gradient(90deg, rgba(217,70,239,0.15) 0%, rgba(232,121,249,0.08) 100%)'
+                                    ? 'rgba(217,70,239,0.08)'
                                     : iconColors[item.href].active.includes('sky')
-                                    ? 'linear-gradient(90deg, rgba(14,165,233,0.15) 0%, rgba(56,189,248,0.08) 100%)'
+                                    ? 'rgba(14,165,233,0.08)'
                                     : iconColors[item.href].active.includes('slate')
-                                    ? 'linear-gradient(90deg, rgba(100,116,139,0.15) 0%, rgba(148,163,184,0.08) 100%)'
-                                    : 'linear-gradient(90deg, rgba(99,102,241,0.15) 0%, rgba(139,92,246,0.08) 100%)',
+                                    ? 'rgba(100,116,139,0.08)'
+                                    : 'rgba(99,102,241,0.08)',
                                 }}
                       />
                     )}

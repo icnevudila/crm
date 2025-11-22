@@ -69,7 +69,7 @@ export default function WorkflowStepper({
                     isCompleted
                       ? 'bg-green-500 text-white shadow-lg'
                       : isCurrent
-                      ? 'bg-indigo-600 text-white shadow-lg ring-4 ring-indigo-200 animate-pulse'
+                      ? 'bg-indigo-600 text-white shadow-lg ring-2 ring-indigo-300'
                       : isLocked
                       ? 'bg-gray-300 text-gray-500'
                       : 'bg-white text-gray-400 border-2 border-gray-300'

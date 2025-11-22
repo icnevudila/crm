@@ -355,7 +355,7 @@ export default function TicketList() {
                     <TableCell className="font-medium">{ticket.subject}</TableCell>
                     {isSuperAdmin && (
                       <TableCell>
-                        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                        <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200">
                           {ticket.Company?.name || '-'}
                         </Badge>
                       </TableCell>
@@ -467,7 +467,7 @@ export default function TicketList() {
                       {statusLabels[ticket.status] || ticket.status}
                     </Badge>
                     {isSuperAdmin && ticket.Company?.name && (
-                      <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                      <Badge variant="outline" className="bg-indigo-50 text-indigo-700 border-indigo-200 text-xs">
                         {ticket.Company.name}
                       </Badge>
                     )}

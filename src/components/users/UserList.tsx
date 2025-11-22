@@ -80,6 +80,7 @@ export default function UserList() {
   const { data: users = [], isLoading, error, mutate: mutateUsers } = useData<User[]>(apiUrl, {
     dedupingInterval: 5000, // 5 saniye cache (daha kısa - güncellemeler daha hızlı)
     revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
+    refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
   })
 
   const handleDelete = useCallback(async (id: string, name: string) => {
@@ -148,7 +149,7 @@ export default function UserList() {
   }
 
   const roleColors: Record<string, string> = {
-    SUPER_ADMIN: 'bg-purple-100 text-purple-800',
+    SUPER_ADMIN: 'bg-indigo-100 text-indigo-800',
     ADMIN: 'bg-blue-100 text-blue-800',
     SALES: 'bg-green-100 text-green-800',
     USER: 'bg-slate-200 text-slate-800',

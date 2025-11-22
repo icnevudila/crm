@@ -67,7 +67,11 @@ export default function DocumentsPage() {
   params.append('limit', pageSize.toString())
   
   const apiUrl = `/api/documents?${params.toString()}`
-  const { data, isLoading, mutate: mutateDocuments, error } = useData<DocumentsResponse>(apiUrl)
+  const { data, isLoading, mutate: mutateDocuments, error } = useData<DocumentsResponse>(apiUrl, {
+    dedupingInterval: 5000,
+    revalidateOnFocus: false,
+    refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
+  })
   
   const documents = data?.data || []
   const pagination = data?.pagination || { page: 1, limit: 20, total: 0, pages: 1 }

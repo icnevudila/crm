@@ -43,7 +43,12 @@ export default function EmailCampaignDetailPage() {
   const campaignId = params.id as string
 
   const { data: campaign, isLoading, error, mutate } = useData<EmailCampaignDetail>(
-    `/api/email-campaigns/${campaignId}`
+    `/api/email-campaigns/${campaignId}`,
+    {
+      dedupingInterval: 30000,
+      revalidateOnFocus: false,
+      refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
+    }
   )
 
   const { data: logsData, isLoading: logsLoading } = useData<{
@@ -62,7 +67,11 @@ export default function EmailCampaignDetailPage() {
       total: number
       pages: number
     }
-  }>(campaign?.status === 'SENT' ? `/api/email-campaigns/${campaignId}/logs` : null)
+  }>(campaign?.status === 'SENT' ? `/api/email-campaigns/${campaignId}/logs` : null, {
+    dedupingInterval: 30000,
+    revalidateOnFocus: false,
+    refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
+  })
 
   const emailLogs = logsData?.data || []
 

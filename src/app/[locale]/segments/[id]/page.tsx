@@ -52,11 +52,19 @@ export default function SegmentDetailPage() {
   const [customerSearch, setCustomerSearch] = useState('')
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null)
 
-  const { data: segment, isLoading } = useData<Segment>(`/api/segments/${segmentId}`)
+  const { data: segment, isLoading } = useData<Segment>(`/api/segments/${segmentId}`, {
+    dedupingInterval: 30000,
+    revalidateOnFocus: false,
+    refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
+  })
   
   // Müşteri listesi için API
   const customersApiUrl = `/api/customers?pageSize=100${customerSearch ? `&search=${customerSearch}` : ''}`
-  const { data: customersData } = useData<{ data: any[] } | any[]>(customersApiUrl)
+  const { data: customersData } = useData<{ data: any[] } | any[]>(customersApiUrl, {
+    dedupingInterval: 30000,
+    revalidateOnFocus: false,
+    refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
+  })
   
   // Müşteri listesini güvenli şekilde al
   const customers = Array.isArray(customersData) 

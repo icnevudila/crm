@@ -158,33 +158,39 @@ export async function POST(request: Request) {
       )
     }
 
-    // Zorunlu alanları kontrol et
-    if (!body.subject || body.subject.trim() === '') {
+    // Zod validation
+    const { ticketCreateSchema } = await import('@/lib/validations/tickets')
+    const validationResult = ticketCreateSchema.safeParse(body)
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: 'Destek talebi konusu gereklidir' },
+        { 
+          error: 'Validation error',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        },
         { status: 400 }
       )
     }
 
-    // Ticket verilerini oluştur - SADECE schema.sql'de olan kolonları gönder
-    // schema.sql: subject, status, priority, companyId, customerId
-    // schema-extension.sql: description, tags (migration çalıştırılmamış olabilir - GÖNDERME!)
+    const validatedData = validationResult.data
+
+    // Ticket verilerini oluştur - Zod validated data kullan
     const ticketData: any = {
-      subject: body.subject,
-      status: body.status || 'OPEN',
-      priority: body.priority || 'MEDIUM',
+      subject: validatedData.subject,
+      status: validatedData.status || 'OPEN',
+      priority: validatedData.priority || 'MEDIUM',
       companyId: session.user.companyId,
     }
 
     // Sadece schema.sql'de olan alanlar
-    if (body.customerId) ticketData.customerId = body.customerId
-    if (body.assignedTo) ticketData.assignedTo = body.assignedTo
+    if (validatedData.customerId) ticketData.customerId = validatedData.customerId
+    if (validatedData.assignedTo) ticketData.assignedTo = validatedData.assignedTo
+    if (validatedData.description) ticketData.description = validatedData.description
     // NOT: description, tags schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 
     const data = await createRecord(
       'Ticket',
       ticketData,
-      `Yeni destek talebi oluşturuldu: ${body.subject}`
+      `Yeni destek talebi oluşturuldu: ${validatedData.subject}`
     )
 
     // ÖNEMLİ: Ticket oluşturulduğunda destek ekibine bildirim gönder
@@ -194,7 +200,7 @@ export async function POST(request: Request) {
         companyId: session.user.companyId,
         role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
         title: 'Yeni Destek Talebi Oluşturuldu',
-        message: `Yeni bir destek talebi oluşturuldu: ${body.subject}. Detayları görmek ister misiniz?`,
+        message: `Yeni bir destek talebi oluşturuldu: ${validatedData.subject}. Detayları görmek ister misiniz?`,
         type: 'info',
         relatedTo: 'Ticket',
         relatedId: (data as any).id,

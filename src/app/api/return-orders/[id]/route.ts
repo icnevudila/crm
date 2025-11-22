@@ -239,6 +239,50 @@ export async function PUT(
       },
     })
 
+    // Notification - Status değişikliği bildirimleri
+    const hasStatusChange = body.status && body.status !== existing.status
+    if (hasStatusChange) {
+      try {
+        const { createNotificationForRole } = await import('@/lib/notification-helper')
+        const statusMessages: Record<string, { title: string; message: string; type: 'info' | 'success' | 'warning' }> = {
+          APPROVED: {
+            title: '✅ İade Siparişi Onaylandı',
+            message: `${data.returnNumber} iade siparişi onaylandı. Ürün stoğu güncellendi.`,
+            type: 'success',
+          },
+          REJECTED: {
+            title: '❌ İade Siparişi Reddedildi',
+            message: `${data.returnNumber} iade siparişi reddedildi.`,
+            type: 'warning',
+          },
+          COMPLETED: {
+            title: '✅ İade Siparişi Tamamlandı',
+            message: `${data.returnNumber} iade siparişi tamamlandı. Credit Note oluşturulabilir.`,
+            type: 'success',
+          },
+        }
+
+        const statusMessage = statusMessages[body.status]
+        if (statusMessage) {
+          await createNotificationForRole({
+            companyId: session.user.companyId,
+            role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+            title: statusMessage.title,
+            message: statusMessage.message,
+            type: statusMessage.type,
+            priority: body.status === 'APPROVED' || body.status === 'COMPLETED' ? 'high' : 'normal',
+            relatedTo: 'ReturnOrder',
+            relatedId: data.id,
+            link: `/tr/return-orders/${data.id}`,
+          }).catch(() => {})
+        }
+      } catch (notificationError) {
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Return order notification error (non-critical):', notificationError)
+        }
+      }
+    }
+
     // Return order'ı items ile birlikte döndür
     const { data: returnOrderWithItems } = await supabase
       .from('ReturnOrder')
@@ -328,6 +372,24 @@ export async function DELETE(
       description: activityMessage,
       meta: { returnOrderId: params.id, returnNumber: existing.returnNumber },
     })
+
+    // Notification - Admin/Sales rollere bildirim
+    try {
+      const { createNotificationForRole } = await import('@/lib/notification-helper')
+      await createNotificationForRole({
+        companyId: session.user.companyId,
+        role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+        title: '🗑️ İade Siparişi Silindi',
+        message: `${existing.returnNumber} iade siparişi silindi.`,
+        type: 'warning',
+        relatedTo: 'ReturnOrder',
+        relatedId: params.id,
+      }).catch(() => {})
+    } catch (notificationError) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Return order notification error (non-critical):', notificationError)
+      }
+    }
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

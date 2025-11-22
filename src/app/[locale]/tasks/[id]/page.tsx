@@ -17,6 +17,7 @@ import Link from 'next/link'
 import { getStatusBadgeClass } from '@/lib/crm-colors'
 import { useData } from '@/hooks/useData'
 import ContextualActionsBar from '@/components/ui/ContextualActionsBar'
+import { mutate } from 'swr'
 
 interface Task {
   id: string
@@ -62,11 +63,12 @@ export default function TaskDetailPage() {
   const [formOpen, setFormOpen] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
 
-  const { data: task, isLoading, error } = useData<Task>(
+  const { data: task, isLoading, error, mutate: mutateTask } = useData<Task>(
     id ? `/api/tasks/${id}` : null,
     {
       dedupingInterval: 30000,
       revalidateOnFocus: false,
+      refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
     }
   )
 
@@ -392,9 +394,15 @@ export default function TaskDetailPage() {
         task={task}
         open={formOpen}
         onClose={() => setFormOpen(false)}
-        onSuccess={async () => {
-          // Form başarılı olduğunda sayfayı yenile
-          window.location.reload()
+        onSuccess={async (savedTask: Task) => {
+          // Optimistic update - cache'i güncelle
+          await Promise.all([
+            mutateTask(savedTask, { revalidate: false }),
+            mutate(`/api/tasks/${id}`, savedTask, { revalidate: false }),
+            mutate('/api/tasks', undefined, { revalidate: true }),
+          ])
+          setFormOpen(false)
+          toast.success('Görev güncellendi')
         }}
       />
     </div>

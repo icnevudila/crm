@@ -69,7 +69,11 @@ export default function DocumentDetailPage() {
   const locale = useLocale()
   const documentId = params.id as string
 
-  const { data: document, isLoading } = useData<Document>(`/api/documents/${documentId}`)
+  const { data: document, isLoading } = useData<Document>(`/api/documents/${documentId}`, {
+    dedupingInterval: 30000,
+    revalidateOnFocus: false,
+    refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
+  })
 
   const handleDelete = async () => {
     if (!confirm(`${document?.title} dökümanını silmek istediğinize emin misiniz?`)) {

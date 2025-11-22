@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useData } from '@/hooks/useData'
 import {
   Dialog,
   DialogContent,
@@ -33,18 +33,6 @@ interface ActivityLogDialogProps {
   entityTitle?: string // Kart başlığı (gösterim için)
 }
 
-async function fetchActivityLogs(entity: string, entityId: string): Promise<ActivityLog[]> {
-  const params = new URLSearchParams()
-  params.append('entity', entity)
-  params.append('entityId', entityId)
-  params.append('limit', '200') // Limit artırıldı - bağlı kayıtların işlemleri de gösterilecek
-
-  const res = await fetch(`/api/activity?${params.toString()}`)
-  if (!res.ok) {
-    throw new Error('Failed to fetch activity logs')
-  }
-  return res.json()
-}
 
 const entityLabels: Record<string, string> = {
   Deal: 'Fırsat',
@@ -64,11 +52,21 @@ export default function ActivityLogDialog({
   entityId,
   entityTitle,
 }: ActivityLogDialogProps) {
-  const { data: activities = [], isLoading, error } = useQuery({
-    queryKey: ['activity', entity, entityId],
-    queryFn: () => fetchActivityLogs(entity, entityId),
-    enabled: open && !!entityId, // Sadece dialog açıkken ve entityId varsa çek
-  })
+  const apiUrl = open && entityId ? (() => {
+    const params = new URLSearchParams()
+    params.append('entity', entity)
+    params.append('entityId', entityId)
+    params.append('limit', '200')
+    return `/api/activity?${params.toString()}`
+  })() : null
+
+  const { data: activities = [], isLoading, error } = useData<ActivityLog[]>(
+    apiUrl,
+    {
+      dedupingInterval: 60000,
+      revalidateOnFocus: false,
+    }
+  )
 
   return (
     <Dialog open={open} onOpenChange={onClose}>

@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useLocale } from 'next-intl'
 import { mutate } from 'swr'
 import Image from 'next/image'
-import { ArrowLeft, Edit, Package, ShoppingCart, FileText, TrendingUp, TrendingDown, Minus, Plus, RotateCcw, History, Trash2, Zap, Receipt } from 'lucide-react'
+import { ArrowLeft, Edit, Package, ShoppingCart, FileText, TrendingUp, TrendingDown, Minus, Plus, RotateCcw, History, Trash2, Zap, Receipt, Layers } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
@@ -38,6 +38,7 @@ export default function ProductDetailPage() {
     {
       dedupingInterval: 30000, // 30 saniye cache (detay sayfası için optimal)
       revalidateOnFocus: false, // Focus'ta revalidate yapma (instant navigation)
+      refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
     }
   )
 
@@ -48,6 +49,7 @@ export default function ProductDetailPage() {
     {
       dedupingInterval: 5000, // 5 saniye cache (dengeli - güncellemeler hızlı görünür ama gereksiz API çağrısı yok)
       revalidateOnFocus: false, // Focus'ta revalidate yapma (instant navigation)
+      refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
     }
   )
 
@@ -57,6 +59,7 @@ export default function ProductDetailPage() {
     {
       dedupingInterval: 30000, // 30 saniye cache
       revalidateOnFocus: false,
+      refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
     }
   )
   const { data: relatedInvoices = [] } = useData<any[]>(
@@ -64,6 +67,17 @@ export default function ProductDetailPage() {
     {
       dedupingInterval: 30000, // 30 saniye cache
       revalidateOnFocus: false,
+      refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
+    }
+  )
+  
+  // Bu ürünü içeren paketleri çek
+  const { data: relatedBundles = [] } = useData<any[]>(
+    id ? `/api/products/${id}/bundles` : null,
+    {
+      dedupingInterval: 30000, // 30 saniye cache
+      revalidateOnFocus: false,
+      refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
     }
   )
 
@@ -492,10 +506,10 @@ export default function ProductDetailPage() {
         </div>
       </Card>
 
-      {/* Tabs: Satış Geçmişi (müşteri/firma bazlı) ve Stok Geçmişi (teknik hareketler) */}
+      {/* Tabs: Satış Geçmişi (müşteri/firma bazlı), Stok Geçmişi (teknik hareketler) ve Paketler */}
       <Card className="p-6">
         <Tabs defaultValue="sales" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="sales">
               <ShoppingCart className="h-4 w-4 mr-2" />
               Satış Geçmişi
@@ -503,6 +517,10 @@ export default function ProductDetailPage() {
             <TabsTrigger value="stock">
               <History className="h-4 w-4 mr-2" />
               Stok Geçmişi
+            </TabsTrigger>
+            <TabsTrigger value="bundles">
+              <Layers className="h-4 w-4 mr-2" />
+              Paketler ({relatedBundles.length})
             </TabsTrigger>
           </TabsList>
 
@@ -699,6 +717,76 @@ export default function ProductDetailPage() {
             ) : (
               <div className="text-center py-8 text-gray-500">
                 Stok hareketi bulunamadı
+              </div>
+            )}
+          </TabsContent>
+          
+          {/* Paketler Tab - Bu ürünü içeren paketler */}
+          <TabsContent value="bundles" className="mt-6">
+            {relatedBundles.length > 0 ? (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Paket Adı</TableHead>
+                      <TableHead>Açıklama</TableHead>
+                      <TableHead>Toplam Fiyat</TableHead>
+                      <TableHead>İndirim</TableHead>
+                      <TableHead>Final Fiyat</TableHead>
+                      <TableHead>Durum</TableHead>
+                      <TableHead>Oluşturulma</TableHead>
+                      <TableHead className="text-right">İşlemler</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {relatedBundles.map((bundle: any) => (
+                      <TableRow key={bundle.id}>
+                        <TableCell className="font-medium">
+                          {bundle.name}
+                        </TableCell>
+                        <TableCell className="text-sm text-gray-600">
+                          {bundle.description || '-'}
+                        </TableCell>
+                        <TableCell>{formatCurrency(bundle.totalPrice || 0)}</TableCell>
+                        <TableCell>
+                          {bundle.discount > 0 ? (
+                            <span className="text-green-600">%{bundle.discount}</span>
+                          ) : (
+                            <span className="text-gray-400">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-semibold">
+                          {formatCurrency(bundle.finalPrice || bundle.totalPrice || 0)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={
+                            bundle.status === 'ACTIVE'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }>
+                            {bundle.status === 'ACTIVE' ? 'Aktif' : 'Pasif'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {new Date(bundle.createdAt).toLocaleDateString('tr-TR')}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Link href={`/${locale}/products?tab=bundles&bundleId=${bundle.id}`}>
+                            <Button variant="ghost" size="sm">
+                              <Package className="h-4 w-4 mr-2" />
+                              Görüntüle
+                            </Button>
+                          </Link>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <Layers className="h-12 w-12 mx-auto mb-2 text-gray-400" />
+                <p>Bu ürün henüz hiçbir pakette kullanılmıyor.</p>
               </div>
             )}
           </TabsContent>

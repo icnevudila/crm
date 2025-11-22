@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from '@/lib/toast'
 import { useConfirm } from '@/hooks/useConfirm'
@@ -14,8 +14,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Progress } from '@/components/ui/progress'
 import SalesQuotaForm from './SalesQuotaForm'
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import ModuleStats from '@/components/stats/ModuleStats'
+import { AutomationInfo } from '@/components/automation/AutomationInfo'
+import RefreshButton from '@/components/ui/RefreshButton'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
+import { formatCurrency } from '@/lib/utils'
 
 interface SalesQuota {
   id: string
@@ -40,15 +44,41 @@ export default function SalesQuotaList() {
   const [formOpen, setFormOpen] = useState(false)
   const [selectedQuota, setSelectedQuota] = useState<SalesQuota | null>(null)
 
-  const params = new URLSearchParams()
-  if (search) params.append('search', search)
-  if (period) params.append('period', period)
+  // Debounced search - performans için (kullanıcı yazmayı bitirdikten 300ms sonra arama)
+  const [debouncedSearch, setDebouncedSearch] = useState(search)
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 300) // 300ms debounce - her harfte arama yapılmaz
+    
+    return () => clearTimeout(timer)
+  }, [search])
 
-  const apiUrl = `/api/sales-quotas?${params.toString()}`
+  // API URL'ini memoize et - her render'da yeni string oluşturma
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams()
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    if (period) params.append('period', period)
+    return `/api/sales-quotas?${params.toString()}`
+  }, [debouncedSearch, period])
+
   const { data: quotas = [], isLoading, mutate: mutateQuotas } = useData<SalesQuota[]>(apiUrl, {
     dedupingInterval: 5000,
     revalidateOnFocus: false,
+    refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
   })
+
+  // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
+  // ÖNEMLİ: apiUrl'i dependency'den çıkar - sadece base URL'leri invalidate et
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([
+      mutateQuotas(undefined, { revalidate: true }),
+      mutate('/api/sales-quotas', undefined, { revalidate: true }),
+      mutate('/api/sales-quotas?', undefined, { revalidate: true }),
+      // apiUrl'i burada kullanma - her değiştiğinde callback yeniden oluşur
+    ])
+  }, [mutateQuotas]) // Sadece mutateQuotas dependency - callback sabit kalır
 
   const handleEdit = (quota: SalesQuota) => {
     setSelectedQuota(quota)
@@ -96,14 +126,66 @@ export default function SalesQuotaList() {
     setFormOpen(false)
   }
 
+  // Otomasyon bilgilerini memoize et - her render'da yeni obje oluşturma
+  const automations = useMemo(() => [
+    {
+      action: t('automationAchievement100', { defaultMessage: 'Kota %100 başarıya ulaştığında' }),
+      result: t('automationAchievement100Result', { defaultMessage: 'Otomatik bildirim gönderilir' }),
+      details: [
+        t('automationAchievement100Details1', { defaultMessage: 'Kullanıcıya başarı bildirimi gönderilir' }),
+        t('automationAchievement100Details2', { defaultMessage: 'Yöneticilere rapor hazırlanır' }),
+      ],
+    },
+    {
+      action: t('automationPeriodEnd', { defaultMessage: 'Kota periyodu bittiğinde' }),
+      result: t('automationPeriodEndResult', { defaultMessage: 'Performans raporu oluşturulur' }),
+      details: [
+        t('automationPeriodEndDetails1', { defaultMessage: 'Başarı oranı hesaplanır' }),
+        t('automationPeriodEndDetails2', { defaultMessage: 'Yeni periyot için öneriler sunulur' }),
+      ],
+    },
+  ], [t])
+
+  // Stats URL'ini memoize et - her render'da yeni string oluşturma
+  const statsUrl = useMemo(() => '/api/stats/sales-quotas', [])
+
+  // onSuccess callback'ini component seviyesinde tanımla - JSX içinde hook kullanma!
+  const onSuccess = useCallback(async (savedQuota: SalesQuota) => {
+    let updatedQuotas: SalesQuota[]
+
+    if (selectedQuota) {
+      updatedQuotas = quotas.map((q) =>
+        q.id === savedQuota.id ? savedQuota : q
+      )
+    } else {
+      updatedQuotas = [savedQuota, ...quotas]
+    }
+
+    await mutateQuotas(updatedQuotas, { revalidate: false })
+    // Sadece base URL'leri güncelle - apiUrl her değiştiğinde callback yeniden oluşmasın
+    await Promise.all([
+      mutate('/api/sales-quotas', updatedQuotas, { revalidate: false }),
+      mutate('/api/sales-quotas?', updatedQuotas, { revalidate: false }),
+    ])
+  }, [selectedQuota, quotas, mutateQuotas])
+
   if (isLoading) return <SkeletonList />
 
   return (
     <div className="space-y-6">
+      {/* İstatistikler */}
+      <ModuleStats module="sales-quotas" statsUrl={statsUrl} />
+
+      {/* Otomasyon Bilgileri */}
+      <AutomationInfo
+        title={t('automationTitle', { defaultMessage: 'Satış Kotaları Otomasyonları' })}
+        automations={automations}
+      />
+
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">{t('title')}</h1>
-          <p className="text-gray-500 mt-1">{t('description')}</p>
+        <div className="flex items-center gap-2">
+          <RefreshButton onRefresh={handleRefresh} />
         </div>
         <Button onClick={() => setFormOpen(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white">
           <Plus className="h-4 w-4 mr-2" />
@@ -167,16 +249,10 @@ export default function SalesQuotaList() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {new Intl.NumberFormat('tr-TR', {
-                      style: 'currency',
-                      currency: 'TRY',
-                    }).format(quota.targetRevenue)}
+                    {formatCurrency(quota.targetRevenue)}
                   </TableCell>
                   <TableCell>
-                    {new Intl.NumberFormat('tr-TR', {
-                      style: 'currency',
-                      currency: 'TRY',
-                    }).format(quota.actualRevenue || 0)}
+                    {formatCurrency(quota.actualRevenue || 0)}
                   </TableCell>
                   <TableCell>
                     <div className="space-y-2">
@@ -189,15 +265,15 @@ export default function SalesQuotaList() {
                       {quota.achievement >= 100 ? (
                         <Badge className="bg-green-100 text-green-800 border-0">
                           <Target className="h-3 w-3 mr-1" />
-                          Hedef Aşıldı
+                          {t('statusAchieved', { defaultMessage: 'Hedef Aşıldı' })}
                         </Badge>
                       ) : quota.achievement >= 80 ? (
                         <Badge className="bg-yellow-100 text-yellow-800 border-0">
-                          Hedefe Yakın
+                          {t('statusNearTarget', { defaultMessage: 'Hedefe Yakın' })}
                         </Badge>
                       ) : (
                         <Badge className="bg-red-100 text-red-800 border-0">
-                          Riskli
+                          {t('statusAtRisk', { defaultMessage: 'Riskli' })}
                         </Badge>
                       )}
                     </div>
@@ -246,24 +322,7 @@ export default function SalesQuotaList() {
         quota={selectedQuota || undefined}
         open={formOpen}
         onClose={handleFormClose}
-        onSuccess={async (savedQuota: SalesQuota) => {
-          let updatedQuotas: SalesQuota[]
-
-          if (selectedQuota) {
-            updatedQuotas = quotas.map((q) =>
-              q.id === savedQuota.id ? savedQuota : q
-            )
-          } else {
-            updatedQuotas = [savedQuota, ...quotas]
-          }
-
-          await mutateQuotas(updatedQuotas, { revalidate: false })
-          await Promise.all([
-            mutate('/api/sales-quotas', updatedQuotas, { revalidate: false }),
-            mutate('/api/sales-quotas?', updatedQuotas, { revalidate: false }),
-            mutate(apiUrl, updatedQuotas, { revalidate: false }),
-          ])
-        }}
+        onSuccess={onSuccess}
       />
     </div>
   )

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useLocale } from 'next-intl'
-import { Plus, Search, Edit, Trash2, Eye, Receipt } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
+import { Plus, Edit, Trash2, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -10,6 +10,9 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import CreditNoteForm from './CreditNoteForm'
 import SkeletonList from '@/components/skeletons/SkeletonList'
+import ModuleStats from '@/components/stats/ModuleStats'
+import { AutomationInfo } from '@/components/automation/AutomationInfo'
+import RefreshButton from '@/components/ui/RefreshButton'
 import Link from 'next/link'
 import { useData } from '@/hooks/useData'
 import { mutate } from 'swr'
@@ -33,14 +36,9 @@ interface CreditNote {
   createdAt: string
 }
 
-const statusLabels: Record<string, string> = {
-  DRAFT: 'Taslak',
-  ISSUED: 'Düzenlendi',
-  APPLIED: 'Uygulandı',
-}
-
 export default function CreditNoteList() {
   const locale = useLocale()
+  const t = useTranslations('creditNotes')
   const { confirm } = useConfirm()
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
@@ -69,17 +67,29 @@ export default function CreditNoteList() {
     }
   }, [])
 
-  // SWR ile veri çekme
-  const params = new URLSearchParams()
-  if (debouncedSearch) params.append('search', debouncedSearch)
-  if (status) params.append('status', status)
-  if (returnOrderId) params.append('returnOrderId', returnOrderId)
-  
-  const apiUrl = `/api/credit-notes?${params.toString()}`
+  // API URL'ini memoize et
+  const apiUrl = useMemo(() => {
+    const params = new URLSearchParams()
+    if (debouncedSearch) params.append('search', debouncedSearch)
+    if (status) params.append('status', status)
+    if (returnOrderId) params.append('returnOrderId', returnOrderId)
+    return `/api/credit-notes?${params.toString()}`
+  }, [debouncedSearch, status, returnOrderId])
+
   const { data: creditNotes = [], isLoading, error, mutate: mutateCreditNotes } = useData<CreditNote[]>(apiUrl, {
     dedupingInterval: 5000,
     revalidateOnFocus: false,
+    refreshInterval: 0, // Auto refresh YOK
   })
+
+  // Refresh handler
+  const handleRefresh = useCallback(async () => {
+    await Promise.all([
+      mutateCreditNotes(undefined, { revalidate: true }),
+      mutate('/api/credit-notes', undefined, { revalidate: true }),
+      mutate('/api/credit-notes?', undefined, { revalidate: true }),
+    ])
+  }, [mutateCreditNotes])
 
   const handleEdit = (creditNote: CreditNote) => {
     setSelectedCreditNote(creditNote)
@@ -88,10 +98,10 @@ export default function CreditNoteList() {
 
   const handleDelete = async (id: string, creditNoteNumber: string) => {
     const confirmed = await confirm({
-      title: 'Alacak Dekontunu Sil?',
-      description: `${creditNoteNumber} alacak dekontunu silmek istediğinize emin misiniz?`,
-      confirmLabel: 'Sil',
-      cancelLabel: 'İptal',
+      title: t('deleteConfirm', { creditNoteNumber, defaultMessage: 'Alacak Dekontunu Sil?' }),
+      description: t('deleteConfirm', { creditNoteNumber, defaultMessage: `${creditNoteNumber} alacak dekontunu silmek istediğinize emin misiniz?` }),
+      confirmLabel: t('delete', { defaultMessage: 'Sil' }),
+      cancelLabel: t('cancel', { defaultMessage: 'İptal' }),
       variant: 'destructive'
     })
     
@@ -120,10 +130,14 @@ export default function CreditNoteList() {
         mutate(apiUrl, updatedCreditNotes, { revalidate: false }),
       ])
 
-      toast.success('Alacak dekontu silindi', { description: `${creditNoteNumber} başarıyla silindi.` })
+      toast.success(t('deleteSuccess', { defaultMessage: 'Alacak dekontu silindi' }), { 
+        description: t('deleteSuccessMessage', { creditNoteNumber, defaultMessage: `${creditNoteNumber} başarıyla silindi.` })
+      })
     } catch (error: any) {
       console.error('Delete error:', error)
-      toast.error('Silme işlemi başarısız', { description: error?.message || 'Bir hata oluştu' })
+      toast.error(t('deleteFailed', { defaultMessage: 'Silme işlemi başarısız' }), { 
+        description: error?.message || t('unknownError', { defaultMessage: 'Bir hata oluştu' })
+      })
     }
   }
 
@@ -132,47 +146,98 @@ export default function CreditNoteList() {
     setFormOpen(false)
   }
 
+  // onSuccess callback'ini memoize et - component'in en üst seviyesinde
+  const handleFormSuccess = useCallback(async (savedCreditNote: CreditNote) => {
+    let updatedCreditNotes: CreditNote[]
+    
+    if (selectedCreditNote) {
+      updatedCreditNotes = creditNotes.map((item) =>
+        item.id === savedCreditNote.id ? savedCreditNote : item
+      )
+    } else {
+      updatedCreditNotes = [savedCreditNote, ...creditNotes]
+    }
+    
+    await mutateCreditNotes(updatedCreditNotes, { revalidate: false })
+    
+    await Promise.all([
+      mutate('/api/credit-notes', updatedCreditNotes, { revalidate: false }),
+      mutate('/api/credit-notes?', updatedCreditNotes, { revalidate: false }),
+      mutate(apiUrl, updatedCreditNotes, { revalidate: false }),
+    ])
+  }, [selectedCreditNote, creditNotes, mutateCreditNotes, apiUrl])
+
+  // Otomasyon bilgilerini memoize et
+  const automations = useMemo(() => [
+    {
+      action: t('automationIssued', { defaultMessage: 'Alacak dekontu "Issued" olduğunda' }),
+      result: t('automationIssuedResult', { defaultMessage: 'Finance kaydı otomatik oluşturulur' }),
+      details: [
+        t('automationIssuedDetails1', { defaultMessage: 'EXPENSE tipinde finans kaydı oluşturulur' }),
+        t('automationIssuedDetails2', { defaultMessage: 'İade tutarı finans sistemine yansır' }),
+      ],
+    },
+    {
+      action: t('automationApplied', { defaultMessage: 'Alacak dekontu "Applied" olduğunda' }),
+      result: t('automationAppliedResult', { defaultMessage: 'Fatura ile eşleştirilir' }),
+      details: [
+        t('automationAppliedDetails1', { defaultMessage: 'İlgili faturaya uygulanır' }),
+        t('automationAppliedDetails2', { defaultMessage: 'Fatura bakiyesi güncellenir' }),
+      ],
+    },
+  ], [t])
+
+  // Stats URL'ini memoize et
+  const statsUrl = useMemo(() => '/api/stats/credit-notes', [])
+
   if (isLoading) return <SkeletonList />
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Alacak Dekontları</h1>
-          <p className="text-gray-500 mt-1">İade alacak dekontlarını yönetin</p>
-        </div>
-        <Button 
-          onClick={() => {
-            setSelectedCreditNote(null)
-            setFormOpen(true)
-          }} 
-          className="bg-indigo-600 hover:bg-indigo-700 text-white"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Yeni Alacak Dekontu
-        </Button>
-      </div>
+      {/* İstatistikler */}
+      <ModuleStats module="credit-notes" statsUrl={statsUrl} />
 
-      {/* Filters */}
-      <div className="flex gap-4">
-        <div className="flex-1">
-          <Input
-            placeholder="Dekont no, sebep ara..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      {/* Otomasyon Bilgileri */}
+      <AutomationInfo
+        title={t('automationTitle', { defaultMessage: 'Alacak Dekontları Otomasyonları' })}
+        automations={automations}
+      />
+
+      {/* Filtreler ve Actions */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-4 flex-1">
+          <div className="flex-1">
+            <Input
+              placeholder={t('searchPlaceholder', { defaultMessage: 'Dekont no ara...' })}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <Select value={status || 'all'} onValueChange={(value) => setStatus(value === 'all' ? '' : value)}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder={t('selectStatus', { defaultMessage: 'Durum' })} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('allStatuses', { defaultMessage: 'Tüm Durumlar' })}</SelectItem>
+              <SelectItem value="DRAFT">{t('statusDraft', { defaultMessage: 'Taslak' })}</SelectItem>
+              <SelectItem value="ISSUED">{t('statusIssued', { defaultMessage: 'Düzenlendi' })}</SelectItem>
+              <SelectItem value="APPLIED">{t('statusApplied', { defaultMessage: 'Uygulandı' })}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-        <Select value={status || 'all'} onValueChange={(value) => setStatus(value === 'all' ? '' : value)}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Durum" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tüm Durumlar</SelectItem>
-            <SelectItem value="DRAFT">Taslak</SelectItem>
-            <SelectItem value="ISSUED">Düzenlendi</SelectItem>
-            <SelectItem value="APPLIED">Uygulandı</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex gap-2">
+          <RefreshButton onRefresh={handleRefresh} />
+          <Button 
+            onClick={() => {
+              setSelectedCreditNote(null)
+              setFormOpen(true)
+            }} 
+            className="bg-indigo-600 hover:bg-indigo-700 text-white"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            {t('newCreditNote', { defaultMessage: 'Yeni Alacak Dekontu' })}
+          </Button>
+        </div>
       </div>
 
       {/* Table */}
@@ -180,21 +245,21 @@ export default function CreditNoteList() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Dekont No</TableHead>
-              <TableHead>İade Siparişi</TableHead>
-              <TableHead>Fatura</TableHead>
-              <TableHead>Müşteri</TableHead>
-              <TableHead>Durum</TableHead>
-              <TableHead>Tutar</TableHead>
-              <TableHead>Oluşturulma</TableHead>
-              <TableHead className="text-right">İşlemler</TableHead>
+              <TableHead>{t('tableHeaders.creditNoteNumber', { defaultMessage: 'Dekont No' })}</TableHead>
+              <TableHead>{t('tableHeaders.returnOrder', { defaultMessage: 'İade Siparişi' })}</TableHead>
+              <TableHead>{t('tableHeaders.invoice', { defaultMessage: 'Fatura' })}</TableHead>
+              <TableHead>{t('tableHeaders.customer', { defaultMessage: 'Müşteri' })}</TableHead>
+              <TableHead>{t('tableHeaders.status', { defaultMessage: 'Durum' })}</TableHead>
+              <TableHead>{t('tableHeaders.amount', { defaultMessage: 'Tutar' })}</TableHead>
+              <TableHead>{t('tableHeaders.issueDate', { defaultMessage: 'Oluşturulma' })}</TableHead>
+              <TableHead className="text-right">{t('tableHeaders.actions', { defaultMessage: 'İşlemler' })}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {creditNotes.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="text-center text-gray-500 py-8">
-                  Alacak dekontu bulunamadı
+                  {t('noCreditNotesFound', { defaultMessage: 'Alacak dekontu bulunamadı' })}
                 </TableCell>
               </TableRow>
             ) : (
@@ -234,7 +299,10 @@ export default function CreditNoteList() {
                   </TableCell>
                   <TableCell>
                     <Badge className={getStatusBadgeClass(creditNote.status)}>
-                      {statusLabels[creditNote.status] || creditNote.status}
+                      {creditNote.status === 'DRAFT' ? t('statusDraft', { defaultMessage: 'Taslak' }) :
+                       creditNote.status === 'ISSUED' ? t('statusIssued', { defaultMessage: 'Düzenlendi' }) :
+                       creditNote.status === 'APPLIED' ? t('statusApplied', { defaultMessage: 'Uygulandı' }) :
+                       creditNote.status}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -282,25 +350,7 @@ export default function CreditNoteList() {
         open={formOpen}
         onClose={handleFormClose}
         returnOrderId={returnOrderId || undefined}
-        onSuccess={async (savedCreditNote: CreditNote) => {
-          let updatedCreditNotes: CreditNote[]
-          
-          if (selectedCreditNote) {
-            updatedCreditNotes = creditNotes.map((item) =>
-              item.id === savedCreditNote.id ? savedCreditNote : item
-            )
-          } else {
-            updatedCreditNotes = [savedCreditNote, ...creditNotes]
-          }
-          
-          await mutateCreditNotes(updatedCreditNotes, { revalidate: false })
-          
-          await Promise.all([
-            mutate('/api/credit-notes', updatedCreditNotes, { revalidate: false }),
-            mutate('/api/credit-notes?', updatedCreditNotes, { revalidate: false }),
-            mutate(apiUrl, updatedCreditNotes, { revalidate: false }),
-          ])
-        }}
+        onSuccess={handleFormSuccess}
       />
     </div>
   )

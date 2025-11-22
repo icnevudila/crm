@@ -241,33 +241,38 @@ export async function POST(request: Request) {
       )
     }
 
-    // Zorunlu alanları kontrol et
-    if (!body.invoiceId || body.invoiceId.trim() === '') {
+    // Zod validation
+    const { shipmentCreateSchema } = await import('@/lib/validations/shipments')
+    const validationResult = shipmentCreateSchema.safeParse(body)
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: 'Fatura ID gereklidir' },
+        { 
+          error: 'Validation error',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        },
         { status: 400 }
       )
     }
 
+    const validatedData = validationResult.data
+
     const supabase = getSupabaseWithServiceRole()
 
-    // Shipment verilerini oluştur - SADECE schema.sql'de olan kolonları gönder
-    // schema.sql: tracking, status, invoiceId, companyId
-    // schema-extension.sql: shippingCompany, estimatedDelivery, deliveryAddress (migration çalıştırılmamış olabilir - GÖNDERME!)
+    // Shipment verilerini oluştur - Zod validated data kullan
     const shipmentData: any = {
       companyId: session.user.companyId,
-      status: body.status || 'PENDING',
+      status: validatedData.status || 'PENDING',
     }
 
     // Sadece schema.sql'de olan alanlar
-    if (body.invoiceId) {
-      shipmentData.invoiceId = body.invoiceId
+    if (validatedData.invoiceId) {
+      shipmentData.invoiceId = validatedData.invoiceId
       // Invoice'dan customerCompanyId'yi çek (eğer varsa)
       try {
         const { data: invoice } = await supabase
           .from('Invoice')
           .select('customerCompanyId')
-          .eq('id', body.invoiceId)
+          .eq('id', validatedData.invoiceId)
           .maybeSingle()
         if (invoice?.customerCompanyId) {
           shipmentData.customerCompanyId = invoice.customerCompanyId
@@ -281,8 +286,17 @@ export async function POST(request: Request) {
     }
     // Firma bazlı ilişki (customerCompanyId) - body'den de alınabilir
     if (body.customerCompanyId) shipmentData.customerCompanyId = body.customerCompanyId
-    if (body.tracking !== undefined && body.tracking !== null && body.tracking !== '') {
-      shipmentData.tracking = body.tracking
+    if (validatedData.tracking !== undefined && validatedData.tracking !== null && validatedData.tracking !== '') {
+      shipmentData.tracking = validatedData.tracking
+    }
+    if (validatedData.shippingCompany !== undefined && validatedData.shippingCompany !== null && validatedData.shippingCompany !== '') {
+      shipmentData.shippingCompany = validatedData.shippingCompany
+    }
+    if (validatedData.estimatedDelivery !== undefined && validatedData.estimatedDelivery !== null && validatedData.estimatedDelivery !== '') {
+      shipmentData.estimatedDelivery = validatedData.estimatedDelivery
+    }
+    if (validatedData.deliveryAddress !== undefined && validatedData.deliveryAddress !== null && validatedData.deliveryAddress !== '') {
+      shipmentData.deliveryAddress = validatedData.deliveryAddress
     }
     // NOT: shippingCompany, estimatedDelivery, deliveryAddress schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
 

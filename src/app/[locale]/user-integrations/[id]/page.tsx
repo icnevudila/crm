@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { useLocale } from 'next-intl'
 import { ArrowLeft, Edit, Trash2, Calendar, Mail, AlertCircle, CheckCircle2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +11,7 @@ import { useData } from '@/hooks/useData'
 import SkeletonList from '@/components/skeletons/SkeletonList'
 import UserIntegrationForm from '@/components/user-integrations/UserIntegrationForm'
 import { mutate } from 'swr'
+import { toastError } from '@/lib/toast'
 
 interface UserIntegration {
   id: string
@@ -65,7 +67,7 @@ export default function UserIntegrationDetailPage() {
       router.push(`/${locale}/user-integrations`)
     } catch (error: any) {
       console.error('Delete error:', error)
-      alert(error?.message || 'Silme işlemi başarısız oldu')
+      toastError('Hata', error?.message || 'Silme işlemi başarısız oldu')
     }
   }
 

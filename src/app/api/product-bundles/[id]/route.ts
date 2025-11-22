@@ -147,6 +147,26 @@ export async function PUT(
       console.error('ActivityLog creation error:', activityError)
     }
 
+    // Notification - Admin/Sales rollere bildirim
+    try {
+      const { createNotificationForRole } = await import('@/lib/notification-helper')
+      await createNotificationForRole({
+        companyId: session.user.companyId,
+        role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+        title: '📦 Ürün Paketi Güncellendi',
+        message: `${bundle.name} paketi güncellendi.`,
+        type: 'info',
+        relatedTo: 'ProductBundle',
+        relatedId: bundle.id,
+        link: `/tr/product-bundles/${bundle.id}`,
+      }).catch(() => {}) // Notification hatası ana işlemi engellemez
+    } catch (notificationError) {
+      // Notification hatası ana işlemi engellemez
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Product bundle notification error (non-critical):', notificationError)
+      }
+    }
+
     // Bundle'ı items ile birlikte döndür
     const { data: bundleWithItems } = await supabase
       .from('ProductBundle')
@@ -237,6 +257,25 @@ export async function DELETE(
       ])
     } catch (activityError) {
       console.error('ActivityLog creation error:', activityError)
+    }
+
+    // Notification - Admin/Sales rollere bildirim
+    try {
+      const { createNotificationForRole } = await import('@/lib/notification-helper')
+      await createNotificationForRole({
+        companyId: session.user.companyId,
+        role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+        title: '🗑️ Ürün Paketi Silindi',
+        message: `${bundle?.name || 'Ürün paketi'} silindi.`,
+        type: 'warning',
+        relatedTo: 'ProductBundle',
+        relatedId: params.id,
+      }).catch(() => {}) // Notification hatası ana işlemi engellemez
+    } catch (notificationError) {
+      // Notification hatası ana işlemi engellemez
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Product bundle notification error (non-critical):', notificationError)
+      }
     }
 
     return NextResponse.json({ success: true })

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useData } from '@/hooks/useData'
 import { Search, Filter } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -33,21 +33,6 @@ interface ActivityLog {
   createdAt: string
 }
 
-async function fetchActivityLogs(
-  entity: string,
-  action: string,
-  userId: string
-): Promise<ActivityLog[]> {
-  const params = new URLSearchParams()
-  if (entity) params.append('entity', entity)
-  if (action) params.append('action', action)
-  if (userId) params.append('userId', userId)
-  params.append('limit', '100')
-
-  const res = await fetch(`/api/activity?${params.toString()}`)
-  if (!res.ok) throw new Error('Failed to fetch activity logs')
-  return res.json()
-}
 
 const entityLabels: Record<string, string> = {
   Quote: 'Teklif',
@@ -74,10 +59,22 @@ export default function ActivityList() {
   const [action, setAction] = useState('')
   const [userId, setUserId] = useState('')
 
-  const { data: logs = [], isLoading } = useQuery({
-    queryKey: ['activity', entity, action, userId],
-    queryFn: () => fetchActivityLogs(entity, action, userId),
-  })
+  const apiUrl = (() => {
+    const params = new URLSearchParams()
+    if (entity) params.append('entity', entity)
+    if (action) params.append('action', action)
+    if (userId) params.append('userId', userId)
+    params.append('limit', '100')
+    return `/api/activity?${params.toString()}`
+  })()
+
+  const { data: logs = [], isLoading } = useData<ActivityLog[]>(
+    apiUrl,
+    {
+      dedupingInterval: 60000,
+      revalidateOnFocus: false,
+    }
+  )
 
   if (isLoading) {
     return <SkeletonList />

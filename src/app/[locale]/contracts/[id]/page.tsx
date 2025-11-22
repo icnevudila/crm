@@ -46,7 +46,11 @@ export default function ContractDetailPage() {
   const [deleteLoading, setDeleteLoading] = useState(false)
   const { handleQuickActionSuccess } = useQuickActionSuccess()
 
-  const { data: contract, isLoading, mutate } = useData<Contract>(`/api/contracts/${contractId}`)
+  const { data: contract, isLoading, mutate } = useData<Contract>(`/api/contracts/${contractId}`, {
+    dedupingInterval: 30000,
+    revalidateOnFocus: false,
+    refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
+  })
 
   const handleDelete = async () => {
     if (!confirm(`${contract?.title} sözleşmesini silmek istediğinize emin misiniz?`)) {

@@ -203,6 +203,7 @@ export default function MeetingList() {
   const { data: meetingsData, isLoading, error, mutate: mutateMeetings } = useData<Meeting[] | MeetingsResponse>(apiUrl, {
     dedupingInterval: 5000,
     revalidateOnFocus: false,
+    refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
   })
 
   const meetings = useMemo(() => {

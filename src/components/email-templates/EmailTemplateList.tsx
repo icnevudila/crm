@@ -72,6 +72,7 @@ export default function EmailTemplateList() {
   const { data: templates = [], isLoading, error, mutate: mutateTemplates } = useData<EmailTemplate[]>(apiUrl, {
     dedupingInterval: 5000,
     revalidateOnFocus: false,
+    refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
   })
 
   const handleEdit = (template: EmailTemplate) => {

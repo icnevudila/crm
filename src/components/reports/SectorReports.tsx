@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useData } from '@/hooks/useData'
 import { Card } from '@/components/ui/card'
 import { Building2, PieChart, BarChart3 } from 'lucide-react'
 import dynamic from 'next/dynamic'
@@ -22,23 +22,14 @@ const SectorProfitabilityBarChart = dynamic(() => import('@/components/reports/c
   loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
 })
 
-async function fetchSectorReports() {
-  const res = await fetch('/api/reports/sector', {
-    cache: 'no-store',
-    credentials: 'include',
-  })
-  if (!res.ok) throw new Error('Failed to fetch sector reports')
-  return res.json()
-}
-
 export default function SectorReports({ isActive }: ReportSectionProps) {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['sector-reports'],
-    queryFn: fetchSectorReports,
-    staleTime: 5 * 60 * 1000,
-    refetchOnMount: true,
-    enabled: isActive,
-  })
+  const { data, isLoading, error } = useData(
+    isActive ? '/api/reports/sector' : null,
+    {
+      dedupingInterval: 5 * 60 * 1000,
+      revalidateOnFocus: false,
+    }
+  )
 
   if (!isActive) return null
   if (isLoading) return <SkeletonList />

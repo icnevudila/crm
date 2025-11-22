@@ -163,6 +163,25 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // Notification - Admin/Sales rollere bildirim
+    try {
+      const { createNotificationForRole } = await import('@/lib/notification-helper')
+      await createNotificationForRole({
+        companyId: session.user.companyId,
+        role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+        title: '📦 Yeni İade Siparişi Oluşturuldu',
+        message: `${returnOrder.returnNumber} iade siparişi oluşturuldu.`,
+        type: 'info',
+        relatedTo: 'ReturnOrder',
+        relatedId: returnOrder.id,
+        link: `/tr/return-orders/${returnOrder.id}`,
+      }).catch(() => {}) // Notification hatası ana işlemi engellemez
+    } catch (notificationError) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Return order notification error (non-critical):', notificationError)
+      }
+    }
+
     // Return order'ı items ile birlikte döndür
     const { data: returnOrderWithItems } = await supabase
       .from('ReturnOrder')

@@ -192,14 +192,20 @@ export async function POST(request: Request) {
       )
     }
 
-    // Zorunlu alanları kontrol et
-    if (!body.title || body.title.trim() === '') {
-      const { getErrorMessage } = await import('@/lib/api-locale')
+    // Zod validation
+    const { quoteCreateSchema } = await import('@/lib/validations/quotes')
+    const validationResult = quoteCreateSchema.safeParse(body)
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: getErrorMessage('errors.api.quoteTitleRequired', request) },
+        { 
+          error: 'Validation error',
+          details: validationResult.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
+        },
         { status: 400 }
       )
     }
+
+    const validatedData = validationResult.data
 
     const supabase = getSupabaseWithServiceRole()
 
@@ -207,7 +213,7 @@ export async function POST(request: Request) {
     // Not: Quote tablosunda quoteNumber kolonu yoksa, title'a eklenebilir veya ayrı bir kolon eklenebilir
     // Şimdilik title'a ekleyeceğiz: "QUO-2024-01-0001 - [Başlık]" formatında
     let quoteNumber = body.quoteNumber
-    let quoteTitle = body.title.trim()
+    let quoteTitle = validatedData.title.trim()
     
     if (!quoteNumber || quoteNumber.trim() === '') {
       const now = new Date()
@@ -229,20 +235,22 @@ export async function POST(request: Request) {
       quoteTitle = `${quoteNumber} - ${quoteTitle}`
     }
 
-    // Quote verilerini oluştur - SADECE schema.sql'de olan kolonları gönder
-    // schema.sql: title, status, total, dealId, companyId
-    // schema-extension.sql: description, validUntil, discount, taxRate (migration çalıştırılmamış olabilir - GÖNDERME!)
-    // schema-vendor.sql: vendorId (migration çalıştırılmamış olabilir - GÖNDERME!)
+    // Quote verilerini oluştur - Zod validated data kullan
     const quoteData: any = {
       title: quoteTitle, // Otomatik numara ile birlikte
-      status: body.status || 'DRAFT',
-      totalAmount: body.totalAmount !== undefined ? parseFloat(body.totalAmount) : (body.total !== undefined ? parseFloat(body.total) : 0),
+      status: validatedData.status || 'DRAFT',
+      totalAmount: validatedData.total !== undefined ? validatedData.total : 0,
       companyId: session.user.companyId,
     }
 
     // Sadece schema.sql'de olan alanlar
-    if (body.dealId) quoteData.dealId = body.dealId
-    if (body.customerCompanyId) quoteData.customerCompanyId = body.customerCompanyId
+    if (validatedData.dealId) quoteData.dealId = validatedData.dealId
+    if (validatedData.customerCompanyId) quoteData.customerCompanyId = validatedData.customerCompanyId
+    if (validatedData.vendorId) quoteData.vendorId = validatedData.vendorId
+    if (validatedData.description) quoteData.description = validatedData.description
+    if (validatedData.validUntil) quoteData.validUntil = validatedData.validUntil
+    if (validatedData.discount !== undefined) quoteData.discount = validatedData.discount
+    if (validatedData.taxRate !== undefined) quoteData.taxRate = validatedData.taxRate
     // NOT: description, vendorId, validUntil, discount, taxRate schema-extension'da var ama migration çalıştırılmamış olabilir - GÖNDERME!
     // NOT: companyId ve createdBy createRecord fonksiyonunda otomatik ekleniyor
 
@@ -284,18 +292,18 @@ export async function POST(request: Request) {
 
     // Deal stage'ini PROPOSAL'a taşı (eğer dealId varsa ve deal CONTACTED veya LEAD aşamasındaysa)
     let dealStageUpdated = false
-    if (body.dealId) {
+    if (validatedData.dealId) {
       try {
         // Deal'ı çek - önce companyId olmadan kontrol et (service role ile RLS bypass)
         const { data: dealById, error: errorById } = await supabase
           .from('Deal')
           .select('id, title, stage, companyId')
-          .eq('id', body.dealId)
+          .eq('id', validatedData.dealId)
           .maybeSingle()
 
         if (errorById) {
           console.error('Deal fetch error (by ID):', {
-            dealId: body.dealId,
+            dealId: validatedData.dealId,
             error: errorById.message,
             code: errorById.code,
           })
@@ -310,7 +318,7 @@ export async function POST(request: Request) {
             
             if (process.env.NODE_ENV === 'development') {
               console.log('Quote deal stage check:', {
-                dealId: body.dealId,
+                dealId: validatedData.dealId,
                 dealTitle: deal.title,
                 currentStage,
                 shouldUpdate: currentStage === 'CONTACTED' || currentStage === 'LEAD',
@@ -327,7 +335,7 @@ export async function POST(request: Request) {
                 .from('Deal')
                 // @ts-ignore - Supabase type inference issue
                 .update({ stage: 'PROPOSAL', updatedAt: new Date().toISOString() })
-                .eq('id', body.dealId)
+                .eq('id', validatedData.dealId)
                 .eq('companyId', dealCompanyId) // Deal'in kendi companyId'sini kullan
                 .select('id, stage')
                 .single()
@@ -337,7 +345,7 @@ export async function POST(request: Request) {
                 
                 if (process.env.NODE_ENV === 'development') {
                   console.log('Deal stage successfully updated:', {
-                    dealId: body.dealId,
+                    dealId: validatedData.dealId,
                     from: currentStage,
                     to: 'PROPOSAL',
                     updatedDeal,
@@ -353,13 +361,13 @@ export async function POST(request: Request) {
                     meta: { 
                       entity: 'Deal', 
                       action: 'stage_change', 
-                      id: body.dealId, 
-                      dealId: body.dealId,
+                      id: validatedData.dealId, 
+                      dealId: validatedData.dealId,
                       from: currentStage, 
                       to: 'PROPOSAL',
                       reason: 'quote_created',
                       quoteId: (data as any).id,
-                      quoteTitle: body.title,
+                      quoteTitle: validatedData.title,
                       companyId: session.user.companyId,
                       createdBy: session.user.id,
                     },
@@ -385,8 +393,8 @@ export async function POST(request: Request) {
                     message: getActivityMessage(locale, 'dealStageUpdatedMessage', { dealTitle }),
                     type: 'success',
                     relatedTo: 'Deal',
-                    relatedId: body.dealId,
-                    link: `/deals/${body.dealId}`,
+                    relatedId: validatedData.dealId,
+                    link: `/deals/${validatedData.dealId}`,
                   })
                 } catch (notificationError) {
                   // Notification hatası kritik değil
@@ -397,7 +405,7 @@ export async function POST(request: Request) {
               } else {
                 // Update hatası veya stage yanlış
                 console.warn('Deal stage update returned unexpected data:', {
-                  dealId: body.dealId,
+                  dealId: validatedData.dealId,
                   currentStage,
                   targetStage: 'PROPOSAL',
                   updateError,
@@ -408,7 +416,7 @@ export async function POST(request: Request) {
               // Deal PROPOSAL'a taşınacak aşamada değil
               if (process.env.NODE_ENV === 'development') {
                 console.log('Deal stage not CONTACTED/LEAD, skipping auto-update:', {
-                  dealId: body.dealId,
+                  dealId: validatedData.dealId,
                   dealTitle: deal.title,
                   currentStage,
                   expectedStages: ['CONTACTED', 'LEAD'],
@@ -417,7 +425,7 @@ export async function POST(request: Request) {
             }
           } else {
             console.warn('Deal found but companyId mismatch (not SuperAdmin):', {
-              dealId: body.dealId,
+              dealId: validatedData.dealId,
               dealCompanyId: deal.companyId,
               userCompanyId: session.user.companyId,
               userRole: session.user.role,
@@ -426,7 +434,7 @@ export async function POST(request: Request) {
           }
         } else {
           console.warn('Deal not found:', {
-            dealId: body.dealId,
+            dealId: validatedData.dealId,
             companyId: session.user.companyId,
           })
         }
@@ -445,11 +453,11 @@ export async function POST(request: Request) {
       const taskLocale = getLocaleFromRequest(request)
       const taskMsgs = getMessages(taskLocale)
       const taskData = {
-        title: getActivityMessage(taskLocale, 'autoTaskCreated', { quoteTitle: body.title }),
+        title: getActivityMessage(taskLocale, 'autoTaskCreated', { quoteTitle: validatedData.title }),
         status: 'TODO',
         assignedTo: session.user.id, // Teklif sahibine atanır
         companyId: session.user.companyId,
-        description: getActivityMessage(taskLocale, 'autoTaskDescription', { quoteTitle: body.title }),
+        description: getActivityMessage(taskLocale, 'autoTaskDescription', { quoteTitle: validatedData.title }),
         dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 3 gün sonra
         priority: 'MEDIUM',
       }
@@ -483,11 +491,11 @@ export async function POST(request: Request) {
       
       // Firma bilgisini çek (eğer customerCompanyId varsa)
       let companyName = ''
-      if (body.customerCompanyId) {
+      if (validatedData.customerCompanyId) {
         const { data: companyData } = await supabase
           .from('CustomerCompany')
           .select('name')
-          .eq('id', body.customerCompanyId)
+          .eq('id', validatedData.customerCompanyId)
           .single()
         if (companyData) {
           companyName = companyData.name
@@ -496,11 +504,11 @@ export async function POST(request: Request) {
       
       // Deal bilgisini çek (eğer dealId varsa)
       let dealTitle = ''
-      if (body.dealId) {
+      if (validatedData.dealId) {
         const { data: dealData } = await supabase
           .from('Deal')
           .select('title')
-          .eq('id', body.dealId)
+          .eq('id', validatedData.dealId)
           .single()
         if (dealData) {
           dealTitle = dealData.title
@@ -544,8 +552,8 @@ export async function POST(request: Request) {
 
     // Response'a stage güncelleme bilgisini ekle
     const responseData: any = { ...(data as any) }
-    if (body.dealId) {
-      responseData.dealId = body.dealId
+    if (validatedData.dealId) {
+      responseData.dealId = validatedData.dealId
       responseData.dealStageUpdated = dealStageUpdated
       
       // Deal bilgilerini de ekle (frontend'de kontrol için)
@@ -553,12 +561,12 @@ export async function POST(request: Request) {
         const { data: finalDealData, error: finalDealError } = await supabase
           .from('Deal')
           .select('id, title, stage, companyId')
-          .eq('id', body.dealId)
+          .eq('id', validatedData.dealId)
           .maybeSingle()
         
         if (finalDealError) {
           console.error('Final deal fetch error:', {
-            dealId: body.dealId,
+            dealId: validatedData.dealId,
             error: finalDealError.message,
             code: finalDealError.code,
           })

@@ -3,11 +3,11 @@
 @tailwind utilities;
 
 :root {
-  /* ENTERPRISE: Premium Tema CSS Variables - Indigo + Purple + Pink gradient temeli */
+  /* ENTERPRISE: Premium Tema CSS Variables - Indigo + Blue + Pink gradient temeli */
   --primary: #6366f1; /* Indigo 500 */
   --primary-dark: #4f46e5; /* Indigo 600 */
-  --secondary: #8b5cf6; /* Purple 500 - gradient partner */
-  --secondary-dark: #7c3aed; /* Purple 600 */
+  --secondary: #6366f1; /* Indigo 500 - gradient partner */
+  --secondary-dark: #4f46e5; /* Indigo 600 */
   --accent: #ec4899; /* Pink 500 - soft accent */
   --accent-dark: #db2777; /* Pink 600 */
 
@@ -218,7 +218,7 @@
 
   /* Premium Button */
   .btn-primary {
-    @apply bg-gradient-to-r from-primary-500 to-secondary-500 text-white px-6 py-2.5 rounded-lg font-medium transition-all duration-300 hover:opacity-90 hover:shadow-lg active:scale-95;
+    @apply bg-[#6366f1] text-white px-6 py-2.5 rounded-lg font-medium transition-all duration-300 hover:bg-[#4f46e5] hover:shadow-lg active:scale-95;
   }
 
   .btn-secondary {
@@ -374,13 +374,13 @@
     border: 1px solid rgba(255, 255, 255, 0.2);
   }
 
-  /* Glow effect */
+  /* Glow effect - kaldırıldı (göz yorucu) */
   .glow {
-    box-shadow: 0 0 20px rgba(139, 92, 246, 0.5);
+    /* box-shadow: 0 0 20px rgba(139, 92, 246, 0.5); */
   }
 
   .glow-hover:hover {
-    box-shadow: 0 0 30px rgba(139, 92, 246, 0.7);
+    /* box-shadow: 0 0 30px rgba(139, 92, 246, 0.7); */
     transform: translateY(-2px);
   }
 

@@ -138,6 +138,25 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // Notification - Admin/Sales rollere bildirim
+    try {
+      const { createNotificationForRole } = await import('@/lib/notification-helper')
+      await createNotificationForRole({
+        companyId: session.user.companyId,
+        role: ['ADMIN', 'SALES', 'SUPER_ADMIN'],
+        title: '📄 Yeni Alacak Dekontu Oluşturuldu',
+        message: `${creditNote.creditNoteNumber} alacak dekontu oluşturuldu.`,
+        type: 'info',
+        relatedTo: 'CreditNote',
+        relatedId: creditNote.id,
+        link: `/tr/credit-notes/${creditNote.id}`,
+      }).catch(() => {})
+    } catch (notificationError) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Credit note notification error (non-critical):', notificationError)
+      }
+    }
+
     return NextResponse.json(creditNote, { status: 201 })
   } catch (error: any) {
     console.error('Credit note create error:', error)

@@ -87,6 +87,7 @@ export default function VendorList() {
   const { data: vendors = [], isLoading, error, mutate: mutateVendors } = useData<Vendor[]>(apiUrl, {
     dedupingInterval: 5000, // 5 saniye cache (daha kısa - güncellemeler daha hızlı)
     revalidateOnFocus: false, // Focus'ta yeniden fetch yapma
+    refreshInterval: 0, // Auto refresh YOK - sürekli refresh'i önle
   })
 
   // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap

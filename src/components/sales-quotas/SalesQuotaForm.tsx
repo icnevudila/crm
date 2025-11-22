@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from '@/lib/toast'
 import { Sparkles } from 'lucide-react'
 import { useLocale } from 'next-intl'
+import { useData } from '@/hooks/useData'
 
 const quotaSchema = z.object({
   userId: z.string().min(1, 'Kullanıcı seçmelisiniz'),
@@ -38,7 +39,6 @@ export default function SalesQuotaForm({
 }: SalesQuotaFormProps) {
   const locale = useLocale()
   const [loading, setLoading] = useState(false)
-  const [users, setUsers] = useState<Array<{ id: string; name: string }>>([])
 
   const {
     register,
@@ -58,15 +58,15 @@ export default function SalesQuotaForm({
     },
   })
 
-  // Load users
-  useEffect(() => {
-    if (open) {
-      fetch('/api/users')
-        .then((res) => res.json())
-        .then((data) => setUsers(data))
-        .catch((err) => console.error('Failed to load users:', err))
+  // Kullanıcıları çek - SWR ile (repo kurallarına uygun)
+  // Hook'u her zaman çağır, sadece open olduğunda fetch yap
+  const { data: users = [], isLoading: usersLoading } = useData<any[]>(
+    open ? '/api/users' : null,
+    {
+      dedupingInterval: 60000, // 1 dakika cache
+      revalidateOnFocus: false,
     }
-  }, [open])
+  )
 
   // Populate form when editing
   useEffect(() => {
@@ -153,10 +153,11 @@ export default function SalesQuotaForm({
               size="sm"
               onClick={() => {
                 // FloatingAIChat'i aç ve context-aware prompt gönder
+                const yearFromDate = quota?.startDate ? new Date(quota.startDate).getFullYear() : ''
                 const event = new CustomEvent('open-ai-chat', {
                   detail: {
                     initialMessage: quota
-                      ? `Satış kotasını düzenle: ${quota.user?.name || 'Kullanıcı'} için ${quota.period} ${quota.year} - Hedef: ${quota.revenueTarget} TL`
+                      ? `Satış kotasını düzenle: ${quota.user?.name || 'Kullanıcı'} için ${quota.period} ${yearFromDate} - Hedef: ${quota.targetRevenue} TL`
                       : 'Yeni satış kotası oluştur',
                     context: {
                       type: 'sales-quota',
@@ -164,8 +165,8 @@ export default function SalesQuotaForm({
                         id: quota.id,
                         userId: quota.userId,
                         period: quota.period,
-                        year: quota.year,
-                        revenueTarget: quota.revenueTarget,
+                        startDate: quota.startDate,
+                        targetRevenue: quota.targetRevenue,
                       } : null,
                     },
                   },
@@ -188,20 +189,30 @@ export default function SalesQuotaForm({
             <Select
               value={watch('userId')}
               onValueChange={(value) => setValue('userId', value)}
+              disabled={usersLoading}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Kullanıcı seçin..." />
+                <SelectValue placeholder={usersLoading ? "Yükleniyor..." : "Kullanıcı seçin..."} />
               </SelectTrigger>
               <SelectContent>
-                {users.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.name}
-                  </SelectItem>
-                ))}
+                {usersLoading ? (
+                  <div className="px-2 py-1.5 text-sm text-gray-500">Yükleniyor...</div>
+                ) : users.length === 0 ? (
+                  <div className="px-2 py-1.5 text-sm text-yellow-600">Kullanıcı bulunamadı</div>
+                ) : (
+                  users.map((user: any) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      {user.name}
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
             {errors.userId && (
               <p className="text-sm text-red-600">{errors.userId.message}</p>
+            )}
+            {!usersLoading && users.length === 0 && (
+              <p className="text-sm text-yellow-600">Kullanıcı listesi boş. Lütfen önce kullanıcı ekleyin.</p>
             )}
           </div>
 
