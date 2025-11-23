@@ -26,7 +26,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { useQuery } from '@tanstack/react-query'
 import { useData } from '@/hooks/useData'
 import { Checkbox } from '@/components/ui/checkbox'
 
@@ -123,18 +122,14 @@ export default function MeetingForm({
 
   type MeetingFormData = z.infer<typeof meetingSchema>
 
-  // Kullanıcıları çek
-  async function fetchUsers() {
-    const res = await fetch('/api/users')
-    if (!res.ok) throw new Error('Failed to fetch users')
-    return res.json()
-  }
-
-  const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: fetchUsers,
-    enabled: open,
-  })
+  // Kullanıcıları çek - SWR ile
+  const { data: users = [] } = useData<any[]>(
+    open ? '/api/users' : null,
+    {
+      dedupingInterval: 60000,
+      revalidateOnFocus: false,
+    }
+  )
 
   // Müşterileri çek - TÜM müşterileri çekmek için pagination parametresi ekle
   const { data: customersResponse, error: customersError, isLoading: customersLoading } = useData<any>('/api/customers?page=1&pageSize=1000', {
@@ -173,30 +168,28 @@ export default function MeetingForm({
     ? deals.filter((deal: any) => deal.customerCompanyId === customerCompanyId)
     : deals
 
-  // ✅ ÇÖZÜM: Deal bilgilerini çek (dealProp varsa direkt kullan, yoksa API'den çek)
-  const { data: dealDataFromApi } = useQuery({
-    queryKey: ['deal', dealId],
-    queryFn: async () => {
-      if (!dealId) return null
-      const res = await fetch(`/api/deals/${dealId}`)
-      if (!res.ok) return null
-      return res.json()
-    },
-    enabled: !!dealId && open && !meeting && !dealProp, // Sadece dealProp yoksa API'den çek
-  })
+  // ✅ ÇÖZÜM: Deal bilgilerini çek (dealProp varsa direkt kullan, yoksa API'den çek) - SWR ile
+  const dealId = dealIdProp || dealIdFromUrl
+  const { data: dealDataFromApi } = useData<any>(
+    (!!dealId && open && !meeting && !dealProp) ? `/api/deals/${dealId}` : null,
+    {
+      dedupingInterval: 30000,
+      revalidateOnFocus: false,
+    }
+  )
   
   // DealProp varsa onu kullan, yoksa API'den gelen datayı kullan
   const dealData = dealProp || dealDataFromApi
 
-  // ✅ ÇÖZÜM: Quote bilgilerini çek (quoteProp varsa direkt kullan, yoksa API'den çek)
-  const { data: quoteDataFromApi } = useQuery({
-    queryKey: ['quote', quoteId],
-    queryFn: async () => {
-      if (!quoteId) return null
-      const res = await fetch(`/api/quotes/${quoteId}`)
-      if (!res.ok) return null
-      return res.json()
-    },
+  // ✅ ÇÖZÜM: Quote bilgilerini çek (quoteProp varsa direkt kullan, yoksa API'den çek) - SWR ile
+  const quoteId = quoteIdProp || quoteIdFromUrl
+  const { data: quoteDataFromApi } = useData<any>(
+    (!!quoteId && open && !meeting && !quoteProp) ? `/api/quotes/${quoteId}` : null,
+    {
+      dedupingInterval: 30000,
+      revalidateOnFocus: false,
+    }
+  )
     enabled: !!quoteId && open && !meeting && !quoteProp, // Sadece quoteProp yoksa API'den çek
   })
   

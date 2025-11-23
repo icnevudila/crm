@@ -41,11 +41,6 @@ interface TaskFormProps {
   invoice?: any // ✅ ÇÖZÜM: Invoice objesi direkt geçilebilir (API çağrısı yapmadan)
 }
 
-async function fetchUsers() {
-  const res = await fetch('/api/users')
-  if (!res.ok) throw new Error('Failed to fetch users')
-  return res.json()
-}
 
 export default function TaskForm({ 
   task, 
@@ -63,7 +58,6 @@ export default function TaskForm({
   const t = useTranslations('tasks.form')
   const tCommon = useTranslations('common.form')
   const router = useRouter()
-  const queryClient = useQueryClient()
   const navigateToDetailToast = useNavigateToDetailToast()
   const [loading, setLoading] = useState(false)
 
@@ -79,11 +73,14 @@ export default function TaskForm({
 
   type TaskFormData = z.infer<typeof taskSchema>
 
-  const { data: users = [] } = useQuery({
-    queryKey: ['users'],
-    queryFn: fetchUsers,
-    enabled: open,
-  })
+  // Kullanıcıları çek - SWR ile
+  const { data: users = [] } = useData<any[]>(
+    open ? '/api/users' : null,
+    {
+      dedupingInterval: 60000,
+      revalidateOnFocus: false,
+    }
+  )
 
   const {
     register,

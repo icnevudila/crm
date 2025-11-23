@@ -1119,7 +1119,7 @@ export default function DealList({ isOpen = true }: DealListProps) {
     try {
 
 
-      await deleteMutation.mutateAsync(id)
+      await handleDeleteDeal(id)
       
 
       

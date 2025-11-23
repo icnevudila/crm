@@ -6,7 +6,6 @@ import { useSearchParams } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Plus, Search, Edit, Trash2, Eye, Upload, Download, CheckSquare, Square, Building2, Sparkles, Briefcase, FileText, Receipt, Calendar, Send } from 'lucide-react'
 import { useSession } from '@/hooks/useSession'
-import { useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { toast } from '@/lib/toast'
@@ -139,7 +138,6 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
   const locale = useLocale()
   const t = useTranslations('customers')
   const tCommon = useTranslations('common')
-  const queryClient = useQueryClient()
   const searchParams = useSearchParams()
   const { data: session } = useSession()
   const { confirm } = useConfirm()
@@ -347,7 +345,6 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       mutateCustomers(undefined, { revalidate: true }),
       mutate('/api/customers', undefined, { revalidate: true }),
       mutate(apiUrl || '/api/customers', undefined, { revalidate: true }),
-      queryClient.invalidateQueries({ queryKey: ['customers'] }),
     ])
   }
 
@@ -421,11 +418,9 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
           }, { revalidate: false })
           : Promise.resolve(),
         // Dashboard'daki müşteri sektör dağılımı grafiğini güncelle (silinen müşteri grafikten çıkarılmalı)
-        queryClient.invalidateQueries({ queryKey: ['distribution'] }),
       ])
 
       // Dashboard'daki distribution query'sini refetch et
-      await queryClient.refetchQueries({ queryKey: ['distribution'] })
     } catch (error: any) {
       // Production'da console.error kaldırıldı
       if (process.env.NODE_ENV === 'development') {
@@ -521,11 +516,9 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
           }, { revalidate: false })
           : Promise.resolve(),
         // Dashboard'daki müşteri sektör dağılımı grafiğini güncelle (silinen müşteriler grafikten çıkarılmalı)
-        queryClient.invalidateQueries({ queryKey: ['distribution'] }),
       ])
 
       // Dashboard'daki distribution query'sini refetch et
-      await queryClient.refetchQueries({ queryKey: ['distribution'] })
 
       setSelectedIds([])
       setSelectAll(false)
@@ -535,7 +528,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
       }
       throw error
     }
-  }, [customers, pagination, mutateCustomers, apiUrl, queryClient])
+  }, [customers, pagination, mutateCustomers, apiUrl])
 
   const handleClearSelection = useCallback(() => {
     setSelectedIds([])
@@ -586,11 +579,9 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
         mutateCustomers(undefined, { revalidate: true }),
         apiUrl,
         // Dashboard'daki müşteri sektör dağılımı grafiğini güncelle (yeni import edilen müşteriler grafikte görünmeli)
-        queryClient.invalidateQueries({ queryKey: ['distribution'] }),
       ])
 
       // Dashboard'daki distribution query'sini refetch et
-      await queryClient.refetchQueries({ queryKey: ['distribution'] })
 
       setImportOpen(false)
       setImportFile(null)
@@ -600,7 +591,7 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
     } finally {
       setImporting(false)
     }
-  }, [importFile, mutateCustomers, apiUrl, queryClient])
+  }, [importFile, mutateCustomers, apiUrl])
 
   // Export handler
   const handleExport = useCallback(async (format: 'excel' | 'csv') => {
@@ -1021,7 +1012,6 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
 
             // Dashboard'daki müşteri sektör dağılımı grafiğini güncelle (sektör değişmiş olabilir)
             await queryClient.invalidateQueries({ queryKey: ['distribution'] })
-            await queryClient.refetchQueries({ queryKey: ['distribution'] })
 
             // Background refetch yap
             setTimeout(async () => {
@@ -1029,7 +1019,6 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
                 mutateCustomers(undefined, { revalidate: true }),
                 apiUrl,
                 // Dashboard'daki müşteri sektör dağılımı grafiğini tekrar güncelle
-                queryClient.refetchQueries({ queryKey: ['distribution'] }),
               ])
             }, 500)
           } else {
@@ -1054,11 +1043,9 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
               apiUrl,
               mutate(firstPageUrl, undefined, { revalidate: true }),
               // Dashboard'daki müşteri sektör dağılımı grafiğini güncelle
-              queryClient.invalidateQueries({ queryKey: ['distribution'] }),
             ])
 
             // Dashboard'daki distribution query'sini refetch et
-            await queryClient.refetchQueries({ queryKey: ['distribution'] })
 
             // SONRA 1. sayfaya geç (apiUrl değişir ve SWR otomatik refetch yapar)
             setCurrentPage(1)
@@ -1069,7 +1056,6 @@ export default function CustomerList({ isOpen = true }: CustomerListProps) {
                 mutate(firstPageUrl, undefined, { revalidate: true }),
                 mutateCustomers(undefined, { revalidate: true }),
                 // Dashboard'daki müşteri sektör dağılımı grafiğini tekrar güncelle
-                queryClient.refetchQueries({ queryKey: ['distribution'] }),
               ])
             }, 500)
           }
