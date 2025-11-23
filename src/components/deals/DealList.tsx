@@ -539,23 +539,9 @@ async function fetchKanbanDeals(
 
 
 async function fetchCustomers() {
-
-
-  // OPTİMİZE: Cache headers (veri çekme mantığı aynı)
-
-
   const res = await fetch('/api/customers?pageSize=1000', {
-
-
-    next: { revalidate: 300 },
-
-
-    cache: 'force-cache',
-
-
+    cache: 'no-store',
     headers: {
-
-
       'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
 
 
@@ -989,34 +975,13 @@ export default function DealList({ isOpen = true }: DealListProps) {
 
 
 
-  const { data: customers } = useQuery({
-
-
-    queryKey: ['customers', { scope: 'deals' }],
-
-
-    queryFn: fetchCustomers,
-
-
-    staleTime: 5 * 60 * 1000, // 5 dakika cache
-
-
-    gcTime: 10 * 60 * 1000,
-
-
-    refetchOnWindowFocus: false,
-
-
-    refetchOnMount: false,
-
-
-    placeholderData: (previousData) => previousData,
-
-
-    enabled: isOpen,
-
-
-  })
+  const { data: customers = [] } = useData<any[]>(
+    isOpen ? '/api/customers?pageSize=1000' : null,
+    {
+      dedupingInterval: 5 * 60 * 1000, // 5 dakika cache
+      revalidateOnFocus: false,
+    }
+  )
 
 
 

@@ -213,13 +213,18 @@ export default function DashboardPage() {
 
   const [openSections, setOpenSections] = useState<string[]>(defaultOpenSections)
 
-  // İlk kullanımda wizard'ı aç
+  // İlk kullanımda wizard'ı aç - SADECE BİR KEZ
   useEffect(() => {
     if (typeof window === 'undefined') return
     
     const wizardCompleted = localStorage.getItem('quick-start-wizard-completed')
     const onboardingCompleted = localStorage.getItem('onboarding-modal-completed')
     const dontShowOnboarding = localStorage.getItem('onboarding-dont-show-again')
+    
+    // Eğer wizard tamamlanmışsa, bir daha açma
+    if (wizardCompleted === 'true') {
+      return // Wizard tamamlanmış, bir daha gösterme
+    }
     
     if (!wizardCompleted && !onboardingCompleted && !dontShowOnboarding) {
       // İlk kullanımda 2 saniye sonra quick start wizard'ı aç
