@@ -169,7 +169,6 @@ export default function MeetingForm({
     : deals
 
   // ✅ ÇÖZÜM: Deal bilgilerini çek (dealProp varsa direkt kullan, yoksa API'den çek) - SWR ile
-  const dealId = dealIdProp || dealIdFromUrl
   const { data: dealDataFromApi } = useData<any>(
     (!!dealId && open && !meeting && !dealProp) ? `/api/deals/${dealId}` : null,
     {
@@ -182,7 +181,6 @@ export default function MeetingForm({
   const dealData = dealProp || dealDataFromApi
 
   // ✅ ÇÖZÜM: Quote bilgilerini çek (quoteProp varsa direkt kullan, yoksa API'den çek) - SWR ile
-  const quoteId = quoteIdProp || quoteIdFromUrl
   const { data: quoteDataFromApi } = useData<any>(
     (!!quoteId && open && !meeting && !quoteProp) ? `/api/quotes/${quoteId}` : null,
     {
@@ -190,8 +188,6 @@ export default function MeetingForm({
       revalidateOnFocus: false,
     }
   )
-    enabled: !!quoteId && open && !meeting && !quoteProp, // Sadece quoteProp yoksa API'den çek
-  })
   
   // QuoteProp varsa onu kullan, yoksa API'den gelen datayı kullan
   const quoteData = quoteProp || quoteDataFromApi

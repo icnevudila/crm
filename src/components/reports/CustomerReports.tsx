@@ -22,14 +22,6 @@ const CustomerSectorRadarChart = dynamic(() => import('@/components/reports/char
   loading: () => <div className="h-[300px] animate-pulse bg-gray-100 rounded" />,
 })
 
-async function fetchCustomerReports() {
-  const res = await fetch('/api/reports/customers', {
-    cache: 'no-store',
-    credentials: 'include',
-  })
-  if (!res.ok) throw new Error('Failed to fetch customer reports')
-  return res.json()
-}
 
 export default function CustomerReports({ isActive }: ReportSectionProps) {
   const { data, isLoading, error } = useData(
@@ -39,9 +31,6 @@ export default function CustomerReports({ isActive }: ReportSectionProps) {
       revalidateOnFocus: false,
     }
   )
-    refetchOnMount: true,
-    enabled: isActive,
-  })
 
   if (!isActive) return null
   if (isLoading) return <SkeletonList />

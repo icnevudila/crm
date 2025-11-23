@@ -65,14 +65,14 @@ export default function ContactForm({
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Müşteri firmalarını çek
-  const { data: customerCompaniesData } = useQuery({
-    queryKey: ['customer-companies'],
-    queryFn: async () => {
-      const res = await fetch('/api/customer-companies')
-      if (!res.ok) return []
-      return res.json()
-    },
+  // Müşteri firmalarını çek - SWR ile
+  const { data: customerCompaniesData } = useData<any[]>(
+    '/api/customer-companies',
+    {
+      dedupingInterval: 60000,
+      revalidateOnFocus: false,
+    }
+  )
   const customerCompanies = Array.isArray(customerCompaniesData) ? customerCompaniesData : []
 
   const {

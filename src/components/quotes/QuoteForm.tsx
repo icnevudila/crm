@@ -230,15 +230,14 @@ export default function QuoteForm({
     }
   }
 
-  // ✅ ÇÖZÜM: Deal bilgilerini çek (dealProp varsa direkt kullan, yoksa API'den çek)
-  const { data: dealDataFromApi } = useQuery({
-    queryKey: ['deal', dealId],
-    queryFn: async () => {
-      if (!dealId) return null
-      const res = await fetch(`/api/deals/${dealId}`)
-      if (!res.ok) return null
-      return res.json()
-    },
+  // ✅ ÇÖZÜM: Deal bilgilerini çek (dealProp varsa direkt kullan, yoksa API'den çek) - SWR ile
+  const { data: dealDataFromApi } = useData<any>(
+    (dealId && open && !quote && !dealProp) ? `/api/deals/${dealId}` : null,
+    {
+      dedupingInterval: 30000,
+      revalidateOnFocus: false,
+    }
+  )
   
   // DealProp varsa onu kullan, yoksa API'den gelen datayı kullan
   const dealData = dealProp || dealDataFromApi
@@ -392,54 +391,53 @@ export default function QuoteForm({
   const finalTotal = afterDiscount + taxAmount
 
   const saveQuote = async (data: QuoteFormData) => {
-      const url = quote ? `/api/quotes/${quote.id}` : '/api/quotes'
-      const method = quote ? 'PUT' : 'POST'
+    const url = quote ? `/api/quotes/${quote.id}` : '/api/quotes'
+    const method = quote ? 'PUT' : 'POST'
 
-      const payload = {
-        ...data,
-        total: finalTotal,
-        customerCompanyId: customerCompanyId || data.customerCompanyId || null,
-      }
+    const payload = {
+      ...data,
+      total: finalTotal,
+      customerCompanyId: customerCompanyId || data.customerCompanyId || null,
+    }
 
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
 
-      if (!res.ok) {
-        const error = await res.json()
-        throw new Error(error.error || 'Failed to save quote')
-      }
+    if (!res.ok) {
+      const error = await res.json()
+      throw new Error(error.error || 'Failed to save quote')
+    }
 
-      return res.json()
-    },
-    onSuccess: async (savedQuote) => {
-      // Toast mesajı göster
-      if (quote) {
-        toast.success('Teklif güncellendi', { description: `"${savedQuote.title}" teklifi başarıyla güncellendi.` })
-      } else {
-        // Yeni quote oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
-        navigateToDetailToast('quote', savedQuote.id, savedQuote.title)
-      }
-      
-      // SWR cache'lerini güncelle
-      await Promise.all([
-        mutate('/api/quotes', undefined, { revalidate: true }),
-        mutate('/api/quotes?', undefined, { revalidate: true }),
-        mutate('/api/kanban/quotes', undefined, { revalidate: true }),
-        mutate('/api/stats/quotes', undefined, { revalidate: true }),
-        mutate('/api/analytics/kpis', undefined, { revalidate: true }),
-      ])
-      
-      // Callback ile yeni eklenen teklifi parent'a gönder - optimistic update için
-      if (onSuccess) {
-        await onSuccess(savedQuote)
-      }
-      
-      // ✅ Otomasyon: Quote oluşturulduğunda email gönder (kullanıcı tercihine göre)
-      if (!quote && savedQuote.dealId) {
-        try {
+    const savedQuote = await res.json()
+    
+    // Toast mesajı göster
+    if (quote) {
+      toast.success('Teklif güncellendi', { description: `"${savedQuote.title}" teklifi başarıyla güncellendi.` })
+    } else {
+      // Yeni quote oluşturuldu - "Detay sayfasına gitmek ister misiniz?" toast'u göster
+      navigateToDetailToast('quote', savedQuote.id, savedQuote.title)
+    }
+    
+    // SWR cache'lerini güncelle
+    await Promise.all([
+      mutate('/api/quotes', undefined, { revalidate: true }),
+      mutate('/api/quotes?', undefined, { revalidate: true }),
+      mutate('/api/kanban/quotes', undefined, { revalidate: true }),
+      mutate('/api/stats/quotes', undefined, { revalidate: true }),
+      mutate('/api/analytics/kpis', undefined, { revalidate: true }),
+    ])
+    
+    // Callback ile yeni eklenen teklifi parent'a gönder - optimistic update için
+    if (onSuccess) {
+      await onSuccess(savedQuote)
+    }
+    
+    // ✅ Otomasyon: Quote oluşturulduğunda email gönder (kullanıcı tercihine göre)
+    if (!quote && savedQuote.dealId) {
+      try {
           // Deal bilgisini çek
           const dealRes = await fetch(`/api/deals/${savedQuote.dealId}`)
           if (dealRes.ok) {
@@ -508,9 +506,10 @@ export default function QuoteForm({
           console.error('Quote automation error:', error)
         }
       }
-      
-      reset()
-      onClose()
+    
+    reset()
+    onClose()
+    return savedQuote
   }
 
   const onError = (errors: any) => {
