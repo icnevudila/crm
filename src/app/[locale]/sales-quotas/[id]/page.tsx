@@ -90,7 +90,12 @@ export default function SalesQuotaDetailPage() {
     )
   }
 
-  const achievement = quota.achievement || 0
+  // achievement'ı number'a çevir - güvenli tip kontrolü
+  const achievement = typeof quota.achievement === 'number' 
+    ? quota.achievement 
+    : typeof quota.achievement === 'string' 
+      ? parseFloat(quota.achievement) || 0 
+      : 0
   const isAchieved = achievement >= 100
   const isNearTarget = achievement >= 80
 
@@ -178,7 +183,7 @@ export default function SalesQuotaDetailPage() {
             <Target className="h-5 w-5 text-blue-500" />
           </div>
           <div className="text-2xl font-bold">
-            {formatCurrency(quota.targetRevenue)}
+            {formatCurrency(typeof quota.targetRevenue === 'number' ? quota.targetRevenue : parseFloat(quota.targetRevenue) || 0)}
           </div>
         </Card>
 
@@ -261,21 +266,35 @@ export default function SalesQuotaDetailPage() {
             <div>
               <span className="text-sm text-gray-500">Başlangıç Tarihi</span>
               <div className="mt-1 text-gray-900">
-                {new Date(quota.startDate).toLocaleDateString('tr-TR', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
+                {quota.startDate 
+                  ? (() => {
+                      const date = new Date(quota.startDate)
+                      return isNaN(date.getTime()) 
+                        ? 'Geçersiz tarih' 
+                        : date.toLocaleDateString('tr-TR', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                          })
+                    })()
+                  : 'N/A'}
               </div>
             </div>
             <div>
               <span className="text-sm text-gray-500">Bitiş Tarihi</span>
               <div className="mt-1 text-gray-900">
-                {new Date(quota.endDate).toLocaleDateString('tr-TR', {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                })}
+                {quota.endDate 
+                  ? (() => {
+                      const date = new Date(quota.endDate)
+                      return isNaN(date.getTime()) 
+                        ? 'Geçersiz tarih' 
+                        : date.toLocaleDateString('tr-TR', {
+                            year: 'numeric',
+                            month: 'long',
+                            day: 'numeric',
+                          })
+                    })()
+                  : 'N/A'}
               </div>
             </div>
           </div>
