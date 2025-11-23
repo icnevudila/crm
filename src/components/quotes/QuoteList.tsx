@@ -147,7 +147,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState(statusFromUrl)
   const [filterCompanyId, setFilterCompanyId] = useState('') // SuperAdmin için firma filtresi
-  const [kanbanDataState, setKanbanDataStateState] = useState<any[]>([]) // Optimistic update için local state
+  const [kanbanDataState, setKanbanDataState] = useState<any[]>([]) // Optimistic update için local state
   const [customerCompanyId, setCustomerCompanyId] = useState('') // Firma bazlı filtreleme
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false)
   const [rejectingQuoteId, setRejectingQuoteId] = useState<string | null>(null)
@@ -262,9 +262,9 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
   // SWR data değiştiğinde local state'i güncelle (sadece local state boşsa)
   useEffect(() => {
     if (kanbanDataFromSWR.length > 0 && kanbanDataState.length === 0) {
-      setKanbanDataStateState(kanbanDataFromSWR)
+      setKanbanDataState(kanbanDataFromSWR)
     }
-  }, [kanbanDataFromSWR])
+  }, [kanbanDataFromSWR, kanbanDataState.length])
 
   // Refresh handler - tüm cache'leri invalidate et ve yeniden fetch yap
   const handleRefresh = useCallback(async () => {
@@ -829,11 +829,11 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
 
                   // ÇÖZÜM: Optimistic update'i state'e set et - kart anında taşınır
                   const optimisticKanbanDataWithNewRef = JSON.parse(JSON.stringify(optimisticKanbanData))
-                  setKanbanDataStateState(optimisticKanbanDataWithNewRef)
+                  setKanbanDataState(optimisticKanbanDataWithNewRef)
 
                   // ✅ ÇÖZÜM: "new" ID kontrolü - geçersiz ID'ler için hata göster
                   if (quoteId === 'new' || !quoteId || quoteId.trim() === '') {
-                    setKanbanDataStateState(previousKanbanData)
+                    setKanbanDataState(previousKanbanData)
                     toast.error('Geçersiz Teklif ID', {
                       description: 'Teklif ID geçersiz. Lütfen sayfayı yenileyin.',
                     })
@@ -843,7 +843,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                   // ÇÖZÜM: API çağrısı yap - backend'de güncelleme yapılsın
                   // ✅ "new" ID kontrolü - geçersiz ID'ler için hemen hata göster
                   if (quoteId === 'new' || !quoteId || quoteId.trim() === '') {
-                    setKanbanDataStateState(previousKanbanData)
+                    setKanbanDataState(previousKanbanData)
                     toast.error('Geçersiz Teklif', {
                       description: 'Teklif ID geçersiz. Lütfen sayfayı yenileyin.',
                       duration: 3000,
@@ -1010,7 +1010,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                     const updatedKanbanDataWithNewRef = JSON.parse(JSON.stringify(updatedKanbanDataWithBackendData))
                     
                     // State'i güncelle - UI hemen güncellenir
-                    setKanbanDataStateState(updatedKanbanDataWithNewRef)
+                    setKanbanDataState(updatedKanbanDataWithNewRef)
                     
                     // Cache'i güncelle - background'da refetch yapılacak
                     mutateKanban(['kanban-quotes', debouncedSearch, dealId, normalizedFilterCompanyId, customerCompanyId], updatedKanbanDataWithNewRef)
@@ -1030,7 +1030,7 @@ export default function QuoteList({ isOpen = true }: QuoteListProps) {
                     console.error('Status update error:', error)
                     
                     // Optimistic update'i geri al
-                    setKanbanDataStateState(previousKanbanData)
+                    setKanbanDataState(previousKanbanData)
                     mutateKanban(undefined, { revalidate: true })
                     
                     // Hata mesajını göster
