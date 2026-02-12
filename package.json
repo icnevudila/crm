@@ -62,7 +62,7 @@
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^3.8.2",
     "lucide-react": "^0.344.0",
-    "next": "^15.0.0",
+    "next": "15.0.7",
     "next-auth": "^4.24.5",
     "next-intl": "^3.6.2",
     "nodemailer": "^7.0.7",
